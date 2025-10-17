@@ -1,0 +1,26 @@
+name = "chittyconnect"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
+
+# KV namespace for context storage
+[[kv_namespaces]]
+binding = "CHITTYCONNECT_KV"
+id = "12f3a45f8cc641a79fbcd35ac15afd6e"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets (set via wrangler secret put)
+# CHITTY_ID_SERVICE_TOKEN - Token for id.chitty.cc API
+
+# Queue producers - ChittyConnect can send to these queues
+[[queues.producers]]
+binding = "CONTEXT_OPS_QUEUE"
+queue = "chittyconnect-context-ops"
+
+# Routes
+routes = [
+  { pattern = "connect.chitty.cc/*", zone_name = "chitty.cc" }
+]

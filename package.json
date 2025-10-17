@@ -1,0 +1,15 @@
+{
+  "name": "chittyconnect",
+  "version": "1.0.0",
+  "description": "ChittyConnect - The Alchemist. Universal adapter layer for ChittyOS.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "keywords": ["chittyos", "connect", "alchemist", "adapter"],
+  "author": "ChittyOS",
+  "license": "MIT"
+}
