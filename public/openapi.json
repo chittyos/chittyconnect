@@ -1,0 +1,810 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ChittyOS GPT Connector API",
+    "description": "Comprehensive API for connecting custom GPTs to ChittyOS services, third-party integrations, and banking connections",
+    "version": "1.0.0",
+    "contact": {
+      "name": "ChittyOS Support",
+      "url": "https://chitty.cc"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://connect.chitty.cc",
+      "description": "Production ChittyConnect API"
+    },
+    {
+      "url": "https://connect-staging.chitty.cc",
+      "description": "Staging environment"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check API health status",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyid/mint": {
+      "post": {
+        "summary": "Mint ChittyID",
+        "description": "Create a new ChittyID for an entity",
+        "operationId": "mintChittyID",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entity": {
+                    "type": "string",
+                    "enum": ["PEO", "PLACE", "PROP", "EVNT", "AUTH", "INFO", "FACT", "CONTEXT", "ACTOR"],
+                    "description": "Entity type for ChittyID"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Optional metadata for the entity"
+                  }
+                },
+                "required": ["entity"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ChittyID minted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChittyIDResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyid/validate": {
+      "post": {
+        "summary": "Validate ChittyID",
+        "description": "Validate a ChittyID format and checksum",
+        "operationId": "validateChittyID",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chittyid": {
+                    "type": "string",
+                    "description": "ChittyID to validate"
+                  }
+                },
+                "required": ["chittyid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "entity": {
+                      "type": "string"
+                    },
+                    "sequence": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/services/status": {
+      "get": {
+        "summary": "Check ChittyOS Services Status",
+        "description": "Get health status of all ChittyOS services",
+        "operationId": "getServicesStatus",
+        "responses": {
+          "200": {
+            "description": "Service status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicesStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittycases/create": {
+      "post": {
+        "summary": "Create Legal Case",
+        "description": "Create a new legal case in ChittyCases",
+        "operationId": "createCase",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "caseType": {
+                    "type": "string",
+                    "enum": ["eviction", "litigation", "resolution", "general"]
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                },
+                "required": ["title", "caseType"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Case created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "caseId": {
+                      "type": "string"
+                    },
+                    "chittyid": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyauth/verify": {
+      "post": {
+        "summary": "Verify Authentication",
+        "description": "Verify authentication token or credentials",
+        "operationId": "verifyAuth",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "userId": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyfinance/account/balance": {
+      "get": {
+        "summary": "Get Account Balance",
+        "description": "Get balance for ChittyFinance account",
+        "operationId": "getAccountBalance",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account balance retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "balance": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "lastUpdated": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyfinance/banking/connect": {
+      "post": {
+        "summary": "Connect Banking Account",
+        "description": "Connect external banking account via Plaid/Stripe",
+        "operationId": "connectBankAccount",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": ["plaid", "stripe", "direct"]
+                  },
+                  "publicToken": {
+                    "type": "string",
+                    "description": "Plaid public token or equivalent"
+                  },
+                  "accountDetails": {
+                    "type": "object"
+                  }
+                },
+                "required": ["provider"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bank account connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "bankName": {
+                      "type": "string"
+                    },
+                    "lastFour": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittycontextual/analyze": {
+      "post": {
+        "summary": "Analyze Context",
+        "description": "Perform contextual analysis on provided data",
+        "operationId": "analyzeContext",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "context": {
+                    "type": "object"
+                  },
+                  "analysisType": {
+                    "type": "string",
+                    "enum": ["sentiment", "entities", "legal", "financial", "comprehensive"]
+                  }
+                },
+                "required": ["text"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "object"
+                    },
+                    "confidence": {
+                      "type": "number"
+                    },
+                    "entities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/log": {
+      "post": {
+        "summary": "Create Chronicle Entry",
+        "description": "Log an event to ChittyChronicle",
+        "operationId": "createChronicleEntry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "eventType": {
+                    "type": "string"
+                  },
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "object"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": ["eventType", "data"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entry logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "chronicleId": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/query": {
+      "get": {
+        "summary": "Query Chronicle",
+        "description": "Query ChittyChronicle event logs",
+        "operationId": "queryChronicle",
+        "parameters": [
+          {
+            "name": "entityId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "eventType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Query results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyevidence/ingest": {
+      "post": {
+        "summary": "Ingest Evidence",
+        "description": "Ingest and process evidence files",
+        "operationId": "ingestEvidence",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "caseId": {
+                    "type": "string"
+                  },
+                  "evidenceType": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence ingested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "evidenceId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "extractedData": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/registry/services": {
+      "get": {
+        "summary": "List Registry Services",
+        "description": "Get all registered ChittyOS services from ChittyRegistry",
+        "operationId": "listRegistryServices",
+        "responses": {
+          "200": {
+            "description": "Services list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ServiceInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/thirdparty/notion/query": {
+      "post": {
+        "summary": "Query Notion Database",
+        "description": "Query Notion database via ChittyConnect proxy",
+        "operationId": "queryNotion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "databaseId": {
+                    "type": "string"
+                  },
+                  "filter": {
+                    "type": "object"
+                  },
+                  "sorts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["databaseId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/thirdparty/neon/query": {
+      "post": {
+        "summary": "Query Neon Database",
+        "description": "Execute SQL query on Neon database",
+        "operationId": "queryNeon",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "array",
+                    "items": {}
+                  }
+                },
+                "required": ["query"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "rowCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ChittyOS-API-Key"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ChittyIDResponse": {
+        "type": "object",
+        "properties": {
+          "chittyid": {
+            "type": "string",
+            "description": "Generated ChittyID"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "string"
+          },
+          "checksum": {
+            "type": "string"
+          }
+        }
+      },
+      "ServicesStatusResponse": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["healthy", "degraded", "down"]
+                },
+                "url": {
+                  "type": "string"
+                },
+                "lastChecked": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceInfo": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,128 @@
+# Wrangler configuration for ChittyConnect - itsChitty™
+# The AI-intelligent spine with ContextConsciousness & MemoryCloude
+#
+# Routes:
+# - /api/* - REST API for custom GPT Actions
+# - /mcp/* - MCP protocol for Claude integration
+# - /integrations/github/webhook - GitHub App integration
+
+name = "chittyconnect"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "bbf9fcd845e78035b7a135c481e88541"
+
+# KV Namespaces
+[[kv_namespaces]]
+binding = "IDEMP_KV"
+id = "YOUR_IDEMP_KV_ID"  # Create via: wrangler kv:namespace create "IDEMP_KV"
+
+[[kv_namespaces]]
+binding = "TOKEN_KV"
+id = "YOUR_TOKEN_KV_ID"  # Create via: wrangler kv:namespace create "TOKEN_KV"
+
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "YOUR_API_KEYS_KV_ID"  # Create via: wrangler kv:namespace create "API_KEYS"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "YOUR_RATE_LIMIT_KV_ID"  # Create via: wrangler kv:namespace create "RATE_LIMIT"
+
+# D1 Database for installation mapping
+[[d1_databases]]
+binding = "DB"
+database_name = "chittyconnect"
+database_id = "YOUR_D1_DB_ID"  # Create via: wrangler d1 create chittyconnect
+
+# Queues for async MCP dispatch
+[[queues.producers]]
+binding = "EVENT_Q"
+queue = "github-events"
+
+[[queues.consumers]]
+queue = "github-events"
+max_batch_size = 10
+max_batch_timeout = 30
+
+# Environment variables for development
+[env.staging]
+name = "chittyconnect-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+CHITTYID_SERVICE_URL = "https://id.chitty.cc"
+REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
+CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
+CHITTYOS_DOMAIN = "chitty.cc"
+GITHUB_APP_ID = ""  # Set via wrangler secret
+
+# Environment variables for production
+[env.production]
+name = "chittyconnect-production"
+
+[[env.production.routes]]
+pattern = "connect.chitty.cc/*"
+zone_name = "chitty.cc"
+
+[[env.production.kv_namespaces]]
+binding = "IDEMP_KV"
+id = "YOUR_PROD_IDEMP_KV_ID"
+
+[[env.production.kv_namespaces]]
+binding = "TOKEN_KV"
+id = "YOUR_PROD_TOKEN_KV_ID"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "chittyconnect-production"
+database_id = "YOUR_PROD_D1_DB_ID"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+CHITTYID_SERVICE_URL = "https://id.chitty.cc"
+REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
+CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
+CHITTYOS_DOMAIN = "chitty.cc"
+
+# Secrets (set via: wrangler secret put <NAME>)
+#
+# GitHub Integration:
+# - GITHUB_APP_ID
+# - GITHUB_APP_PK (PEM format, PKCS#8)
+# - GITHUB_WEBHOOK_SECRET
+#
+# ChittyOS Services:
+# - CHITTY_ID_TOKEN
+# - CHITTY_AUTH_TOKEN
+# - CHITTY_CASES_TOKEN
+# - CHITTY_FINANCE_TOKEN
+# - CHITTY_EVIDENCE_TOKEN
+# - CHITTY_SYNC_TOKEN
+# - CHITTY_CHRONICLE_TOKEN
+# - CHITTY_CONTEXTUAL_TOKEN
+# - CHITTY_REGISTRY_TOKEN
+#
+# Third-Party Integrations:
+# - NOTION_TOKEN
+# - OPENAI_API_KEY
+# - GOOGLE_ACCESS_TOKEN
+# - NEON_DATABASE_URL
+
+# Cloudflare Workers AI binding
+[ai]
+binding = "AI"
+
+# Analytics and logging
+[observability]
+enabled = true
+
+# Build configuration
+[build]
+command = ""
+cwd = "."
+
+# Assets for OpenAPI spec
+[[assets]]
+binding = "ASSETS"
+directory = "./public"
