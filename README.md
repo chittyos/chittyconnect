@@ -4,6 +4,12 @@
 
 Comprehensive connector enabling custom GPTs and Claude to interact with the entire ChittyOS ecosystem and third-party integrations.
 
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICK_START.md)** - Get up and running in 30 minutes
+- **[Architecture Analysis](ARCHITECTURE_ANALYSIS.md)** - Comprehensive architectural review and improvement proposals
+- **[Innovation Roadmap](INNOVATION_ROADMAP.md)** - ContextConsciousness™ & MemoryCloude™ vision and implementation
+
 ## 🌟 Features
 
 ### 1. Custom GPT Actions API
