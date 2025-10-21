@@ -18,6 +18,7 @@ import { chittyevidenceRoutes } from './routes/chittyevidence.js';
 import { registryRoutes } from './routes/registry.js';
 import { servicesRoutes } from './routes/services.js';
 import { thirdpartyRoutes } from './routes/thirdparty.js';
+import { intelligence } from './routes/intelligence.js';
 import { authenticate } from './middleware/auth.js';
 
 const api = new Hono();
@@ -57,7 +58,8 @@ api.get('/api/health', (c) => {
       chittyevidence: '/api/chittyevidence',
       registry: '/api/registry',
       services: '/api/services',
-      thirdparty: '/api/thirdparty'
+      thirdparty: '/api/thirdparty',
+      intelligence: '/api/intelligence'
     }
   });
 });
@@ -80,5 +82,6 @@ api.route('/api/chittyevidence', chittyevidenceRoutes);
 api.route('/api/registry', registryRoutes);
 api.route('/api/services', servicesRoutes);
 api.route('/api/thirdparty', thirdpartyRoutes);
+api.route('/api/intelligence', intelligence);
 
 export { api };

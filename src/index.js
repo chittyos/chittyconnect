@@ -18,13 +18,18 @@ import { queueConsumer } from './handlers/queue.js';
 import { api } from './api/router.js';
 import { mcp } from './mcp/server.js';
 import { ChittyOSEcosystem, initializeDatabase } from './integrations/chittyos-ecosystem.js';
+import { ContextConsciousness } from './intelligence/context-consciousness.js';
+import { MemoryCloude } from './intelligence/memory-cloude.js';
+import { CognitiveCoordinator } from './intelligence/cognitive-coordination.js';
 
 const app = new Hono();
 
 // Initialize ChittyOS ecosystem on first request (lazy + graceful)
 let ecosystemInitialized = false;
+let intelligenceModules = null;
+
 async function ensureEcosystemInitialized(env) {
-  if (ecosystemInitialized) return;
+  if (ecosystemInitialized) return intelligenceModules;
 
   try {
     console.log('[ChittyConnect] Initializing ChittyOS ecosystem integration...');
@@ -32,32 +37,72 @@ async function ensureEcosystemInitialized(env) {
     // Initialize D1 database schema (critical)
     await initializeDatabase(env.DB);
 
+    // Initialize intelligence modules
+    console.log('[ChittyConnect] Initializing intelligence modules...');
+
+    const consciousness = new ContextConsciousness(env);
+    const memory = new MemoryCloude(env);
+    const coordinator = new CognitiveCoordinator(env);
+
+    // Initialize all modules in parallel
+    await Promise.all([
+      consciousness.initialize().catch(err =>
+        console.warn('[ContextConsciousness™] Init failed:', err.message)
+      ),
+      memory.initialize().catch(err =>
+        console.warn('[MemoryCloude™] Init failed:', err.message)
+      ),
+      coordinator.initialize().catch(err =>
+        console.warn('[Cognitive-Coordination™] Init failed:', err.message)
+      )
+    ]);
+
+    intelligenceModules = { consciousness, memory, coordinator };
+
     // Initialize ChittyConnect context (non-blocking, best-effort)
     // Don't await - let it run in background
     const ecosystem = new ChittyOSEcosystem(env);
     ecosystem.initializeContext('chittyconnect', {
       version: '1.0.0',
       type: 'ai-integration-hub',
-      capabilities: ['mcp', 'rest-api', 'github-app', 'context-consciousness'],
-      description: 'The AI-intelligent spine with ContextConsciousness™'
+      capabilities: [
+        'mcp',
+        'rest-api',
+        'github-app',
+        'context-consciousness',
+        'memory-cloude',
+        'cognitive-coordination'
+      ],
+      description: 'The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™'
     }).catch(err => {
       console.error('[ChittyConnect] Background initialization error (non-critical):', err.message);
     });
 
     ecosystemInitialized = true;
-    console.log('[ChittyConnect] Database initialized, ecosystem initializing in background');
+    console.log('[ChittyConnect] All systems initialized and ready');
+
+    return intelligenceModules;
   } catch (error) {
     console.error('[ChittyConnect] Initialization error:', error);
     // Still mark as initialized to avoid retry loop
     ecosystemInitialized = true;
+    return null;
   }
 }
 
 // Middleware to ensure ecosystem is initialized
 app.use('*', async (c, next) => {
-  await ensureEcosystemInitialized(c.env);
-  // Attach ecosystem to context for use in handlers
+  const modules = await ensureEcosystemInitialized(c.env);
+
+  // Attach ecosystem and intelligence modules to context for use in handlers
   c.set('ecosystem', new ChittyOSEcosystem(c.env));
+
+  if (modules) {
+    c.set('consciousness', modules.consciousness);
+    c.set('memory', modules.memory);
+    c.set('coordinator', modules.coordinator);
+  }
+
   await next();
 });
 
@@ -69,13 +114,19 @@ app.get('/health', (c) => {
     status: 'healthy',
     service: 'chittyconnect',
     brand: 'itsChitty™',
-    tagline: 'The AI-intelligent spine with ContextConsciousness™',
+    tagline: 'The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
+    intelligence: {
+      contextConsciousness: !!c.get('consciousness'),
+      memoryCloude: !!c.get('memory'),
+      cognitiveCoordination: !!c.get('coordinator')
+    },
     endpoints: {
       api: '/api/*',
       mcp: '/mcp/*',
       github: '/integrations/github/*',
+      intelligence: '/intelligence/*',
       openapi: '/openapi.json'
     }
   });
