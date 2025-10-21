@@ -1,0 +1,39 @@
+{
+  "name": "ChittyConnect - itsChitty™",
+  "description": "The AI-intelligent spine with ContextConsciousness™ - Connects ChittyOS ecosystem with GitHub for intelligent automation, context-aware workflows, and AI-powered development assistance.",
+  "url": "https://connect.chitty.cc",
+  "hook_attributes": {
+    "url": "https://connect.chitty.cc/integrations/github/webhook",
+    "active": true
+  },
+  "redirect_url": "https://connect.chitty.cc/integrations/github/callback",
+  "setup_url": "https://app.chitty.cc/integrations/github/setup",
+  "callback_urls": [
+    "https://connect.chitty.cc/integrations/github/callback"
+  ],
+  "public": false,
+  "default_permissions": {
+    "actions": "read",
+    "checks": "write",
+    "contents": "read",
+    "issues": "write",
+    "pull_requests": "write",
+    "repository_hooks": "read",
+    "statuses": "write",
+    "workflows": "read",
+    "metadata": "read"
+  },
+  "default_events": [
+    "check_run",
+    "check_suite",
+    "issues",
+    "issue_comment",
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "push",
+    "workflow_run",
+    "workflow_job",
+    "status"
+  ]
+}

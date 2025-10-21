@@ -17,8 +17,49 @@ import { handleWebhookEvent } from './handlers/webhook.js';
 import { queueConsumer } from './handlers/queue.js';
 import { api } from './api/router.js';
 import { mcp } from './mcp/server.js';
+import { ChittyOSEcosystem, initializeDatabase } from './integrations/chittyos-ecosystem.js';
 
 const app = new Hono();
+
+// Initialize ChittyOS ecosystem on first request (lazy + graceful)
+let ecosystemInitialized = false;
+async function ensureEcosystemInitialized(env) {
+  if (ecosystemInitialized) return;
+
+  try {
+    console.log('[ChittyConnect] Initializing ChittyOS ecosystem integration...');
+
+    // Initialize D1 database schema (critical)
+    await initializeDatabase(env.DB);
+
+    // Initialize ChittyConnect context (non-blocking, best-effort)
+    // Don't await - let it run in background
+    const ecosystem = new ChittyOSEcosystem(env);
+    ecosystem.initializeContext('chittyconnect', {
+      version: '1.0.0',
+      type: 'ai-integration-hub',
+      capabilities: ['mcp', 'rest-api', 'github-app', 'context-consciousness'],
+      description: 'The AI-intelligent spine with ContextConsciousness™'
+    }).catch(err => {
+      console.error('[ChittyConnect] Background initialization error (non-critical):', err.message);
+    });
+
+    ecosystemInitialized = true;
+    console.log('[ChittyConnect] Database initialized, ecosystem initializing in background');
+  } catch (error) {
+    console.error('[ChittyConnect] Initialization error:', error);
+    // Still mark as initialized to avoid retry loop
+    ecosystemInitialized = true;
+  }
+}
+
+// Middleware to ensure ecosystem is initialized
+app.use('*', async (c, next) => {
+  await ensureEcosystemInitialized(c.env);
+  // Attach ecosystem to context for use in handlers
+  c.set('ecosystem', new ChittyOSEcosystem(c.env));
+  await next();
+});
 
 /**
  * Root health check endpoint
@@ -116,14 +157,115 @@ app.post('/integrations/github/webhook', async (c) => {
  * Handles OAuth flow after app installation
  */
 app.get('/integrations/github/callback', async (c) => {
-  const code = c.req.query('code');
-  const installationId = c.req.query('installation_id');
-  const setupAction = c.req.query('setup_action');
+  try {
+    const code = c.req.query('code');
+    const installationId = c.req.query('installation_id');
+    const setupAction = c.req.query('setup_action');
 
-  // TODO: Exchange code for installation access token
-  // TODO: Store installation mapping to tenant
+    if (!installationId) {
+      return c.text('Missing installation_id', 400);
+    }
 
-  return c.redirect(`https://app.chitty.cc/integrations/github/success?installation_id=${installationId}`);
+    console.log(`[GitHub App] Installation callback: ${installationId}, action: ${setupAction}`);
+
+    // 1. Get GitHub App token to fetch installation details
+    const { generateAppJWT, getInstallationToken } = await import('./auth/github.js');
+    const appJwt = await generateAppJWT(c.env.GITHUB_APP_ID, c.env.GITHUB_APP_PK);
+
+    // 2. Fetch installation details
+    const installResponse = await fetch(
+      `https://api.github.com/app/installations/${installationId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${appJwt}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'ChittyConnect/1.0'
+        }
+      }
+    );
+
+    if (!installResponse.ok) {
+      const error = await installResponse.text();
+      console.error(`[GitHub App] Installation fetch failed:`, error);
+      return c.text(`Installation verification failed: ${installResponse.status}`, 500);
+    }
+
+    const installation = await installResponse.json();
+
+    // 3. Mint ChittyID for the installation
+    const ecosystem = c.get('ecosystem');
+    const installChittyID = await ecosystem.mintChittyID({
+      entity: 'CONTEXT',
+      metadata: {
+        type: 'github_installation',
+        installationId: installation.id,
+        accountId: installation.account.id,
+        accountLogin: installation.account.login,
+        accountType: installation.account.type
+      }
+    });
+
+    // 4. Initialize ChittyDNA record for installation
+    await ecosystem.initializeChittyDNA(installChittyID, {
+      type: 'github_installation',
+      installation_id: installation.id,
+      account: installation.account.login,
+      repository_selection: installation.repository_selection
+    });
+
+    // 5. Store installation mapping in D1
+    await c.env.DB.prepare(`
+      INSERT OR REPLACE INTO installations
+      (installation_id, chittyid, account_id, account_login, account_type, repository_selection, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).bind(
+      installation.id,
+      installChittyID,
+      installation.account.id,
+      installation.account.login,
+      installation.account.type,
+      installation.repository_selection
+    ).run();
+
+    // 6. Get and cache installation token
+    const tokenData = await getInstallationToken(installationId, appJwt);
+    await c.env.TOKEN_KV.put(
+      `install:${installationId}`,
+      JSON.stringify(tokenData),
+      { expirationTtl: 3600 }
+    );
+
+    // 7. Log to ChittyChronicle
+    await fetch('https://chronicle.chitty.cc/api/entries', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`
+      },
+      body: JSON.stringify({
+        eventType: 'github.app.installed',
+        entityId: installChittyID,
+        data: {
+          installationId: installation.id,
+          account: installation.account.login,
+          repositorySelection: installation.repository_selection,
+          permissions: tokenData.permissions
+        }
+      })
+    });
+
+    console.log(`[GitHub App] Installation complete: ${installChittyID}`);
+
+    // Redirect to success page
+    return c.redirect(
+      `https://app.chitty.cc/integrations/github/success?installation_id=${installationId}&chittyid=${installChittyID}`
+    );
+  } catch (error) {
+    console.error('[GitHub App] Callback error:', error);
+    return c.redirect(
+      `https://app.chitty.cc/integrations/github/error?message=${encodeURIComponent(error.message)}`
+    );
+  }
 });
 
 /**

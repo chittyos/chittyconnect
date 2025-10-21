@@ -10,32 +10,32 @@ name = "chittyconnect"
 main = "src/index.js"
 compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
-account_id = "bbf9fcd845e78035b7a135c481e88541"
+account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
 # KV Namespaces
 [[kv_namespaces]]
 binding = "IDEMP_KV"
-id = "YOUR_IDEMP_KV_ID"  # Create via: wrangler kv:namespace create "IDEMP_KV"
+id = "ea43bc974b894701a069e4804be765ba"
 
 [[kv_namespaces]]
 binding = "TOKEN_KV"
-id = "YOUR_TOKEN_KV_ID"  # Create via: wrangler kv:namespace create "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
 
 [[kv_namespaces]]
 binding = "API_KEYS"
-id = "YOUR_API_KEYS_KV_ID"  # Create via: wrangler kv:namespace create "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "YOUR_RATE_LIMIT_KV_ID"  # Create via: wrangler kv:namespace create "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
 
 # D1 Database for installation mapping
 [[d1_databases]]
 binding = "DB"
 database_name = "chittyconnect"
-database_id = "YOUR_D1_DB_ID"  # Create via: wrangler d1 create chittyconnect
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 
-# Queues for async MCP dispatch
+# Queues for async GitHub event processing
 [[queues.producers]]
 binding = "EVENT_Q"
 queue = "github-events"
@@ -48,6 +48,39 @@ max_batch_timeout = 30
 # Environment variables for development
 [env.staging]
 name = "chittyconnect-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "IDEMP_KV"
+id = "ea43bc974b894701a069e4804be765ba"
+
+[[env.staging.kv_namespaces]]
+binding = "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
+
+[[env.staging.kv_namespaces]]
+binding = "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "chittyconnect"
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
+
+[[env.staging.queues.producers]]
+binding = "EVENT_Q"
+queue = "github-events"
+
+[[env.staging.queues.consumers]]
+queue = "github-events"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[env.staging.ai]
+binding = "AI"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
@@ -67,16 +100,36 @@ zone_name = "chitty.cc"
 
 [[env.production.kv_namespaces]]
 binding = "IDEMP_KV"
-id = "YOUR_PROD_IDEMP_KV_ID"
+id = "9ad1ec9795d243ca94f7502e6efb6a62"
 
 [[env.production.kv_namespaces]]
 binding = "TOKEN_KV"
-id = "YOUR_PROD_TOKEN_KV_ID"
+id = "788d2fce231d4819a11b46d5f4678b04"
+
+[[env.production.kv_namespaces]]
+binding = "API_KEYS"
+id = "cf6da7757caf4da5a8a365be2174f391"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "59975122a4f74ce391067df2f637b924"
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "chittyconnect-production"
-database_id = "YOUR_PROD_D1_DB_ID"
+database_id = "39f76706-5d67-401f-b1bf-9a212de4da0b"
+
+[[env.production.queues.producers]]
+binding = "EVENT_Q"
+queue = "github-events"
+
+[[env.production.queues.consumers]]
+queue = "github-events"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[env.production.ai]
+binding = "AI"
 
 [env.production.vars]
 ENVIRONMENT = "production"
@@ -121,8 +174,3 @@ enabled = true
 [build]
 command = ""
 cwd = "."
-
-# Assets for OpenAPI spec
-[[assets]]
-binding = "ASSETS"
-directory = "./public"
