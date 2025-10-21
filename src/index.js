@@ -133,6 +133,66 @@ app.get('/health', (c) => {
 });
 
 /**
+ * Intelligence health check (no auth required)
+ */
+app.get('/intelligence/health', async (c) => {
+  const consciousness = c.get('consciousness');
+  const memory = c.get('memory');
+  const coordinator = c.get('coordinator');
+
+  // Get basic stats without requiring full execution
+  let consciousnessHealth = { available: false };
+  let memoryHealth = { available: false };
+  let coordinatorHealth = { available: false };
+
+  if (consciousness) {
+    try {
+      consciousnessHealth = {
+        available: true,
+        services: consciousness.services.size,
+        historySize: consciousness.healthHistory.length
+      };
+    } catch (error) {
+      consciousnessHealth = { available: true, error: error.message };
+    }
+  }
+
+  if (memory) {
+    try {
+      const stats = await memory.getStats('health-check');
+      memoryHealth = {
+        available: true,
+        hasVectorize: memory.hasVectorize,
+        retentionDays: memory.retention.conversations
+      };
+    } catch (error) {
+      memoryHealth = { available: true, error: error.message };
+    }
+  }
+
+  if (coordinator) {
+    try {
+      coordinatorHealth = {
+        available: true,
+        maxConcurrency: coordinator.executionEngine?.maxConcurrency || 5
+      };
+    } catch (error) {
+      coordinatorHealth = { available: true, error: error.message };
+    }
+  }
+
+  return c.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    modules: {
+      contextConsciousness: consciousnessHealth,
+      memoryCloude: memoryHealth,
+      cognitiveCoordination: coordinatorHealth
+    }
+  });
+});
+
+/**
  * Mount API router for custom GPT integration
  */
 app.route('/', api);

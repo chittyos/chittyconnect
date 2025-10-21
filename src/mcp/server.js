@@ -250,6 +250,129 @@ mcp.get('/tools/list', (c) => {
           },
           required: ['messages']
         }
+      },
+      // Intelligence Tools
+      {
+        name: 'consciousness_get_awareness',
+        description: 'Get ContextConsciousness™ ecosystem awareness - current health, anomalies, and predictions for all ChittyOS services',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'consciousness_capture_snapshot',
+        description: 'Capture comprehensive ecosystem snapshot with detailed service health, anomaly detection, and failure predictions',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'memory_persist_interaction',
+        description: 'Persist interaction to MemoryCloude™ for 90-day semantic memory with entity extraction and decision logging',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sessionId: {
+              type: 'string',
+              description: 'Session identifier'
+            },
+            interaction: {
+              type: 'object',
+              description: 'Interaction data including content, entities, actions, decisions',
+              properties: {
+                userId: { type: 'string' },
+                type: { type: 'string' },
+                content: { type: 'string' },
+                entities: { type: 'array' },
+                actions: { type: 'array' },
+                decisions: { type: 'array' }
+              }
+            }
+          },
+          required: ['sessionId', 'interaction']
+        }
+      },
+      {
+        name: 'memory_recall_context',
+        description: 'Recall relevant context from MemoryCloude™ using semantic search with vector embeddings',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sessionId: {
+              type: 'string',
+              description: 'Session identifier'
+            },
+            query: {
+              type: 'string',
+              description: 'Search query for context recall'
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of contexts to return',
+              default: 5
+            }
+          },
+          required: ['sessionId', 'query']
+        }
+      },
+      {
+        name: 'memory_get_session_summary',
+        description: 'Get AI-generated summary of a session from MemoryCloude™',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sessionId: {
+              type: 'string',
+              description: 'Session identifier'
+            }
+          },
+          required: ['sessionId']
+        }
+      },
+      {
+        name: 'coordination_execute_task',
+        description: 'Execute complex task with Cognitive-Coordination™ - intelligent decomposition, parallel execution, and synthesis',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task: {
+              type: 'object',
+              description: 'Task specification',
+              properties: {
+                description: { type: 'string' },
+                type: { type: 'string' },
+                metadata: { type: 'object' }
+              },
+              required: ['description']
+            },
+            sessionId: {
+              type: 'string',
+              description: 'Session identifier for learning'
+            }
+          },
+          required: ['task']
+        }
+      },
+      {
+        name: 'coordination_analyze_task',
+        description: 'Analyze task complexity with Cognitive-Coordination™ without executing - shows subtasks, dependencies, and risks',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task: {
+              type: 'object',
+              description: 'Task to analyze',
+              properties: {
+                description: { type: 'string' },
+                type: { type: 'string' }
+              },
+              required: ['description']
+            }
+          },
+          required: ['task']
+        }
       }
     ]
   });
@@ -312,6 +435,35 @@ mcp.post('/tools/call', async (c) => {
 
       case 'openai_chat':
         result = await openaiChat(args, c.env);
+        break;
+
+      // Intelligence tools
+      case 'consciousness_get_awareness':
+        result = await getConsciousnessAwareness(c);
+        break;
+
+      case 'consciousness_capture_snapshot':
+        result = await captureConsciousnessSnapshot(c);
+        break;
+
+      case 'memory_persist_interaction':
+        result = await persistMemoryInteraction(args, c);
+        break;
+
+      case 'memory_recall_context':
+        result = await recallMemoryContext(args, c);
+        break;
+
+      case 'memory_get_session_summary':
+        result = await getMemorySessionSummary(args, c);
+        break;
+
+      case 'coordination_execute_task':
+        result = await executeCoordinationTask(args, c);
+        break;
+
+      case 'coordination_analyze_task':
+        result = await analyzeCoordinationTask(args, c);
         break;
 
       default:
@@ -587,6 +739,144 @@ function calculateEcosystemHealth(services) {
   if (healthPercent >= 70) return 'good';
   if (healthPercent >= 50) return 'degraded';
   return 'critical';
+}
+
+/**
+ * Intelligence Tool Implementations
+ */
+
+async function getConsciousnessAwareness(c) {
+  const consciousness = c.get('consciousness');
+
+  if (!consciousness) {
+    throw new Error('ContextConsciousness™ not available');
+  }
+
+  return await consciousness.getAwareness();
+}
+
+async function captureConsciousnessSnapshot(c) {
+  const consciousness = c.get('consciousness');
+
+  if (!consciousness) {
+    throw new Error('ContextConsciousness™ not available');
+  }
+
+  const snapshot = await consciousness.captureEcosystemSnapshot();
+  const anomalies = await consciousness.detectAnomalies(snapshot);
+  const predictions = await consciousness.predictFailures(snapshot);
+
+  return {
+    snapshot,
+    anomalies,
+    predictions
+  };
+}
+
+async function persistMemoryInteraction(args, c) {
+  const memory = c.get('memory');
+
+  if (!memory) {
+    throw new Error('MemoryCloude™ not available');
+  }
+
+  const { sessionId, interaction } = args;
+
+  if (!sessionId || !interaction) {
+    throw new Error('sessionId and interaction are required');
+  }
+
+  await memory.persistInteraction(sessionId, interaction);
+
+  return {
+    success: true,
+    message: `Interaction persisted to MemoryCloude™ for session ${sessionId}`
+  };
+}
+
+async function recallMemoryContext(args, c) {
+  const memory = c.get('memory');
+
+  if (!memory) {
+    throw new Error('MemoryCloude™ not available');
+  }
+
+  const { sessionId, query, limit } = args;
+
+  if (!sessionId || !query) {
+    throw new Error('sessionId and query are required');
+  }
+
+  const contexts = await memory.recallContext(sessionId, query, {
+    limit: limit || 5,
+    semantic: true
+  });
+
+  return {
+    sessionId,
+    query,
+    contexts,
+    count: contexts.length
+  };
+}
+
+async function getMemorySessionSummary(args, c) {
+  const memory = c.get('memory');
+
+  if (!memory) {
+    throw new Error('MemoryCloude™ not available');
+  }
+
+  const { sessionId } = args;
+
+  if (!sessionId) {
+    throw new Error('sessionId is required');
+  }
+
+  const summary = await memory.getSessionSummary(sessionId);
+  const stats = await memory.getStats(sessionId);
+
+  return {
+    sessionId,
+    summary,
+    stats
+  };
+}
+
+async function executeCoordinationTask(args, c) {
+  const coordinator = c.get('coordinator');
+
+  if (!coordinator) {
+    throw new Error('Cognitive-Coordination™ not available');
+  }
+
+  const { task, sessionId } = args;
+
+  if (!task) {
+    throw new Error('task is required');
+  }
+
+  const result = await coordinator.executeComplex(task, sessionId || 'mcp-session');
+
+  return result;
+}
+
+async function analyzeCoordinationTask(args, c) {
+  const coordinator = c.get('coordinator');
+
+  if (!coordinator) {
+    throw new Error('Cognitive-Coordination™ not available');
+  }
+
+  const { task } = args;
+
+  if (!task) {
+    throw new Error('task is required');
+  }
+
+  const analysis = await coordinator.cognitiveAnalysis(task);
+
+  return analysis;
 }
 
 export { mcp };
