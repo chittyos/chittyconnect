@@ -1,0 +1,78 @@
+name: Test & Validate
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - staging
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate wrangler.toml
+        run: |
+          if [ ! -f wrangler.toml ]; then
+            echo "❌ wrangler.toml not found"
+            exit 1
+          fi
+          echo "✅ wrangler.toml exists"
+
+      - name: Check required files
+        run: |
+          required_files=("package.json" "src/index.js" "wrangler.toml")
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Required file missing: $file"
+              exit 1
+            fi
+          done
+          echo "✅ All required files present"
+
+      - name: Security scan
+        run: npm audit --audit-level=moderate
+
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -rE "(sk-[a-zA-Z0-9]{48}|ghp_[a-zA-Z0-9]{36})" src/; then
+            echo "❌ Potential hardcoded secrets found"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets detected"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke test - Import check
+        run: |
+          node -e "import('./src/index.js').then(() => console.log('✅ Main entry point loads')).catch(e => { console.error('❌', e); process.exit(1); })"
