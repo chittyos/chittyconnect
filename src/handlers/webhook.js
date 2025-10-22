@@ -4,7 +4,7 @@
  */
 
 export async function handleWebhookEvent(event) {
-  console.log('Processing webhook event:', event.event);
+  console.log("Processing webhook event:", event.event);
 
   // TODO: Implement full MCP dispatch logic
   // This is a placeholder for GitHub App webhook processing
@@ -13,6 +13,6 @@ export async function handleWebhookEvent(event) {
     success: true,
     event: event.event,
     delivery: event.delivery,
-    timestamp: event.timestamp
+    timestamp: event.timestamp,
   };
 }

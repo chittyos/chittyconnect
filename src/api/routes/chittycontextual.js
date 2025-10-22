@@ -3,7 +3,7 @@
  * Contextual analysis and AI-powered insights
  */
 
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 const chittycontextualRoutes = new Hono();
 
@@ -11,27 +11,37 @@ const chittycontextualRoutes = new Hono();
  * POST /api/chittycontextual/analyze
  * Perform contextual analysis
  */
-chittycontextualRoutes.post('/analyze', async (c) => {
+chittycontextualRoutes.post("/analyze", async (c) => {
   try {
-    const { text, context, analysisType = 'comprehensive' } = await c.req.json();
+    const {
+      text,
+      context,
+      analysisType = "comprehensive",
+    } = await c.req.json();
 
     if (!text) {
-      return c.json({ error: 'text is required' }, 400);
+      return c.json({ error: "text is required" }, 400);
     }
 
-    const validTypes = ['sentiment', 'entities', 'legal', 'financial', 'comprehensive'];
+    const validTypes = [
+      "sentiment",
+      "entities",
+      "legal",
+      "financial",
+      "comprehensive",
+    ];
     if (!validTypes.includes(analysisType)) {
-      return c.json({ error: 'Invalid analysisType' }, 400);
+      return c.json({ error: "Invalid analysisType" }, 400);
     }
 
     // Forward to ChittyContextual service
-    const response = await fetch('https://contextual.chitty.cc/api/analyze', {
-      method: 'POST',
+    const response = await fetch("https://contextual.chitty.cc/api/analyze", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`,
       },
-      body: JSON.stringify({ text, context, analysisType })
+      body: JSON.stringify({ text, context, analysisType }),
     });
 
     if (!response.ok) {
@@ -49,21 +59,21 @@ chittycontextualRoutes.post('/analyze', async (c) => {
  * POST /api/chittycontextual/extract
  * Extract entities and metadata from text
  */
-chittycontextualRoutes.post('/extract', async (c) => {
+chittycontextualRoutes.post("/extract", async (c) => {
   try {
     const { text, entityTypes } = await c.req.json();
 
     if (!text) {
-      return c.json({ error: 'text is required' }, 400);
+      return c.json({ error: "text is required" }, 400);
     }
 
-    const response = await fetch('https://contextual.chitty.cc/api/extract', {
-      method: 'POST',
+    const response = await fetch("https://contextual.chitty.cc/api/extract", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`,
       },
-      body: JSON.stringify({ text, entityTypes })
+      body: JSON.stringify({ text, entityTypes }),
     });
 
     if (!response.ok) {

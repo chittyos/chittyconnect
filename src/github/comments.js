@@ -4,7 +4,7 @@
  * Posts and updates PR summary comments
  */
 
-const COMMENT_MARKER = '<!-- chitty:summary v1 -->';
+const COMMENT_MARKER = "<!-- chitty:summary v1 -->";
 
 /**
  * Summarize pull request and post top-level comment
@@ -19,7 +19,12 @@ export async function summarizePullRequest(token, owner, repo, prNumber, pr) {
   const summary = generatePRSummary(pr);
 
   // Check if we already posted a summary comment
-  const existingComment = await findExistingComment(token, owner, repo, prNumber);
+  const existingComment = await findExistingComment(
+    token,
+    owner,
+    repo,
+    prNumber,
+  );
 
   if (existingComment) {
     // Update existing comment
@@ -38,47 +43,48 @@ export async function summarizePullRequest(token, owner, repo, prNumber, pr) {
 function generatePRSummary(pr) {
   const lines = [];
 
-  lines.push('## PR Summary');
-  lines.push('');
+  lines.push("## PR Summary");
+  lines.push("");
   lines.push(`**Title:** ${pr.title}`);
   lines.push(`**Branch:** \`${pr.head.ref}\` → \`${pr.base.ref}\``);
   lines.push(`**Author:** @${pr.user.login}`);
-  lines.push(`**State:** ${pr.state} ${pr.draft ? '(draft)' : ''}`);
-  lines.push('');
+  lines.push(`**State:** ${pr.state} ${pr.draft ? "(draft)" : ""}`);
+  lines.push("");
 
   // Stats
-  lines.push('### Changes');
+  lines.push("### Changes");
   lines.push(`- **Files changed:** ${pr.changed_files || 0}`);
   lines.push(`- **Additions:** +${pr.additions || 0}`);
   lines.push(`- **Deletions:** -${pr.deletions || 0}`);
   lines.push(`- **Commits:** ${pr.commits || 0}`);
-  lines.push('');
+  lines.push("");
 
   // Risk assessment (simple heuristic)
   const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
-  const riskLevel = totalChanges > 500 ? 'High' : totalChanges > 200 ? 'Medium' : 'Low';
+  const riskLevel =
+    totalChanges > 500 ? "High" : totalChanges > 200 ? "Medium" : "Low";
   lines.push(`### Risk Assessment: **${riskLevel}**`);
-  lines.push('');
+  lines.push("");
 
   // Labels
   if (pr.labels && pr.labels.length > 0) {
-    lines.push('### Labels');
-    lines.push(pr.labels.map(l => `\`${l.name}\``).join(', '));
-    lines.push('');
+    lines.push("### Labels");
+    lines.push(pr.labels.map((l) => `\`${l.name}\``).join(", "));
+    lines.push("");
   }
 
   // Checklist
-  lines.push('### Review Checklist');
-  lines.push('- [ ] Code follows project style guidelines');
-  lines.push('- [ ] Tests added/updated for changes');
-  lines.push('- [ ] Documentation updated if needed');
-  lines.push('- [ ] No breaking changes introduced');
-  lines.push('');
+  lines.push("### Review Checklist");
+  lines.push("- [ ] Code follows project style guidelines");
+  lines.push("- [ ] Tests added/updated for changes");
+  lines.push("- [ ] Documentation updated if needed");
+  lines.push("- [ ] No breaking changes introduced");
+  lines.push("");
 
-  lines.push('---');
+  lines.push("---");
   lines.push(`${COMMENT_MARKER}`);
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 /**
@@ -94,11 +100,11 @@ async function findExistingComment(token, owner, repo, prNumber) {
     `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
     {
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
-      }
-    }
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+      },
+    },
   );
 
   if (!response.ok) {
@@ -106,7 +112,7 @@ async function findExistingComment(token, owner, repo, prNumber) {
   }
 
   const comments = await response.json();
-  return comments.find(c => c.body?.includes(COMMENT_MARKER)) || null;
+  return comments.find((c) => c.body?.includes(COMMENT_MARKER)) || null;
 }
 
 /**
@@ -121,14 +127,14 @@ async function postComment(token, owner, repo, issueNumber, body) {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
-      body: JSON.stringify({ body })
-    }
+      body: JSON.stringify({ body }),
+    },
   );
 
   if (!response.ok) {
@@ -151,14 +157,14 @@ async function updateComment(token, owner, repo, commentId, body) {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}`,
     {
-      method: 'PATCH',
+      method: "PATCH",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
-      body: JSON.stringify({ body })
-    }
+      body: JSON.stringify({ body }),
+    },
   );
 
   if (!response.ok) {

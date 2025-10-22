@@ -13,9 +13,9 @@ export class ContextConsciousness {
     this.services = new Map();
     this.healthHistory = [];
     this.alertThresholds = {
-      latency: 1000,      // ms
-      errorRate: 0.05,    // 5%
-      availability: 0.99  // 99%
+      latency: 1000, // ms
+      errorRate: 0.05, // 5%
+      availability: 0.99, // 99%
     };
   }
 
@@ -23,13 +23,13 @@ export class ContextConsciousness {
    * Initialize ContextConsciousness™ monitoring
    */
   async initialize() {
-    console.log('[ContextConsciousness™] Initializing ecosystem awareness...');
+    console.log("[ContextConsciousness™] Initializing ecosystem awareness...");
 
     // Load service registry
     await this.loadServiceRegistry();
 
     // Start passive monitoring (no interval in Workers)
-    console.log('[ContextConsciousness™] Ready for ecosystem monitoring');
+    console.log("[ContextConsciousness™] Ready for ecosystem monitoring");
   }
 
   /**
@@ -37,11 +37,12 @@ export class ContextConsciousness {
    */
   async loadServiceRegistry() {
     try {
-      const registryUrl = this.env.REGISTRY_SERVICE_URL || 'https://registry.chitty.cc';
+      const registryUrl =
+        this.env.REGISTRY_SERVICE_URL || "https://registry.chitty.cc";
       const response = await fetch(`${registryUrl}/api/services`, {
         headers: {
-          'User-Agent': 'ChittyConnect/1.0 (ContextConsciousness)',
-        }
+          "User-Agent": "ChittyConnect/1.0 (ContextConsciousness)",
+        },
       });
 
       if (response.ok) {
@@ -49,13 +50,18 @@ export class ContextConsciousness {
         for (const service of services) {
           this.services.set(service.name, {
             ...service,
-            health: { status: 'unknown', lastCheck: null }
+            health: { status: "unknown", lastCheck: null },
           });
         }
-        console.log(`[ContextConsciousness™] Loaded ${this.services.size} services`);
+        console.log(
+          `[ContextConsciousness™] Loaded ${this.services.size} services`,
+        );
       }
     } catch (error) {
-      console.warn('[ContextConsciousness™] Registry load failed:', error.message);
+      console.warn(
+        "[ContextConsciousness™] Registry load failed:",
+        error.message,
+      );
     }
   }
 
@@ -69,8 +75,8 @@ export class ContextConsciousness {
       overall: {
         healthy: 0,
         degraded: 0,
-        down: 0
-      }
+        down: 0,
+      },
     };
 
     // Check health of all services
@@ -78,8 +84,8 @@ export class ContextConsciousness {
       const health = await this.checkServiceHealth(name, service);
       snapshot.services.push({ name, ...health });
 
-      if (health.status === 'healthy') snapshot.overall.healthy++;
-      else if (health.status === 'degraded') snapshot.overall.degraded++;
+      if (health.status === "healthy") snapshot.overall.healthy++;
+      else if (health.status === "degraded") snapshot.overall.degraded++;
       else snapshot.overall.down++;
     }
 
@@ -99,36 +105,36 @@ export class ContextConsciousness {
    */
   async checkServiceHealth(name, service) {
     const start = Date.now();
-    let status = 'healthy';
+    let status = "healthy";
     let latency = 0;
 
     try {
       const healthUrl = service.healthEndpoint || `${service.url}/health`;
       const response = await fetch(healthUrl, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000) // 5s timeout
+        method: "GET",
+        signal: AbortSignal.timeout(5000), // 5s timeout
       });
 
       latency = Date.now() - start;
 
       if (!response.ok) {
-        status = response.status >= 500 ? 'down' : 'degraded';
+        status = response.status >= 500 ? "down" : "degraded";
       } else if (latency > this.alertThresholds.latency) {
-        status = 'degraded';
+        status = "degraded";
       }
 
       return {
         status,
         latency,
         lastCheck: Date.now(),
-        details: await response.json().catch(() => ({}))
+        details: await response.json().catch(() => ({})),
       };
     } catch (error) {
       return {
-        status: 'down',
+        status: "down",
         latency: Date.now() - start,
         lastCheck: Date.now(),
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -144,20 +150,20 @@ export class ContextConsciousness {
       // High latency
       if (service.latency > this.alertThresholds.latency) {
         anomalies.push({
-          type: 'high_latency',
+          type: "high_latency",
           service: service.name,
           value: service.latency,
           threshold: this.alertThresholds.latency,
-          severity: 'medium'
+          severity: "medium",
         });
       }
 
       // Service down
-      if (service.status === 'down') {
+      if (service.status === "down") {
         anomalies.push({
-          type: 'service_down',
+          type: "service_down",
           service: service.name,
-          severity: 'high'
+          severity: "high",
         });
       }
     }
@@ -191,17 +197,24 @@ Look for:
 
 Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "severity": "low|medium|high"}]}`;
 
-      const response = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
         messages: [
-          { role: 'system', content: 'You are an anomaly detection expert for distributed systems.' },
-          { role: 'user', content: prompt }
-        ]
+          {
+            role: "system",
+            content:
+              "You are an anomaly detection expert for distributed systems.",
+          },
+          { role: "user", content: prompt },
+        ],
       });
 
       const result = JSON.parse(response.response);
       return result.anomalies || [];
     } catch (error) {
-      console.warn('[ContextConsciousness™] AI anomaly detection failed:', error.message);
+      console.warn(
+        "[ContextConsciousness™] AI anomaly detection failed:",
+        error.message,
+      );
       return [];
     }
   }
@@ -220,28 +233,31 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     // Analyze trends for each service
     for (const service of snapshot.services) {
       const serviceHistory = this.healthHistory
-        .map(s => s.services.find(svc => svc.name === service.name))
+        .map((s) => s.services.find((svc) => svc.name === service.name))
         .filter(Boolean);
 
       // Check latency trend
-      const latencyTrend = this.calculateTrend(serviceHistory.map(s => s.latency));
+      const latencyTrend = this.calculateTrend(
+        serviceHistory.map((s) => s.latency),
+      );
 
       if (latencyTrend.slope > 50 && latencyTrend.confidence > 0.7) {
         // Latency increasing rapidly
         const timeToFailure = this.estimateTimeToThreshold(
           service.latency,
           latencyTrend.slope,
-          this.alertThresholds.latency * 2 // 2x threshold = failure
+          this.alertThresholds.latency * 2, // 2x threshold = failure
         );
 
-        if (timeToFailure > 0 && timeToFailure < 900000) { // Within 15 minutes
+        if (timeToFailure > 0 && timeToFailure < 900000) {
+          // Within 15 minutes
           predictions.push({
-            type: 'latency_failure',
+            type: "latency_failure",
             service: service.name,
             timeToFailure: Math.round(timeToFailure / 1000), // seconds
             confidence: latencyTrend.confidence,
             currentValue: service.latency,
-            threshold: this.alertThresholds.latency * 2
+            threshold: this.alertThresholds.latency * 2,
           });
         }
       }
@@ -273,11 +289,11 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
       const predicted = slope * i + (sumY - slope * sumX) / n;
       return sum + Math.pow(y - predicted, 2);
     }, 0);
-    const rSquared = 1 - (ssResidual / ssTotal);
+    const rSquared = 1 - ssResidual / ssTotal;
 
     return {
       slope,
-      confidence: Math.max(0, Math.min(1, rSquared)) // Clamp to [0,1]
+      confidence: Math.max(0, Math.min(1, rSquared)), // Clamp to [0,1]
     };
   }
 
@@ -293,18 +309,22 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
    * Trigger self-healing actions for detected anomalies
    */
   async triggerSelfHealing(anomalies) {
-    console.log(`[ContextConsciousness™] Self-healing triggered for ${anomalies.length} anomalies`);
+    console.log(
+      `[ContextConsciousness™] Self-healing triggered for ${anomalies.length} anomalies`,
+    );
 
     for (const anomaly of anomalies) {
       switch (anomaly.type) {
-        case 'high_latency':
+        case "high_latency":
           await this.healHighLatency(anomaly);
           break;
-        case 'service_down':
+        case "service_down":
           await this.healServiceDown(anomaly);
           break;
         default:
-          console.log(`[ContextConsciousness™] No healing action for ${anomaly.type}`);
+          console.log(
+            `[ContextConsciousness™] No healing action for ${anomaly.type}`,
+          );
       }
     }
   }
@@ -314,13 +334,15 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
    */
   async healHighLatency(anomaly) {
     // Enable caching for this service
-    console.log(`[ContextConsciousness™] Enabling aggressive caching for ${anomaly.service}`);
+    console.log(
+      `[ContextConsciousness™] Enabling aggressive caching for ${anomaly.service}`,
+    );
 
     // Store in KV for routing optimization
     await this.env.RATE_LIMIT.put(
       `cache:${anomaly.service}:aggressive`,
-      'true',
-      { expirationTtl: 300 } // 5 minutes
+      "true",
+      { expirationTtl: 300 }, // 5 minutes
     );
   }
 
@@ -329,7 +351,9 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
    */
   async healServiceDown(anomaly) {
     // Activate failover routing
-    console.log(`[ContextConsciousness™] Activating failover for ${anomaly.service}`);
+    console.log(
+      `[ContextConsciousness™] Activating failover for ${anomaly.service}`,
+    );
 
     // Find alternative service
     const alternatives = this.findAlternativeServices(anomaly.service);
@@ -338,7 +362,7 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
       await this.env.RATE_LIMIT.put(
         `failover:${anomaly.service}`,
         JSON.stringify(alternatives),
-        { expirationTtl: 600 } // 10 minutes
+        { expirationTtl: 600 }, // 10 minutes
       );
     }
   }
@@ -350,9 +374,11 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     const alternatives = [];
 
     for (const [name, service] of this.services.entries()) {
-      if (name !== serviceName &&
-          service.health?.status === 'healthy' &&
-          this.hasCompatibleCapabilities(serviceName, name)) {
+      if (
+        name !== serviceName &&
+        service.health?.status === "healthy" &&
+        this.hasCompatibleCapabilities(serviceName, name)
+      ) {
         alternatives.push(name);
       }
     }
@@ -381,24 +407,24 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     const routingMap = {};
 
     for (const service of snapshot.services) {
-      if (service.status === 'healthy') {
+      if (service.status === "healthy") {
         routingMap[service.name] = {
           priority: 1,
-          latency: service.latency
+          latency: service.latency,
         };
-      } else if (service.status === 'degraded') {
+      } else if (service.status === "degraded") {
         routingMap[service.name] = {
           priority: 2,
-          latency: service.latency
+          latency: service.latency,
         };
       }
     }
 
     // Store routing optimization
     await this.env.RATE_LIMIT.put(
-      'routing:optimization',
+      "routing:optimization",
       JSON.stringify(routingMap),
-      { expirationTtl: 60 } // 1 minute
+      { expirationTtl: 60 }, // 1 minute
     );
 
     return routingMap;
@@ -418,17 +444,17 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
         totalServices: this.services.size,
         healthy: snapshot.overall.healthy,
         degraded: snapshot.overall.degraded,
-        down: snapshot.overall.down
+        down: snapshot.overall.down,
       },
       anomalies: {
         count: anomalies.length,
-        details: anomalies
+        details: anomalies,
       },
       predictions: {
         count: predictions.length,
-        details: predictions
+        details: predictions,
       },
-      routing: await this.getRoutingOptimization()
+      routing: await this.getRoutingOptimization(),
     };
   }
 
@@ -437,7 +463,7 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
    */
   async getRoutingOptimization() {
     try {
-      const stored = await this.env.RATE_LIMIT.get('routing:optimization');
+      const stored = await this.env.RATE_LIMIT.get("routing:optimization");
       return stored ? JSON.parse(stored) : {};
     } catch {
       return {};

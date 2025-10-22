@@ -12,17 +12,19 @@
  * @param {number} prNumber - PR number
  * @param {object} options - Reviewer options
  */
-export async function requestReviewers(token, owner, repo, prNumber, options = {}) {
-  const {
-    reviewers = [],
-    teamReviewers = [],
-    useCODEOWNERS = true
-  } = options;
+export async function requestReviewers(
+  token,
+  owner,
+  repo,
+  prNumber,
+  options = {},
+) {
+  const { reviewers = [], teamReviewers = [], useCODEOWNERS = true } = options;
 
   // TODO: Parse CODEOWNERS file and match changed files
   // For now, use fallback reviewers
   const defaultReviewers = reviewers.length > 0 ? reviewers : [];
-  const defaultTeams = teamReviewers.length > 0 ? teamReviewers : ['core'];
+  const defaultTeams = teamReviewers.length > 0 ? teamReviewers : ["core"];
 
   if (defaultReviewers.length === 0 && defaultTeams.length === 0) {
     return; // No reviewers to request
@@ -31,24 +33,26 @@ export async function requestReviewers(token, owner, repo, prNumber, options = {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/requested_reviewers`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
       body: JSON.stringify({
         reviewers: defaultReviewers,
-        team_reviewers: defaultTeams
-      })
-    }
+        team_reviewers: defaultTeams,
+      }),
+    },
   );
 
   if (!response.ok) {
     const error = await response.text();
     // Don't throw on 422 (reviewers already requested or author can't review)
     if (response.status !== 422) {
-      throw new Error(`Request reviewers failed (${response.status}): ${error}`);
+      throw new Error(
+        `Request reviewers failed (${response.status}): ${error}`,
+      );
     }
   }
 
@@ -65,11 +69,7 @@ export async function requestReviewers(token, owner, repo, prNumber, options = {
  */
 export async function getCodeOwners(token, owner, repo, paths) {
   // Try to fetch CODEOWNERS file from common locations
-  const locations = [
-    '.github/CODEOWNERS',
-    'CODEOWNERS',
-    'docs/CODEOWNERS'
-  ];
+  const locations = [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"];
 
   let codeownersContent = null;
 
@@ -79,10 +79,10 @@ export async function getCodeOwners(token, owner, repo, paths) {
         `https://api.github.com/repos/${owner}/${repo}/contents/${location}`,
         {
           headers: {
-            'Authorization': `token ${token}`,
-            'Accept': 'application/vnd.github.raw'
-          }
-        }
+            Authorization: `token ${token}`,
+            Accept: "application/vnd.github.raw",
+          },
+        },
       );
 
       if (response.ok) {
@@ -113,11 +113,11 @@ export async function getCodeOwners(token, owner, repo, paths) {
 function parseCodeOwners(content) {
   const rules = [];
 
-  for (const line of content.split('\n')) {
+  for (const line of content.split("\n")) {
     const trimmed = line.trim();
 
     // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith('#')) {
+    if (!trimmed || trimmed.startsWith("#")) {
       continue;
     }
 
@@ -131,11 +131,9 @@ function parseCodeOwners(content) {
 
     // Convert glob pattern to regex (simplified)
     const regex = new RegExp(
-      '^' + pattern
-        .replace(/\./g, '\\.')
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.')
-        + '$'
+      "^" +
+        pattern.replace(/\./g, "\\.").replace(/\*/g, ".*").replace(/\?/g, ".") +
+        "$",
     );
 
     rules.push({ pattern: regex, owners });
@@ -158,11 +156,11 @@ function matchPathsToOwners(paths, rules) {
     for (const rule of rules) {
       if (rule.pattern.test(path)) {
         for (const owner of rule.owners) {
-          if (owner.startsWith('@')) {
+          if (owner.startsWith("@")) {
             const name = owner.slice(1);
-            if (name.includes('/')) {
+            if (name.includes("/")) {
               // Team reference: @org/team
-              teams.add(name.split('/')[1]);
+              teams.add(name.split("/")[1]);
             } else {
               // User reference: @username
               users.add(name);
@@ -175,6 +173,6 @@ function matchPathsToOwners(paths, rules) {
 
   return {
     users: Array.from(users),
-    teams: Array.from(teams)
+    teams: Array.from(teams),
   };
 }

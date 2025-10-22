@@ -12,23 +12,23 @@
  * Error types for classification
  */
 export const ErrorTypes = {
-  NETWORK: 'network',
-  TIMEOUT: 'timeout',
-  RATE_LIMIT: 'rate_limit',
-  AUTH: 'authentication',
-  VALIDATION: 'validation',
-  NOT_FOUND: 'not_found',
-  SERVER: 'server',
-  UNKNOWN: 'unknown'
+  NETWORK: "network",
+  TIMEOUT: "timeout",
+  RATE_LIMIT: "rate_limit",
+  AUTH: "authentication",
+  VALIDATION: "validation",
+  NOT_FOUND: "not_found",
+  SERVER: "server",
+  UNKNOWN: "unknown",
 };
 
 /**
  * Circuit breaker states
  */
 const CircuitState = {
-  CLOSED: 'closed',     // Normal operation
-  OPEN: 'open',         // Failing, rejecting requests
-  HALF_OPEN: 'half_open' // Testing if service recovered
+  CLOSED: "closed", // Normal operation
+  OPEN: "open", // Failing, rejecting requests
+  HALF_OPEN: "half_open", // Testing if service recovered
 };
 
 /**
@@ -51,7 +51,7 @@ class CircuitBreaker {
    */
   recordSuccess() {
     if (this.state === CircuitState.HALF_OPEN) {
-      console.log('[CircuitBreaker] Service recovered, closing circuit');
+      console.log("[CircuitBreaker] Service recovered, closing circuit");
       this.state = CircuitState.CLOSED;
       this.failures = [];
     }
@@ -66,7 +66,7 @@ class CircuitBreaker {
 
     // Remove old failures outside monitor window
     this.failures = this.failures.filter(
-      time => now - time < this.monitorWindow
+      (time) => now - time < this.monitorWindow,
     );
 
     // Add new failure
@@ -74,7 +74,9 @@ class CircuitBreaker {
 
     // Check if threshold exceeded
     if (this.failures.length >= this.failureThreshold) {
-      console.error(`[CircuitBreaker] Failure threshold exceeded (${this.failures.length}/${this.failureThreshold}), opening circuit`);
+      console.error(
+        `[CircuitBreaker] Failure threshold exceeded (${this.failures.length}/${this.failureThreshold}), opening circuit`,
+      );
       this.state = CircuitState.OPEN;
       this.nextAttemptTime = now + this.resetTimeout;
     }
@@ -92,7 +94,7 @@ class CircuitBreaker {
 
       case CircuitState.OPEN:
         if (now >= this.nextAttemptTime) {
-          console.log('[CircuitBreaker] Testing service recovery (half-open)');
+          console.log("[CircuitBreaker] Testing service recovery (half-open)");
           this.state = CircuitState.HALF_OPEN;
           return true;
         }
@@ -114,7 +116,7 @@ class CircuitBreaker {
       state: this.state,
       failures: this.failures.length,
       threshold: this.failureThreshold,
-      nextAttempt: this.nextAttemptTime
+      nextAttempt: this.nextAttemptTime,
     };
   }
 }
@@ -126,7 +128,7 @@ const circuitBreakers = {
   chittyid: new CircuitBreaker({ failureThreshold: 3, resetTimeout: 30000 }),
   auth: new CircuitBreaker({ failureThreshold: 3, resetTimeout: 30000 }),
   registry: new CircuitBreaker({ failureThreshold: 5, resetTimeout: 60000 }),
-  default: new CircuitBreaker()
+  default: new CircuitBreaker(),
 };
 
 /**
@@ -142,16 +144,20 @@ function getCircuitBreaker(serviceName) {
 export function classifyError(error) {
   if (!error) return ErrorTypes.UNKNOWN;
 
-  const message = error.message?.toLowerCase() || '';
+  const message = error.message?.toLowerCase() || "";
   const status = error.status || error.statusCode;
 
   // Network errors
-  if (message.includes('fetch') || message.includes('network') || message.includes('econnrefused')) {
+  if (
+    message.includes("fetch") ||
+    message.includes("network") ||
+    message.includes("econnrefused")
+  ) {
     return ErrorTypes.NETWORK;
   }
 
   // Timeout errors
-  if (message.includes('timeout') || message.includes('timed out')) {
+  if (message.includes("timeout") || message.includes("timed out")) {
     return ErrorTypes.TIMEOUT;
   }
 
@@ -176,7 +182,7 @@ export function isRetryable(error) {
     ErrorTypes.NETWORK,
     ErrorTypes.TIMEOUT,
     ErrorTypes.RATE_LIMIT,
-    ErrorTypes.SERVER
+    ErrorTypes.SERVER,
   ];
 
   return retryableTypes.includes(errorType);
@@ -186,10 +192,7 @@ export function isRetryable(error) {
  * Calculate exponential backoff delay
  */
 function calculateBackoff(attempt, baseDelay = 1000, maxDelay = 30000) {
-  const exponentialDelay = Math.min(
-    baseDelay * Math.pow(2, attempt),
-    maxDelay
-  );
+  const exponentialDelay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
 
   // Add jitter (±25%)
   const jitter = exponentialDelay * 0.25 * (Math.random() - 0.5);
@@ -201,7 +204,7 @@ function calculateBackoff(attempt, baseDelay = 1000, maxDelay = 30000) {
  * Sleep for specified milliseconds
  */
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -217,7 +220,7 @@ export async function retryWithBackoff(fn, options = {}) {
     baseDelay = 1000,
     maxDelay = 30000,
     onRetry = null,
-    serviceName = 'default'
+    serviceName = "default",
   } = options;
 
   const breaker = getCircuitBreaker(serviceName);
@@ -228,7 +231,9 @@ export async function retryWithBackoff(fn, options = {}) {
       // Check circuit breaker
       if (!breaker.canAttempt()) {
         const state = breaker.getState();
-        throw new Error(`Circuit breaker OPEN for ${serviceName}. Next attempt at ${new Date(state.nextAttempt).toISOString()}`);
+        throw new Error(
+          `Circuit breaker OPEN for ${serviceName}. Next attempt at ${new Date(state.nextAttempt).toISOString()}`,
+        );
       }
 
       // Attempt function call
@@ -238,7 +243,6 @@ export async function retryWithBackoff(fn, options = {}) {
       breaker.recordSuccess();
 
       return result;
-
     } catch (error) {
       lastError = error;
 
@@ -247,13 +251,18 @@ export async function retryWithBackoff(fn, options = {}) {
 
       // Check if error is retryable
       if (!isRetryable(error)) {
-        console.error(`[Retry] Non-retryable error (${classifyError(error)}):`, error.message);
+        console.error(
+          `[Retry] Non-retryable error (${classifyError(error)}):`,
+          error.message,
+        );
         throw error;
       }
 
       // Last attempt - don't retry
       if (attempt === maxAttempts - 1) {
-        console.error(`[Retry] Max attempts (${maxAttempts}) reached for ${serviceName}`);
+        console.error(
+          `[Retry] Max attempts (${maxAttempts}) reached for ${serviceName}`,
+        );
         break;
       }
 
@@ -262,7 +271,7 @@ export async function retryWithBackoff(fn, options = {}) {
 
       console.warn(
         `[Retry] Attempt ${attempt + 1}/${maxAttempts} failed for ${serviceName}. ` +
-        `Error: ${error.message}. Retrying in ${delay}ms...`
+          `Error: ${error.message}. Retrying in ${delay}ms...`,
       );
 
       // Call onRetry hook if provided
@@ -289,13 +298,13 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
     return response;
   } catch (error) {
     clearTimeout(timeout);
-    if (error.name === 'AbortError') {
+    if (error.name === "AbortError") {
       throw new Error(`Request timeout after ${timeoutMs}ms`);
     }
     throw error;
@@ -306,15 +315,21 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
  * Enhanced fetch with retry and circuit breaker
  */
 export async function resilientFetch(url, options = {}, retryOptions = {}) {
-  const serviceName = new URL(url).hostname.split('.')[0] || 'default';
+  const serviceName = new URL(url).hostname.split(".")[0] || "default";
 
   return retryWithBackoff(
     async () => {
-      const response = await fetchWithTimeout(url, options, retryOptions.timeout || 10000);
+      const response = await fetchWithTimeout(
+        url,
+        options,
+        retryOptions.timeout || 10000,
+      );
 
       // Check if response is OK
       if (!response.ok) {
-        const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const error = new Error(
+          `HTTP ${response.status}: ${response.statusText}`,
+        );
         error.status = response.status;
         error.response = response;
         throw error;
@@ -324,8 +339,8 @@ export async function resilientFetch(url, options = {}, retryOptions = {}) {
     },
     {
       ...retryOptions,
-      serviceName
-    }
+      serviceName,
+    },
   );
 }
 
@@ -336,7 +351,7 @@ export function getCircuitBreakerStatus(serviceName = null) {
   if (serviceName) {
     const breaker = getCircuitBreaker(serviceName);
     return {
-      [serviceName]: breaker.getState()
+      [serviceName]: breaker.getState(),
     };
   }
 
@@ -363,6 +378,6 @@ export function resetCircuitBreaker(serviceName) {
   return {
     success: true,
     service: serviceName,
-    state: breaker.getState()
+    state: breaker.getState(),
   };
 }

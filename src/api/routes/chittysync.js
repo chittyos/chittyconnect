@@ -3,7 +3,7 @@
  * Data synchronization and state management
  */
 
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 const chittysyncRoutes = new Hono();
 
@@ -11,21 +11,26 @@ const chittysyncRoutes = new Hono();
  * POST /api/chittysync/sync
  * Trigger a sync operation
  */
-chittysyncRoutes.post('/sync', async (c) => {
+chittysyncRoutes.post("/sync", async (c) => {
   try {
-    const { source, target, entities, mode = 'incremental' } = await c.req.json();
+    const {
+      source,
+      target,
+      entities,
+      mode = "incremental",
+    } = await c.req.json();
 
     if (!source || !target) {
-      return c.json({ error: 'source and target are required' }, 400);
+      return c.json({ error: "source and target are required" }, 400);
     }
 
-    const response = await fetch('https://sync.chitty.cc/api/sync', {
-      method: 'POST',
+    const response = await fetch("https://sync.chitty.cc/api/sync", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${c.env.CHITTY_SYNC_TOKEN}`
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
       },
-      body: JSON.stringify({ source, target, entities, mode })
+      body: JSON.stringify({ source, target, entities, mode }),
     });
 
     if (!response.ok) {
@@ -43,14 +48,14 @@ chittysyncRoutes.post('/sync', async (c) => {
  * GET /api/chittysync/status/:syncId
  * Get sync status
  */
-chittysyncRoutes.get('/status/:syncId', async (c) => {
+chittysyncRoutes.get("/status/:syncId", async (c) => {
   try {
-    const syncId = c.req.param('syncId');
+    const syncId = c.req.param("syncId");
 
     const response = await fetch(`https://sync.chitty.cc/api/sync/${syncId}`, {
       headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_SYNC_TOKEN}`
-      }
+        Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
+      },
     });
 
     if (!response.ok) {
@@ -68,20 +73,23 @@ chittysyncRoutes.get('/status/:syncId', async (c) => {
  * GET /api/chittysync/history
  * Get sync history
  */
-chittysyncRoutes.get('/history', async (c) => {
+chittysyncRoutes.get("/history", async (c) => {
   try {
     const { source, target, limit = 50 } = c.req.query();
 
     const params = new URLSearchParams();
-    if (source) params.append('source', source);
-    if (target) params.append('target', target);
-    params.append('limit', limit);
+    if (source) params.append("source", source);
+    if (target) params.append("target", target);
+    params.append("limit", limit);
 
-    const response = await fetch(`https://sync.chitty.cc/api/history?${params.toString()}`, {
-      headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_SYNC_TOKEN}`
-      }
-    });
+    const response = await fetch(
+      `https://sync.chitty.cc/api/history?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
+        },
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`ChittySync service error: ${response.status}`);

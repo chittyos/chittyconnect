@@ -13,7 +13,7 @@
  * @returns {Promise<boolean>}
  */
 export async function verifyWebhookSignature(body, signature, secret) {
-  if (!signature || !signature.startsWith('sha256=')) {
+  if (!signature || !signature.startsWith("sha256=")) {
     return false;
   }
 
@@ -30,19 +30,19 @@ export async function verifyWebhookSignature(body, signature, secret) {
 async function signHmac(secret, data) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
+    { name: "HMAC", hash: "SHA-256" },
     false,
-    ['sign']
+    ["sign"],
   );
 
-  const mac = await crypto.subtle.sign('HMAC', key, data);
+  const mac = await crypto.subtle.sign("HMAC", key, data);
   const hex = Array.from(new Uint8Array(mac))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 
-  return 'sha256=' + hex;
+  return "sha256=" + hex;
 }
 
 /**

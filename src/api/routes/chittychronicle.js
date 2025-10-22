@@ -3,7 +3,7 @@
  * Event logging and audit trails
  */
 
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 const chittychronicleRoutes = new Hono();
 
@@ -11,26 +11,26 @@ const chittychronicleRoutes = new Hono();
  * POST /api/chittychronicle/log
  * Create a chronicle entry
  */
-chittychronicleRoutes.post('/log', async (c) => {
+chittychronicleRoutes.post("/log", async (c) => {
   try {
     const { eventType, entityId, data, timestamp } = await c.req.json();
 
     if (!eventType || !data) {
-      return c.json({ error: 'eventType and data are required' }, 400);
+      return c.json({ error: "eventType and data are required" }, 400);
     }
 
-    const response = await fetch('https://chronicle.chitty.cc/api/entries', {
-      method: 'POST',
+    const response = await fetch("https://chronicle.chitty.cc/api/entries", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`,
       },
       body: JSON.stringify({
         eventType,
         entityId,
         data,
-        timestamp: timestamp || new Date().toISOString()
-      })
+        timestamp: timestamp || new Date().toISOString(),
+      }),
     });
 
     if (!response.ok) {
@@ -48,21 +48,24 @@ chittychronicleRoutes.post('/log', async (c) => {
  * GET /api/chittychronicle/query
  * Query chronicle entries
  */
-chittychronicleRoutes.get('/query', async (c) => {
+chittychronicleRoutes.get("/query", async (c) => {
   try {
     const { entityId, eventType, startDate, limit = 100 } = c.req.query();
 
     const params = new URLSearchParams();
-    if (entityId) params.append('entityId', entityId);
-    if (eventType) params.append('eventType', eventType);
-    if (startDate) params.append('startDate', startDate);
-    params.append('limit', limit);
+    if (entityId) params.append("entityId", entityId);
+    if (eventType) params.append("eventType", eventType);
+    if (startDate) params.append("startDate", startDate);
+    params.append("limit", limit);
 
-    const response = await fetch(`https://chronicle.chitty.cc/api/entries?${params.toString()}`, {
-      headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`
-      }
-    });
+    const response = await fetch(
+      `https://chronicle.chitty.cc/api/entries?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`,
+        },
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`ChittyChronicle service error: ${response.status}`);
@@ -79,15 +82,18 @@ chittychronicleRoutes.get('/query', async (c) => {
  * GET /api/chittychronicle/timeline/:entityId
  * Get timeline for an entity
  */
-chittychronicleRoutes.get('/timeline/:entityId', async (c) => {
+chittychronicleRoutes.get("/timeline/:entityId", async (c) => {
   try {
-    const entityId = c.req.param('entityId');
+    const entityId = c.req.param("entityId");
 
-    const response = await fetch(`https://chronicle.chitty.cc/api/timeline/${entityId}`, {
-      headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`
-      }
-    });
+    const response = await fetch(
+      `https://chronicle.chitty.cc/api/timeline/${entityId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`,
+        },
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`ChittyChronicle service error: ${response.status}`);

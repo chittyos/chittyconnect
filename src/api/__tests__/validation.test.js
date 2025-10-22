@@ -4,14 +4,24 @@
  * Tests Zod schema validation for all API endpoints
  */
 
-import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { describe, it, expect } from "vitest";
+import { z } from "zod";
 
 /**
  * ChittyID Mint Request Schema
  */
 const ChittyIDMintSchema = z.object({
-  entity: z.enum(['PEO', 'PLACE', 'PROP', 'EVNT', 'AUTH', 'INFO', 'FACT', 'CONTEXT', 'ACTOR']),
+  entity: z.enum([
+    "PEO",
+    "PLACE",
+    "PROP",
+    "EVNT",
+    "AUTH",
+    "INFO",
+    "FACT",
+    "CONTEXT",
+    "ACTOR",
+  ]),
   metadata: z.object({}).passthrough().optional(),
 });
 
@@ -21,7 +31,7 @@ const ChittyIDMintSchema = z.object({
 const CaseCreateSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().optional(),
-  caseType: z.enum(['eviction', 'litigation', 'resolution', 'general']),
+  caseType: z.enum(["eviction", "litigation", "resolution", "general"]),
   metadata: z.object({}).passthrough().optional(),
 });
 
@@ -35,72 +45,72 @@ const EvidenceIngestSchema = z.object({
   metadata: z.object({}).passthrough().optional(),
 });
 
-describe('API Input Validation Schemas', () => {
-  describe('ChittyID Mint Validation', () => {
-    it('should validate valid ChittyID mint requests', () => {
+describe("API Input Validation Schemas", () => {
+  describe("ChittyID Mint Validation", () => {
+    it("should validate valid ChittyID mint requests", () => {
       const valid = {
-        entity: 'PEO',
-        metadata: { name: 'Test Entity' }
+        entity: "PEO",
+        metadata: { name: "Test Entity" },
       };
 
       const result = ChittyIDMintSchema.safeParse(valid);
       expect(result.success).toBe(true);
     });
 
-    it('should reject invalid entity types', () => {
+    it("should reject invalid entity types", () => {
       const invalid = {
-        entity: 'INVALID_TYPE',
-        metadata: {}
+        entity: "INVALID_TYPE",
+        metadata: {},
       };
 
       const result = ChittyIDMintSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
 
-    it('should allow omitting metadata', () => {
-      const valid = { entity: 'PLACE' };
+    it("should allow omitting metadata", () => {
+      const valid = { entity: "PLACE" };
       const result = ChittyIDMintSchema.safeParse(valid);
       expect(result.success).toBe(true);
     });
   });
 
-  describe('Case Create Validation', () => {
-    it('should validate valid case creation requests', () => {
+  describe("Case Create Validation", () => {
+    it("should validate valid case creation requests", () => {
       const valid = {
-        title: 'Eviction Proceeding - 123 Main St',
-        description: 'Non-payment of rent',
-        caseType: 'eviction',
-        metadata: { propertyAddress: '123 Main St' }
+        title: "Eviction Proceeding - 123 Main St",
+        description: "Non-payment of rent",
+        caseType: "eviction",
+        metadata: { propertyAddress: "123 Main St" },
       };
 
       const result = CaseCreateSchema.safeParse(valid);
       expect(result.success).toBe(true);
     });
 
-    it('should reject empty titles', () => {
+    it("should reject empty titles", () => {
       const invalid = {
-        title: '',
-        caseType: 'eviction'
+        title: "",
+        caseType: "eviction",
       };
 
       const result = CaseCreateSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
 
-    it('should reject titles over 500 characters', () => {
+    it("should reject titles over 500 characters", () => {
       const invalid = {
-        title: 'A'.repeat(501),
-        caseType: 'eviction'
+        title: "A".repeat(501),
+        caseType: "eviction",
       };
 
       const result = CaseCreateSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
 
-    it('should reject invalid case types', () => {
+    it("should reject invalid case types", () => {
       const invalid = {
-        title: 'Test Case',
-        caseType: 'invalid_type'
+        title: "Test Case",
+        caseType: "invalid_type",
       };
 
       const result = CaseCreateSchema.safeParse(invalid);
@@ -108,31 +118,31 @@ describe('API Input Validation Schemas', () => {
     });
   });
 
-  describe('Evidence Ingest Validation', () => {
-    it('should validate valid evidence ingest requests', () => {
+  describe("Evidence Ingest Validation", () => {
+    it("should validate valid evidence ingest requests", () => {
       const valid = {
-        fileUrl: 'https://example.com/evidence.pdf',
-        caseId: 'CHITTY-CASE-123',
-        evidenceType: 'documentary'
+        fileUrl: "https://example.com/evidence.pdf",
+        caseId: "CHITTY-CASE-123",
+        evidenceType: "documentary",
       };
 
       const result = EvidenceIngestSchema.safeParse(valid);
       expect(result.success).toBe(true);
     });
 
-    it('should reject invalid URLs', () => {
+    it("should reject invalid URLs", () => {
       const invalid = {
-        fileUrl: 'not-a-url',
-        caseId: 'CHITTY-CASE-123'
+        fileUrl: "not-a-url",
+        caseId: "CHITTY-CASE-123",
       };
 
       const result = EvidenceIngestSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
 
-    it('should require caseId', () => {
+    it("should require caseId", () => {
       const invalid = {
-        fileUrl: 'https://example.com/evidence.pdf'
+        fileUrl: "https://example.com/evidence.pdf",
       };
 
       const result = EvidenceIngestSchema.safeParse(invalid);
@@ -144,8 +154,8 @@ describe('API Input Validation Schemas', () => {
 /**
  * Rate Limiting Tests
  */
-describe('Rate Limiting', () => {
-  it('should track request counts per API key', () => {
+describe("Rate Limiting", () => {
+  it("should track request counts per API key", () => {
     // Mock rate limit counter
     const rateLimits = new Map();
 
@@ -158,7 +168,7 @@ describe('Rate Limiting', () => {
       }
 
       const requests = rateLimits.get(apiKey);
-      const recentRequests = requests.filter(time => time > windowStart);
+      const recentRequests = requests.filter((time) => time > windowStart);
 
       if (recentRequests.length >= limit) {
         return { allowed: false, remaining: 0 };
@@ -169,12 +179,12 @@ describe('Rate Limiting', () => {
 
       return {
         allowed: true,
-        remaining: limit - recentRequests.length
+        remaining: limit - recentRequests.length,
       };
     }
 
     // Test rate limiting
-    const apiKey = 'test-key-123';
+    const apiKey = "test-key-123";
     const limit = 5;
 
     // Should allow first 5 requests

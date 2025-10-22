@@ -8,12 +8,12 @@
  * 4. Execute automations
  */
 
-import { normalizeGitHubEvent } from '../mcp/normalize.js';
-import { getCachedInstallationToken } from '../auth/github.js';
-import { createComplianceCheck } from '../github/checks.js';
-import { autoLabelPullRequest } from '../github/labels.js';
-import { summarizePullRequest } from '../github/comments.js';
-import { requestReviewers } from '../github/reviewers.js';
+import { normalizeGitHubEvent } from "../mcp/normalize.js";
+import { getCachedInstallationToken } from "../auth/github.js";
+import { createComplianceCheck } from "../github/checks.js";
+import { autoLabelPullRequest } from "../github/labels.js";
+import { summarizePullRequest } from "../github/comments.js";
+import { requestReviewers } from "../github/reviewers.js";
 
 /**
  * Process batch of queued events
@@ -22,21 +22,21 @@ import { requestReviewers } from '../github/reviewers.js';
  */
 export async function queueConsumer(batch, env) {
   const results = await Promise.allSettled(
-    batch.messages.map(msg => processEvent(msg.body, env))
+    batch.messages.map((msg) => processEvent(msg.body, env)),
   );
 
   // Log failures
   results.forEach((result, i) => {
-    if (result.status === 'rejected') {
-      console.error('Event processing failed:', {
+    if (result.status === "rejected") {
+      console.error("Event processing failed:", {
         delivery: batch.messages[i].body.delivery,
-        error: result.reason?.message
+        error: result.reason?.message,
       });
     }
   });
 
   // Ack all messages (even failures, to avoid infinite retries)
-  batch.messages.forEach(msg => msg.ack());
+  batch.messages.forEach((msg) => msg.ack());
 }
 
 /**
@@ -51,14 +51,17 @@ async function processEvent(message, env) {
     // Get installation ID from payload
     const installationId = payload.installation?.id;
     if (!installationId) {
-      console.warn('No installation_id in event:', { delivery, event });
+      console.warn("No installation_id in event:", { delivery, event });
       return;
     }
 
     // Lookup tenant mapping
     const tenantId = await lookupTenant(env, installationId);
     if (!tenantId) {
-      console.warn('No tenant mapping for installation:', { installationId, delivery });
+      console.warn("No tenant mapping for installation:", {
+        installationId,
+        delivery,
+      });
       return;
     }
 
@@ -68,7 +71,7 @@ async function processEvent(message, env) {
       event,
       payload,
       installationId,
-      tenantId
+      tenantId,
     });
 
     // Dispatch to MCP bus (TODO: implement MCP client)
@@ -78,25 +81,24 @@ async function processEvent(message, env) {
     await runAutomations(env, event, payload, installationId);
 
     // Mark as completed
-    await env.IDEMP_KV.put(delivery, 'completed', { expirationTtl: 86400 });
+    await env.IDEMP_KV.put(delivery, "completed", { expirationTtl: 86400 });
 
-    console.log('Event processed:', {
+    console.log("Event processed:", {
       delivery,
       event,
       installationId,
-      tenantId
+      tenantId,
     });
-
   } catch (error) {
-    console.error('Event processing error:', {
+    console.error("Event processing error:", {
       delivery,
       event,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
 
     // Mark as failed
-    await env.IDEMP_KV.put(delivery, 'failed', { expirationTtl: 86400 });
+    await env.IDEMP_KV.put(delivery, "failed", { expirationTtl: 86400 });
     throw error;
   }
 }
@@ -109,7 +111,7 @@ async function processEvent(message, env) {
  */
 async function lookupTenant(env, installationId) {
   const result = await env.DB.prepare(
-    'SELECT tenant_id FROM gh_installations WHERE installation_id = ?'
+    "SELECT tenant_id FROM gh_installations WHERE installation_id = ?",
   )
     .bind(installationId)
     .first();
@@ -128,20 +130,20 @@ async function runAutomations(env, event, payload, installationId) {
   const token = await getCachedInstallationToken(env, installationId);
 
   switch (event) {
-    case 'push':
+    case "push":
       // Post compliance check on push
       if (payload.after && payload.repository) {
         await createComplianceCheck(
           token,
           payload.repository.owner.login,
           payload.repository.name,
-          payload.after
+          payload.after,
         );
       }
       break;
 
-    case 'pull_request':
-      if (['opened', 'synchronize', 'reopened'].includes(payload.action)) {
+    case "pull_request":
+      if (["opened", "synchronize", "reopened"].includes(payload.action)) {
         const pr = payload.pull_request;
         const repo = payload.repository;
 
@@ -152,7 +154,7 @@ async function runAutomations(env, event, payload, installationId) {
             token,
             repo.owner.login,
             repo.name,
-            pr.head.sha
+            pr.head.sha,
           ),
 
           // 2. Auto-label based on title/paths
@@ -162,7 +164,7 @@ async function runAutomations(env, event, payload, installationId) {
             repo.name,
             pr.number,
             pr.title,
-            [] // TODO: fetch changed files
+            [], // TODO: fetch changed files
           ),
 
           // 3. PR summary comment
@@ -171,23 +173,18 @@ async function runAutomations(env, event, payload, installationId) {
             repo.owner.login,
             repo.name,
             pr.number,
-            pr
+            pr,
           ),
 
           // 4. Request reviewers
-          requestReviewers(
-            token,
-            repo.owner.login,
-            repo.name,
-            pr.number
-          )
+          requestReviewers(token, repo.owner.login, repo.name, pr.number),
         ]);
       }
       break;
 
-    case 'issue_comment':
+    case "issue_comment":
       // Re-summarize on "/chitty summarize" command
-      if (payload.comment?.body?.includes('/chitty summarize')) {
+      if (payload.comment?.body?.includes("/chitty summarize")) {
         const issue = payload.issue;
         const repo = payload.repository;
 
@@ -195,9 +192,9 @@ async function runAutomations(env, event, payload, installationId) {
           // Fetch PR details
           const prResponse = await fetch(issue.pull_request.url, {
             headers: {
-              'Authorization': `token ${token}`,
-              'Accept': 'application/vnd.github+json'
-            }
+              Authorization: `token ${token}`,
+              Accept: "application/vnd.github+json",
+            },
           });
           const pr = await prResponse.json();
 
@@ -206,7 +203,7 @@ async function runAutomations(env, event, payload, installationId) {
             repo.owner.login,
             repo.name,
             issue.number,
-            pr
+            pr,
           );
         }
       }

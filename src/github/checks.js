@@ -18,37 +18,37 @@ export async function createComplianceCheck(
   owner,
   repo,
   sha,
-  options = {}
+  options = {},
 ) {
   const {
-    status = 'completed',
-    conclusion = 'success',
-    title = 'ChittyMCP checks passed',
-    summary = 'Baseline webhook→MCP→GitHub round-trip ok.',
-    details = null
+    status = "completed",
+    conclusion = "success",
+    title = "ChittyMCP checks passed",
+    summary = "Baseline webhook→MCP→GitHub round-trip ok.",
+    details = null,
   } = options;
 
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/check-runs`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
       body: JSON.stringify({
-        name: 'Chitty Compliance/CI',
+        name: "Chitty Compliance/CI",
         head_sha: sha,
         status,
         conclusion,
         output: {
           title,
           summary,
-          text: details
-        }
-      })
-    }
+          text: details,
+        },
+      }),
+    },
   );
 
   if (!response.ok) {
@@ -71,14 +71,14 @@ export async function updateCheckRun(token, owner, repo, checkRunId, updates) {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/check-runs/${checkRunId}`,
     {
-      method: 'PATCH',
+      method: "PATCH",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
-      body: JSON.stringify(updates)
-    }
+      body: JSON.stringify(updates),
+    },
   );
 
   if (!response.ok) {

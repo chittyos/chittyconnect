@@ -13,9 +13,9 @@ export class MemoryCloude {
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
     this.vectorStore = env.VECTORIZE; // Cloudflare Vectorize (when available)
     this.retention = {
-      conversations: 90,  // 90 days
-      decisions: 365,     // 1 year
-      entities: Infinity  // Forever
+      conversations: 90, // 90 days
+      decisions: 365, // 1 year
+      entities: Infinity, // Forever
     };
   }
 
@@ -23,16 +23,18 @@ export class MemoryCloude {
    * Initialize MemoryCloude™
    */
   async initialize() {
-    console.log('[MemoryCloude™] Initializing perpetual context system...');
+    console.log("[MemoryCloude™] Initializing perpetual context system...");
 
     // Check for Vectorize availability
     this.hasVectorize = !!this.vectorStore;
 
     if (!this.hasVectorize) {
-      console.warn('[MemoryCloude™] Vectorize not available, using KV-only mode');
+      console.warn(
+        "[MemoryCloude™] Vectorize not available, using KV-only mode",
+      );
     }
 
-    console.log('[MemoryCloude™] Ready for memory persistence');
+    console.log("[MemoryCloude™] Ready for memory persistence");
   }
 
   /**
@@ -48,9 +50,9 @@ export class MemoryCloude {
       JSON.stringify({
         ...interaction,
         id: interactionId,
-        timestamp
+        timestamp,
       }),
-      { expirationTtl: this.retention.conversations * 86400 }
+      { expirationTtl: this.retention.conversations * 86400 },
     );
 
     // 2. Generate and store embedding (if Vectorize available)
@@ -81,29 +83,31 @@ export class MemoryCloude {
     try {
       // Generate embedding using Cloudflare AI
       const text = this.extractTextContent(interaction);
-      const embedding = await this.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-        text: [text]
+      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
+        text: [text],
       });
 
       if (embedding && embedding.data && embedding.data[0]) {
         // Store in Vectorize
-        await this.vectorStore.insert([{
-          id: interactionId,
-          values: embedding.data[0],
-          metadata: {
-            sessionId,
-            timestamp: Date.now(),
-            userId: interaction.userId,
-            type: interaction.type,
-            entities: JSON.stringify(interaction.entities || []),
-            actions: JSON.stringify(interaction.actions || [])
-          }
-        }]);
+        await this.vectorStore.insert([
+          {
+            id: interactionId,
+            values: embedding.data[0],
+            metadata: {
+              sessionId,
+              timestamp: Date.now(),
+              userId: interaction.userId,
+              type: interaction.type,
+              entities: JSON.stringify(interaction.entities || []),
+              actions: JSON.stringify(interaction.actions || []),
+            },
+          },
+        ]);
 
         console.log(`[MemoryCloude™] Stored embedding for ${interactionId}`);
       }
     } catch (error) {
-      console.warn('[MemoryCloude™] Embedding storage failed:', error.message);
+      console.warn("[MemoryCloude™] Embedding storage failed:", error.message);
     }
   }
 
@@ -116,9 +120,10 @@ export class MemoryCloude {
     if (interaction.content) parts.push(interaction.content);
     if (interaction.input) parts.push(interaction.input);
     if (interaction.output) parts.push(interaction.output);
-    if (interaction.actions) parts.push(interaction.actions.map(a => a.type).join(', '));
+    if (interaction.actions)
+      parts.push(interaction.actions.map((a) => a.type).join(", "));
 
-    return parts.join('\n');
+    return parts.join("\n");
   }
 
   /**
@@ -129,13 +134,13 @@ export class MemoryCloude {
       const entityKey = `entity:${entity.type}:${entity.id}`;
 
       // Get existing entity data
-      const existing = await this.kv.get(entityKey, 'json');
+      const existing = await this.kv.get(entityKey, "json");
 
       const entityData = {
         ...entity,
         sessions: [...new Set([...(existing?.sessions || []), sessionId])],
         lastSeen: Date.now(),
-        occurrences: (existing?.occurrences || 0) + 1
+        occurrences: (existing?.occurrences || 0) + 1,
       };
 
       // Store without expiration (entities live forever)
@@ -157,9 +162,9 @@ export class MemoryCloude {
         JSON.stringify({
           ...decision,
           sessionId,
-          timestamp
+          timestamp,
         }),
-        { expirationTtl: this.retention.decisions * 86400 }
+        { expirationTtl: this.retention.decisions * 86400 },
       );
     }
   }
@@ -170,15 +175,15 @@ export class MemoryCloude {
   async updateSessionIndex(sessionId, interactionId) {
     const indexKey = `session:${sessionId}:index`;
 
-    const existing = await this.kv.get(indexKey, 'json') || { interactions: [] };
+    const existing = (await this.kv.get(indexKey, "json")) || {
+      interactions: [],
+    };
     existing.interactions.push(interactionId);
     existing.lastUpdate = Date.now();
 
-    await this.kv.put(
-      indexKey,
-      JSON.stringify(existing),
-      { expirationTtl: this.retention.conversations * 86400 }
-    );
+    await this.kv.put(indexKey, JSON.stringify(existing), {
+      expirationTtl: this.retention.conversations * 86400,
+    });
   }
 
   /**
@@ -201,53 +206,56 @@ export class MemoryCloude {
   async semanticRecall(sessionId, query, limit) {
     try {
       // Generate query embedding
-      const embedding = await this.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-        text: [query]
+      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
+        text: [query],
       });
 
       if (!embedding || !embedding.data || !embedding.data[0]) {
-        throw new Error('Failed to generate query embedding');
+        throw new Error("Failed to generate query embedding");
       }
 
       // Query Vectorize
       const matches = await this.vectorStore.query(embedding.data[0], {
         topK: limit * 2, // Get more, then filter by session
-        returnMetadata: true
+        returnMetadata: true,
       });
 
       // Filter by session and re-rank
       const sessionMatches = matches
-        .filter(m => m.metadata.sessionId === sessionId)
-        .map(m => ({
+        .filter((m) => m.metadata.sessionId === sessionId)
+        .map((m) => ({
           id: m.id,
           score: m.score,
-          metadata: m.metadata
+          metadata: m.metadata,
         }));
 
       // Re-rank by recency and relevance
       const reranked = this.rerank(sessionMatches, {
         recencyWeight: 0.3,
-        relevanceWeight: 0.7
+        relevanceWeight: 0.7,
       });
 
       // Fetch full interaction data
       const contexts = [];
       for (const match of reranked.slice(0, limit)) {
-        const parts = match.id.split('-');
+        const parts = match.id.split("-");
         const timestamp = parts[parts.length - 1];
-        const data = await this.kv.get(`session:${sessionId}:${timestamp}`, 'json');
+        const data = await this.kv.get(
+          `session:${sessionId}:${timestamp}`,
+          "json",
+        );
 
         if (data) {
           contexts.push({
             ...data,
-            relevanceScore: match.score
+            relevanceScore: match.score,
           });
         }
       }
 
       return contexts;
     } catch (error) {
-      console.warn('[MemoryCloude™] Semantic recall failed:', error.message);
+      console.warn("[MemoryCloude™] Semantic recall failed:", error.message);
       return await this.keywordRecall(sessionId, query, limit);
     }
   }
@@ -257,7 +265,7 @@ export class MemoryCloude {
    */
   async keywordRecall(sessionId, query, limit) {
     // Get session index
-    const index = await this.kv.get(`session:${sessionId}:index`, 'json');
+    const index = await this.kv.get(`session:${sessionId}:index`, "json");
 
     if (!index || !index.interactions) {
       return [];
@@ -268,18 +276,21 @@ export class MemoryCloude {
     const keywords = query.toLowerCase().split(/\s+/);
 
     for (const interactionId of index.interactions.slice(-20)) {
-      const parts = interactionId.split('-');
+      const parts = interactionId.split("-");
       const timestamp = parts[parts.length - 1];
-      const data = await this.kv.get(`session:${sessionId}:${timestamp}`, 'json');
+      const data = await this.kv.get(
+        `session:${sessionId}:${timestamp}`,
+        "json",
+      );
 
       if (data) {
         const content = this.extractTextContent(data).toLowerCase();
-        const matches = keywords.filter(k => content.includes(k)).length;
+        const matches = keywords.filter((k) => content.includes(k)).length;
 
         if (matches > 0) {
           interactions.push({
             ...data,
-            relevanceScore: matches / keywords.length
+            relevanceScore: matches / keywords.length,
           });
         }
       }
@@ -299,9 +310,9 @@ export class MemoryCloude {
     const maxAge = 90 * 86400 * 1000; // 90 days
 
     return matches
-      .map(match => {
+      .map((match) => {
         const age = now - match.metadata.timestamp;
-        const recencyScore = 1 - (age / maxAge);
+        const recencyScore = 1 - age / maxAge;
         const relevanceScore = match.score;
 
         const combinedScore =
@@ -310,7 +321,7 @@ export class MemoryCloude {
 
         return {
           ...match,
-          combinedScore
+          combinedScore,
         };
       })
       .sort((a, b) => b.combinedScore - a.combinedScore);
@@ -324,37 +335,39 @@ export class MemoryCloude {
     const interactions = await this.getSessionInteractions(sessionId);
 
     if (interactions.length === 0) {
-      return 'No interactions found for this session.';
+      return "No interactions found for this session.";
     }
 
     try {
       // Use AI to generate summary
-      const response = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
         messages: [
           {
-            role: 'system',
-            content: 'You are a session summarizer. Summarize this conversation session, highlighting key decisions, actions taken, and outcomes. Be concise but comprehensive.'
+            role: "system",
+            content:
+              "You are a session summarizer. Summarize this conversation session, highlighting key decisions, actions taken, and outcomes. Be concise but comprehensive.",
           },
           {
-            role: 'user',
-            content: JSON.stringify(interactions)
-          }
-        ]
+            role: "user",
+            content: JSON.stringify(interactions),
+          },
+        ],
       });
 
       const summary = response.response;
 
       // Store summary
-      await this.kv.put(
-        `session:${sessionId}:summary`,
-        summary,
-        { expirationTtl: this.retention.conversations * 86400 }
-      );
+      await this.kv.put(`session:${sessionId}:summary`, summary, {
+        expirationTtl: this.retention.conversations * 86400,
+      });
 
       return summary;
     } catch (error) {
-      console.warn('[MemoryCloude™] Session summarization failed:', error.message);
-      return 'Failed to generate summary.';
+      console.warn(
+        "[MemoryCloude™] Session summarization failed:",
+        error.message,
+      );
+      return "Failed to generate summary.";
     }
   }
 
@@ -362,7 +375,7 @@ export class MemoryCloude {
    * Get all interactions for a session
    */
   async getSessionInteractions(sessionId, limit = 100) {
-    const index = await this.kv.get(`session:${sessionId}:index`, 'json');
+    const index = await this.kv.get(`session:${sessionId}:index`, "json");
 
     if (!index || !index.interactions) {
       return [];
@@ -372,9 +385,12 @@ export class MemoryCloude {
     const toFetch = index.interactions.slice(-limit);
 
     for (const interactionId of toFetch) {
-      const parts = interactionId.split('-');
+      const parts = interactionId.split("-");
       const timestamp = parts[parts.length - 1];
-      const data = await this.kv.get(`session:${sessionId}:${timestamp}`, 'json');
+      const data = await this.kv.get(
+        `session:${sessionId}:${timestamp}`,
+        "json",
+      );
 
       if (data) {
         interactions.push(data);
@@ -390,7 +406,7 @@ export class MemoryCloude {
   async getUserHistory(userId, limit = 100) {
     // This would require a user index, which we can implement
     // For now, return empty array
-    console.warn('[MemoryCloude™] User history not yet implemented');
+    console.warn("[MemoryCloude™] User history not yet implemented");
     return [];
   }
 
@@ -417,15 +433,15 @@ export class MemoryCloude {
     const patterns = {
       timeOfDay: new Date(interaction.timestamp).getHours(),
       type: interaction.type,
-      entities: interaction.entities?.map(e => e.type) || [],
-      actions: interaction.actions?.map(a => a.type) || []
+      entities: interaction.entities?.map((e) => e.type) || [],
+      actions: interaction.actions?.map((a) => a.type) || [],
     };
 
     // Store pattern
     await this.kv.put(
       `pattern:${userId}:${Date.now()}`,
       JSON.stringify(patterns),
-      { expirationTtl: this.retention.conversations * 86400 }
+      { expirationTtl: this.retention.conversations * 86400 },
     );
 
     return patterns;
@@ -441,8 +457,8 @@ export class MemoryCloude {
     }
 
     try {
-      const embedding = await this.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-        text: [JSON.stringify(subtask)]
+      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
+        text: [JSON.stringify(subtask)],
       });
 
       if (!embedding || !embedding.data || !embedding.data[0]) {
@@ -452,16 +468,19 @@ export class MemoryCloude {
       const matches = await this.vectorStore.query(embedding.data[0], {
         topK: 5,
         returnMetadata: true,
-        filter: { type: 'task_decomposition' }
+        filter: { type: "task_decomposition" },
       });
 
-      return matches.map(m => ({
+      return matches.map((m) => ({
         task: m.metadata.task,
         approach: m.metadata.approach,
-        performance: m.metadata.performance
+        performance: m.metadata.performance,
       }));
     } catch (error) {
-      console.warn('[MemoryCloude™] Similar decomposition recall failed:', error.message);
+      console.warn(
+        "[MemoryCloude™] Similar decomposition recall failed:",
+        error.message,
+      );
       return [];
     }
   }
@@ -470,13 +489,13 @@ export class MemoryCloude {
    * Get memory statistics
    */
   async getStats(sessionId) {
-    const index = await this.kv.get(`session:${sessionId}:index`, 'json');
+    const index = await this.kv.get(`session:${sessionId}:index`, "json");
 
     return {
       interactions: index?.interactions?.length || 0,
       lastUpdate: index?.lastUpdate || null,
       hasVectorize: this.hasVectorize,
-      retentionDays: this.retention.conversations
+      retentionDays: this.retention.conversations,
     };
   }
 }

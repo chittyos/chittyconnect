@@ -7,8 +7,8 @@
  * @module intelligence/cognitive-coordination
  */
 
-import { ContextConsciousness } from './context-consciousness.js';
-import { MemoryCloude } from './memory-cloude.js';
+import { ContextConsciousness } from "./context-consciousness.js";
+import { MemoryCloude } from "./memory-cloude.js";
 
 /**
  * Task Graph for dependency management
@@ -24,7 +24,7 @@ class TaskGraph {
     this.nodes.set(id, {
       id,
       ...task,
-      status: 'pending'
+      status: "pending",
     });
 
     // Initialize edges for this node
@@ -65,11 +65,11 @@ class TaskGraph {
     const executable = [];
 
     for (const [id, node] of this.nodes.entries()) {
-      if (node.status === 'pending') {
+      if (node.status === "pending") {
         const dependencies = node.dependencies || [];
-        const allDepsComplete = dependencies.every(depId => {
+        const allDepsComplete = dependencies.every((depId) => {
           const dep = this.nodes.get(depId);
-          return dep && dep.status === 'completed';
+          return dep && dep.status === "completed";
         });
 
         if (allDepsComplete) {
@@ -83,14 +83,17 @@ class TaskGraph {
 
   isComplete() {
     return Array.from(this.nodes.values()).every(
-      node => node.status === 'completed' || node.status === 'failed'
+      (node) => node.status === "completed" || node.status === "failed",
     );
   }
 
   toJSON() {
     return {
       nodes: Array.from(this.nodes.values()),
-      edges: Array.from(this.edges.entries()).map(([from, to]) => ({ from, to }))
+      edges: Array.from(this.edges.entries()).map(([from, to]) => ({
+        from,
+        to,
+      })),
     };
   }
 }
@@ -110,7 +113,7 @@ class ExecutionEngine {
       parallel = true,
       dependencyAware = true,
       failover = true,
-      timeout = 60000
+      timeout = 60000,
     } = options;
 
     const results = [];
@@ -121,9 +124,11 @@ class ExecutionEngine {
 
       if (executable.length === 0) {
         // Check for deadlock
-        const pending = Array.from(graph.nodes.values()).filter(n => n.status === 'pending');
+        const pending = Array.from(graph.nodes.values()).filter(
+          (n) => n.status === "pending",
+        );
         if (pending.length > 0) {
-          console.error('[ExecutionEngine] Deadlock detected:', pending);
+          console.error("[ExecutionEngine] Deadlock detected:", pending);
           break;
         }
         break;
@@ -131,21 +136,33 @@ class ExecutionEngine {
 
       // Execute tasks (parallel if enabled)
       if (parallel) {
-        const batch = executable.slice(0, this.maxConcurrency - this.running.size);
-        const promises = batch.map(task => this.executeTask(task, graph, failover, timeout));
+        const batch = executable.slice(
+          0,
+          this.maxConcurrency - this.running.size,
+        );
+        const promises = batch.map((task) =>
+          this.executeTask(task, graph, failover, timeout),
+        );
         const batchResults = await Promise.allSettled(promises);
 
-        results.push(...batchResults.map((r, i) => ({
-          task: batch[i],
-          success: r.status === 'fulfilled',
-          result: r.status === 'fulfilled' ? r.value : null,
-          error: r.status === 'rejected' ? r.reason : null
-        })));
+        results.push(
+          ...batchResults.map((r, i) => ({
+            task: batch[i],
+            success: r.status === "fulfilled",
+            result: r.status === "fulfilled" ? r.value : null,
+            error: r.status === "rejected" ? r.reason : null,
+          })),
+        );
       } else {
         // Sequential execution
         for (const task of executable) {
           try {
-            const result = await this.executeTask(task, graph, failover, timeout);
+            const result = await this.executeTask(
+              task,
+              graph,
+              failover,
+              timeout,
+            );
             results.push({ task, success: true, result });
           } catch (error) {
             results.push({ task, success: false, error });
@@ -159,22 +176,24 @@ class ExecutionEngine {
   }
 
   async executeTask(task, graph, failover, timeout) {
-    console.log(`[ExecutionEngine] Executing task: ${task.id} (${task.subtask?.description || 'unknown'})`);
+    console.log(
+      `[ExecutionEngine] Executing task: ${task.id} (${task.subtask?.description || "unknown"})`,
+    );
 
-    graph.updateNode(task.id, { status: 'running', startTime: Date.now() });
+    graph.updateNode(task.id, { status: "running", startTime: Date.now() });
     this.running.add(task.id);
 
     try {
       // Execute with timeout
       const result = await Promise.race([
         this.performTask(task),
-        this.timeoutPromise(timeout, task.id)
+        this.timeoutPromise(timeout, task.id),
       ]);
 
       graph.updateNode(task.id, {
-        status: 'completed',
+        status: "completed",
         result,
-        endTime: Date.now()
+        endTime: Date.now(),
       });
 
       return result;
@@ -186,25 +205,25 @@ class ExecutionEngine {
         try {
           const alternative = await this.performTaskAlternative(task);
           graph.updateNode(task.id, {
-            status: 'completed',
+            status: "completed",
             result: alternative,
             endTime: Date.now(),
-            usedFailover: true
+            usedFailover: true,
           });
           return alternative;
         } catch (failoverError) {
           graph.updateNode(task.id, {
-            status: 'failed',
+            status: "failed",
             error: failoverError.message,
-            endTime: Date.now()
+            endTime: Date.now(),
           });
           throw failoverError;
         }
       } else {
         graph.updateNode(task.id, {
-          status: 'failed',
+          status: "failed",
           error: error.message,
-          endTime: Date.now()
+          endTime: Date.now(),
         });
         throw error;
       }
@@ -222,9 +241,9 @@ class ExecutionEngine {
     // Simulate task execution (in real implementation, this would route to services)
     return {
       taskId: task.id,
-      description: subtask?.description || 'Task completed',
+      description: subtask?.description || "Task completed",
       insights: learnedInsights,
-      output: `Completed: ${subtask?.description || task.id}`
+      output: `Completed: ${subtask?.description || task.id}`,
     };
   }
 
@@ -235,13 +254,16 @@ class ExecutionEngine {
     return {
       taskId: task.id,
       description: `Fallback: ${task.subtask?.description || task.id}`,
-      output: `Completed via fallback: ${task.subtask?.description || task.id}`
+      output: `Completed via fallback: ${task.subtask?.description || task.id}`,
     };
   }
 
   timeoutPromise(ms, taskId) {
     return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Task ${taskId} timed out after ${ms}ms`)), ms)
+      setTimeout(
+        () => reject(new Error(`Task ${taskId} timed out after ${ms}ms`)),
+        ms,
+      ),
     );
   }
 }
@@ -262,27 +284,31 @@ export class CognitiveCoordinator {
    * Initialize Cognitive-Coordination™
    */
   async initialize() {
-    console.log('[Cognitive-Coordination™] Initializing intelligent task orchestration...');
+    console.log(
+      "[Cognitive-Coordination™] Initializing intelligent task orchestration...",
+    );
 
     await Promise.all([
       this.consciousness.initialize(),
-      this.memory.initialize()
+      this.memory.initialize(),
     ]);
 
-    console.log('[Cognitive-Coordination™] Ready for complex task execution');
+    console.log("[Cognitive-Coordination™] Ready for complex task execution");
   }
 
   /**
    * Execute a complex task with cognitive coordination
    */
   async executeComplex(task, sessionId) {
-    console.log(`[Cognitive-Coordination™] Analyzing task: ${task.description || task.type}`);
+    console.log(
+      `[Cognitive-Coordination™] Analyzing task: ${task.description || task.type}`,
+    );
 
     // 1. Cognitive analysis of task complexity
     const analysis = await this.cognitiveAnalysis(task);
 
-    if (analysis.complexity === 'simple') {
-      console.log('[Cognitive-Coordination™] Simple task, executing directly');
+    if (analysis.complexity === "simple") {
+      console.log("[Cognitive-Coordination™] Simple task, executing directly");
       return await this.executeDirect(task);
     }
 
@@ -297,7 +323,7 @@ export class CognitiveCoordinator {
       parallel: true,
       dependencyAware: true,
       failover: true,
-      timeout: 60000
+      timeout: 60000,
     });
 
     // 5. Cognitive synthesis of results
@@ -305,13 +331,13 @@ export class CognitiveCoordinator {
 
     // 6. Learn from execution patterns
     await this.memory.persistInteraction(sessionId, {
-      type: 'task_decomposition',
+      type: "task_decomposition",
       task,
       taskGraph: taskGraph.toJSON(),
       executionPlan,
       results,
       synthesis,
-      performance: this.measurePerformance(results)
+      performance: this.measurePerformance(results),
     });
 
     return synthesis;
@@ -340,32 +366,44 @@ Respond in JSON format: {
   "risks": ["..."]
 }`;
 
-      const response = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
         messages: [
           {
-            role: 'system',
-            content: 'You are a task analysis expert for ChittyOS Cognitive-Coordination™. Analyze tasks and provide structured decomposition.'
+            role: "system",
+            content:
+              "You are a task analysis expert for ChittyOS Cognitive-Coordination™. Analyze tasks and provide structured decomposition.",
           },
           {
-            role: 'user',
-            content: prompt
-          }
-        ]
+            role: "user",
+            content: prompt,
+          },
+        ],
       });
 
       const analysis = JSON.parse(response.response);
-      console.log(`[Cognitive-Coordination™] Task complexity: ${analysis.complexity}`);
+      console.log(
+        `[Cognitive-Coordination™] Task complexity: ${analysis.complexity}`,
+      );
 
       return analysis;
     } catch (error) {
-      console.warn('[Cognitive-Coordination™] AI analysis failed:', error.message);
+      console.warn(
+        "[Cognitive-Coordination™] AI analysis failed:",
+        error.message,
+      );
 
       // Fallback to simple heuristics
       return {
-        complexity: 'simple',
-        subtasks: [{ description: task.description || 'Execute task', dependencies: [], priority: 1 }],
+        complexity: "simple",
+        subtasks: [
+          {
+            description: task.description || "Execute task",
+            dependencies: [],
+            priority: 1,
+          },
+        ],
         estimatedTime: 5000,
-        risks: []
+        risks: [],
       };
     }
   }
@@ -379,10 +417,12 @@ Respond in JSON format: {
     // Add each subtask to the graph
     for (const subtask of analysis.subtasks) {
       // Use ContextConsciousness™ to determine optimal dependencies
-      const dependencies = await this.consciousness.getAwareness().then(awareness => {
-        // Check if required services are available
-        return subtask.dependencies || [];
-      });
+      const dependencies = await this.consciousness
+        .getAwareness()
+        .then((awareness) => {
+          // Check if required services are available
+          return subtask.dependencies || [];
+        });
 
       // Use MemoryCloude™ to learn from past decompositions
       const learned = await this.memory.recallSimilarDecompositions(subtask);
@@ -391,11 +431,13 @@ Respond in JSON format: {
         subtask,
         dependencies,
         priority: subtask.priority || 1,
-        learnedInsights: learned
+        learnedInsights: learned,
       });
     }
 
-    console.log(`[Cognitive-Coordination™] Created task graph with ${graph.nodes.size} nodes`);
+    console.log(
+      `[Cognitive-Coordination™] Created task graph with ${graph.nodes.size} nodes`,
+    );
 
     return graph;
   }
@@ -406,9 +448,9 @@ Respond in JSON format: {
   async createExecutionPlan(graph) {
     return {
       graph,
-      strategy: 'parallel_dependency_aware',
+      strategy: "parallel_dependency_aware",
       maxConcurrency: 5,
-      failoverEnabled: true
+      failoverEnabled: true,
     };
   }
 
@@ -419,7 +461,7 @@ Respond in JSON format: {
     return {
       success: true,
       result: `Executed: ${task.description || task.type}`,
-      complexity: 'simple'
+      complexity: "simple",
     };
   }
 
@@ -450,17 +492,18 @@ Respond in JSON format: {
   "recommendations": ["..."]
 }`;
 
-      const response = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
         messages: [
           {
-            role: 'system',
-            content: 'You are a cognitive synthesizer for ChittyConnect Cognitive-Coordination™. Analyze task results and provide intelligent synthesis.'
+            role: "system",
+            content:
+              "You are a cognitive synthesizer for ChittyConnect Cognitive-Coordination™. Analyze task results and provide intelligent synthesis.",
           },
           {
-            role: 'user',
-            content: prompt
-          }
-        ]
+            role: "user",
+            content: prompt,
+          },
+        ],
       });
 
       const synthesis = JSON.parse(response.response);
@@ -469,17 +512,20 @@ Respond in JSON format: {
         success: true,
         ...synthesis,
         details: results,
-        confidence: this.calculateConfidence(results)
+        confidence: this.calculateConfidence(results),
       };
     } catch (error) {
-      console.warn('[Cognitive-Coordination™] Synthesis failed:', error.message);
+      console.warn(
+        "[Cognitive-Coordination™] Synthesis failed:",
+        error.message,
+      );
 
       // Fallback synthesis
       return {
         success: true,
         summary: `Executed ${results.length} tasks`,
         details: results,
-        confidence: this.calculateConfidence(results)
+        confidence: this.calculateConfidence(results),
       };
     }
   }
@@ -488,7 +534,7 @@ Respond in JSON format: {
    * Calculate confidence score from results
    */
   calculateConfidence(results) {
-    const successful = results.filter(r => r.success).length;
+    const successful = results.filter((r) => r.success).length;
     return successful / results.length;
   }
 
@@ -497,18 +543,19 @@ Respond in JSON format: {
    */
   measurePerformance(results) {
     const times = results
-      .filter(r => r.task.startTime && r.task.endTime)
-      .map(r => r.task.endTime - r.task.startTime);
+      .filter((r) => r.task.startTime && r.task.endTime)
+      .map((r) => r.task.endTime - r.task.startTime);
 
     if (times.length === 0) return { totalTime: 0, avgTime: 0, tasks: 0 };
 
     return {
-      totalTime: Math.max(...times.map((_, i) => results[i].task.endTime)) -
-                 Math.min(...times.map((_, i) => results[i].task.startTime)),
+      totalTime:
+        Math.max(...times.map((_, i) => results[i].task.endTime)) -
+        Math.min(...times.map((_, i) => results[i].task.startTime)),
       avgTime: times.reduce((a, b) => a + b, 0) / times.length,
       tasks: results.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length
+      successful: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
     };
   }
 
@@ -520,10 +567,10 @@ Respond in JSON format: {
       activeGraph: this.taskGraph.toJSON(),
       executionEngine: {
         running: this.executionEngine.running.size,
-        maxConcurrency: this.executionEngine.maxConcurrency
+        maxConcurrency: this.executionEngine.maxConcurrency,
       },
       consciousness: await this.consciousness.getAwareness(),
-      memory: await this.memory.getStats('global')
+      memory: await this.memory.getStats("global"),
     };
   }
 }

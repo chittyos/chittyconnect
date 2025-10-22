@@ -2,7 +2,7 @@
  * ChittyRegistry API Routes
  */
 
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 const registryRoutes = new Hono();
 
@@ -10,12 +10,12 @@ const registryRoutes = new Hono();
  * GET /api/registry/services
  * List all registered services
  */
-registryRoutes.get('/services', async (c) => {
+registryRoutes.get("/services", async (c) => {
   try {
-    const response = await fetch('https://registry.chitty.cc/api/services', {
+    const response = await fetch("https://registry.chitty.cc/api/services", {
       headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`
-      }
+        Authorization: `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`,
+      },
     });
 
     if (!response.ok) {
@@ -33,15 +33,18 @@ registryRoutes.get('/services', async (c) => {
  * GET /api/registry/services/:serviceId
  * Get service details
  */
-registryRoutes.get('/services/:serviceId', async (c) => {
+registryRoutes.get("/services/:serviceId", async (c) => {
   try {
-    const serviceId = c.req.param('serviceId');
+    const serviceId = c.req.param("serviceId");
 
-    const response = await fetch(`https://registry.chitty.cc/api/services/${serviceId}`, {
-      headers: {
-        'Authorization': `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`
-      }
-    });
+    const response = await fetch(
+      `https://registry.chitty.cc/api/services/${serviceId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`,
+        },
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`ChittyRegistry service error: ${response.status}`);

@@ -8,39 +8,39 @@
  * Label rules based on PR title patterns
  */
 const TITLE_RULES = [
-  { pattern: /^feat:|^feature:/i, label: 'type/feature' },
-  { pattern: /^fix:|^bugfix:/i, label: 'type/bugfix' },
-  { pattern: /^chore:/i, label: 'type/chore' },
-  { pattern: /^docs:/i, label: 'type/docs' },
-  { pattern: /^refactor:/i, label: 'type/refactor' },
-  { pattern: /^test:/i, label: 'type/test' },
-  { pattern: /^perf:/i, label: 'type/performance' },
-  { pattern: /^ci:/i, label: 'type/ci' }
+  { pattern: /^feat:|^feature:/i, label: "type/feature" },
+  { pattern: /^fix:|^bugfix:/i, label: "type/bugfix" },
+  { pattern: /^chore:/i, label: "type/chore" },
+  { pattern: /^docs:/i, label: "type/docs" },
+  { pattern: /^refactor:/i, label: "type/refactor" },
+  { pattern: /^test:/i, label: "type/test" },
+  { pattern: /^perf:/i, label: "type/performance" },
+  { pattern: /^ci:/i, label: "type/ci" },
 ];
 
 /**
  * Label rules based on changed file paths
  */
 const PATH_RULES = [
-  { pattern: /^src\/api\//i, label: 'area/api' },
-  { pattern: /^src\/auth\//i, label: 'area/auth' },
-  { pattern: /^src\/github\//i, label: 'area/github' },
-  { pattern: /^src\/mcp\//i, label: 'area/mcp' },
-  { pattern: /\.test\.[jt]s$/i, label: 'area/tests' },
-  { pattern: /^docs\//i, label: 'area/docs' },
-  { pattern: /wrangler\.toml$/i, label: 'area/infrastructure' },
-  { pattern: /package\.json$/i, label: 'area/dependencies' }
+  { pattern: /^src\/api\//i, label: "area/api" },
+  { pattern: /^src\/auth\//i, label: "area/auth" },
+  { pattern: /^src\/github\//i, label: "area/github" },
+  { pattern: /^src\/mcp\//i, label: "area/mcp" },
+  { pattern: /\.test\.[jt]s$/i, label: "area/tests" },
+  { pattern: /^docs\//i, label: "area/docs" },
+  { pattern: /wrangler\.toml$/i, label: "area/infrastructure" },
+  { pattern: /package\.json$/i, label: "area/dependencies" },
 ];
 
 /**
  * Size labels based on changes count
  */
 const SIZE_LABELS = [
-  { max: 10, label: 'size/XS' },
-  { max: 50, label: 'size/S' },
-  { max: 200, label: 'size/M' },
-  { max: 500, label: 'size/L' },
-  { max: Infinity, label: 'size/XL' }
+  { max: 10, label: "size/XS" },
+  { max: 50, label: "size/S" },
+  { max: 200, label: "size/M" },
+  { max: 500, label: "size/L" },
+  { max: Infinity, label: "size/XL" },
 ];
 
 /**
@@ -52,7 +52,14 @@ const SIZE_LABELS = [
  * @param {string} title - PR title
  * @param {string[]} changedFiles - Array of changed file paths
  */
-export async function autoLabelPullRequest(token, owner, repo, prNumber, title, changedFiles = []) {
+export async function autoLabelPullRequest(
+  token,
+  owner,
+  repo,
+  prNumber,
+  title,
+  changedFiles = [],
+) {
   const labels = new Set();
 
   // Match title patterns
@@ -100,14 +107,14 @@ export async function addLabels(token, owner, repo, issueNumber, labels) {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
       },
-      body: JSON.stringify({ labels })
-    }
+      body: JSON.stringify({ labels }),
+    },
   );
 
   if (!response.ok) {
@@ -130,13 +137,13 @@ export async function removeLabel(token, owner, repo, issueNumber, label) {
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(label)}`,
     {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ChittyConnect/1.0'
-      }
-    }
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+      },
+    },
   );
 
   if (!response.ok && response.status !== 404) {
