@@ -3,24 +3,108 @@ main = "src/index.js"
 compatibility_date = "2024-10-01"
 account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
-# KV namespace for context storage
+# KV Namespaces
 [[kv_namespaces]]
 binding = "CHITTYCONNECT_KV"
 id = "12f3a45f8cc641a79fbcd35ac15afd6e"
 
-# Environment variables
-[vars]
-ENVIRONMENT = "production"
+[[kv_namespaces]]
+binding = "IDEMP_KV"
+id = "ea43bc974b894701a069e4804be765ba"
 
-# Secrets (set via wrangler secret put)
-# CHITTY_ID_SERVICE_TOKEN - Token for id.chitty.cc API
+[[kv_namespaces]]
+binding = "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
 
-# Queue producers - ChittyConnect can send to these queues
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "chittyconnect"
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
+
+# Queue Producers
 [[queues.producers]]
 binding = "CONTEXT_OPS_QUEUE"
 queue = "chittyconnect-context-ops"
 
-# Routes
+[[queues.producers]]
+binding = "EVENT_Q"
+queue = "github-events"
+
+# Queue Consumers
+[[queues.consumers]]
+queue = "github-events"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "github-events-dlq"
+
+# AI Binding
+[ai]
+binding = "AI"
+
+# Environment Variables
+[vars]
+ENVIRONMENT = "production"
+VERSION = "1.0.0"
+SERVICE_NAME = "chittyconnect"
+
+# Secrets (set via wrangler secret put)
+# CHITTY_ID_SERVICE_TOKEN - Token for id.chitty.cc API
+# GITHUB_APP_ID - GitHub App ID
+# GITHUB_APP_PRIVATE_KEY - GitHub App private key (PEM format)
+# GITHUB_WEBHOOK_SECRET - GitHub webhook secret
+# CHITTY_AUTH_TOKEN - ChittyAuth service token
+# CHITTY_DNA_TOKEN - ChittyDNA service token
+# CHITTY_VERIFY_TOKEN - ChittyVerify service token
+# CHITTY_CERTIFY_TOKEN - ChittyCertify service token
+# CHITTY_CHRONICLE_TOKEN - ChittyChronicle service token
+# CHITTY_REGISTRY_TOKEN - ChittyRegistry service token
+
+# Routes (Production)
 routes = [
   { pattern = "connect.chitty.cc/*", zone_name = "chitty.cc" }
 ]
+
+# Staging Environment
+[env.staging]
+name = "chittyconnect-staging"
+vars = { ENVIRONMENT = "staging", VERSION = "1.0.0" }
+routes = [
+  { pattern = "chittyconnect-staging.ccorp.workers.dev/*" }
+]
+
+# Staging KV Namespaces
+[[env.staging.kv_namespaces]]
+binding = "CHITTYCONNECT_KV"
+id = "12f3a45f8cc641a79fbcd35ac15afd6e"
+
+[[env.staging.kv_namespaces]]
+binding = "IDEMP_KV"
+id = "ea43bc974b894701a069e4804be765ba"
+
+[[env.staging.kv_namespaces]]
+binding = "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
+
+[[env.staging.kv_namespaces]]
+binding = "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
+
+# Staging D1 Database
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "chittyconnect"
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
