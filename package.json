@@ -12,6 +12,15 @@
     "deploy:production": "wrangler deploy",
     "tail": "wrangler tail",
     "tail:staging": "wrangler tail --env staging",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --config vitest.config.unit.js",
+    "test:integration": "vitest run --config vitest.config.integration.js",
+    "lint": "eslint src/ --ext .js",
+    "lint:fix": "eslint src/ --ext .js --fix",
+    "format": "prettier --write \"src/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\"",
     "provision": "./scripts/provision-infrastructure.sh all",
     "provision:prod": "./scripts/provision-infrastructure.sh production",
     "provision:staging": "./scripts/provision-infrastructure.sh staging",
@@ -27,6 +36,10 @@
   "author": "ChittyOS",
   "license": "MIT",
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^3.0.0",
+    "vitest": "^1.0.0",
+    "@cloudflare/vitest-pool-workers": "^0.1.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0"
   }
 }

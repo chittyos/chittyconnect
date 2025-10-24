@@ -1,8 +1,8 @@
 # ChittyConnect - The Alchemist
 
 **Version:** 1.0.0-alpha
-**Status:** 🚧 Early Development (8% Complete)
-**Last Updated:** October 21, 2025
+**Status:** 🚀 Week 3 Complete - CI/CD Ready (40% Complete)
+**Last Updated:** October 24, 2025
 
 > Universal adapter layer that transmutes connections into consciousness.
 > Provides keys, connectors, transport, and bindings for all ChittyOS services.
@@ -13,35 +13,65 @@
 
 ## Current Status
 
-ChittyConnect is in **early development**. Core context management is functional, but most features described in planning documents are not yet implemented.
+ChittyConnect has completed **Week 1-3 implementation**: Core foundation, ChittyOS integration, and CI/CD infrastructure are complete.
 
 ### What Works ✅
 
-- **Context Management**
+- **Complete Context Management**
   - `POST /v1/contexts/create` - Create contexts with ChittyID minting
-  - `GET /v1/contexts/list` - List contexts (zero-trust validation)
-  - `GET /v1/contexts/{id}` - Get context by ID (zero-trust validation)
+  - `GET /v1/contexts/list` - List contexts with zero-trust validation
+  - `GET /v1/contexts/{id}` - Get context by ID
+  - `PATCH /v1/contexts/{id}` - Update context (NEW)
+  - `DELETE /v1/contexts/{id}` - Soft delete context (NEW)
+  - `GET /v1/contexts/search` - Search contexts (NEW)
 
-- **ChittyOS Integration (Minimal)**
-  - ChittyAuth actor validation (`auth.chitty.cc`)
-  - ChittyID minting (`id.chitty.cc`)
-  - Actor-based authorization
+- **Actor Management** (NEW)
+  - Actor registration with ChittyDNA tracking
+  - Session management
+  - Capability-based authorization
 
-- **Infrastructure**
-  - Cloudflare Workers foundation
-  - 1 KV namespace for context storage
-  - 1 Queue for async operations
-  - Health check endpoint
+- **Connection Lifecycle** (NEW)
+  - Service connection management
+  - Health monitoring with circuit breakers
+  - API key provisioning
+
+- **Service Delegation** (NEW)
+  - Time-limited delegation tokens
+  - Service-to-service authentication
+
+- **Full ChittyOS Integration**
+  - ChittyID - Identity minting (100% authority compliance)
+  - ChittyAuth - Actor validation and API keys
+  - ChittyRegistry - Service discovery with caching
+  - ChittyDNA - Genetic tracking for all entities
+  - ChittyVerify - Identity verification
+  - ChittyCertify - Certification management
+  - ChittyChronicle - Event logging via queue
+
+- **Production Infrastructure**
+  - D1 database (4 tables: contexts, actors, connections, installations)
+  - 5 KV namespaces (storage, tokens, rate limiting, idempotency, certs)
+  - 2 Queue producers + consumer (async processing)
+  - Workers AI binding
+  - Staging + Production environments
+
+- **CI/CD Pipeline**
+  - Automated testing (lint, unit tests, integration tests)
+  - Staging deployment (auto-deploy on develop/claude/** branches)
+  - Production deployment (manual approval, 5-min monitoring)
+  - Security scanning and validation
+
+- **Testing Infrastructure**
+  - Vitest test framework
+  - 50+ unit and integration tests
+  - ChittyOS service mocks
+  - 80%+ coverage target
 
 ### What's Coming 🚧
 
-- GitHub App integration (webhooks, OAuth, installation management)
-- MCP Server (11 tools, 3 resources)
-- REST API expansion (28+ additional endpoints)
-- Complete ChittyOS ecosystem integration (10+ services)
-- D1 database for relational data
-- Comprehensive testing
-- Full deployment to production
+- **Week 4-6:** GitHub App integration (webhooks, OAuth, installation management)
+- **Week 7:** Performance optimization and monitoring
+- **Week 8:** Documentation and production launch
 
 See [ROADMAP.md](ROADMAP.md) for detailed implementation plan.
 
@@ -332,19 +362,41 @@ These will be addressed in upcoming sprints (see ROADMAP.md).
 
 ### Current Status
 
-- ❌ Not deployed to staging
-- ❌ Not deployed to production
-- ⚠️ Infrastructure not provisioned
+- ✅ Infrastructure provisioned (D1, KV, Queues)
+- ✅ CI/CD pipeline configured
+- 🚀 Ready for staging deployment
+- 📋 Production deployment pending GitHub configuration
 
-### Deployment Plan
+### Automated Deployment
 
-**Week 2-3:** Initial deployment to staging
-- Provision KV namespaces
-- Configure secrets
-- Deploy worker
-- Set up custom domain (`connect.chitty.cc`)
+**Staging**: Auto-deploys on push to `develop` or `claude/**` branches
+```bash
+git push origin develop
+# Triggers staging deployment workflow
+```
 
-See [ROADMAP.md](ROADMAP.md) for full deployment timeline.
+**Production**: Manual approval or version tags
+```bash
+# Via GitHub UI: Actions → Deploy to Production → Run workflow
+# Or via CLI:
+gh workflow run deploy-production.yml -f reason="Deploy v1.0.1" -f confirm="DEPLOY"
+```
+
+### Setup CI/CD
+
+See [CI/CD Setup Checklist](./CI_CD_SETUP_CHECKLIST.md) for step-by-step guide.
+
+**Quick setup:**
+1. Create GitHub environments (staging, production)
+2. Configure secrets (CLOUDFLARE_API_TOKEN, etc.)
+3. Set up branch protection rules
+4. Run test deployment
+
+**Documentation:**
+- [CI/CD Guide](./docs/deployment/CI_CD_GUIDE.md) - Complete CI/CD documentation
+- [GitHub Setup](./docs/deployment/GITHUB_SETUP.md) - GitHub configuration
+- [Deployment Guide](./docs/deployment/DEPLOYMENT_GUIDE.md) - Manual deployment
+- [Local Development](./docs/deployment/LOCAL_DEVELOPMENT.md) - Dev workflow
 
 ---
 
@@ -352,17 +404,47 @@ See [ROADMAP.md](ROADMAP.md) for full deployment timeline.
 
 ### Current Status
 
-- ❌ No unit tests
-- ❌ No integration tests
-- ❌ No E2E tests
+- ✅ Vitest test framework configured
+- ✅ 50+ unit and integration tests
+- ✅ ChittyOS service mocks
+- ✅ CI integration with coverage reporting
+- ✅ 80%+ coverage target
 
-### Testing Plan
+### Running Tests
 
-**Week 7:** Comprehensive testing
-- Unit tests with Vitest
-- Integration tests for ChittyOS services
-- E2E tests for API workflows
-- Load testing
+```bash
+# Run all tests
+npm test
+
+# Unit tests only
+npm run test:unit
+
+# Integration tests only
+npm run test:integration
+
+# Watch mode (TDD)
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+```
+
+### Test Structure
+
+```
+tests/
+├── unit/               # Fast unit tests with mocks
+│   ├── ecosystem.test.js
+│   └── contexts.test.js
+├── integration/        # Full worker environment tests
+│   └── worker.test.js
+└── helpers/            # Test utilities and mocks
+    └── mock-chittyos.js
+```
+
+### Documentation
+
+See [Test Suite README](./tests/README.md) for complete testing documentation.
 
 ---
 
@@ -399,11 +481,12 @@ See [ROADMAP.md](ROADMAP.md) for detailed implementation timeline.
 
 **High-level milestones:**
 
-- ✅ **Week 1:** Assessment & Planning (Current)
-- 🚧 **Weeks 2-3:** Core foundation (ChittyOS integration, infrastructure)
-- 📋 **Weeks 4-6:** Priority integration (MCP Server / GitHub App / API)
-- 📋 **Week 7:** Testing & hardening
-- 📋 **Week 8:** Documentation & launch
+- ✅ **Week 1:** Assessment & Planning - COMPLETE
+- ✅ **Week 2:** Core foundation (ChittyOS integration, database, API endpoints) - COMPLETE
+- ✅ **Week 3:** Infrastructure & CI/CD (deployment automation, testing) - COMPLETE
+- 🚧 **Weeks 4-6:** Priority integration (GitHub App / MCP Server) - NEXT
+- 📋 **Week 7:** Performance optimization & monitoring
+- 📋 **Week 8:** Documentation & production launch
 
 ---
 
@@ -437,6 +520,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Status:** Early Development (8% Complete)
-**Next Milestone:** Foundation implementation (Weeks 2-3)
-**Target MVP:** Week 8
+**Status:** Week 3 Complete - CI/CD Ready (40% Complete)
+**Next Milestone:** GitHub App Integration (Weeks 4-6)
+**Target MVP:** Week 8 (On Track)
