@@ -5,8 +5,15 @@
  */
 
 import { Hono } from "hono";
+import { mcpAuthMiddleware } from "../middleware/mcp-auth.js";
 
 const mcp = new Hono();
+
+/**
+ * Apply authentication middleware to all MCP routes
+ * Public endpoints (manifest, health) are excluded in middleware
+ */
+mcp.use("*", mcpAuthMiddleware);
 
 /**
  * MCP Protocol Version
