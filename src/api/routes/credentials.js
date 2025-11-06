@@ -49,7 +49,8 @@ credentialsRoutes.post("/provision", async (c) => {
 
     // Get requesting service from API key metadata
     const apiKeyInfo = c.get("apiKey");
-    const requestingService = apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
+    const requestingService =
+      apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
 
     // Initialize provisioner
     const provisioner = new CredentialProvisioner(c.env);
@@ -61,7 +62,11 @@ credentialsRoutes.post("/provision", async (c) => {
     await provisioner.checkRateLimit(requestingService);
 
     // Provision credential
-    const result = await provisioner.provision(type, context, requestingService);
+    const result = await provisioner.provision(
+      type,
+      context,
+      requestingService,
+    );
 
     return c.json(result);
   } catch (error) {
@@ -71,7 +76,10 @@ credentialsRoutes.post("/provision", async (c) => {
     let status = 500;
     if (error.message.includes("Rate limit exceeded")) {
       status = 429;
-    } else if (error.message.includes("required") || error.message.includes("Unknown credential type")) {
+    } else if (
+      error.message.includes("required") ||
+      error.message.includes("Unknown credential type")
+    ) {
       status = 400;
     } else if (error.message.includes("not configured")) {
       status = 503; // Service unavailable
@@ -89,7 +97,7 @@ credentialsRoutes.post("/provision", async (c) => {
           timestamp: new Date().toISOString(),
         },
       },
-      status
+      status,
     );
   }
 });
@@ -121,7 +129,11 @@ credentialsRoutes.get("/types", async (c) => {
       description: "Cloudflare Workers deployment token with write permissions",
       required_context: ["service"],
       optional_context: ["purpose"],
-      scopes: ["Workers Scripts Write", "Workers KV Storage Write", "Account Settings Read"],
+      scopes: [
+        "Workers Scripts Write",
+        "Workers KV Storage Write",
+        "Account Settings Read",
+      ],
       ttl: "365 days",
       status: "available",
     },
@@ -237,7 +249,9 @@ credentialsRoutes.get("/audit", async (c) => {
     params.push(limit, offset);
 
     // Execute query
-    const result = await c.env.DB.prepare(query).bind(...params).all();
+    const result = await c.env.DB.prepare(query)
+      .bind(...params)
+      .all();
 
     // Get total count
     let countQuery = `SELECT COUNT(*) as total FROM credential_provisions WHERE 1=1`;
@@ -253,7 +267,9 @@ credentialsRoutes.get("/audit", async (c) => {
       countParams.push(type);
     }
 
-    const countResult = await c.env.DB.prepare(countQuery).bind(...countParams).first();
+    const countResult = await c.env.DB.prepare(countQuery)
+      .bind(...countParams)
+      .first();
 
     return c.json({
       success: true,
@@ -277,7 +293,7 @@ credentialsRoutes.get("/audit", async (c) => {
           message: error.message,
         },
       },
-      500
+      500,
     );
   }
 });
@@ -308,7 +324,7 @@ credentialsRoutes.delete("/revoke", async (c) => {
           success: false,
           error: "token_id is required",
         },
-        400
+        400,
       );
     }
 
@@ -318,9 +334,10 @@ credentialsRoutes.delete("/revoke", async (c) => {
       return c.json(
         {
           success: false,
-          error: "Credential revocation not available (CLOUDFLARE_MAKE_API_KEY not configured)",
+          error:
+            "Credential revocation not available (CLOUDFLARE_MAKE_API_KEY not configured)",
         },
-        503
+        503,
       );
     }
 
@@ -333,7 +350,7 @@ credentialsRoutes.delete("/revoke", async (c) => {
           Authorization: `Bearer ${makeApiKey}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -342,11 +359,15 @@ credentialsRoutes.delete("/revoke", async (c) => {
     }
 
     // Log revocation
-    await c.env.DB.prepare(`
+    await c.env.DB.prepare(
+      `
       UPDATE credential_provisions
       SET revoked_at = datetime('now')
       WHERE token_id = ?
-    `).bind(token_id).run();
+    `,
+    )
+      .bind(token_id)
+      .run();
 
     return c.json({
       success: true,
@@ -364,7 +385,7 @@ credentialsRoutes.delete("/revoke", async (c) => {
           message: error.message,
         },
       },
-      500
+      500,
     );
   }
 });
@@ -386,8 +407,12 @@ credentialsRoutes.delete("/revoke", async (c) => {
  */
 credentialsRoutes.get("/health", async (c) => {
   const checks = {
-    cloudflare_make_api_key: c.env.CLOUDFLARE_MAKE_API_KEY ? "configured" : "missing",
-    cloudflare_account_id: c.env.CLOUDFLARE_ACCOUNT_ID ? "configured" : "using_default",
+    cloudflare_make_api_key: c.env.CLOUDFLARE_MAKE_API_KEY
+      ? "configured"
+      : "missing",
+    cloudflare_account_id: c.env.CLOUDFLARE_ACCOUNT_ID
+      ? "configured"
+      : "using_default",
     database: "unknown",
     rate_limit: c.env.RATE_LIMIT ? "available" : "missing",
     chronicle: c.env.CHITTY_CHRONICLE_TOKEN ? "configured" : "missing",
@@ -401,7 +426,9 @@ credentialsRoutes.get("/health", async (c) => {
     checks.database = "error";
   }
 
-  const isHealthy = checks.cloudflare_make_api_key === "configured" && checks.database === "connected";
+  const isHealthy =
+    checks.cloudflare_make_api_key === "configured" &&
+    checks.database === "connected";
 
   return c.json({
     status: isHealthy ? "healthy" : "degraded",
