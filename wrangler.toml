@@ -161,6 +161,11 @@ CHITTYOS_DOMAIN = "chitty.cc"
 # - OPENAI_API_KEY
 # - GOOGLE_ACCESS_TOKEN
 # - NEON_DATABASE_URL
+#
+# Credential Provisioning:
+# - CLOUDFLARE_MAKE_API_KEY (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/m4unvf5sbz3rm7ny2ys5siy5om/make_api_key)
+# - CLOUDFLARE_ACCOUNT_ID (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/ChittyCorp LLC/account_id)
+#   Note: CLOUDFLARE_ACCOUNT_ID defaults to 0bc21e3a5a9de1a4cc843be9c3e98121 if not set
 
 # Cloudflare Workers AI binding
 [ai]
