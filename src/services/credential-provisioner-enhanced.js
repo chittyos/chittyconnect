@@ -14,8 +14,8 @@
  * - Rate limit requests
  */
 
-// import { OnePasswordProvider } from './onepassword-provider.js'; // TODO: Create this file
-import { OnePasswordConnectClient } from './1password-connect-client.js';
+import { OnePasswordProvider } from './onepassword-provider.js';
+import { memoryRateLimit } from '../middleware/memory-rate-limit.js';
 
 /**
  * Enhanced Credential provisioner for ChittyOS ecosystem
@@ -24,13 +24,12 @@ export class EnhancedCredentialProvisioner {
   constructor(env, contextConsciousness) {
     this.env = env;
     this.contextConsciousness = contextConsciousness;
-    this.onePassword = new OnePasswordConnectClient(env);
+    this.onePassword = new OnePasswordProvider(env, contextConsciousness);
 
-    // Initialize 1Password with ContextConsciousness
-    // this.onePassword.initialize(contextConsciousness); // TODO: Add this method to OnePasswordConnectClient
-
-    // Cloudflare permission group IDs (same as original)
-    this.cloudflarePermissions = {
+    // Cloudflare permissions will be fetched dynamically
+    // These are fallback IDs if API fetch fails
+    this.cloudflarePermissions = null;
+    this.cloudflarePermissionsFallback = {
       workersScriptsWrite: {
         id: "c8fed203ed3043cba015a93ad1616f1f",
         name: "Workers Scripts Write",
@@ -60,6 +59,11 @@ export class EnhancedCredentialProvisioner {
         name: "D1 Database Write",
       }
     };
+
+    // Cache for permission groups (persists for Worker lifetime)
+    this.permissionGroupsCache = null;
+    this.permissionGroupsCacheTime = 0;
+    this.permissionGroupsCacheTTL = 24 * 60 * 60 * 1000; // 24 hours
 
     // Expanded credential type mappings
     this.credentialTypes = {
@@ -239,6 +243,107 @@ export class EnhancedCredentialProvisioner {
   }
 
   /**
+   * Fetch Cloudflare permission groups dynamically
+   *
+   * @private
+   * @param {string} apiKey - Cloudflare API key
+   * @returns {Promise<object>} Permission groups mapped by name
+   */
+  async fetchCloudflarePermissions(apiKey) {
+    try {
+      // Check cache first
+      if (this.permissionGroupsCache &&
+          Date.now() - this.permissionGroupsCacheTime < this.permissionGroupsCacheTTL) {
+        return this.permissionGroupsCache;
+      }
+
+      console.log('[EnhancedCredentialProvisioner] Fetching Cloudflare permission groups from API');
+
+      const response = await fetch(
+        "https://api.cloudflare.com/client/v4/user/tokens/permission_groups",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch permission groups: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.success || !data.result) {
+        throw new Error('Invalid permission groups response');
+      }
+
+      // Map permission groups by normalized name
+      const permissions = {};
+      for (const group of data.result) {
+        // Normalize the permission name for mapping
+        const normalizedName = group.name
+          .replace(/\s+/g, '')  // Remove spaces
+          .replace(/^Workers/, 'workers')  // Lowercase workers prefix
+          .replace(/^Account/, 'account')  // Lowercase account prefix
+          .replace(/^D1/, 'd1');  // Lowercase D1 prefix
+
+        // Create a key that matches our existing naming
+        let key = null;
+        if (normalizedName.includes('workersScripts') && normalizedName.includes('Write')) {
+          key = 'workersScriptsWrite';
+        } else if (normalizedName.includes('workersScripts') && normalizedName.includes('Read')) {
+          key = 'workersScriptsRead';
+        } else if (normalizedName.includes('workersKV') && normalizedName.includes('Write')) {
+          key = 'workersKVWrite';
+        } else if (normalizedName.includes('accountSettings') && normalizedName.includes('Read')) {
+          key = 'accountSettingsRead';
+        } else if (normalizedName.includes('workersR2') && normalizedName.includes('Write')) {
+          key = 'workersR2Write';
+        } else if (normalizedName.includes('workersDurableObjects') && normalizedName.includes('Write')) {
+          key = 'workersDurableObjectsWrite';
+        } else if (normalizedName.includes('d1Database') && normalizedName.includes('Write')) {
+          key = 'd1DatabaseWrite';
+        }
+
+        if (key) {
+          permissions[key] = {
+            id: group.id,
+            name: group.name
+          };
+        }
+      }
+
+      // Cache the results
+      this.permissionGroupsCache = permissions;
+      this.permissionGroupsCacheTime = Date.now();
+
+      console.log('[EnhancedCredentialProvisioner] Successfully fetched and cached permission groups');
+      return permissions;
+
+    } catch (error) {
+      console.error('[EnhancedCredentialProvisioner] Failed to fetch permissions dynamically:', error);
+      console.log('[EnhancedCredentialProvisioner] Using fallback permission IDs');
+      return this.cloudflarePermissionsFallback;
+    }
+  }
+
+  /**
+   * Get Cloudflare permissions (dynamic or fallback)
+   *
+   * @private
+   * @param {string} apiKey - Cloudflare API key
+   * @returns {Promise<object>} Permission groups
+   */
+  async getCloudflarePermissions(apiKey) {
+    if (!this.cloudflarePermissions) {
+      this.cloudflarePermissions = await this.fetchCloudflarePermissions(apiKey);
+    }
+    return this.cloudflarePermissions;
+  }
+
+  /**
    * Provision Cloudflare API token with credentials from 1Password
    *
    * @private
@@ -251,8 +356,9 @@ export class EnhancedCredentialProvisioner {
     const { service, purpose, environment = 'production' } = context;
 
     // Retrieve Cloudflare credentials from 1Password
-    const makeApiKey = await this.onePassword.retrieveCredential(
-      'infrastructure/cloudflare/make_api_key',
+    const makeApiKey = await this.onePassword.getInfrastructureCredential(
+      'cloudflare',
+      'make_api_key',
       {
         service: 'chittyconnect',
         purpose: 'credential_provisioning',
@@ -260,22 +366,26 @@ export class EnhancedCredentialProvisioner {
       }
     );
 
-    const accountId = await this.onePassword.retrieveCredential(
-      'infrastructure/cloudflare/account_id',
+    const accountId = await this.onePassword.getInfrastructureCredential(
+      'cloudflare',
+      'account_id',
       {
         service: 'chittyconnect',
         purpose: 'credential_provisioning',
         environment
       }
-    ) || "0bc21e3a5a9de1a4cc843be9c3e98121"; // Fallback to default
+    ).catch(() => "0bc21e3a5a9de1a4cc843be9c3e98121"); // Fallback to default
 
     if (!makeApiKey) {
       throw new Error('Failed to retrieve Cloudflare credentials from 1Password');
     }
 
+    // Get permission groups dynamically
+    const cloudflarePermissions = await this.getCloudflarePermissions(makeApiKey);
+
     // Get type configuration
     const typeConfig = this.credentialTypes[type];
-    const permissions = typeConfig.permissions.map(p => this.cloudflarePermissions[p]);
+    const permissions = typeConfig.permissions.map(p => cloudflarePermissions[p]);
 
     // Create token name with context
     const tokenName = `${service} ${purpose || type} (${new Date().toISOString().split("T")[0]}) [via ChittyConnect]`;
@@ -433,8 +543,9 @@ export class EnhancedCredentialProvisioner {
     const { repository, permissions = ['contents:write', 'actions:write'] } = context;
 
     // Retrieve GitHub App credentials from 1Password
-    const appId = await this.onePassword.retrieveCredential(
-      'infrastructure/github/app_id',
+    const appId = await this.onePassword.getInfrastructureCredential(
+      'github',
+      'app_id',
       {
         service: requestingService,
         purpose: 'github_deployment',
@@ -442,8 +553,9 @@ export class EnhancedCredentialProvisioner {
       }
     );
 
-    const privateKey = await this.onePassword.retrieveCredential(
-      'infrastructure/github/private_key',
+    const privateKey = await this.onePassword.getInfrastructureCredential(
+      'github',
+      'private_key',
       {
         service: requestingService,
         purpose: 'github_deployment',
@@ -501,8 +613,9 @@ export class EnhancedCredentialProvisioner {
     const { database, readonly = false } = context;
 
     // Retrieve Neon credentials from 1Password
-    const databaseUrl = await this.onePassword.retrieveCredential(
-      'infrastructure/neon/database_url',
+    const databaseUrl = await this.onePassword.getInfrastructureCredential(
+      'neon',
+      'database_url',
       {
         service: requestingService,
         purpose: 'database_connection',
@@ -769,27 +882,18 @@ export class EnhancedCredentialProvisioner {
 
   /**
    * Check rate limit for credential provisioning
+   * Now uses in-memory rate limiting instead of KV
    *
    * @private
    */
   async checkRateLimit(requestingService) {
-    const rateLimitKey = `credential:ratelimit:${requestingService}:${Math.floor(Date.now() / 3600000)}`;
-    const requests = await this.env.RATE_LIMIT.get(rateLimitKey);
-    const requestCount = requests ? parseInt(requests) : 0;
+    const status = memoryRateLimit.checkProvisionLimit(requestingService);
 
-    // Allow max 10 credential provisions per hour per service
-    const maxPerHour = 10;
-
-    if (requestCount >= maxPerHour) {
-      return false;
+    if (!status.allowed) {
+      console.warn(`[EnhancedCredentialProvisioner] Rate limit exceeded for ${requestingService}: ${status.remaining} remaining, resets in ${Math.round(status.resetIn / 1000)}s`);
     }
 
-    // Increment counter
-    await this.env.RATE_LIMIT.put(rateLimitKey, (requestCount + 1).toString(), {
-      expirationTtl: 3600, // 1 hour
-    });
-
-    return true;
+    return status.allowed;
   }
 
   /**

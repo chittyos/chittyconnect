@@ -20,7 +20,6 @@ import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
-// import { onepasswordRoutes } from "./routes/onepassword.js"; // TODO: Create this file
 import { authenticate } from "./middleware/auth.js";
 
 const api = new Hono();
@@ -66,7 +65,6 @@ api.get("/api/health", (c) => {
       thirdparty: "/api/thirdparty",
       credentials: "/api/credentials",
       intelligence: "/api/intelligence",
-      // onepassword: "/api/onepassword", // TODO: Add when route file is created
     },
   });
 });
@@ -93,6 +91,5 @@ api.route("/api/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);
-// api.route("/api/onepassword", onepasswordRoutes); // TODO: Add when route file is created
 
 export { api };

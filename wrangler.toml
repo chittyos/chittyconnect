@@ -25,9 +25,8 @@ id = "d8051882226b470ba10035b30447a8b7"
 binding = "API_KEYS"
 id = "3a29a9de28c84b7e8b87070cbf006415"
 
-[[kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "1ab2c1114f5c4e248b8eba157615a125"
+# RATE_LIMIT namespace removed - using in-memory rate limiting for free tier optimization
+# Saves 5,000 KV writes/day
 
 [[kv_namespaces]]
 binding = "CREDENTIAL_CACHE"
@@ -65,9 +64,7 @@ id = "d8051882226b470ba10035b30447a8b7"
 binding = "API_KEYS"
 id = "3a29a9de28c84b7e8b87070cbf006415"
 
-[[env.staging.kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "1ab2c1114f5c4e248b8eba157615a125"
+# RATE_LIMIT namespace removed for staging - using in-memory rate limiting
 
 [[env.staging.kv_namespaces]]
 binding = "CREDENTIAL_CACHE"
@@ -125,9 +122,7 @@ id = "788d2fce231d4819a11b46d5f4678b04"
 binding = "API_KEYS"
 id = "cf6da7757caf4da5a8a365be2174f391"
 
-[[env.production.kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "59975122a4f74ce391067df2f637b924"
+# RATE_LIMIT namespace removed for production - using in-memory rate limiting
 
 [[env.production.kv_namespaces]]
 binding = "CREDENTIAL_CACHE"

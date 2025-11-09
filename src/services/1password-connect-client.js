@@ -28,6 +28,11 @@ export class OnePasswordConnectClient {
       integrations: 900, // 15 minutes for third-party APIs
       emergency: 0 // Never cache emergency credentials
     };
+
+    // Cached encryption key for performance
+    // This dramatically improves encryption/decryption speed
+    this.cachedEncryptionKey = null;
+    this.cachedKeyMaterial = null;
   }
 
   /**
@@ -231,6 +236,7 @@ export class OnePasswordConnectClient {
 
   /**
    * Get credential from cache
+   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
    *
    * @private
    * @param {string} credentialPath - Credential path
@@ -239,7 +245,7 @@ export class OnePasswordConnectClient {
   async getFromCache(credentialPath) {
     try {
       const cacheKey = `1password:cache:${credentialPath}`;
-      const cached = await this.env.RATE_LIMIT.get(cacheKey);
+      const cached = await this.env.CREDENTIAL_CACHE.get(cacheKey);
 
       if (cached) {
         // Decrypt cached value (credentials are encrypted at rest in KV)
@@ -255,6 +261,7 @@ export class OnePasswordConnectClient {
 
   /**
    * Set credential in cache
+   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
    *
    * @private
    * @param {string} credentialPath - Credential path
@@ -268,7 +275,7 @@ export class OnePasswordConnectClient {
       // Encrypt value before caching
       const encrypted = await this.encrypt(value);
 
-      await this.env.RATE_LIMIT.put(cacheKey, encrypted, {
+      await this.env.CREDENTIAL_CACHE.put(cacheKey, encrypted, {
         expirationTtl: ttl
       });
 
@@ -280,6 +287,49 @@ export class OnePasswordConnectClient {
   }
 
   /**
+   * Get or create cached encryption key
+   *
+   * @private
+   * @returns {Promise<CryptoKey>} Encryption key
+   */
+  async getEncryptionKey() {
+    // Return cached key if available
+    if (this.cachedEncryptionKey) {
+      return this.cachedEncryptionKey;
+    }
+
+    const encoder = new TextEncoder();
+
+    // Import key material (only once)
+    if (!this.cachedKeyMaterial) {
+      this.cachedKeyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(this.env.ENCRYPTION_KEY || 'default-key-change-me'),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits', 'deriveKey']
+      );
+    }
+
+    // Derive and cache the key
+    this.cachedEncryptionKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode('chittyos-1password-salt'),
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      this.cachedKeyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    console.log('[1Password] Encryption key cached for improved performance');
+    return this.cachedEncryptionKey;
+  }
+
+  /**
    * Encrypt credential value for caching
    *
    * @private
@@ -287,31 +337,14 @@ export class OnePasswordConnectClient {
    * @returns {Promise<string>} Encrypted credential
    */
   async encrypt(value) {
-    // Use Web Crypto API for encryption
+    // Use cached key for massive performance improvement
+    const startTime = Date.now();
+
     const encoder = new TextEncoder();
     const data = encoder.encode(value);
 
-    // Derive key from environment encryption key
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(this.env.ENCRYPTION_KEY || 'default-key-change-me'),
-      { name: 'PBKDF2' },
-      false,
-      ['deriveBits', 'deriveKey']
-    );
-
-    const key = await crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        salt: encoder.encode('chittyos-1password-salt'),
-        iterations: 100000,
-        hash: 'SHA-256'
-      },
-      keyMaterial,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt']
-    );
+    // Get cached encryption key
+    const key = await this.getEncryptionKey();
 
     // Generate random IV
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -329,7 +362,14 @@ export class OnePasswordConnectClient {
     combined.set(new Uint8Array(encrypted), iv.length);
 
     // Base64 encode
-    return btoa(String.fromCharCode(...combined));
+    const result = btoa(String.fromCharCode(...combined));
+
+    const encryptTime = Date.now() - startTime;
+    if (encryptTime > 10) {
+      console.log(`[1Password] Encryption took ${encryptTime}ms`);
+    }
+
+    return result;
   }
 
   /**
@@ -340,7 +380,7 @@ export class OnePasswordConnectClient {
    * @returns {Promise<string>} Plain text credential
    */
   async decrypt(encrypted) {
-    const encoder = new TextEncoder();
+    const startTime = Date.now();
     const decoder = new TextDecoder();
 
     // Base64 decode
@@ -352,27 +392,8 @@ export class OnePasswordConnectClient {
     const iv = combined.slice(0, 12);
     const data = combined.slice(12);
 
-    // Derive key (same as encryption)
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(this.env.ENCRYPTION_KEY || 'default-key-change-me'),
-      { name: 'PBKDF2' },
-      false,
-      ['deriveBits', 'deriveKey']
-    );
-
-    const key = await crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        salt: encoder.encode('chittyos-1password-salt'),
-        iterations: 100000,
-        hash: 'SHA-256'
-      },
-      keyMaterial,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['decrypt']
-    );
+    // Get cached encryption key (same key works for decrypt)
+    const key = await this.getEncryptionKey();
 
     // Decrypt
     const decrypted = await crypto.subtle.decrypt(
@@ -380,6 +401,11 @@ export class OnePasswordConnectClient {
       key,
       data
     );
+
+    const decryptTime = Date.now() - startTime;
+    if (decryptTime > 10) {
+      console.log(`[1Password] Decryption took ${decryptTime}ms`);
+    }
 
     return decoder.decode(decrypted);
   }
@@ -415,13 +441,14 @@ export class OnePasswordConnectClient {
 
   /**
    * Invalidate cached credential
+   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
    *
    * @param {string} credentialPath - Credential path to invalidate
    */
   async invalidateCache(credentialPath) {
     try {
       const cacheKey = `1password:cache:${credentialPath}`;
-      await this.env.RATE_LIMIT.delete(cacheKey);
+      await this.env.CREDENTIAL_CACHE.delete(cacheKey);
       console.log(`[1Password] Invalidated cache for ${credentialPath}`);
     } catch (error) {
       console.error(`[1Password] Cache invalidation error:`, error);
