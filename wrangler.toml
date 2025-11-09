@@ -29,6 +29,10 @@ id = "3a29a9de28c84b7e8b87070cbf006415"
 binding = "RATE_LIMIT"
 id = "1ab2c1114f5c4e248b8eba157615a125"
 
+[[kv_namespaces]]
+binding = "CREDENTIAL_CACHE"
+id = "7b71b58ad724477888b37d8beeb5d825"
+
 # D1 Database for installation mapping
 [[d1_databases]]
 binding = "DB"
@@ -65,6 +69,10 @@ id = "3a29a9de28c84b7e8b87070cbf006415"
 binding = "RATE_LIMIT"
 id = "1ab2c1114f5c4e248b8eba157615a125"
 
+[[env.staging.kv_namespaces]]
+binding = "CREDENTIAL_CACHE"
+id = "944ba0b2eb874119ada9961e922ff4a9"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "chittyconnect"
@@ -89,6 +97,13 @@ REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
 CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
 CHITTYOS_DOMAIN = "chitty.cc"
 GITHUB_APP_ID = ""  # Set via wrangler secret
+# 1Password Connect Configuration (optional - enables dynamic credential retrieval)
+ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
+ONEPASSWORD_VAULT_INFRASTRUCTURE = "infrastructure-vault-uuid"
+ONEPASSWORD_VAULT_SERVICES = "services-vault-uuid"
+ONEPASSWORD_VAULT_INTEGRATIONS = "integrations-vault-uuid"
+ONEPASSWORD_VAULT_EMERGENCY = "emergency-vault-uuid"
+CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Environment variables for production
 [env.production]
@@ -114,6 +129,10 @@ id = "cf6da7757caf4da5a8a365be2174f391"
 binding = "RATE_LIMIT"
 id = "59975122a4f74ce391067df2f637b924"
 
+[[env.production.kv_namespaces]]
+binding = "CREDENTIAL_CACHE"
+id = "aa18a59a2eb24fb29cfe08ef62519f4d"
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "chittyconnect-production"
@@ -137,6 +156,13 @@ CHITTYID_SERVICE_URL = "https://id.chitty.cc"
 REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
 CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
 CHITTYOS_DOMAIN = "chitty.cc"
+# 1Password Connect Configuration (optional - enables dynamic credential retrieval)
+ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
+ONEPASSWORD_VAULT_INFRASTRUCTURE = "infrastructure-vault-uuid"
+ONEPASSWORD_VAULT_SERVICES = "services-vault-uuid"
+ONEPASSWORD_VAULT_INTEGRATIONS = "integrations-vault-uuid"
+ONEPASSWORD_VAULT_EMERGENCY = "emergency-vault-uuid"
+CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Secrets (set via: wrangler secret put <NAME>)
 #
@@ -166,6 +192,11 @@ CHITTYOS_DOMAIN = "chitty.cc"
 # - CLOUDFLARE_MAKE_API_KEY (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/m4unvf5sbz3rm7ny2ys5siy5om/make_api_key)
 # - CLOUDFLARE_ACCOUNT_ID (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/ChittyCorp LLC/account_id)
 #   Note: CLOUDFLARE_ACCOUNT_ID defaults to 0bc21e3a5a9de1a4cc843be9c3e98121 if not set
+#
+# 1Password Connect (optional - enables dynamic credential retrieval at runtime):
+# - ONEPASSWORD_CONNECT_TOKEN (Bearer token for 1Password Connect API)
+# - EMERGENCY_REVOKE_TOKEN (Special token for emergency credential cache clearing - high entropy random string)
+# - ENCRYPTION_KEY (for encrypting cached credentials in KV - 32+ character random string)
 
 # Cloudflare Workers AI binding
 [ai]

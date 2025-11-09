@@ -6,6 +6,7 @@
 
 import { Hono } from "hono";
 import { mcpAuthMiddleware } from "../middleware/mcp-auth.js";
+import { credentialTools } from "./tools/credential-tools.js";
 
 const mcp = new Hono();
 
@@ -408,6 +409,12 @@ mcp.get("/tools/list", (c) => {
           required: ["task"],
         },
       },
+      // Credential Management Tools (1Password Integration)
+      ...credentialTools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema
+      })),
     ],
   });
 });
@@ -498,6 +505,21 @@ mcp.post("/tools/call", async (c) => {
 
       case "coordination_analyze_task":
         result = await analyzeCoordinationTask(args, c);
+        break;
+
+      // Credential Management Tools (1Password Integration)
+      case "chitty_credential_retrieve":
+      case "chitty_credential_provision":
+      case "chitty_credential_validate":
+      case "chitty_credential_revoke":
+      case "chitty_credential_audit":
+      case "chitty_credential_health":
+        const tool = credentialTools.find(t => t.name === name);
+        if (tool) {
+          result = await tool.execute(args, c.env);
+        } else {
+          return c.json({ error: `Unknown credential tool: ${name}` }, 404);
+        }
         break;
 
       default:
