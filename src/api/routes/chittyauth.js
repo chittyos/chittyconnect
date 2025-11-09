@@ -1,9 +1,13 @@
 /**
  * ChittyAuth API Routes
- * Authentication and authorization
+ * Authentication and authorization with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittyauthRoutes = new Hono();
 
@@ -19,11 +23,20 @@ chittyauthRoutes.post("/verify", async (c) => {
       return c.json({ error: "token is required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittyauth');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyAuth service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     const response = await fetch("https://auth.chitty.cc/api/verify", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_AUTH_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ token }),
     });
@@ -51,11 +64,19 @@ chittyauthRoutes.post("/refresh", async (c) => {
       return c.json({ error: "refreshToken is required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittyauth');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyAuth service token not configured"
+      }, 503);
+    }
+
     const response = await fetch("https://auth.chitty.cc/api/refresh", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_AUTH_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ refreshToken }),
     });

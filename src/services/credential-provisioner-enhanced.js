@@ -14,8 +14,7 @@
  * - Rate limit requests
  */
 
-import { OnePasswordProvider } from './onepassword-provider.js';
-import { memoryRateLimit } from '../middleware/memory-rate-limit.js';
+import { OnePasswordConnectClient } from './1password-connect-client.js';
 
 /**
  * Enhanced Credential provisioner for ChittyOS ecosystem
@@ -24,7 +23,7 @@ export class EnhancedCredentialProvisioner {
   constructor(env, contextConsciousness) {
     this.env = env;
     this.contextConsciousness = contextConsciousness;
-    this.onePassword = new OnePasswordProvider(env, contextConsciousness);
+    this.onePassword = new OnePasswordConnectClient(env);
 
     // Cloudflare permissions will be fetched dynamically
     // These are fallback IDs if API fetch fails
@@ -882,18 +881,26 @@ export class EnhancedCredentialProvisioner {
 
   /**
    * Check rate limit for credential provisioning
-   * Now uses in-memory rate limiting instead of KV
+   * Uses KV for rate limiting across Worker instances
    *
    * @private
    */
   async checkRateLimit(requestingService) {
-    const status = memoryRateLimit.checkProvisionLimit(requestingService);
+    const rateLimitKey = `provision:${requestingService}:${Math.floor(Date.now() / 3600000)}`;
+    const currentCount = parseInt(await this.env.RATE_LIMIT.get(rateLimitKey) || '0');
+    const maxPerHour = 10;
 
-    if (!status.allowed) {
-      console.warn(`[EnhancedCredentialProvisioner] Rate limit exceeded for ${requestingService}: ${status.remaining} remaining, resets in ${Math.round(status.resetIn / 1000)}s`);
+    if (currentCount >= maxPerHour) {
+      console.warn(`[EnhancedCredentialProvisioner] Rate limit exceeded for ${requestingService}: ${currentCount}/${maxPerHour}`);
+      throw new Error(`Rate limit exceeded for ${requestingService}`);
     }
 
-    return status.allowed;
+    // Increment count
+    await this.env.RATE_LIMIT.put(rateLimitKey, (currentCount + 1).toString(), {
+      expirationTtl: 3600
+    });
+
+    return true;
   }
 
   /**

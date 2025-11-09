@@ -1,9 +1,13 @@
 /**
  * ChittySync API Routes
- * Data synchronization and state management
+ * Data synchronization and state management with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittysyncRoutes = new Hono();
 
@@ -24,11 +28,20 @@ chittysyncRoutes.post("/sync", async (c) => {
       return c.json({ error: "source and target are required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittysync');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittySync service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     const response = await fetch("https://sync.chitty.cc/api/sync", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ source, target, entities, mode }),
     });
@@ -52,9 +65,17 @@ chittysyncRoutes.get("/status/:syncId", async (c) => {
   try {
     const syncId = c.req.param("syncId");
 
+    const serviceToken = await getServiceToken(c.env, 'chittysync');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittySync service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(`https://sync.chitty.cc/api/sync/${syncId}`, {
       headers: {
-        Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
     });
 
@@ -82,11 +103,19 @@ chittysyncRoutes.get("/history", async (c) => {
     if (target) params.append("target", target);
     params.append("limit", limit);
 
+    const serviceToken = await getServiceToken(c.env, 'chittysync');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittySync service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(
       `https://sync.chitty.cc/api/history?${params.toString()}`,
       {
         headers: {
-          Authorization: `Bearer ${c.env.CHITTY_SYNC_TOKEN}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
       },
     );

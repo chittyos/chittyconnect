@@ -7,26 +7,9 @@
  */
 
 import { Hono } from "hono";
-import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittyidRoutes = new Hono();
-
-/**
- * Helper function to get ChittyID service token with 1Password fallback
- * @private
- */
-async function getServiceToken(env) {
-  try {
-    const opClient = new OnePasswordConnectClient(env);
-    const token = await opClient.get('services/chittyid/service_token');
-    if (token) return token;
-  } catch (error) {
-    console.warn('[ChittyID] 1Password retrieval failed for service token, using fallback:', error.message);
-  }
-
-  // Fallback to environment variable
-  return env.CHITTY_ID_TOKEN;
-}
 
 /**
  * POST /api/chittyid/mint
@@ -55,8 +38,7 @@ chittyidRoutes.post("/mint", async (c) => {
       return c.json({ error: "Invalid entity type" }, 400);
     }
 
-    // Get service token from 1Password with fallback
-    const serviceToken = await getServiceToken(c.env);
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
 
     if (!serviceToken) {
       return c.json({
@@ -98,8 +80,7 @@ chittyidRoutes.post("/validate", async (c) => {
       return c.json({ error: "chittyid is required" }, 400);
     }
 
-    // Get service token from 1Password with fallback
-    const serviceToken = await getServiceToken(c.env);
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
 
     if (!serviceToken) {
       return c.json({
@@ -136,8 +117,7 @@ chittyidRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
 
-    // Get service token from 1Password with fallback
-    const serviceToken = await getServiceToken(c.env);
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
 
     if (!serviceToken) {
       return c.json({

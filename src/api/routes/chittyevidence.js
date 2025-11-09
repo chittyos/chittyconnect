@@ -1,9 +1,13 @@
 /**
  * ChittyEvidence API Routes
- * Evidence ingestion and management
+ * Evidence ingestion and management with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittyevidenceRoutes = new Hono();
 
@@ -23,6 +27,15 @@ chittyevidenceRoutes.post("/ingest", async (c) => {
       return c.json({ error: "file and caseId are required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyEvidence service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     // Forward to ChittyEvidence service
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
@@ -33,7 +46,7 @@ chittyevidenceRoutes.post("/ingest", async (c) => {
     const response = await fetch("https://evidence.chitty.cc/api/ingest", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${c.env.CHITTY_EVIDENCE_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: uploadFormData,
     });
@@ -57,11 +70,19 @@ chittyevidenceRoutes.get("/:evidenceId", async (c) => {
   try {
     const evidenceId = c.req.param("evidenceId");
 
+    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyEvidence service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(
       `https://evidence.chitty.cc/api/evidence/${evidenceId}`,
       {
         headers: {
-          Authorization: `Bearer ${c.env.CHITTY_EVIDENCE_TOKEN}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
       },
     );
