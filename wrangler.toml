@@ -41,6 +41,17 @@ index_name = "memory-cloude"
 binding = "CONTEXT_VECTORIZE"
 index_name = "context-embeddings"
 
+# Durable Objects for MCP session state management
+[[durable_objects.bindings]]
+name = "MCP_SESSIONS"
+class_name = "MCPSessionDurableObject"
+script_name = "chittyconnect"
+
+# Durable Objects migrations
+[[migrations]]
+tag = "v1"
+new_classes = ["MCPSessionDurableObject"]
+
 # D1 Database for installation mapping
 [[d1_databases]]
 binding = "DB"
@@ -86,6 +97,11 @@ index_name = "memory-cloude"
 [[env.staging.vectorize]]
 binding = "CONTEXT_VECTORIZE"
 index_name = "context-embeddings"
+
+[[env.staging.durable_objects.bindings]]
+name = "MCP_SESSIONS"
+class_name = "MCPSessionDurableObject"
+script_name = "chittyconnect-staging"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -152,6 +168,11 @@ index_name = "memory-cloude"
 [[env.production.vectorize]]
 binding = "CONTEXT_VECTORIZE"
 index_name = "context-embeddings"
+
+[[env.production.durable_objects.bindings]]
+name = "MCP_SESSIONS"
+class_name = "MCPSessionDurableObject"
+script_name = "chittyconnect-production"
 
 [[env.production.d1_databases]]
 binding = "DB"

@@ -13,6 +13,7 @@ import { chittyauthRoutes } from "./routes/chittyauth.js";
 import { chittyfinanceRoutes } from "./routes/chittyfinance.js";
 import { chittycontextualRoutes } from "./routes/chittycontextual.js";
 import { chittychronicleRoutes } from "./routes/chittychronicle.js";
+import { chittyqualityRoutes } from "./routes/chittyquality.js";
 import { chittysyncRoutes } from "./routes/chittysync.js";
 import { chittyevidenceRoutes } from "./routes/chittyevidence.js";
 import { registryRoutes } from "./routes/registry.js";
@@ -20,6 +21,7 @@ import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
+import { mcpRoutes } from "./routes/mcp.js";
 import { authenticate } from "./middleware/auth.js";
 
 const api = new Hono();
@@ -58,6 +60,7 @@ api.get("/api/health", (c) => {
       chittyfinance: "/api/chittyfinance",
       chittycontextual: "/api/chittycontextual",
       chittychronicle: "/api/chittychronicle",
+      chittyquality: "/api/chittyquality",
       chittysync: "/api/chittysync",
       chittyevidence: "/api/chittyevidence",
       registry: "/api/registry",
@@ -65,16 +68,32 @@ api.get("/api/health", (c) => {
       thirdparty: "/api/thirdparty",
       credentials: "/api/credentials",
       intelligence: "/api/intelligence",
+      mcp: "/mcp",
     },
   });
 });
 
-// OpenAPI spec endpoint
+// OpenAPI spec endpoint - import and serve statically
+// In Cloudflare Workers, we use import attributes to load JSON
 api.get("/openapi.json", async (c) => {
-  const spec = await c.env.ASSETS.fetch(
-    new Request("https://connect.chitty.cc/openapi.json"),
-  );
-  return spec;
+  try {
+    // Use dynamic import with assertion for JSON module
+    const { default: openapiSpec } = await import('../../public/openapi.json', {
+      assert: { type: 'json' }
+    });
+
+    // Set proper CORS headers for OpenAPI spec
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header('Content-Type', 'application/json');
+
+    return c.json(openapiSpec);
+  } catch (error) {
+    console.error('[OpenAPI] Failed to load spec:', error);
+    return c.json({
+      error: 'OpenAPI spec not available',
+      message: error.message
+    }, 500);
+  }
 });
 
 // Route handlers
@@ -84,6 +103,7 @@ api.route("/api/chittyauth", chittyauthRoutes);
 api.route("/api/chittyfinance", chittyfinanceRoutes);
 api.route("/api/chittycontextual", chittycontextualRoutes);
 api.route("/api/chittychronicle", chittychronicleRoutes);
+api.route("/api/chittyquality", chittyqualityRoutes);
 api.route("/api/chittysync", chittysyncRoutes);
 api.route("/api/chittyevidence", chittyevidenceRoutes);
 api.route("/api/registry", registryRoutes);
@@ -91,5 +111,6 @@ api.route("/api/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);
+api.route("/mcp", mcpRoutes);
 
 export { api };
