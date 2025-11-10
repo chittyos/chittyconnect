@@ -1,0 +1,332 @@
+{
+  "name": "ChittyOS Legal Intelligence",
+  "version": "1.0.0",
+  "description": "Complete legal case management, evidence analysis, trust scoring, and intelligent document processing powered by ContextConsciousness™ and MemoryCloude™",
+  "vendor": {
+    "name": "ChittyOS",
+    "url": "https://chitty.cc",
+    "support_email": "support@chitty.cc"
+  },
+  "authentication": {
+    "type": "oauth2",
+    "authorization_url": "https://auth.chitty.cc/oauth/authorize",
+    "token_url": "https://auth.chitty.cc/oauth/token",
+    "scopes": [
+      "chittyid:read",
+      "chittyid:write",
+      "cases:read",
+      "cases:write",
+      "evidence:read",
+      "evidence:write",
+      "trust:read",
+      "contextual:read",
+      "finance:read"
+    ]
+  },
+  "endpoints": {
+    "base_url": "https://connect.chitty.cc",
+    "mcp_server": "https://connect.chitty.cc/mcp",
+    "streaming": "https://connect.chitty.cc/mcp/stream/{sessionId}",
+    "openapi_spec": "https://connect.chitty.cc/openapi.json"
+  },
+  "capabilities": {
+    "identity_management": {
+      "description": "Generate and validate cryptographically secure ChittyIDs",
+      "actions": [
+        "mint_chittyid",
+        "validate_chittyid",
+        "resolve_identity"
+      ]
+    },
+    "case_management": {
+      "description": "Create, manage, and track legal cases",
+      "actions": [
+        "create_case",
+        "update_case",
+        "get_case",
+        "list_cases",
+        "close_case"
+      ]
+    },
+    "evidence_analysis": {
+      "description": "Ingest, verify, and analyze legal evidence with chain of custody",
+      "actions": [
+        "ingest_evidence",
+        "verify_evidence",
+        "analyze_evidence",
+        "track_chain_of_custody"
+      ]
+    },
+    "trust_scoring": {
+      "description": "6D behavioral trust scoring (Source, Temporal, Channel, Outcome, Network, Justice)",
+      "actions": [
+        "calculate_trust_score",
+        "get_trust_history",
+        "analyze_trust_trends"
+      ]
+    },
+    "contextual_intelligence": {
+      "description": "ContextConsciousness™ - Deep understanding of legal, financial, and relational context",
+      "actions": [
+        "analyze_context",
+        "predict_outcomes",
+        "detect_anomalies",
+        "get_ecosystem_awareness"
+      ]
+    },
+    "memory_persistence": {
+      "description": "MemoryCloude™ - 90-day semantic memory with cross-session learning",
+      "actions": [
+        "persist_interaction",
+        "recall_context",
+        "summarize_session",
+        "get_entity_history"
+      ]
+    },
+    "real_time_streaming": {
+      "description": "Server-Sent Events for live consciousness updates, predictions, and alerts",
+      "actions": [
+        "subscribe_to_updates",
+        "get_live_predictions",
+        "receive_alerts"
+      ]
+    },
+    "banking_integration": {
+      "description": "Connect banking institutions for financial evidence and transactions",
+      "actions": [
+        "connect_bank",
+        "verify_transactions",
+        "track_financial_flows"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "chittyid_mint",
+      "description": "Mint a new ChittyID with contextual awareness",
+      "endpoint": "/api/v1/chittyid/mint",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string",
+            "enum": ["PEO", "PLACE", "PROP", "EVNT", "AUTH", "INFO", "FACT", "CONTEXT", "ACTOR"],
+            "description": "Entity type for ChittyID"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Contextual metadata"
+          }
+        },
+        "required": ["entity"]
+      }
+    },
+    {
+      "name": "case_create",
+      "description": "Create a new legal case with full context",
+      "endpoint": "/api/v1/cases/create",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Case title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed case description"
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Legal jurisdiction"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Involved parties"
+          }
+        },
+        "required": ["title", "description"]
+      }
+    },
+    {
+      "name": "evidence_ingest",
+      "description": "Ingest and verify legal evidence",
+      "endpoint": "/api/v1/evidence/ingest",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "description": "Associated case ID"
+          },
+          "evidenceType": {
+            "type": "string",
+            "enum": ["document", "testimony", "physical", "digital", "financial"],
+            "description": "Type of evidence"
+          },
+          "content": {
+            "type": "string",
+            "description": "Evidence content or reference"
+          },
+          "source": {
+            "type": "object",
+            "description": "Evidence source information"
+          }
+        },
+        "required": ["caseId", "evidenceType", "content"]
+      }
+    },
+    {
+      "name": "contextual_analyze",
+      "description": "Analyze text with ContextConsciousness™ for deep legal, financial, and relational understanding",
+      "endpoint": "/api/v1/contextual/analyze",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to analyze"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional context"
+          },
+          "analysisType": {
+            "type": "string",
+            "enum": ["legal", "financial", "relational", "comprehensive"],
+            "description": "Type of analysis"
+          }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "name": "stream_subscribe",
+      "description": "Subscribe to real-time consciousness updates, predictions, and alerts",
+      "endpoint": "/mcp/stream/{sessionId}",
+      "method": "GET",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session identifier"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Event type filters (consciousness:update, prediction:new, alert:new, etc.)"
+          }
+        },
+        "required": ["sessionId"]
+      }
+    },
+    {
+      "name": "finance_connect_bank",
+      "description": "Connect a banking institution for financial evidence",
+      "endpoint": "/api/v1/finance/connect-bank",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "bankName": {
+            "type": "string",
+            "description": "Name of banking institution"
+          },
+          "accountType": {
+            "type": "string",
+            "enum": ["checking", "savings", "credit", "investment"],
+            "description": "Account type"
+          },
+          "credentials": {
+            "type": "object",
+            "description": "Bank API credentials (securely handled)"
+          }
+        },
+        "required": ["bankName", "accountType"]
+      }
+    },
+    {
+      "name": "memory_recall",
+      "description": "Recall relevant context from MemoryCloude™ using semantic search",
+      "endpoint": "/mcp/tools/call",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "const": "memory_recall_context"
+          },
+          "arguments": {
+            "type": "object",
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "features": {
+    "real_time_streaming": true,
+    "semantic_memory": true,
+    "predictive_intelligence": true,
+    "multi_service_orchestration": true,
+    "blockchain_minting": true,
+    "trust_scoring": true,
+    "evidence_verification": true
+  },
+  "pricing": {
+    "model": "usage_based",
+    "tiers": [
+      {
+        "name": "Individual",
+        "price_per_month": 0,
+        "included_api_calls": 1000,
+        "features": ["Basic case management", "ChittyID generation", "Evidence ingestion"]
+      },
+      {
+        "name": "Professional",
+        "price_per_month": 49,
+        "included_api_calls": 10000,
+        "features": ["All Individual features", "Trust scoring", "Contextual analysis", "Real-time streaming"]
+      },
+      {
+        "name": "Enterprise",
+        "price_per_month": 299,
+        "included_api_calls": 100000,
+        "features": ["All Professional features", "Dedicated support", "Custom integrations", "SLA guarantees"]
+      }
+    ]
+  },
+  "documentation": {
+    "quick_start": "https://connect.chitty.cc/docs/quick-start",
+    "api_reference": "https://connect.chitty.cc/docs/api",
+    "examples": "https://github.com/chittyos/chittyconnect-examples",
+    "support": "https://chitty.cc/support"
+  },
+  "metadata": {
+    "categories": ["legal", "productivity", "finance", "security"],
+    "tags": ["legal-tech", "evidence", "trust-scoring", "ai", "blockchain", "case-management"],
+    "languages": ["en"],
+    "regions": ["global"]
+  }
+}

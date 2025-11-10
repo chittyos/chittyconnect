@@ -7,6 +7,7 @@
 import { Hono } from "hono";
 import { mcpAuthMiddleware } from "../middleware/mcp-auth.js";
 import { credentialTools } from "./tools/credential-tools.js";
+import { StreamingManager } from "../intelligence/streaming-manager.js";
 
 const mcp = new Hono();
 
@@ -955,5 +956,50 @@ async function analyzeCoordinationTask(args, c) {
 
   return analysis;
 }
+
+/**
+ * GET /mcp/stream/:sessionId
+ * Server-Sent Events endpoint for real-time updates
+ */
+mcp.get("/stream/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const filters = c.req.query("filters")?.split(",") || [];
+
+  // Create streaming manager if not exists
+  let streamingManager = c.get("streamingManager");
+  if (!streamingManager) {
+    streamingManager = new StreamingManager(c.env);
+    c.set("streamingManager", streamingManager);
+  }
+
+  // Create SSE stream
+  const stream = await streamingManager.createStream(sessionId, { filters });
+
+  // Send initial consciousness state if available
+  const consciousness = c.get("consciousness");
+  if (consciousness) {
+    const awareness = await consciousness.getAwareness();
+    await streamingManager.streamConsciousnessUpdate(sessionId, awareness);
+  }
+
+  return stream;
+});
+
+/**
+ * GET /mcp/stream/:sessionId/status
+ * Get streaming status for a session
+ */
+mcp.get("/stream/:sessionId/status", (c) => {
+  const sessionId = c.req.param("sessionId");
+  const streamingManager = c.get("streamingManager");
+
+  if (!streamingManager) {
+    return c.json({ connected: false });
+  }
+
+  const info = streamingManager.getSessionInfo(sessionId);
+
+  return c.json(info || { connected: false });
+});
 
 export { mcp };

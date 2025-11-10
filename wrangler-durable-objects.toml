@@ -1,0 +1,41 @@
+# Durable Objects Configuration for ChittyConnect
+# Add this configuration to your existing wrangler.toml
+
+# Durable Objects bindings
+[[durable_objects.bindings]]
+name = "SESSION_STATE"
+class_name = "SessionStateDO"
+script_name = "chittyconnect"
+
+# For staging environment
+[[env.staging.durable_objects.bindings]]
+name = "SESSION_STATE"
+class_name = "SessionStateDO"
+script_name = "chittyconnect-staging"
+
+# For production environment
+[[env.production.durable_objects.bindings]]
+name = "SESSION_STATE"
+class_name = "SessionStateDO"
+script_name = "chittyconnect-production"
+
+# Export the Durable Object class
+# Add to your main wrangler.toml:
+[durable_objects]
+classes = [
+  { binding = "SESSION_STATE", class_name = "SessionStateDO", script_name = "chittyconnect" }
+]
+
+# Migration configuration (for initial deployment)
+[[migrations]]
+tag = "v1"
+new_classes = ["SessionStateDO"]
+
+# For production with location hints (optimize for your primary user base)
+[[env.production.durable_objects.bindings]]
+name = "SESSION_STATE"
+class_name = "SessionStateDO"
+script_name = "chittyconnect-production"
+# Location hint for automatic placement (optional)
+# Use "eu" for European users, "enam" for Eastern North America, "wnam" for Western North America
+# location_hint = "enam"

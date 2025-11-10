@@ -32,6 +32,15 @@ id = "3a29a9de28c84b7e8b87070cbf006415"
 binding = "CREDENTIAL_CACHE"
 id = "7b71b58ad724477888b37d8beeb5d825"
 
+# Vectorize for MemoryCloude and ContextConsciousness
+[[vectorize]]
+binding = "MEMORY_VECTORIZE"
+index_name = "memory-cloude"
+
+[[vectorize]]
+binding = "CONTEXT_VECTORIZE"
+index_name = "context-embeddings"
+
 # D1 Database for installation mapping
 [[d1_databases]]
 binding = "DB"
@@ -69,6 +78,14 @@ id = "3a29a9de28c84b7e8b87070cbf006415"
 [[env.staging.kv_namespaces]]
 binding = "CREDENTIAL_CACHE"
 id = "944ba0b2eb874119ada9961e922ff4a9"
+
+[[env.staging.vectorize]]
+binding = "MEMORY_VECTORIZE"
+index_name = "memory-cloude"
+
+[[env.staging.vectorize]]
+binding = "CONTEXT_VECTORIZE"
+index_name = "context-embeddings"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -127,6 +144,14 @@ id = "cf6da7757caf4da5a8a365be2174f391"
 [[env.production.kv_namespaces]]
 binding = "CREDENTIAL_CACHE"
 id = "aa18a59a2eb24fb29cfe08ef62519f4d"
+
+[[env.production.vectorize]]
+binding = "MEMORY_VECTORIZE"
+index_name = "memory-cloude"
+
+[[env.production.vectorize]]
+binding = "CONTEXT_VECTORIZE"
+index_name = "context-embeddings"
 
 [[env.production.d1_databases]]
 binding = "DB"
