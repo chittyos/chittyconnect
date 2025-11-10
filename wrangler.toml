@@ -63,11 +63,6 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 binding = "EVENT_Q"
 queue = "github-events"
 
-[[queues.consumers]]
-queue = "github-events"
-max_batch_size = 10
-max_batch_timeout = 30
-
 # Environment variables for development
 [env.staging]
 name = "chittyconnect-staging"
@@ -111,11 +106,6 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 [[env.staging.queues.producers]]
 binding = "EVENT_Q"
 queue = "github-events"
-
-[[env.staging.queues.consumers]]
-queue = "github-events"
-max_batch_size = 10
-max_batch_timeout = 30
 
 [env.staging.ai]
 binding = "AI"
@@ -182,11 +172,6 @@ database_id = "39f76706-5d67-401f-b1bf-9a212de4da0b"
 [[env.production.queues.producers]]
 binding = "EVENT_Q"
 queue = "github-events"
-
-[[env.production.queues.consumers]]
-queue = "github-events"
-max_batch_size = 10
-max_batch_timeout = 30
 
 [env.production.ai]
 binding = "AI"
