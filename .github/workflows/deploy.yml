@@ -32,7 +32,7 @@ jobs:
           purpose: deploy
 
   ###########################################################################
-  # 1. Deploy to Staging (runs automatically on staging branch)
+  # 1. Deploy to Staging (auto-triggered on staging branch)
   ###########################################################################
   deploy-staging:
     if: github.ref == 'refs/heads/staging'
@@ -86,28 +86,66 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate OpenAPI Exists
+      ############################################################
+      # 3. Strict OpenAPI Validation (local schema)
+      ############################################################
+      - name: Validate OpenAPI (local schema)
         run: |
-          echo "Checking OpenAPI availability..."
-          curl -f https://connect.chitty.cc/openapi.json || echo "OpenAPI validation deferred"
+          echo "Validating OpenAPI schema..."
+          if [ ! -f openapi.json ]; then
+            echo "❌ Missing openapi.json"
+            exit 1
+          fi
+          npx @redocly/cli lint openapi.json
 
+      ############################################################
+      # 4. Validate MCP Manifest Schema
+      ############################################################
+      - name: Validate MCP manifest
+        run: |
+          echo "Validating MCP manifest..."
+          if [ ! -f mcp/manifest.json ]; then
+            echo "❌ Missing mcp/manifest.json"
+            exit 1
+          fi
+          if [ ! -f mcp/manifest.schema.json ]; then
+            echo "❌ Missing mcp/manifest.schema.json"
+            exit 1
+          fi
+          npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json
+
+      ############################################################
+      # 5. Deploy
+      ############################################################
       - name: Deploy to Production
+        id: deploy_step
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --env production
+        run: |
+          echo "🚀 Deploying to production…"
+          npx wrangler deploy --env production
 
-      - name: Post-Deploy Endpoint Health Checks
+      ############################################################
+      # 6. Post-Deploy Health Checks + Auto-Rollback
+      ############################################################
+      - name: Post-Deploy Health Checks
         run: |
           sleep 5
 
+          fail() {
+            echo "❌ Health check failed — rolling back..."
+            npx wrangler deploy --env production --rollback
+            exit 1
+          }
+
           echo "Checking /health..."
-          curl -f https://connect.chitty.cc/health
+          curl -f https://connect.chitty.cc/health || fail
 
           echo "Checking /openapi.json..."
-          curl -f https://connect.chitty.cc/openapi.json
+          curl -f https://connect.chitty.cc/openapi.json || fail
 
           echo "Checking /mcp/manifest..."
-          curl -f https://connect.chitty.cc/mcp/manifest
+          curl -f https://connect.chitty.cc/mcp/manifest || fail
 
           echo "✅ All production endpoints verified."
