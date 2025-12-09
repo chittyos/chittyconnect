@@ -235,7 +235,13 @@ export class PredictionEngine {
     const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
     const sumXX = points.reduce((sum, p) => sum + p.x * p.x, 0);
 
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const denominator = n * sumXX - sumX * sumX;
+    if (denominator === 0) {
+      // All x-values are the same or not enough variety; slope cannot be computed
+      return { slope: 0, intercept: sumY / n || 0, confidence: 0 };
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
     const intercept = (sumY - slope * sumX) / n;
 
     // Calculate R² (confidence)
