@@ -93,7 +93,7 @@ export class PredictionEngine {
             reasoning: 'Latency trending upward, performance degradation likely',
           }),
           expires_at: now + (6 * 3600 * 1000), // 6 hours
-        }),
+        });
       }
     }
 
