@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: Fetch ChittyConnect ephemeral credentials
         id: chitty
-        uses: chittyos/chittyconnect-action@v1
+        uses: ./.github/actions/chitty-creds-action
         with:
           api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
           purpose: deploy
