@@ -6,7 +6,7 @@
 # - /mcp/* - MCP protocol for Claude integration
 # - /integrations/github/webhook - GitHub App integration
 
-name = "chittyconnect"
+name = "chittyconnect-production"
 main = "src/index.js"
 compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
