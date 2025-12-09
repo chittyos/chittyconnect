@@ -223,7 +223,7 @@ export class PredictionEngine {
     const predicted = points[points.length - 1].y + slope * 5; // Predict 5 steps ahead
 
     return { slope, confidence, predicted };
-  }
+  } //
 
   /**
    * Linear regression for trend analysis
