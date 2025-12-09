@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-chittyconnect
+  cancel-in-progress: true
+
 jobs:
   ###########################################################################
   # 0. Fetch ephemeral deploy creds from ChittyConnect
@@ -28,13 +32,13 @@ jobs:
           purpose: deploy
 
   ###########################################################################
-  # 1. Deploy to Staging (runs on any push to staging branch)
+  # 1. Deploy to Staging (runs automatically on staging branch)
   ###########################################################################
   deploy-staging:
     if: github.ref == 'refs/heads/staging'
     needs: chitty-creds
     runs-on: ubuntu-latest
-    environment: staging
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -44,11 +48,6 @@ jobs:
         with:
           node-version: 20
           cache: npm
-
-      - name: Configure ephemeral NPM token
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
 
       - name: Install dependencies
         run: npm ci
@@ -62,16 +61,18 @@ jobs:
       - name: Health Check (Staging)
         run: |
           sleep 5
+          echo "Checking /health..."
           curl -f https://chittyconnect-staging.chitty.workers.dev/health
+          echo "Staging deployment healthy."
 
   ###########################################################################
-  # 2. Deploy to Production (only main)
+  # 2. Deploy to Production (only on main branch)
   ###########################################################################
   deploy-production:
     if: github.ref == 'refs/heads/main'
     needs: chitty-creds
     runs-on: ubuntu-latest
-    environment: production
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -82,16 +83,12 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Configure ephemeral NPM token
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
-
       - name: Install dependencies
         run: npm ci
 
       - name: Validate OpenAPI Exists
         run: |
+          echo "Checking OpenAPI availability..."
           curl -f https://connect.chitty.cc/openapi.json || echo "OpenAPI validation deferred"
 
       - name: Deploy to Production
