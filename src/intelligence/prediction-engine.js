@@ -12,7 +12,7 @@ export class PredictionEngine {
     this.env = env;
     this.consciousness = consciousness;
     this.db = env.DB;
-    this.predictionCache = env.CREDENTIAL_CACHE; // Reuse KV for caching
+    this.predictionCache = env.PREDICTION_CACHE; // Use dedicated prediction cache
   }
 
   /**
