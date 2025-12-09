@@ -1,0 +1,16 @@
+name: "ChittyConnect Ephemeral Credentials"
+description: "Fetch short-lived deploy credentials from ChittyConnect"
+
+inputs:
+  api_key:
+    required: true
+
+outputs:
+  github_token:
+    description: "Ephemeral GitHub token"
+  npm_token:
+    description: "Ephemeral NPM token"
+
+runs:
+  using: "node20"
+  main: "index.js"
