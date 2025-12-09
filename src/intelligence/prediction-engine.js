@@ -246,7 +246,13 @@ export class PredictionEngine {
       return sum + Math.pow(p.y - predicted, 2);
     }, 0);
 
-    const rSquared = 1 - ssResidual / ssTotal;
+    let rSquared;
+    if (ssTotal === 0) {
+      // No variance in y values, so rSquared is undefined. Set to 0 for no confidence.
+      rSquared = 0;
+    } else {
+      rSquared = 1 - ssResidual / ssTotal;
+    }
     const confidence = Math.max(0, Math.min(1, rSquared));
 
     return { slope, intercept, confidence };
