@@ -287,6 +287,11 @@ export class PredictionEngine {
     let totalWeight = 0;
     let criticalCount = 0;
 
+    if (affectedServices.length === 0) {
+      // No affected services means no cascade confidence
+      return 0;
+    }
+
     for (const affectedService of affectedServices) {
       const deps = depMap.get(affectedService) || [];
       const dep = deps.find(d => d.service === failingService.name);
