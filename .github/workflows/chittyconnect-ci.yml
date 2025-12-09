@@ -5,57 +5,127 @@ on:
     branches: [ main ]
   pull_request:
 
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
 jobs:
-  build-and-test:
+  ###########################################################################
+  # 1. Fetch ephemeral credentials (singleton)
+  ###########################################################################
+  chitty-creds:
+    name: Fetch ChittyConnect ephemeral credentials
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
+    outputs:
+      gh_token: ${{ steps.chitty.outputs.github_token }}
+      npm_token: ${{ steps.chitty.outputs.npm_token }}
     steps:
-      # 1. Checkout repo
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      # 3. Retrieve ephemeral credentials from ChittyConnect
       - name: Fetch ChittyConnect ephemeral credentials
         id: chitty
         uses: chittyos/chittyconnect-action@v1
         with:
           api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
-          purpose: github-actions
+          purpose: github-actions-ci
 
-      # 4. Use ephemeral GitHub token (available in env if needed by scripts)
-      - name: Configure ephemeral GitHub token
-        run: echo "Using Chitty GitHub Token"
-        env:
-          GH_TOKEN: ${{ steps.chitty.outputs.github_token }}
+  ###########################################################################
+  # 2. Lint (matrix)
+  ###########################################################################
+  lint:
+    name: Lint
+    needs: chitty-creds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        node-version: [20, 22]
 
-      # 5. Use ephemeral NPM token
-      - name: Configure npm auth
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix['node-version'] }}
+          cache: npm
+
+      - name: Configure ephemeral npm auth
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:
-          NPM_TOKEN: ${{ steps.chitty.outputs.npm_token }}
+          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
 
-      # 6. Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 7. Lint (if script exists)
-      - name: Lint
+      - name: Run lint
         run: npm run lint --if-present
 
-      # 8. Run tests (if script exists)
-      - name: Test
+  ###########################################################################
+  # 3. Test (matrix)
+  ###########################################################################
+  test:
+    name: Test
+    needs: [chitty-creds, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix['node-version'] }}
+          cache: npm
+
+      - name: Configure ephemeral npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
         run: npm test --if-present
 
-      # 9. Build (if script exists)
+  ###########################################################################
+  # 4. Build (single Node version)
+  ###########################################################################
+  build:
+    name: Build
+    needs: [chitty-creds, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure ephemeral npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Build
         run: npm run build --if-present
