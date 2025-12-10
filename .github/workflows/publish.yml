@@ -39,7 +39,6 @@ jobs:
         run: npm publish
 
   publish-npm:
-    if: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,7 +46,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check 1Password token presence
+        id: check_op
+        run: |
+          if [ -n "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Read npm token from 1Password
+        if: steps.check_op.outputs.has_token == 'true'
         uses: 1password/load-secrets-action@v2
         with:
           export-env: true
@@ -56,6 +67,7 @@ jobs:
           NPM_TOKEN: op://CODEX CLI SECRETS/p7fkefvzjqus56w2n25oi7kpvy/credential
 
       - name: Use Node.js
+        if: steps.check_op.outputs.has_token == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -63,14 +75,18 @@ jobs:
           scope: '@chittyos'
 
       - name: Configure npm for npmjs
+        if: steps.check_op.outputs.has_token == 'true'
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
 
       - name: Install dependencies
+        if: steps.check_op.outputs.has_token == 'true'
         run: npm ci
 
       - name: Pack validation (optional)
+        if: steps.check_op.outputs.has_token == 'true'
         run: npm pack --dry-run
 
       - name: Publish to npmjs
+        if: steps.check_op.outputs.has_token == 'true'
         run: npm publish --access public
