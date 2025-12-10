@@ -1,5 +1,8 @@
 import { writeFileSync } from "fs";
 
+// Use Node core undici fetch to avoid external deps
+const { fetch } = await import('node:undici');
+
 async function run() {
   try {
     const apiKey = process.env["INPUT_API_KEY"];
@@ -7,7 +10,7 @@ async function run() {
       throw new Error("INPUT_API_KEY is missing. Did you pass 'api_key:' in the workflow?");
     }
 
-    const res = await (globalThis.fetch || (await import('node-fetch')).default)("https://connect.chitty.cc/credentials/deploy", {
+    const res = await fetch("https://connect.chitty.cc/credentials/deploy", {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
 
