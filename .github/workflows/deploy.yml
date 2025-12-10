@@ -29,8 +29,6 @@ jobs:
       with:
         api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
 
-          purpose: deploy
-
   ###########################################################################
   # 1. Deploy to Staging (auto-triggered on staging branch)
   ###########################################################################
