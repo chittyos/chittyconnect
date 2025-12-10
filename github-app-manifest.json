@@ -1,0 +1,42 @@
+{
+  "name": "ChittyConnect",
+  "url": "https://connect.chitty.cc",
+  "hook_attributes": {
+    "url": "https://connect.chitty.cc/integrations/github/webhook",
+    "active": true
+  },
+  "redirect_url": "https://connect.chitty.cc/integrations/github/callback",
+  "callback_urls": [
+    "https://connect.chitty.cc/integrations/github/callback"
+  ],
+  "setup_url": "https://connect.chitty.cc/github/setup",
+  "description": "ChittyConnect - The AI-intelligent spine with ContextConsciousness™. Tracks all GitHub activity with ChittyIDs and provides MCP integration.",
+  "public": false,
+  "default_permissions": {
+    "issues": "write",
+    "pull_requests": "write",
+    "contents": "read",
+    "metadata": "read",
+    "repository_projects": "read",
+    "statuses": "read",
+    "checks": "read",
+    "actions": "read"
+  },
+  "default_events": [
+    "installation",
+    "installation_repositories",
+    "push",
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "issues",
+    "issue_comment",
+    "commit_comment",
+    "create",
+    "delete",
+    "fork",
+    "release",
+    "star",
+    "watch"
+  ]
+}

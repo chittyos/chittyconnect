@@ -4,92 +4,338 @@
  * Universal adapter layer that transmutes connections into consciousness.
  * Provides keys, connectors, transport, and bindings for all ChittyOS services.
  *
- * Not an orchestrator. A facilitator. The connective tissue.
+ * Features:
+ * - ChittyOS Ecosystem Integration
+ * - GitHub App with webhook processing
+ * - MCP Server (11 tools, 3 resources)
+ * - REST API (32+ endpoints)
+ * - ContextConsciousness™ tracking
  *
  * Version: 1.0.0
- * ChittyOS Compliance: 100%
- * ChittyID Violations: 0
  */
 
-import { ecosystemInitMiddleware } from './middleware/ecosystem-init.js';
-import { handleContexts } from './api/contexts.js';
-import { handleActors } from './api/actors.js';
-import { handleConnections } from './api/connections.js';
-import { handleDelegation } from './api/delegation.js';
-import { handleQueueMessage } from './queue/consumer.js';
-import { createEcosystem } from './integrations/chittyos-ecosystem.js';
+import { initializeSchema, contextExists, createContext, getContextByName } from './database/schema.js';
+import { initializeContext } from './integrations/chittyos-ecosystem.js';
+import { handleWebhook } from './integrations/github/webhook.js';
+import { handleOAuthCallback, renderInstallationSuccess } from './integrations/github/oauth.js';
+import { handleQueueBatch } from './integrations/github/consumer.js';
+import { routeAPI } from './api/router.js';
+import { MCP_MANIFEST, MCP_TOOLS, MCP_RESOURCES, executeTool, getResource } from './mcp/server.js';
 
 /**
- * Main fetch handler
+ * Main Worker Fetch Handler
  */
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const pathname = url.pathname;
 
-    try {
-      // Step 1: Ecosystem initialization middleware
-      // (Runs database schema creation and ChittyOS registration)
-      await ecosystemInitMiddleware(request, env, ctx);
+    // Initialize database schema on first request
+    await initializeDatabaseSchema(env);
 
-      // Step 2: Health check (fast path, no auth required)
-      if (url.pathname === '/health' || url.pathname === '/') {
-        return handleHealth(request, env, ctx);
-      }
+    // Initialize ChittyConnect context (non-blocking)
+    ctx.waitUntil(initializeChittyConnectContext(env));
 
-      // Step 3: Route to API handlers
-      return routeRequest(request, env, ctx, url);
-
-    } catch (error) {
-      console.error('[ChittyConnect] Request error:', error);
+    // Root health check
+    if (pathname === '/' || pathname === '/health') {
       return new Response(JSON.stringify({
-        error: 'Internal server error',
-        message: error.message,
-        timestamp: new Date().toISOString(),
+        status: 'healthy',
+        service: 'chittyconnect',
+        brand: 'itsChitty™',
+        tagline: 'The AI-intelligent spine with ContextConsciousness™',
+        version: '1.0.0',
+        environment: env.ENVIRONMENT || 'production',
+        endpoints: {
+          api: '/api/*',
+          mcp: '/mcp/*',
+          github: '/integrations/github/*',
+          openapi: '/openapi.json'
+        },
+        timestamp: new Date().toISOString()
       }), {
-        status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'X-ChittyConnect-Error': 'true',
+          'X-ChittyConnect-Version': '1.0.0'
         }
+      });
+    }
+
+    // GitHub App webhook endpoint
+    if (pathname === '/integrations/github/webhook' && request.method === 'POST') {
+      return handleWebhook(request, env);
+    }
+
+    // GitHub App OAuth callback
+    if (pathname === '/integrations/github/callback' && request.method === 'GET') {
+      return handleOAuthCallback(request, env);
+    }
+
+    // GitHub App installation success page
+    if (pathname === '/github/installed' && request.method === 'GET') {
+      return renderInstallationSuccess(request, env);
+    }
+
+    // MCP Server manifest
+    if (pathname === '/mcp/manifest' && request.method === 'GET') {
+      return new Response(JSON.stringify(MCP_MANIFEST), {
+        headers: { 'Content-Type': 'application/json' }
       });
     }
   },
 
+    // MCP Server tools list
+    if (pathname === '/mcp/tools/list' && request.method === 'GET') {
+      return new Response(JSON.stringify({
+        tools: MCP_TOOLS
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // MCP Server tools call
+    if (pathname === '/mcp/tools/call' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const result = await executeTool(body.name, body.arguments || {}, env);
+
+        return new Response(JSON.stringify({
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({
+          error: error.message
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // MCP Server resources list
+    if (pathname === '/mcp/resources/list' && request.method === 'GET') {
+      return new Response(JSON.stringify({
+        resources: MCP_RESOURCES
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // MCP Server resources read
+    if (pathname === '/mcp/resources/read' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const result = await getResource(body.uri, env);
+
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({
+          error: error.message
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // REST API router
+    if (pathname.startsWith('/api/')) {
+      return routeAPI(request, env, pathname);
+    }
+
+    // Legacy context endpoints (v1)
+    if (pathname.startsWith('/v1/contexts')) {
+      return handleContexts(request, env, url);
+    }
+
+    // OpenAPI specification
+    if (pathname === '/openapi.json') {
+      return new Response(JSON.stringify({
+        openapi: '3.0.0',
+        info: {
+          title: 'ChittyConnect API',
+          version: '1.0.0',
+          description: 'ChittyConnect - The AI-intelligent spine with ContextConsciousness™'
+        },
+        servers: [
+          { url: 'https://connect.chitty.cc', description: 'Production' },
+          { url: 'https://chittyconnect-staging.ccorp.workers.dev', description: 'Staging' }
+        ],
+        paths: {
+          '/health': {
+            get: {
+              summary: 'Health check',
+              responses: {
+                '200': { description: 'Service is healthy' }
+              }
+            }
+          },
+          '/api/health': {
+            get: {
+              summary: 'API health check',
+              responses: {
+                '200': { description: 'API is healthy' }
+              }
+            }
+          },
+          '/mcp/manifest': {
+            get: {
+              summary: 'MCP server manifest',
+              responses: {
+                '200': { description: 'MCP manifest' }
+              }
+            }
+          }
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response('ChittyConnect - The Alchemist', {
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  },
+
   /**
-   * Queue consumer for async operations
+   * Queue Consumer Handler
+   * Processes GitHub webhook events asynchronously
    */
-  async queue(batch, env, ctx) {
-    return handleQueueMessage(batch, env, ctx);
+  async queue(batch, env) {
+    return handleQueueBatch(batch, env);
   }
 };
 
 /**
- * Health check endpoint
+ * Initialize database schema (blocking)
  */
-async function handleHealth(request, env, ctx) {
+async function initializeDatabaseSchema(env) {
   try {
-    const ecosystem = createEcosystem(env, ctx);
+    await initializeSchema(env.DB);
+  } catch (error) {
+    console.error('[ChittyConnect] Database initialization failed:', error.message);
+    // Continue anyway - graceful degradation
+  }
+}
 
-    // Quick health check (no external calls)
-    const health = {
-      status: 'healthy',
-      service: 'chittyconnect',
-      brand: 'itsChitty™',
-      tagline: 'The AI-intelligent spine with ContextConsciousness™',
-      version: env.SERVICE_VERSION || '1.0.0',
-      environment: env.ENVIRONMENT || 'unknown',
-      timestamp: new Date().toISOString(),
-      endpoints: {
-        contexts: '/v1/contexts/*',
-        actors: '/v1/actors/*',
-        connections: '/v1/connections/*',
-        delegation: '/v1/delegate/*',
-        health: '/health',
-      },
-      chittyos_compliance: {
-        chittyid_violations: 0,
-        authority_compliance: '100%',
-        services_integrated: 7,
+/**
+ * Initialize ChittyConnect context (non-blocking)
+ * Checks if context exists, creates if not
+ */
+async function initializeChittyConnectContext(env) {
+  try {
+    const contextName = 'chittyconnect';
+
+    // Check if context already exists
+    const exists = await contextExists(env.DB, contextName);
+
+    if (exists) {
+      console.log('[ChittyConnect] Context already initialized');
+      const context = await getContextByName(env.DB, contextName);
+      console.log(`[ChittyConnect] Using ChittyID: ${context.chitty_id}`);
+      return context;
+    }
+
+    console.log('[ChittyConnect] Initializing new context...');
+
+    // Initialize context with ChittyOS ecosystem
+    const result = await initializeContext(env, contextName, {
+      version: '1.0.0',
+      capabilities: ['mcp', 'rest-api', 'github-app']
+    });
+
+    if (!result.success) {
+      console.error('[ChittyConnect] Context initialization failed:', result.error);
+      return null;
+    }
+
+    // Store in database
+    await createContext(env.DB, {
+      chittyId: result.chittyId,
+      name: contextName,
+      dnaRecord: result.dna,
+      apiKeyId: result.apiKeys?.apiKey,
+      verified: result.verified,
+      certified: result.certified,
+      metadata: {
+        version: '1.0.0',
+        capabilities: ['mcp', 'rest-api', 'github-app'],
+        registered: result.registered
+      }
+    });
+
+    console.log('[ChittyConnect] Context initialized successfully');
+    console.log(`[ChittyConnect] ChittyID: ${result.chittyId}`);
+
+    return result;
+
+  } catch (error) {
+    console.error('[ChittyConnect] Context initialization error:', error.message);
+    // Non-blocking - continue anyway
+    return null;
+  }
+}
+
+/**
+ * Legacy context management endpoints
+ */
+async function handleContexts(request, env, url) {
+  const path = url.pathname.replace('/v1/contexts', '');
+
+  if (path === '/create' && request.method === 'POST') {
+    return createContextLegacy(request, env);
+  }
+
+  if (path === '/list' && request.method === 'GET') {
+    return listContexts(request, env);
+  }
+
+  if (path.startsWith('/') && request.method === 'GET') {
+    const contextId = path.slice(1);
+    return getContext(contextId, env, request);
+  }
+
+  return new Response('Not found', { status: 404 });
+}
+
+/**
+ * Create new context (legacy v1 endpoint)
+ */
+async function createContextLegacy(request, env) {
+  try {
+    const body = await request.json();
+    const { name, data, systems, tools } = body;
+
+    if (!name) {
+      return new Response(JSON.stringify({ error: 'Name required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Extract actor authorization
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization required' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate actor via ChittyAuth
+    const authResponse = await fetch('https://auth.chitty.cc/v1/auth/validate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader
       }
     };
 
@@ -99,10 +345,43 @@ async function handleHealth(request, env, ctx) {
       health.services = servicesHealth;
     }
 
-    return new Response(JSON.stringify(health, null, 2), {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ChittyConnect-Version': env.SERVICE_VERSION || '1.0.0',
+    const { actor } = await authResponse.json();
+
+    // Initialize context with full ChittyOS ecosystem
+    const result = await initializeContext(env, name, {
+      ownerId: actor.chittyId,
+      data: data || [],
+      systems: systems || [],
+      tools: tools || []
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Context initialization failed');
+    }
+
+    // Store in database
+    await createContext(env.DB, {
+      chittyId: result.chittyId,
+      name,
+      ownerId: actor.chittyId,
+      dnaRecord: result.dna,
+      apiKeyId: result.apiKeys?.apiKey,
+      verified: result.verified,
+      certified: result.certified,
+      metadata: {
+        data: data || [],
+        systems: systems || [],
+        tools: tools || []
+      }
+    });
+
+    return new Response(JSON.stringify({
+      success: true,
+      context: {
+        chittyId: result.chittyId,
+        name,
+        owner: actor.chittyId,
+        created: new Date().toISOString()
       }
     });
 
@@ -119,66 +398,77 @@ async function handleHealth(request, env, ctx) {
 }
 
 /**
- * Route requests to appropriate handlers
+ * List all contexts
  */
-async function routeRequest(request, env, ctx, url) {
-  const path = url.pathname;
+async function listContexts(request, env) {
+  try {
+    const contexts = [];
+    const results = await env.DB.prepare('SELECT * FROM contexts ORDER BY created_at DESC').all();
 
-  // Context management
-  if (path.startsWith('/v1/contexts')) {
-    return handleContexts(request, env, ctx, url);
+    for (const row of results.results || []) {
+      contexts.push({
+        chittyId: row.chitty_id,
+        name: row.name,
+        ownerId: row.owner_id,
+        verified: row.verified === 1,
+        certified: row.certified === 1,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      });
+    }
+
+    return new Response(JSON.stringify({
+      contexts,
+      count: contexts.length
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-
-  // Actor management
-  if (path.startsWith('/v1/actors')) {
-    return handleActors(request, env, ctx, url);
-  }
-
-  // Connection lifecycle
-  if (path.startsWith('/v1/connections')) {
-    return handleConnections(request, env, ctx, url);
-  }
-
-  // Service delegation
-  if (path.startsWith('/v1/delegate')) {
-    return handleDelegation(request, env, ctx, url);
-  }
-
-  // ChittyOS service proxies (for future expansion)
-  if (path.startsWith('/api/chittyos')) {
-    return handleChittyOSProxy(request, env, ctx, url);
-  }
-
-  // Default: Not found
-  return new Response(JSON.stringify({
-    error: 'Not found',
-    path: path,
-    available_endpoints: [
-      '/health',
-      '/v1/contexts/*',
-      '/v1/actors/*',
-      '/v1/connections/*',
-      '/v1/delegate/*',
-    ],
-    message: 'ChittyConnect - The Alchemist. Universal adapter for ChittyOS.',
-  }), {
-    status: 404,
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 /**
- * ChittyOS service proxy (for future API expansion)
+ * Get context by ID
  */
-async function handleChittyOSProxy(request, env, ctx, url) {
-  // Placeholder for Week 3+ API expansion
-  // Will proxy requests to ChittyOS services (ChittyCases, ChittyFinance, etc.)
+async function getContext(contextId, env, request) {
+  try {
+    const context = await getContextByName(env.DB, contextId);
 
-  return new Response(JSON.stringify({
-    message: 'ChittyOS service proxies coming in Week 3+',
-    path: url.pathname,
-  }), {
-    status: 501, // Not Implemented
-    headers: { 'Content-Type': 'application/json' }
-  });
+    if (!context) {
+      return new Response(JSON.stringify({
+        error: 'Context not found'
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({
+      chittyId: context.chitty_id,
+      name: context.name,
+      ownerId: context.owner_id,
+      verified: context.verified === 1,
+      certified: context.certified === 1,
+      metadata: context.metadata,
+      createdAt: context.created_at,
+      updatedAt: context.updated_at
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }

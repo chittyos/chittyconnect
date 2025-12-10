@@ -3,164 +3,108 @@ main = "src/index.js"
 compatibility_date = "2024-10-01"
 account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
-#:schema node_modules/wrangler/config-schema.json
-
-# ============================================
 # KV Namespaces
-# ============================================
-
-# Context storage
 [[kv_namespaces]]
 binding = "CHITTYCONNECT_KV"
 id = "12f3a45f8cc641a79fbcd35ac15afd6e"
 
-# Service token cache (1-hour TTL)
-[[kv_namespaces]]
-binding = "TOKEN_KV"
-id = "PLACEHOLDER_TOKEN_KV"  # Run: npx wrangler kv:namespace create TOKEN_KV
-
-# ChittyAuth API keys
-[[kv_namespaces]]
-binding = "API_KEYS"
-id = "PLACEHOLDER_API_KEYS"  # Run: npx wrangler kv:namespace create API_KEYS
-
-# Rate limiting counters
-[[kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "PLACEHOLDER_RATE_LIMIT"  # Run: npx wrangler kv:namespace create RATE_LIMIT
-
-# Idempotency tracking (24-hour TTL)
 [[kv_namespaces]]
 binding = "IDEMP_KV"
-id = "PLACEHOLDER_IDEMP_KV"  # Run: npx wrangler kv:namespace create IDEMP_KV
+id = "ea43bc974b894701a069e4804be765ba"
 
-# ============================================
+[[kv_namespaces]]
+binding = "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
+
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
+
 # D1 Database
-# ============================================
-
 [[d1_databases]]
 binding = "DB"
 database_name = "chittyconnect"
-database_id = "PLACEHOLDER_D1_ID"  # Run: npx wrangler d1 create chittyconnect
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 
-# ============================================
-# Queues
-# ============================================
-
-# Context operations (async processing)
+# Queue Producers
 [[queues.producers]]
 binding = "CONTEXT_OPS_QUEUE"
 queue = "chittyconnect-context-ops"
 
-# GitHub events (webhook processing)
 [[queues.producers]]
 binding = "EVENT_Q"
-queue = "chittyconnect-github-events"
+queue = "github-events"
 
-# Queue consumer configuration
+# Queue Consumers
 [[queues.consumers]]
-queue = "chittyconnect-context-ops"
+queue = "github-events"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
-dead_letter_queue = "chittyconnect-dlq"
+dead_letter_queue = "github-events-dlq"
 
-[[queues.consumers]]
-queue = "chittyconnect-github-events"
-max_batch_size = 10
-max_batch_timeout = 30
-max_retries = 3
-dead_letter_queue = "chittyconnect-dlq"
-
-# ============================================
-# Workers AI
-# ============================================
-
+# AI Binding
 [ai]
 binding = "AI"
 
-# ============================================
 # Environment Variables
-# ============================================
-
 [vars]
 ENVIRONMENT = "production"
+VERSION = "1.0.0"
 SERVICE_NAME = "chittyconnect"
-SERVICE_VERSION = "1.0.0"
-LOG_LEVEL = "info"
 
-# ============================================
 # Secrets (set via wrangler secret put)
-# ============================================
+# CHITTY_ID_SERVICE_TOKEN - Token for id.chitty.cc API
+# GITHUB_APP_ID - GitHub App ID
+# GITHUB_APP_PRIVATE_KEY - GitHub App private key (PEM format)
+# GITHUB_WEBHOOK_SECRET - GitHub webhook secret
+# CHITTY_AUTH_TOKEN - ChittyAuth service token
+# CHITTY_DNA_TOKEN - ChittyDNA service token
+# CHITTY_VERIFY_TOKEN - ChittyVerify service token
+# CHITTY_CERTIFY_TOKEN - ChittyCertify service token
+# CHITTY_CHRONICLE_TOKEN - ChittyChronicle service token
+# CHITTY_REGISTRY_TOKEN - ChittyRegistry service token
 
-# Required secrets for production:
-#
-# ChittyOS Service Tokens:
-#   npx wrangler secret put CHITTY_ID_SERVICE_TOKEN
-#   npx wrangler secret put CHITTY_AUTH_SERVICE_TOKEN
-#   npx wrangler secret put CHITTY_REGISTRY_TOKEN
-#   npx wrangler secret put CHITTY_DNA_TOKEN
-#   npx wrangler secret put CHITTY_CHRONICLE_TOKEN
-#   npx wrangler secret put CHITTY_VERIFY_TOKEN
-#   npx wrangler secret put CHITTY_CERTIFY_TOKEN
-#
-# GitHub App (for GitHub integration):
-#   npx wrangler secret put GITHUB_APP_ID
-#   npx wrangler secret put GITHUB_APP_PRIVATE_KEY
-#   npx wrangler secret put GITHUB_WEBHOOK_SECRET
-#
-# Optional (for extended API):
-#   npx wrangler secret put OPENAI_API_KEY
-#   npx wrangler secret put NOTION_TOKEN
-#   npx wrangler secret put GOOGLE_API_KEY
-
-# ============================================
 # Routes (Production)
-# ============================================
-
 routes = [
   { pattern = "connect.chitty.cc/*", zone_name = "chitty.cc" }
 ]
 
-# ============================================
 # Staging Environment
-# ============================================
-
 [env.staging]
+name = "chittyconnect-staging"
+vars = { ENVIRONMENT = "staging", VERSION = "1.0.0" }
+routes = [
+  { pattern = "chittyconnect-staging.ccorp.workers.dev/*" }
+]
 
-[env.staging.vars]
-ENVIRONMENT = "staging"
-SERVICE_NAME = "chittyconnect-staging"
-LOG_LEVEL = "debug"
-
-# Staging KV namespaces
+# Staging KV Namespaces
 [[env.staging.kv_namespaces]]
 binding = "CHITTYCONNECT_KV"
-id = "PLACEHOLDER_STAGING_CHITTYCONNECT_KV"
-
-[[env.staging.kv_namespaces]]
-binding = "TOKEN_KV"
-id = "PLACEHOLDER_STAGING_TOKEN_KV"
-
-[[env.staging.kv_namespaces]]
-binding = "API_KEYS"
-id = "PLACEHOLDER_STAGING_API_KEYS"
-
-[[env.staging.kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "PLACEHOLDER_STAGING_RATE_LIMIT"
+id = "12f3a45f8cc641a79fbcd35ac15afd6e"
 
 [[env.staging.kv_namespaces]]
 binding = "IDEMP_KV"
-id = "PLACEHOLDER_STAGING_IDEMP_KV"
+id = "ea43bc974b894701a069e4804be765ba"
 
-# Staging D1 database
+[[env.staging.kv_namespaces]]
+binding = "TOKEN_KV"
+id = "d8051882226b470ba10035b30447a8b7"
+
+[[env.staging.kv_namespaces]]
+binding = "API_KEYS"
+id = "3a29a9de28c84b7e8b87070cbf006415"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "1ab2c1114f5c4e248b8eba157615a125"
+
+# Staging D1 Database
 [[env.staging.d1_databases]]
 binding = "DB"
-database_name = "chittyconnect-staging"
-database_id = "PLACEHOLDER_STAGING_D1_ID"
-
-# Staging routes
-[[env.staging.routes]]
-pattern = "connect-staging.chitty.cc/*"
-zone_name = "chitty.cc"
+database_name = "chittyconnect"
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
