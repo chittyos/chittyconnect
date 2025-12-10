@@ -45,7 +45,7 @@ index_name = "context-embeddings"
 [[durable_objects.bindings]]
 name = "MCP_SESSIONS"
 class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect"
+script_name = "chittyconnect-production"
 
 # Durable Objects migrations
 [[migrations]]
