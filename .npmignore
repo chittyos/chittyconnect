@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.DS_Store
+*.log
+*.tgz
+*.zip
+.git
+.github
+migrations
+*.md
+!README.md
+test*
+scripts/*.js
+scripts/*.ts
+CLAUDE.md

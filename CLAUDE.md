@@ -1,8 +1,12 @@
-# CLAUDE.md
+# CLAUDE.md (Pointer)
+
+Canonical CLAUDE guidance has moved to `development/docs/architecture/CLAUDE.md`.
+
+Update architecture guidance there; link here is maintained for navigation.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **🎯 Project Orchestration:** This project follows [ChittyCan™ Project Standards](../CHITTYCAN_PROJECT_ORCHESTRATOR.md)
+> **🎯 Project Orchestration:** This project follows [ChittyCan™ Project Standards](../chittycan/CHITTYCAN_PROJECT_ORCHESTRATOR.md) <!-- was: ../CHITTYCAN_PROJECT_ORCHESTRATOR.md -->
 
 ## Project Overview
 
@@ -142,6 +146,8 @@ X-Hub-Signature-256: {signature}
 - **ChittyFinance** - Banking integrations
 - **ChittyCases** - Case management
 - **ChittyVerify** - Evidence verification
+- **ChittyEvidence** (evidence.chitty.cc) - Evidence management (v2.0 with ChittyLedger integration)
+- **ChittyLedger** - Universal ledger with things/evidence/cases tables
 
 ### Authentication
 All API endpoints require ChittyAuth tokens:
@@ -225,7 +231,117 @@ GET /api/v1/proxy/google-calendar/list-events
 - **[Architecture Analysis](ARCHITECTURE_ANALYSIS.md)** - Comprehensive architectural review
 - **[Innovation Roadmap](INNOVATION_ROADMAP.md)** - ContextConsciousness™ & MemoryCloude™ vision
 
+## ChittyEvidence v2.0 Integration (IMPORTANT)
+
+As of ChittyEvidence v2.0, evidence management has been integrated with ChittyLedger:
+
+### Breaking Changes
+- **No more evidence_registry table** - Evidence now uses ChittyLedger `things` and `evidence` tables
+- **UUID-based IDs** - `evidence_id`, `thing_id`, `case_id` are all UUIDs, not integers
+- **New field names** - `evidence_number` (not `exhibit_id`), `document_type` (not `category`)
+- **Platform sync tracking** - New `chittyevidence_platform_sync` table for integration status
+
+### ChittyConnect Compatibility
+
+ChittyConnect maintains **full backward compatibility** while supporting the new schema:
+
+**Evidence Lookup:**
+- **UUID (recommended):** `GET /api/chittyevidence/{evidence_id}` - Uses evidence UUID
+- **file_hash (deprecated):** `GET /api/chittyevidence/{file_hash}` - Legacy SHA256 lookup
+- Auto-detection based on identifier format
+
+**Legacy Format Support:**
+- Add `?legacy=true` query parameter to get v1.0 response format
+- Requires `EVIDENCE_LEGACY_MODE=true` environment variable
+- Response transformer maps ChittyLedger fields to old schema
+
+**New Endpoints:**
+- `GET /api/chittyevidence/case/:caseId` - List all evidence for a case
+- `GET /api/chittyevidence/:evidenceId/sync-status` - Platform sync status
+- `POST /api/chittyevidence/:evidenceId/verify` - Trigger verification
+
+**MCP Tools Updated:**
+- `chitty_evidence_ingest` - Now returns UUIDs (evidence_id, thing_id, case_id)
+- `chitty_evidence_get` - Supports both UUID and file_hash with optional legacy format
+- `chitty_evidence_list_by_case` - New tool for case-based listing
+- `chitty_evidence_verify` - New tool for triggering verification
+- `chitty_evidence_sync_status` - New tool for sync status
+
+### Migration Guide for Developers
+
+**If your code uses ChittyEvidence:**
+
+1. **Update to use evidence_id (UUID) instead of file_hash**
+   ```javascript
+   // Old (deprecated)
+   const evidence = await fetch(`/api/chittyevidence/${fileHash}`);
+
+   // New (recommended)
+   const evidence = await fetch(`/api/chittyevidence/${evidenceId}`);
+   ```
+
+2. **Update field references**
+   ```javascript
+   // Old field names
+   evidence.exhibit_id
+   evidence.category
+   evidence.chitty_id
+
+   // New field names
+   evidence.evidence_number
+   evidence.document_type
+   evidence.case_id
+   ```
+
+3. **Use new response structure**
+   ```javascript
+   // v2.0 response includes
+   {
+     evidence_id: "uuid",
+     thing_id: "uuid",
+     case_id: "uuid",
+     evidence_tier: "L1",
+     chain_of_custody_verified: true,
+     ...
+   }
+   ```
+
+4. **Optional: Enable legacy mode during transition**
+   - Set `EVIDENCE_LEGACY_MODE=true` in environment
+   - Use `?legacy=true` query parameter
+   - Gradually migrate to new format
+
+### Database Integration
+
+ChittyConnect's `EvidenceCompatibilityLayer` provides:
+- File hash to UUID lookups via shared database
+- Legacy format transformation
+- Reference migration utilities
+- Backward compatible queries
+
+**Example Usage:**
+```javascript
+import { EvidenceCompatibilityLayer } from './lib/evidence-compatibility.js';
+
+const compat = new EvidenceCompatibilityLayer(env);
+
+// Look up by file_hash
+const evidence = await compat.getEvidenceByFileHash(fileHash);
+
+// Transform to legacy format
+const legacy = compat.transformToLegacyFormat(evidence);
+
+// Migrate references
+const uuids = await compat.migrateReferences([fileHash1, fileHash2]);
+```
+
 ## Troubleshooting
+
+### ChittyEvidence Integration Issues
+1. **UUID vs file_hash confusion:** Evidence IDs are now UUIDs - use `evidence_id` not `file_hash`
+2. **Field name errors:** Update to new field names (evidence_number, document_type, case_id)
+3. **Legacy format not working:** Ensure `EVIDENCE_LEGACY_MODE=true` environment variable is set
+4. **Database query failures:** ChittyConnect needs access to shared Neon database for compatibility layer
 
 ### Authentication Failures
 1. Verify token is valid and not expired
