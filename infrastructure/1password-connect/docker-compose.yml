@@ -1,0 +1,303 @@
+# Docker Compose for 1Password Connect + Cloudflare Tunnel
+# Provides secure, private access to 1Password Connect server via Cloudflare Tunnel
+#
+# Prerequisites:
+# 1. 1Password Connect credentials file (1password-credentials.json)
+# 2. Cloudflare Tunnel token from dashboard
+# 3. Docker and Docker Compose installed
+#
+# Setup:
+# 1. Copy this file to your infrastructure server
+# 2. Place 1password-credentials.json in ./credentials/
+# 3. Create .env file with required variables
+# 4. Run: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # 1Password Connect API Server
+  connect-api:
+    image: 1password/connect-api:latest
+    container_name: onepassword-connect-api
+    restart: unless-stopped
+
+    # Resource limits (adjust based on your server)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # Volumes
+    volumes:
+      - ./credentials/1password-credentials.json:/home/opuser/.op/1password-credentials.json:ro
+      - connect-data:/home/opuser/.op/data
+
+    # Environment variables
+    environment:
+      - OP_SESSION=${OP_SESSION}
+      - OP_LOG_LEVEL=${OP_LOG_LEVEL:-info}
+      - OP_HTTP_PORT=8080
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network
+    networks:
+      - connect-internal
+
+  # 1Password Connect Sync Server
+  connect-sync:
+    image: 1password/connect-sync:latest
+    container_name: onepassword-connect-sync
+    restart: unless-stopped
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Volumes
+    volumes:
+      - ./credentials/1password-credentials.json:/home/opuser/.op/1password-credentials.json:ro
+      - connect-data:/home/opuser/.op/data
+
+    # Environment variables
+    environment:
+      - OP_SESSION=${OP_SESSION}
+      - OP_LOG_LEVEL=${OP_LOG_LEVEL:-info}
+      - OP_HTTP_PORT=8081
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network
+    networks:
+      - connect-internal
+
+    # Depends on API server
+    depends_on:
+      connect-api:
+        condition: service_healthy
+
+  # Cloudflare Tunnel (cloudflared)
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    restart: unless-stopped
+
+    # Command to run tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Environment variables
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_METRICS=0.0.0.0:2000
+      - TUNNEL_LOGLEVEL=${TUNNEL_LOGLEVEL:-info}
+
+    # Health check (metrics endpoint)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2000/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network
+    networks:
+      - connect-internal
+
+    # Depends on Connect API
+    depends_on:
+      connect-api:
+        condition: service_healthy
+
+  # Nginx reverse proxy (optional - for internal routing and caching)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: connect-nginx-proxy
+    restart: unless-stopped
+
+    # Ports (only if accessing locally without tunnel)
+    # ports:
+    #   - "8080:80"
+
+    # Volumes
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/cache:/var/cache/nginx
+
+    # Environment
+    environment:
+      - NGINX_WORKER_PROCESSES=auto
+      - NGINX_WORKER_CONNECTIONS=1024
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network
+    networks:
+      - connect-internal
+
+    # Depends on Connect API
+    depends_on:
+      connect-api:
+        condition: service_healthy
+
+  # Monitoring - Prometheus exporter (optional)
+  connect-exporter:
+    image: prom/node-exporter:latest
+    container_name: connect-metrics-exporter
+    restart: unless-stopped
+
+    # Command
+    command:
+      - '--path.rootfs=/host'
+
+    # Volumes
+    volumes:
+      - /:/host:ro,rslave
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+    # Network
+    networks:
+      - connect-internal
+
+  # Health check aggregator
+  healthcheck-aggregator:
+    image: curlimages/curl:latest
+    container_name: connect-healthcheck
+    restart: unless-stopped
+
+    # Command - check all services every 60 seconds
+    entrypoint: /bin/sh
+    command: >
+      -c "while true; do
+        echo 'Running health checks...';
+        curl -sf http://connect-api:8080/health || echo 'API unhealthy';
+        curl -sf http://connect-sync:8081/health || echo 'Sync unhealthy';
+        curl -sf http://cloudflare-tunnel:2000/ready || echo 'Tunnel unhealthy';
+        curl -sf http://nginx-proxy/health || echo 'Nginx unhealthy';
+        echo 'Health checks complete';
+        sleep 60;
+      done"
+
+    # Network
+    networks:
+      - connect-internal
+
+    # Depends on all services
+    depends_on:
+      - connect-api
+      - connect-sync
+      - cloudflare-tunnel
+      - nginx-proxy
+
+# Networks
+networks:
+  connect-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes
+volumes:
+  connect-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+
+# Additional configuration notes:
+#
+# Environment Variables (.env file):
+# - OP_SESSION: 1Password session token
+# - OP_LOG_LEVEL: Log level (info, debug, warn, error)
+# - CLOUDFLARE_TUNNEL_TOKEN: Tunnel token from Cloudflare dashboard
+# - TUNNEL_LOGLEVEL: Tunnel log level
+#
+# Security Notes:
+# 1. Never commit 1password-credentials.json to git
+# 2. Use strong file permissions: chmod 600 credentials/*
+# 3. Regularly rotate tunnel tokens
+# 4. Monitor access logs for unauthorized access
+# 5. Enable Cloudflare Access for additional authentication
+#
+# Backup Strategy:
+# 1. Backup connect-data volume daily
+# 2. Store 1password-credentials.json in secure location
+# 3. Document tunnel token securely
+#
+# Disaster Recovery:
+# 1. Keep copy of credentials in 1Password Emergency Kit
+# 2. Document tunnel recreation steps
+# 3. Test recovery procedure quarterly

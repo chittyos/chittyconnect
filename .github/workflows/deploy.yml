@@ -1,48 +1,53 @@
-name: Deploy Pipeline
+name: Deploy ChittyConnect
 
 on:
   push:
     branches:
       - main
       - staging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-chittyconnect
+  cancel-in-progress: true
 
 jobs:
-  lint-and-test:
+  ###########################################################################
+  # 0. Fetch ephemeral deploy creds from ChittyConnect
+  ###########################################################################
+  chitty-creds:
     runs-on: ubuntu-latest
+    outputs:
+      gh_token: ${{ steps.chitty.outputs.github_token }}
+      npm_token: ${{ steps.chitty.outputs.npm_token }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Fetch ChittyConnect ephemeral credentials
+        id: chitty
+        uses: ./.github/actions/chitty-creds-action
         with:
-          node-version: '18'
-          cache: 'npm'
+          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+          purpose: deploy
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npx prettier --check 'src/**/*.{js,ts,json}'
-
-      - name: Run tests
-        run: npm test
-
+  ###########################################################################
+  # 1. Deploy to Staging (auto-triggered on staging branch)
+  ###########################################################################
   deploy-staging:
-    needs: lint-and-test
     if: github.ref == 'refs/heads/staging'
+    needs: chitty-creds
     runs-on: ubuntu-latest
-    environment: staging
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -53,48 +58,94 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --env staging
 
-      - name: Health Check
+      - name: Health Check (Staging)
         run: |
           sleep 5
-          curl -f https://chittyconnect-staging.chitty.workers.dev/health || exit 1
+          echo "Checking /health..."
+          curl -f https://chittyconnect-staging.chitty.workers.dev/health
+          echo "Staging deployment healthy."
 
+  ###########################################################################
+  # 2. Deploy to Production (only on main branch)
+  ###########################################################################
   deploy-production:
-    needs: lint-and-test
     if: github.ref == 'refs/heads/main'
+    needs: chitty-creds
     runs-on: ubuntu-latest
-    environment: production
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate OpenAPI
+      ############################################################
+      # 3. Strict OpenAPI Validation (local schema)
+      ############################################################
+      - name: Validate OpenAPI (local schema)
         run: |
-          curl -f https://connect.chitty.cc/openapi.json || echo "Current deployment check"
+          echo "Validating OpenAPI schema..."
+          if [ ! -f openapi.json ]; then
+            echo "❌ Missing openapi.json"
+            exit 1
+          fi
+          npx @redocly/cli lint openapi.json
 
+      ############################################################
+      # 4. Validate MCP Manifest Schema
+      ############################################################
+      - name: Validate MCP manifest
+        run: |
+          echo "Validating MCP manifest..."
+          if [ ! -f mcp/manifest.json ]; then
+            echo "❌ Missing mcp/manifest.json"
+            exit 1
+          fi
+          if [ ! -f mcp/manifest.schema.json ]; then
+            echo "❌ Missing mcp/manifest.schema.json"
+            exit 1
+          fi
+          npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json
+
+      ############################################################
+      # 5. Deploy
+      ############################################################
       - name: Deploy to Production
+        id: deploy_step
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --env production
+        run: |
+          echo "🚀 Deploying to production…"
+          npx wrangler deploy --env production
 
-      - name: Health Checks
+      ############################################################
+      # 6. Post-Deploy Health Checks + Auto-Rollback
+      ############################################################
+      - name: Post-Deploy Health Checks
         run: |
           sleep 5
+
+          fail() {
+            echo "❌ Health check failed — rolling back..."
+            npx wrangler deploy --env production --rollback
+            exit 1
+          }
+
           echo "Checking /health..."
-          curl -f https://connect.chitty.cc/health || exit 1
+          curl -f https://connect.chitty.cc/health || fail
 
           echo "Checking /openapi.json..."
-          curl -f https://connect.chitty.cc/openapi.json || exit 1
+          curl -f https://connect.chitty.cc/openapi.json || fail
 
           echo "Checking /mcp/manifest..."
-          curl -f https://connect.chitty.cc/mcp/manifest || exit 1
+          curl -f https://connect.chitty.cc/mcp/manifest || fail
 
-          echo "✅ All endpoints verified!"
+          echo "✅ All production endpoints verified."

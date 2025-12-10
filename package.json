@@ -1,9 +1,12 @@
 {
   "name": "@chittyos/chittyconnect",
-  "version": "1.0.0",
-  "description": "ChittyConnect - GitHub App integration for ChittyOS ecosystem",
+  "version": "2.0.1",
+  "description": "ChittyConnect - AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for ChittyOS ecosystem",
   "type": "module",
   "main": "src/index.js",
+  "bin": {
+    "chittyconnect-mcp": "./mcp-server.js"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -12,7 +15,12 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
-    "format": "prettier --write 'src/**/*.{js,ts,json}'"
+    "format": "prettier --write 'src/**/*.{js,ts,json}'",
+    "mcp:start": "node mcp-server.js",
+    "mcp:test": "DEBUG=true node mcp-server.js",
+    "mcp:setup": "./scripts/setup-mcp.sh",
+    "mcp:setup:desktop": "./scripts/setup-mcp.sh desktop",
+    "mcp:setup:code": "./scripts/setup-mcp.sh code"
   },
   "keywords": [
     "chittyos",
@@ -24,18 +32,29 @@
     "workers"
   ],
   "author": "ChittyOS",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "files": [
+    "src",
+    "mcp-server.js",
+    "wrangler*.toml",
+    "scripts/*.sh",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@neondatabase/serverless": "^0.10.4",
     "hono": "^4.0.0",
     "jose": "^5.2.0",
+    "node-fetch": "^3.3.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",
-    "wrangler": "^3.28.0",
-    "vitest": "^1.2.0",
     "eslint": "^8.56.0",
-    "prettier": "^3.2.0"
+    "prettier": "^3.2.0",
+    "vitest": "^4.0.8",
+    "wrangler": "^4.46.0"
   },
   "engines": {
     "node": ">=18.0.0"

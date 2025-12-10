@@ -1,9 +1,13 @@
 /**
  * ChittyCases API Routes
- * Legal case management
+ * Legal case management with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittycasesRoutes = new Hono();
 
@@ -24,11 +28,20 @@ chittycasesRoutes.post("/create", async (c) => {
       return c.json({ error: "Invalid caseType" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittycases');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyCases service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     const response = await fetch("https://cases.chitty.cc/api/cases", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_CASES_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ title, description, caseType, metadata }),
     });
@@ -52,11 +65,19 @@ chittycasesRoutes.get("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
 
+    const serviceToken = await getServiceToken(c.env, 'chittycases');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyCases service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,
       {
         headers: {
-          Authorization: `Bearer ${c.env.CHITTY_CASES_TOKEN}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
       },
     );
@@ -81,13 +102,21 @@ chittycasesRoutes.put("/:caseId", async (c) => {
     const caseId = c.req.param("caseId");
     const updates = await c.req.json();
 
+    const serviceToken = await getServiceToken(c.env, 'chittycases');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyCases service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,
       {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${c.env.CHITTY_CASES_TOKEN}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
         body: JSON.stringify(updates),
       },

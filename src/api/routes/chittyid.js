@@ -1,8 +1,13 @@
 /**
  * ChittyID API Routes
+ * Proxy for ChittyID service with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittyidRoutes = new Hono();
 
@@ -33,12 +38,21 @@ chittyidRoutes.post("/mint", async (c) => {
       return c.json({ error: "Invalid entity type" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyID service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     // Forward to ChittyID service
     const response = await fetch("https://id.chitty.cc/v1/mint", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_ID_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ entity, metadata }),
     });
@@ -66,12 +80,20 @@ chittyidRoutes.post("/validate", async (c) => {
       return c.json({ error: "chittyid is required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyID service token not configured"
+      }, 503);
+    }
+
     // Forward to ChittyID service
     const response = await fetch("https://id.chitty.cc/v1/validate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_ID_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ chittyid }),
     });
@@ -95,9 +117,17 @@ chittyidRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
 
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyID service token not configured"
+      }, 503);
+    }
+
     const response = await fetch(`https://id.chitty.cc/v1/${id}`, {
       headers: {
-        Authorization: `Bearer ${c.env.CHITTY_ID_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
     });
 

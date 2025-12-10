@@ -13,7 +13,6 @@
 
 import { Hono } from "hono";
 import { verifyWebhookSignature } from "./auth/webhook.js";
-import { handleWebhookEvent } from "./handlers/webhook.js";
 import { queueConsumer } from "./handlers/queue.js";
 import { api } from "./api/router.js";
 import { mcp } from "./mcp/server.js";
@@ -24,6 +23,7 @@ import {
 import { ContextConsciousness } from "./intelligence/context-consciousness.js";
 import { MemoryCloude } from "./intelligence/memory-cloude.js";
 import { CognitiveCoordinator } from "./intelligence/cognitive-coordination.js";
+import { MCPSessionDurableObject } from "./mcp/session/durable-object.js";
 
 const app = new Hono();
 
@@ -426,3 +426,8 @@ export default {
     await queueConsumer(batch, env);
   },
 };
+
+/**
+ * Export Durable Object classes
+ */
+export { MCPSessionDurableObject };

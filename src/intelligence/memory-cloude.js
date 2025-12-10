@@ -11,7 +11,7 @@ export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
-    this.vectorStore = env.VECTORIZE; // Cloudflare Vectorize (when available)
+    this.vectorStore = env.MEMORY_VECTORIZE; // Cloudflare Vectorize for semantic memory
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year

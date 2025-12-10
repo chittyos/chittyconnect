@@ -7,22 +7,53 @@ on:
       - staging
   pull_request:
 
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  chitty-creds:
     runs-on: ubuntu-latest
+    outputs:
+      npm_token: ${{ steps.chitty.outputs.npm_token }}
+    steps:
+      - name: Fetch ChittyConnect ephemeral credentials
+        id: chitty
+        uses: chittyos/chittyconnect-action@v1
+        with:
+          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+          purpose: github-actions
+
+  validate:
+    needs: chitty-creds
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Configure ephemeral NPM token
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ needs.chitty-creds.outputs.npm_token }}
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate wrangler.toml
+      - name: Validate wrangler.toml presence
         run: |
           if [ ! -f wrangler.toml ]; then
             echo "❌ wrangler.toml not found"
@@ -35,7 +66,7 @@ jobs:
           required_files=("package.json" "src/index.js" "wrangler.toml")
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then
-              echo "❌ Required file missing: $file"
+              echo "❌ Missing: $file"
               exit 1
             fi
           done
@@ -46,11 +77,14 @@ jobs:
 
       - name: Check for hardcoded secrets
         run: |
-          if grep -rE "(sk-[a-zA-Z0-9]{48}|ghp_[a-zA-Z0-9]{36})" src/; then
-            echo "❌ Potential hardcoded secrets found"
+          if grep -rE "(sk-[A-Za-z0-9]{48}|ghp_[A-Za-z0-9]{36})" src/; then
+            echo "❌ Hardcoded secrets detected"
             exit 1
           fi
           echo "✅ No hardcoded secrets detected"
+
+      - name: Wrangler Dry-Run Build (no deploy)
+        run: npx wrangler deploy --dry-run
 
       - name: Run tests
         run: npm test
@@ -59,20 +93,21 @@ jobs:
         run: npm run lint
 
   smoke-tests:
-    runs-on: ubuntu-latest
     needs: validate
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Smoke test - Import check
         run: |
-          node -e "import('./src/index.js').then(() => console.log('✅ Main entry point loads')).catch(e => { console.error('❌', e); process.exit(1); })"
+          node -e "import('./src/index.js').then(()=>console.log('✅ Entry loads')).catch(e=>{console.error('❌',e);process.exit(1);})"

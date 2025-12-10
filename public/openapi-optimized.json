@@ -1,0 +1,1024 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ChittyOS GPT Connector API - Optimized",
+    "description": "AI-optimized API for Custom GPTs to interact with ChittyOS legal technology platform. This API provides comprehensive access to identity management, case processing, evidence handling, and intelligent contextual analysis.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "ChittyOS Support",
+      "url": "https://chitty.cc",
+      "email": "support@chitty.cc"
+    },
+    "x-gpt-configuration": {
+      "conversationMode": "stateful",
+      "contextPreservation": true,
+      "errorRecovery": true,
+      "capabilities": [
+        "identity-management",
+        "case-processing",
+        "evidence-handling",
+        "contextual-analysis",
+        "financial-integration"
+      ]
+    }
+  },
+  "servers": [
+    {
+      "url": "https://connect.chitty.cc",
+      "description": "Production - ChittyConnect API Gateway"
+    },
+    {
+      "url": "https://connect-staging.chitty.cc",
+      "description": "Staging - Test environment"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "apiKeyAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Identity",
+      "description": "ChittyID creation and validation - Cryptographically secure identifiers"
+    },
+    {
+      "name": "Cases",
+      "description": "Legal case management - Create, update, and track legal proceedings"
+    },
+    {
+      "name": "Evidence",
+      "description": "Evidence ingestion and chain of custody"
+    },
+    {
+      "name": "Context",
+      "description": "ContextConsciousness™ - AI-powered contextual analysis"
+    },
+    {
+      "name": "Composite",
+      "description": "Multi-step workflows - Optimized for conversation flow"
+    }
+  ],
+  "paths": {
+    "/api/composite/case-with-parties": {
+      "post": {
+        "tags": ["Composite"],
+        "summary": "Create Complete Case - All-in-one case creation",
+        "description": "Creates a legal case with all parties and initial evidence in a single operation. This is the recommended endpoint for starting a new legal matter as it handles all related entity creation automatically.",
+        "operationId": "createCompleteCase",
+        "x-gpt-hints": {
+          "preferredAction": true,
+          "conversationFlow": "start",
+          "contextRequired": true,
+          "followUpActions": ["addEvidence", "updateCase", "generateDocuments"]
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteCaseRequest"
+              },
+              "examples": {
+                "evictionCase": {
+                  "summary": "Eviction case with landlord and tenant",
+                  "value": {
+                    "caseDetails": {
+                      "title": "Smith vs. Johnson - Eviction Proceeding",
+                      "type": "eviction",
+                      "description": "Non-payment of rent for 3 months",
+                      "jurisdiction": "California",
+                      "filingDate": "2024-11-09"
+                    },
+                    "parties": [
+                      {
+                        "role": "plaintiff",
+                        "name": "John Smith",
+                        "type": "individual",
+                        "contactInfo": {
+                          "email": "john.smith@email.com",
+                          "phone": "+1-555-0100"
+                        }
+                      },
+                      {
+                        "role": "defendant",
+                        "name": "Jane Johnson",
+                        "type": "individual",
+                        "contactInfo": {
+                          "email": "jane.j@email.com"
+                        }
+                      }
+                    ],
+                    "initialEvidence": {
+                      "leaseAgreement": {
+                        "type": "document",
+                        "description": "Original lease agreement signed 2023-01-15",
+                        "url": "https://example.com/lease.pdf"
+                      },
+                      "paymentHistory": {
+                        "type": "financial",
+                        "description": "Payment records showing missed payments",
+                        "data": {
+                          "missedPayments": 3,
+                          "totalOwed": 4500
+                        }
+                      }
+                    }
+                  }
+                },
+                "litigationCase": {
+                  "summary": "Business litigation with multiple parties",
+                  "value": {
+                    "caseDetails": {
+                      "title": "TechCorp vs. StartupInc - Contract Dispute",
+                      "type": "litigation",
+                      "description": "Breach of software development contract"
+                    },
+                    "parties": [
+                      {
+                        "role": "plaintiff",
+                        "name": "TechCorp LLC",
+                        "type": "organization"
+                      },
+                      {
+                        "role": "defendant",
+                        "name": "StartupInc",
+                        "type": "organization"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Case created successfully with all entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteCaseResponse"
+                },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "case": {
+                          "id": "01-C-CTX-A7B2-C-2411-3-X",
+                          "title": "Smith vs. Johnson - Eviction Proceeding",
+                          "status": "active",
+                          "createdAt": "2024-11-09T10:30:00Z"
+                        },
+                        "parties": [
+                          {
+                            "chittyId": "01-C-PEO-A7B3-P-2411-4-X",
+                            "role": "plaintiff",
+                            "name": "John Smith"
+                          },
+                          {
+                            "chittyId": "01-C-PEO-A7B4-P-2411-5-X",
+                            "role": "defendant",
+                            "name": "Jane Johnson"
+                          }
+                        ],
+                        "evidence": [
+                          {
+                            "id": "01-C-INFO-A7B5-I-2411-6-X",
+                            "type": "document",
+                            "status": "verified"
+                          }
+                        ]
+                      },
+                      "context": {
+                        "conversationId": "conv_abc123",
+                        "continuationHint": "Case created successfully. You can now add more evidence, schedule hearings, or generate legal documents.",
+                        "suggestedNextSteps": [
+                          {
+                            "action": "Add additional evidence",
+                            "endpoint": "/api/evidence/add",
+                            "reason": "Strengthen your case with more documentation"
+                          },
+                          {
+                            "action": "Generate notice document",
+                            "endpoint": "/api/documents/generate",
+                            "reason": "Create formal eviction notice"
+                          }
+                        ]
+                      },
+                      "metadata": {
+                        "requestId": "req_xyz789",
+                        "processingTime": 234,
+                        "timestamp": "2024-11-09T10:30:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/chittyid/mint": {
+      "post": {
+        "tags": ["Identity"],
+        "summary": "Mint ChittyID - Create unique identifier",
+        "description": "Generates a cryptographically secure ChittyID for any entity. ChittyIDs are immutable, globally unique identifiers that serve as the foundation for all entity references in the ChittyOS ecosystem. The ID format includes entity type, geographic domain, timestamp, and checksum for validation.",
+        "operationId": "mintChittyID",
+        "x-gpt-hints": {
+          "idempotent": false,
+          "contextAware": true,
+          "commonErrors": ["INVALID_ENTITY_TYPE", "RATE_LIMITED"],
+          "relatedActions": ["validateChittyID", "getEntityDetails"]
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintChittyIDRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ChittyID successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChittyIDResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/contextual/analyze": {
+      "post": {
+        "tags": ["Context"],
+        "summary": "Analyze Context - AI-powered analysis",
+        "description": "Performs deep contextual analysis using ContextConsciousness™ to extract entities, sentiments, legal implications, and actionable insights from text. Maintains conversation state for multi-turn interactions.",
+        "operationId": "analyzeContext",
+        "x-gpt-hints": {
+          "preservesContext": true,
+          "stateful": true,
+          "capabilities": ["entity-extraction", "sentiment-analysis", "legal-analysis", "financial-analysis"]
+        },
+        "parameters": [
+          {
+            "name": "X-Conversation-ID",
+            "in": "header",
+            "description": "Optional conversation ID to maintain context across multiple requests",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextAnalysisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextAnalysisResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/batch": {
+      "post": {
+        "tags": ["Composite"],
+        "summary": "Batch Operations - Process multiple requests",
+        "description": "Execute multiple API operations in a single request. Supports both parallel and sequential processing modes. Ideal for complex workflows that require multiple related operations.",
+        "operationId": "batchOperations",
+        "x-gpt-hints": {
+          "maxBatchSize": 10,
+          "supportsMixedOperations": true,
+          "transactional": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "All operations completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Partial success - Some operations failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token obtained from ChittyAuth service"
+      },
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ChittyOS-API-Key",
+        "description": "API key for service-to-service communication"
+      },
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.chitty.cc/oauth/authorize",
+            "tokenUrl": "https://auth.chitty.cc/oauth/token",
+            "scopes": {
+              "chittyid:read": "Read ChittyID information",
+              "chittyid:write": "Create new ChittyIDs",
+              "cases:read": "View case information",
+              "cases:write": "Create and modify cases",
+              "evidence:read": "Access evidence",
+              "evidence:write": "Submit new evidence",
+              "context:analyze": "Perform contextual analysis"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "CompleteCaseRequest": {
+        "type": "object",
+        "required": ["caseDetails"],
+        "properties": {
+          "caseDetails": {
+            "type": "object",
+            "required": ["title", "type"],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Case title - Should be descriptive and include party names"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["eviction", "litigation", "resolution", "general"],
+                "description": "Type of legal proceeding"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "Detailed description of the case"
+              },
+              "jurisdiction": {
+                "type": "string",
+                "description": "Legal jurisdiction (e.g., state, county)"
+              },
+              "filingDate": {
+                "type": "string",
+                "format": "date",
+                "description": "Date case was or will be filed"
+              }
+            }
+          },
+          "parties": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "All parties involved in the case",
+            "items": {
+              "type": "object",
+              "required": ["role", "name", "type"],
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": ["plaintiff", "defendant", "witness", "attorney", "judge", "other"],
+                  "description": "Party's role in the case"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Full name of the party"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["individual", "organization"],
+                  "description": "Whether party is a person or organization"
+                },
+                "contactInfo": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "representation": {
+                  "type": "object",
+                  "properties": {
+                    "attorneyName": {
+                      "type": "string"
+                    },
+                    "firmName": {
+                      "type": "string"
+                    },
+                    "barNumber": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "initialEvidence": {
+            "type": "object",
+            "description": "Initial evidence to attach to the case",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["type", "description"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["document", "photo", "video", "audio", "financial", "communication", "other"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "URL to the evidence file"
+                },
+                "data": {
+                  "type": "object",
+                  "description": "Structured data for the evidence"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompleteCaseResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "case": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^01-[CE]-CTX-[A-Z0-9]{4}-C-\\d{4}-[0-9A-F]-X$",
+                    "description": "ChittyID of the created case"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["active", "pending", "closed", "archived"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "parties": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "chittyId": {
+                      "type": "string",
+                      "description": "ChittyID assigned to this party"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "ChittyID of the evidence"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "verified", "rejected"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "context": {
+            "$ref": "#/components/schemas/ResponseContext"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "MintChittyIDRequest": {
+        "type": "object",
+        "required": ["entity"],
+        "properties": {
+          "entity": {
+            "type": "string",
+            "enum": ["PEO", "PLACE", "PROP", "EVNT", "AUTH", "INFO", "FACT", "CONTEXT", "ACTOR"],
+            "description": "Entity type for the ChittyID. PEO=Person, PLACE=Location, PROP=Property, EVNT=Event, AUTH=Authority, INFO=Information, FACT=Verified Fact, CONTEXT=Container, ACTOR=System"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional metadata about the entity",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ChittyIDResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "chittyid": {
+                "type": "string",
+                "pattern": "^01-[CE]-[A-Z]{3,4}-[A-Z0-9]{4}-[PTOCLX]-\\d{4}-[0-9A-F]-X$",
+                "description": "The generated ChittyID",
+                "example": "01-C-PEO-A7B2-P-2411-3-X"
+              },
+              "entity": {
+                "type": "string",
+                "description": "Entity type used"
+              },
+              "sequence": {
+                "type": "string",
+                "description": "Unique sequence from drand beacon"
+              },
+              "checksum": {
+                "type": "string",
+                "description": "Validation checksum"
+              },
+              "metadata": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "ContextAnalysisRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "Text to analyze"
+          },
+          "analysisType": {
+            "type": "string",
+            "enum": ["sentiment", "entities", "legal", "financial", "comprehensive"],
+            "default": "comprehensive",
+            "description": "Type of analysis to perform"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional context for analysis",
+            "properties": {
+              "caseId": {
+                "type": "string"
+              },
+              "previousAnalysis": {
+                "type": "string"
+              }
+            }
+          },
+          "preserveContext": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to preserve context for future requests"
+          }
+        }
+      },
+      "ContextAnalysisResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "analysis": {
+                "type": "object",
+                "properties": {
+                  "sentiment": {
+                    "type": "object",
+                    "properties": {
+                      "score": {
+                        "type": "number",
+                        "minimum": -1,
+                        "maximum": 1
+                      },
+                      "label": {
+                        "type": "string",
+                        "enum": ["positive", "neutral", "negative"]
+                      }
+                    }
+                  },
+                  "entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "legalImplications": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "recommendations": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Overall confidence in the analysis"
+              }
+            }
+          },
+          "context": {
+            "$ref": "#/components/schemas/ResponseContext"
+          }
+        }
+      },
+      "BatchRequest": {
+        "type": "object",
+        "required": ["requests"],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["method", "endpoint"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Optional ID to track this specific request"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "API endpoint path"
+                },
+                "body": {
+                  "type": "object",
+                  "description": "Request body for POST/PUT/PATCH"
+                },
+                "headers": {
+                  "type": "object",
+                  "description": "Additional headers for this request"
+                }
+              }
+            }
+          },
+          "sequential": {
+            "type": "boolean",
+            "default": false,
+            "description": "Process requests sequentially instead of in parallel"
+          }
+        }
+      },
+      "BatchResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "True if all operations succeeded"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "succeeded": {
+                "type": "integer"
+              },
+              "failed": {
+                "type": "integer"
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["success", "error"]
+                },
+                "response": {
+                  "type": "object"
+                },
+                "error": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ResponseContext": {
+        "type": "object",
+        "description": "Contextual information for maintaining conversation state",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "description": "ID to maintain context across requests"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Unique request identifier"
+          },
+          "continuationHint": {
+            "type": "string",
+            "description": "Suggestion for next action"
+          },
+          "suggestedNextSteps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ResponseMetadata": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "processingTime": {
+            "type": "integer",
+            "description": "Processing time in milliseconds"
+          },
+          "service": {
+            "type": "string",
+            "default": "chittyconnect"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "recovery": {
+            "type": "string",
+            "description": "Suggested recovery action"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional error details"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Request validation failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "invalidEntity": {
+                "value": {
+                  "code": "INVALID_ENTITY_TYPE",
+                  "message": "The entity type 'PERSON' is not valid. Please use one of: PEO, PLACE, PROP, EVNT, AUTH, INFO, FACT, CONTEXT, or ACTOR.",
+                  "recovery": "Use 'PEO' for person entities",
+                  "requestId": "req_abc123"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication required or failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "missingAuth": {
+                "value": {
+                  "code": "UNAUTHORIZED",
+                  "message": "Authentication required. Please provide a valid API key or bearer token.",
+                  "recovery": "Include 'Authorization: Bearer <token>' header",
+                  "requestId": "req_def456"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "rateLimited": {
+                "value": {
+                  "code": "RATE_LIMITED",
+                  "message": "You've exceeded the rate limit. Please wait before making more requests.",
+                  "recovery": "Wait 60 seconds before retrying",
+                  "details": {
+                    "limit": 100,
+                    "remaining": 0,
+                    "resetAt": "2024-11-09T10:35:00Z"
+                  },
+                  "requestId": "req_ghi789"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "internalError": {
+                "value": {
+                  "code": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Our team has been notified.",
+                  "recovery": "Please try again in a few moments",
+                  "requestId": "req_jkl012"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true,
+    "samples-languages": ["curl", "javascript", "python"]
+  }
+}

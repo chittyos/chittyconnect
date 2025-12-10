@@ -1,9 +1,13 @@
 /**
  * ChittyContextual API Routes
- * Contextual analysis and AI-powered insights
+ * Contextual analysis and AI-powered insights with 1Password Connect integration
+ *
+ * Service token retrieved dynamically from 1Password with automatic
+ * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
+import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittycontextualRoutes = new Hono();
 
@@ -34,12 +38,21 @@ chittycontextualRoutes.post("/analyze", async (c) => {
       return c.json({ error: "Invalid analysisType" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittycontextual');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyContextual service token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
     // Forward to ChittyContextual service
     const response = await fetch("https://contextual.chitty.cc/api/analyze", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ text, context, analysisType }),
     });
@@ -67,11 +80,19 @@ chittycontextualRoutes.post("/extract", async (c) => {
       return c.json({ error: "text is required" }, 400);
     }
 
+    const serviceToken = await getServiceToken(c.env, 'chittycontextual');
+
+    if (!serviceToken) {
+      return c.json({
+        error: "ChittyContextual service token not configured"
+      }, 503);
+    }
+
     const response = await fetch("https://contextual.chitty.cc/api/extract", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_CONTEXTUAL_TOKEN}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ text, entityTypes }),
     });

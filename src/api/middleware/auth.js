@@ -25,19 +25,23 @@ export async function authenticate(c, next) {
     return c.json({ error: "API key is inactive" }, 401);
   }
 
-  // Check rate limits
-  const rateLimitKey = `ratelimit:${apiKey}:${Math.floor(Date.now() / 60000)}`;
-  const requests = await c.env.RATE_LIMIT.get(rateLimitKey);
-  const requestCount = requests ? parseInt(requests) : 0;
+  // Optional KV-based rate limiting (only if RATE_LIMIT is bound)
+  // In environments without RATE_LIMIT KV, skip this and rely on
+  // the dedicated token-bucket middleware when enabled.
+  if (c.env.RATE_LIMIT) {
+    const rateLimitKey = `ratelimit:${apiKey}:${Math.floor(Date.now() / 60000)}`;
+    const requests = await c.env.RATE_LIMIT.get(rateLimitKey);
+    const requestCount = requests ? parseInt(requests) : 0;
 
-  if (requestCount >= keyInfo.rateLimit) {
-    return c.json({ error: "Rate limit exceeded" }, 429);
+    if (requestCount >= (keyInfo.rateLimit || 1000)) {
+      return c.json({ error: "Rate limit exceeded" }, 429);
+    }
+
+    // Increment rate limit counter
+    await c.env.RATE_LIMIT.put(rateLimitKey, (requestCount + 1).toString(), {
+      expirationTtl: 60,
+    });
   }
-
-  // Increment rate limit counter
-  await c.env.RATE_LIMIT.put(rateLimitKey, (requestCount + 1).toString(), {
-    expirationTtl: 60,
-  });
 
   // Store key info in context
   c.set("apiKey", keyInfo);
