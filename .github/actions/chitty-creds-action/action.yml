@@ -1,7 +1,7 @@
 name: "ChittyConnect Creds"
 description: "Fetch ephemeral credentials from ChittyConnect"
 runs:
-  using: "node16"
+  using: "node20"
   main: "index.js"
 inputs:
   api_key:

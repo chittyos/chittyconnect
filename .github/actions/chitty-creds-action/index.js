@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 import { writeFileSync } from "fs";
 
 async function run() {
