@@ -1,6 +1,6 @@
 {
   "name": "@chittyos/chittyconnect",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ChittyConnect - AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for ChittyOS ecosystem",
   "type": "module",
   "main": "src/index.js",
@@ -32,7 +32,15 @@
     "workers"
   ],
   "author": "ChittyOS",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "files": [
+    "src",
+    "mcp-server.js",
+    "wrangler*.toml",
+    "scripts/*.sh",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.0",
     "@neondatabase/serverless": "^0.10.4",
