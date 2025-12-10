@@ -7,7 +7,7 @@ async function run() {
       throw new Error("INPUT_API_KEY is missing. Did you pass 'api_key:' in the workflow?");
     }
 
-    const res = await fetch("https://connect.chitty.cc/credentials/deploy", {
+    const res = await (globalThis.fetch || (await import('node-fetch')).default)("https://connect.chitty.cc/credentials/deploy", {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
 
