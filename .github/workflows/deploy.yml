@@ -18,16 +18,16 @@ jobs:
   ###########################################################################
   # 0. Fetch ephemeral deploy creds from ChittyConnect
   ###########################################################################
- chitty-creds:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+  chitty-creds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Fetch ChittyConnect ephemeral credentials
-      uses: ./.github/actions/chitty-creds-action
-      with:
-        api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+      - name: Fetch ChittyConnect ephemeral credentials
+        uses: ./.github/actions/chitty-creds-action
+        with:
+          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
 
   ###########################################################################
   # 1. Deploy to Staging (auto-triggered on staging branch)
@@ -36,7 +36,6 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     needs: chitty-creds
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -70,7 +69,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: chitty-creds
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
