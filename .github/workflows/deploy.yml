@@ -18,17 +18,17 @@ jobs:
   ###########################################################################
   # 0. Fetch ephemeral deploy creds from ChittyConnect
   ###########################################################################
-  chitty-creds:
-    runs-on: ubuntu-latest
-    outputs:
-      gh_token: ${{ steps.chitty.outputs.github_token }}
-      npm_token: ${{ steps.chitty.outputs.npm_token }}
-    steps:
-      - name: Fetch ChittyConnect ephemeral credentials
-        id: chitty
-        uses: ./.github/actions/chitty-creds-action
-        with:
-          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+ chitty-creds:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Fetch ChittyConnect ephemeral credentials
+      uses: ./.github/actions/chitty-creds-action
+      with:
+        api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+
           purpose: deploy
 
   ###########################################################################
