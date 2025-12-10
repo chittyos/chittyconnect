@@ -81,6 +81,7 @@ export default {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+  },
 
     // MCP Server tools list
     if (pathname === '/mcp/tools/list' && request.method === 'GET') {
@@ -336,13 +337,12 @@ async function createContextLegacy(request, env) {
         'Content-Type': 'application/json',
         'Authorization': authHeader
       }
-    });
+    };
 
-    if (!authResponse.ok) {
-      return new Response(JSON.stringify({ error: 'Invalid authorization' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    // Optional: Full health check with service status
+    if (request.url.includes('?full=true')) {
+      const servicesHealth = await ecosystem.getAllServicesHealth();
+      health.services = servicesHealth;
     }
 
     const { actor } = await authResponse.json();
@@ -383,16 +383,15 @@ async function createContextLegacy(request, env) {
         owner: actor.chittyId,
         created: new Date().toISOString()
       }
-    }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
     return new Response(JSON.stringify({
-      error: error.message
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString(),
     }), {
-      status: 500,
+      status: 503,
       headers: { 'Content-Type': 'application/json' }
     });
   }

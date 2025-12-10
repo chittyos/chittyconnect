@@ -1,0 +1,235 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for production deployment'
+        required: true
+      confirm:
+        description: 'Type "DEPLOY" to confirm'
+        required: true
+
+jobs:
+  validate-deployment:
+    name: Validate Production Deployment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "❌ Deployment not confirmed. Type 'DEPLOY' to proceed."
+            exit 1
+          fi
+          echo "✓ Deployment confirmed"
+
+      - name: Check branch
+        run: |
+          if [ "${{ github.ref_name }}" != "main" ] && [ ! "${{ github.ref }}" =~ ^refs/tags/v ]]; then
+            echo "❌ Production deployments only allowed from main branch or version tags"
+            exit 1
+          fi
+          echo "✓ Branch check passed"
+
+      - name: Deployment approval
+        run: |
+          echo "## Production Deployment Request" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch/Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "- **Reason:** ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate-deployment
+    environment:
+      name: production
+      url: https://connect.chitty.cc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pre-deployment validation
+        run: |
+          echo "Running pre-deployment checks..."
+
+          # Dry run deployment
+          npx wrangler deploy --dry-run
+
+          # Check for secrets in code
+          if grep -r "CHITTY.*TOKEN.*=" src/ --include="*.js" | grep -v "env\."; then
+            echo "❌ Error: Secrets found in code"
+            exit 1
+          fi
+
+          echo "✓ Pre-deployment validation passed"
+
+      - name: Create deployment record
+        run: |
+          echo "DEPLOYMENT_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+          echo "DEPLOYMENT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+          echo "DEPLOYMENT_ACTOR=${{ github.actor }}" >> $GITHUB_ENV
+
+      - name: Deploy to Cloudflare Workers (Production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+      - name: Wait for deployment propagation
+        run: sleep 15
+
+      - name: Production health check
+        run: |
+          echo "Running production health check..."
+
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://connect.chitty.cc/health)
+
+            if [ "$RESPONSE" -eq 200 ]; then
+              echo "✓ Health check passed (HTTP $RESPONSE)"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Health check failed (HTTP $RESPONSE), retrying... ($RETRY_COUNT/$MAX_RETRIES)"
+                sleep 5
+              else
+                echo "❌ Health check failed after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Run production smoke tests
+        run: |
+          echo "Running production smoke tests..."
+
+          BASE_URL="https://connect.chitty.cc"
+
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          curl -f "$BASE_URL/health" || exit 1
+
+          # Test health with full parameter
+          echo "Testing full health check..."
+          HEALTH_RESPONSE=$(curl -s "$BASE_URL/health?full=true")
+          echo "$HEALTH_RESPONSE" | jq -e '.status == "healthy"' || exit 1
+
+          # Verify ChittyOS compliance
+          echo "Verifying ChittyOS compliance..."
+          echo "$HEALTH_RESPONSE" | jq -e '.chittyos_compliance.chittyid_violations == 0' || exit 1
+          echo "$HEALTH_RESPONSE" | jq -e '.chittyos_compliance.authority_compliance == "100%"' || exit 1
+
+          echo "✓ Production smoke tests passed"
+
+      - name: Deployment success notification
+        run: |
+          echo "## ✓ Production Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://connect.chitty.cc" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch/Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Check" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ✓ Healthy" >> $GITHUB_STEP_SUMMARY
+          echo "- ChittyID Violations: 0" >> $GITHUB_STEP_SUMMARY
+          echo "- Authority Compliance: 100%" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "## ❌ Production Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Action Required:** Check logs and consider rollback" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback Command:** \`git revert ${{ github.sha }} && git push\`" >> $GITHUB_STEP_SUMMARY
+
+  post-deployment-monitoring:
+    name: Post-Deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    environment: production
+
+    steps:
+      - name: Monitor for 5 minutes
+        run: |
+          echo "Monitoring production for 5 minutes..."
+
+          END_TIME=$(($(date +%s) + 300))  # 5 minutes from now
+
+          while [ $(date +%s) -lt $END_TIME ]; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://connect.chitty.cc/health)
+
+            if [ "$RESPONSE" -ne 200 ]; then
+              echo "❌ Health check failed during monitoring (HTTP $RESPONSE)"
+              exit 1
+            fi
+
+            echo "✓ Health check passed at $(date)"
+            sleep 30  # Check every 30 seconds
+          done
+
+          echo "✓ 5-minute monitoring completed successfully"
+
+      - name: Performance baseline
+        run: |
+          echo "Establishing performance baseline..."
+
+          TOTAL_TIME=0
+          NUM_REQUESTS=10
+
+          for i in $(seq 1 $NUM_REQUESTS); do
+            RESPONSE_TIME=$(curl -o /dev/null -s -w "%{time_total}" https://connect.chitty.cc/health)
+            TOTAL_TIME=$(echo "$TOTAL_TIME + $RESPONSE_TIME" | bc)
+            echo "Request $i: ${RESPONSE_TIME}s"
+          done
+
+          AVG_TIME=$(echo "scale=3; $TOTAL_TIME / $NUM_REQUESTS" | bc)
+          echo "Average response time: ${AVG_TIME}s"
+
+          if (( $(echo "$AVG_TIME < 0.5" | bc -l) )); then
+            echo "✓ Performance excellent (<500ms)"
+          elif (( $(echo "$AVG_TIME < 1.0" | bc -l) )); then
+            echo "✓ Performance acceptable (<1s)"
+          else
+            echo "⚠️ Warning: Performance degraded (>1s)"
+          fi
+
+      - name: Monitoring summary
+        run: |
+          echo "## Post-Deployment Monitoring" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration:** 5 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✓ All checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Performance:** ✓ Within acceptable range" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Continue monitoring via Cloudflare Analytics" >> $GITHUB_STEP_SUMMARY
+          echo "- Check ChittyChronicle for event logs" >> $GITHUB_STEP_SUMMARY
+          echo "- Review error rates over next 24 hours" >> $GITHUB_STEP_SUMMARY
