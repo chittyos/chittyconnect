@@ -1,5 +1,10 @@
 # ChittyConnect - itsChitty™
 
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/chittyos/chittyconnect/publish.yml?branch=main&label=publish)
+![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/chittyos/chittyconnect)
+![GitHub Package Version](https://img.shields.io/github/package-json/v/chittyos/chittyconnect?filename=package.json&label=gpr)
+![npm](https://img.shields.io/npm/v/%40chittyos%2Fchittyconnect)
+
 The AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for the ChittyOS ecosystem.
 
 ChittyConnect packages an HTTP API server (Cloudflare Workers/Hono) and an MCP server binary (`chittyconnect-mcp`) for model integrations. This package is intended to be used either as a deployed Worker or as a dependency to integrate with ChittyOS services.

@@ -39,6 +39,7 @@ jobs:
         run: npm publish
 
   publish-npm:
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
