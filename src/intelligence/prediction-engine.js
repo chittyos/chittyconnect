@@ -12,7 +12,7 @@ export class PredictionEngine {
     this.env = env;
     this.consciousness = consciousness;
     this.db = env.DB;
-    this.predictionCache = env.CREDENTIAL_CACHE; // Reuse KV for caching
+    this.predictionCache = env.PREDICTION_CACHE; // Use dedicated prediction cache
   }
 
   /**
@@ -93,7 +93,7 @@ export class PredictionEngine {
             reasoning: 'Latency trending upward, performance degradation likely',
           }),
           expires_at: now + (6 * 3600 * 1000), // 6 hours
-        }),
+        });
       }
     }
 
@@ -223,7 +223,7 @@ export class PredictionEngine {
     const predicted = points[points.length - 1].y + slope * 5; // Predict 5 steps ahead
 
     return { slope, confidence, predicted };
-  }
+  } //
 
   /**
    * Linear regression for trend analysis
@@ -235,7 +235,13 @@ export class PredictionEngine {
     const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
     const sumXX = points.reduce((sum, p) => sum + p.x * p.x, 0);
 
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const denominator = n * sumXX - sumX * sumX;
+    if (denominator === 0) {
+      // All x-values are the same or not enough variety; slope cannot be computed
+      return { slope: 0, intercept: sumY / n || 0, confidence: 0 };
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
     const intercept = (sumY - slope * sumX) / n;
 
     // Calculate R² (confidence)
@@ -246,7 +252,13 @@ export class PredictionEngine {
       return sum + Math.pow(p.y - predicted, 2);
     }, 0);
 
-    const rSquared = 1 - ssResidual / ssTotal;
+    let rSquared;
+    if (ssTotal === 0) {
+      // No variance in y values, so rSquared is undefined. Set to 0 for no confidence.
+      rSquared = 0;
+    } else {
+      rSquared = 1 - ssResidual / ssTotal;
+    }
     const confidence = Math.max(0, Math.min(1, rSquared));
 
     return { slope, intercept, confidence };
@@ -286,6 +298,11 @@ export class PredictionEngine {
   calculateCascadeConfidence(failingService, affectedServices, depMap) {
     let totalWeight = 0;
     let criticalCount = 0;
+
+    if (affectedServices.length === 0) {
+      // No affected services means no cascade confidence
+      return 0;
+    }
 
     for (const affectedService of affectedServices) {
       const deps = depMap.get(affectedService) || [];
