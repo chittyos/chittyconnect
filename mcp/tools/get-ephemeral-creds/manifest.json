@@ -1,0 +1,11 @@
+{
+  "name": "get_ephemeral_credentials",
+  "description": "Fetch short-lived GitHub + NPM deploy tokens from ChittyConnect",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "api_key": { "type": "string" }
+    },
+    "required": ["api_key"]
+  }
+}
