@@ -103,9 +103,10 @@ export async function rateLimitMiddleware(c, next) {
   try {
     // Check if user is authenticated (has valid API key)
     const apiKey =
+      c.req.header("X-ChittyOS-API-Key") ||
       c.req.header("x-api-key") ||
       c.req.header("authorization")?.replace("Bearer ", "");
-    const isAuthenticated = apiKey && (await env.API_KEYS?.get(apiKey));
+    const isAuthenticated = apiKey && (await env.API_KEYS?.get(`key:${apiKey}`));
 
     // Get identifier (API key or IP)
     const identifier = apiKey || c.req.header("cf-connecting-ip") || "unknown";

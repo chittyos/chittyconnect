@@ -110,13 +110,15 @@ async function processEvent(message, env) {
  * @returns {Promise<string|null>} Tenant UUID
  */
 async function lookupTenant(env, installationId) {
+  // Our schema stores GitHub installations in the `installations` table
+  // with a `chittyid` column. Use that as the tenant identifier.
   const result = await env.DB.prepare(
-    "SELECT tenant_id FROM gh_installations WHERE installation_id = ?",
+    "SELECT chittyid FROM installations WHERE installation_id = ?",
   )
     .bind(installationId)
     .first();
 
-  return result?.tenant_id || null;
+  return result?.chittyid || null;
 }
 
 /**

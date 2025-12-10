@@ -25,30 +25,11 @@
     }
   ],
   "paths": {
-    "/api/health": {
-      "get": {
-        "summary": "Health Check",
-        "description": "Check API health status",
-        "operationId": "healthCheck",
-        "responses": {
-          "200": {
-            "description": "Service is healthy",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/chittyid/mint": {
+    "/api/chittyauth/verify": {
       "post": {
-        "summary": "Mint ChittyID",
-        "description": "Create a new ChittyID for an entity",
-        "operationId": "mintChittyID",
+        "summary": "Verify Authentication",
+        "description": "Verify authentication token or credentials",
+        "operationId": "verifyAuth",
         "requestBody": {
           "required": true,
           "content": {
@@ -56,60 +37,20 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "entity": {
-                    "type": "string",
-                    "enum": ["PEO", "PLACE", "PROP", "EVNT", "AUTH", "INFO", "FACT", "CONTEXT", "ACTOR"],
-                    "description": "Entity type for ChittyID"
-                  },
-                  "metadata": {
-                    "type": "object",
-                    "description": "Optional metadata for the entity"
+                  "token": {
+                    "type": "string"
                   }
                 },
-                "required": ["entity"]
+                "required": [
+                  "token"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "ChittyID minted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChittyIDResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/chittyid/validate": {
-      "post": {
-        "summary": "Validate ChittyID",
-        "description": "Validate a ChittyID format and checksum",
-        "operationId": "validateChittyID",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "chittyid": {
-                    "type": "string",
-                    "description": "ChittyID to validate"
-                  }
-                },
-                "required": ["chittyid"]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Validation result",
+            "description": "Token verified",
             "content": {
               "application/json": {
                 "schema": {
@@ -118,32 +59,16 @@
                     "valid": {
                       "type": "boolean"
                     },
-                    "entity": {
+                    "userId": {
                       "type": "string"
                     },
-                    "sequence": {
-                      "type": "string"
+                    "scope": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/services/status": {
-      "get": {
-        "summary": "Check ChittyOS Services Status",
-        "description": "Get health status of all ChittyOS services",
-        "operationId": "getServicesStatus",
-        "responses": {
-          "200": {
-            "description": "Service status retrieved",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServicesStatusResponse"
                 }
               }
             }
@@ -171,13 +96,21 @@
                   },
                   "caseType": {
                     "type": "string",
-                    "enum": ["eviction", "litigation", "resolution", "general"]
+                    "enum": [
+                      "eviction",
+                      "litigation",
+                      "resolution",
+                      "general"
+                    ]
                   },
                   "metadata": {
                     "type": "object"
                   }
                 },
-                "required": ["title", "caseType"]
+                "required": [
+                  "title",
+                  "caseType"
+                ]
               }
             }
           }
@@ -207,11 +140,348 @@
         }
       }
     },
-    "/api/chittyauth/verify": {
+    "/api/chittychronicle": {
+      "get": {
+        "summary": "Chronicle Health Check",
+        "description": "Check ChittyChronicle service health",
+        "operationId": "chronicleHealthCheck",
+        "tags": [
+          "Chronicle"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service is healthy"
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/audit/{entityId}": {
+      "get": {
+        "summary": "Get Audit Trail",
+        "description": "Retrieve complete audit trail for entity",
+        "operationId": "getChronicleAuditTrail",
+        "tags": [
+          "Chronicle"
+        ],
+        "parameters": [
+          {
+            "name": "entityId",
+            "in": "path",
+            "required": true,
+            "description": "Entity ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": true,
+            "description": "Entity type",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit trail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChronicleEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/events": {
+      "get": {
+        "summary": "Search Events",
+        "description": "Search logged events with optional filters",
+        "operationId": "searchChronicleEvents",
+        "tags": [
+          "Chronicle"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "description": "Filter by service name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "Filter by user ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed",
+                "pending"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Full-text search query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max results (default 100)",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChronicleEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
-        "summary": "Verify Authentication",
-        "description": "Verify authentication token or credentials",
-        "operationId": "verifyAuth",
+        "summary": "Log Event",
+        "description": "Record an event in ChittyChronicle",
+        "operationId": "logChronicleEvent",
+        "tags": [
+          "Chronicle"
+        ],
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChronicleEventInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event logged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/health": {
+      "get": {
+        "summary": "Get Service Health",
+        "description": "Retrieve health status for all services (24-hour window)",
+        "operationId": "getChronicleServiceHealth",
+        "tags": [
+          "Chronicle"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceHealth"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/statistics": {
+      "get": {
+        "summary": "Get Statistics",
+        "description": "Retrieve event statistics summary",
+        "operationId": "getChronicleStatistics",
+        "tags": [
+          "Chronicle"
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistics summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChronicleStatistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittychronicle/timeline": {
+      "get": {
+        "summary": "Get Activity Timeline",
+        "description": "Retrieve event counts grouped by time period",
+        "operationId": "getChronicleTimeline",
+        "tags": [
+          "Chronicle"
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": true,
+            "description": "Start date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": true,
+            "description": "End date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "services",
+            "in": "query",
+            "description": "Comma-separated service names",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "description": "Time grouping",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hour",
+                "day",
+                "week",
+                "month"
+              ],
+              "default": "day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Timeline data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimelineEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittycontextual/analyze": {
+      "post": {
+        "summary": "Analyze Context",
+        "description": "Perform contextual analysis on provided data",
+        "operationId": "analyzeContext",
         "requestBody": {
           "required": true,
           "content": {
@@ -219,34 +489,104 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "token": {
+                  "text": {
                     "type": "string"
+                  },
+                  "context": {
+                    "type": "object"
+                  },
+                  "analysisType": {
+                    "type": "string",
+                    "enum": [
+                      "sentiment",
+                      "entities",
+                      "legal",
+                      "financial",
+                      "comprehensive"
+                    ]
                   }
                 },
-                "required": ["token"]
+                "required": [
+                  "text"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Token verified",
+            "description": "Analysis completed",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "valid": {
-                      "type": "boolean"
+                    "results": {
+                      "type": "object"
                     },
-                    "userId": {
-                      "type": "string"
+                    "confidence": {
+                      "type": "number"
                     },
-                    "scope": {
+                    "entities": {
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "object"
                       }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyevidence/ingest": {
+      "post": {
+        "summary": "Ingest Evidence",
+        "description": "Ingest and process evidence files",
+        "operationId": "ingestEvidence",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "caseId": {
+                    "type": "string"
+                  },
+                  "evidenceType": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence ingested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "evidenceId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "extractedData": {
+                      "type": "object"
                     }
                   }
                 }
@@ -314,7 +654,11 @@
                 "properties": {
                   "provider": {
                     "type": "string",
-                    "enum": ["plaid", "stripe", "direct"]
+                    "enum": [
+                      "plaid",
+                      "stripe",
+                      "direct"
+                    ]
                   },
                   "publicToken": {
                     "type": "string",
@@ -324,7 +668,9 @@
                     "type": "object"
                   }
                 },
-                "required": ["provider"]
+                "required": [
+                  "provider"
+                ]
               }
             }
           }
@@ -357,11 +703,11 @@
         }
       }
     },
-    "/api/chittycontextual/analyze": {
+    "/api/chittyid/mint": {
       "post": {
-        "summary": "Analyze Context",
-        "description": "Perform contextual analysis on provided data",
-        "operationId": "analyzeContext",
+        "summary": "Mint ChittyID",
+        "description": "Create a new ChittyID for an entity",
+        "operationId": "mintChittyID",
         "requestBody": {
           "required": true,
           "content": {
@@ -369,43 +715,40 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "text": {
-                    "type": "string"
-                  },
-                  "context": {
-                    "type": "object"
-                  },
-                  "analysisType": {
+                  "entity": {
                     "type": "string",
-                    "enum": ["sentiment", "entities", "legal", "financial", "comprehensive"]
+                    "enum": [
+                      "PEO",
+                      "PLACE",
+                      "PROP",
+                      "EVNT",
+                      "AUTH",
+                      "INFO",
+                      "FACT",
+                      "CONTEXT",
+                      "ACTOR"
+                    ],
+                    "description": "Entity type for ChittyID"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Optional metadata for the entity"
                   }
                 },
-                "required": ["text"]
+                "required": [
+                  "entity"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Analysis completed",
+            "description": "ChittyID minted successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "results": {
-                      "type": "object"
-                    },
-                    "confidence": {
-                      "type": "number"
-                    },
-                    "entities": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ChittyIDResponse"
                 }
               }
             }
@@ -413,11 +756,11 @@
         }
       }
     },
-    "/api/chittychronicle/log": {
+    "/api/chittyid/validate": {
       "post": {
-        "summary": "Create Chronicle Entry",
-        "description": "Log an event to ChittyChronicle",
-        "operationId": "createChronicleEntry",
+        "summary": "Validate ChittyID",
+        "description": "Validate a ChittyID format and checksum",
+        "operationId": "validateChittyID",
         "requestBody": {
           "required": true,
           "content": {
@@ -425,40 +768,33 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "eventType": {
-                    "type": "string"
-                  },
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "data": {
-                    "type": "object"
-                  },
-                  "timestamp": {
+                  "chittyid": {
                     "type": "string",
-                    "format": "date-time"
+                    "description": "ChittyID to validate"
                   }
                 },
-                "required": ["eventType", "data"]
+                "required": [
+                  "chittyid"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Entry logged",
+            "description": "Validation result",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "entryId": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "entity": {
                       "type": "string"
                     },
-                    "chronicleId": {
-                      "type": "string"
-                    },
-                    "timestamp": {
+                    "sequence": {
                       "type": "string"
                     }
                   }
@@ -469,58 +805,59 @@
         }
       }
     },
-    "/api/chittychronicle/query": {
+    "/api/chittyquality": {
       "get": {
-        "summary": "Query Chronicle",
-        "description": "Query ChittyChronicle event logs",
-        "operationId": "queryChronicle",
-        "parameters": [
-          {
-            "name": "entityId",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "eventType",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "startDate",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 100
-            }
-          }
+        "summary": "Quality Health Check",
+        "description": "Check ChittyQuality service health",
+        "operationId": "qualityHealthCheck",
+        "tags": [
+          "Quality"
         ],
         "responses": {
           "200": {
-            "description": "Query results",
+            "description": "Service is healthy"
+          }
+        }
+      }
+    },
+    "/api/chittyquality/rules": {
+      "get": {
+        "summary": "Get Validation Rules",
+        "description": "Retrieve current quality validation rules",
+        "operationId": "getQualityValidationRules",
+        "tags": [
+          "Quality"
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation rules",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "entries": {
+                    "draftPatterns": {
                       "type": "array",
                       "items": {
                         "type": "object"
                       }
                     },
-                    "total": {
+                    "junkContentPatterns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "minimumContentLength": {
+                      "type": "integer"
+                    },
+                    "minimumWords": {
+                      "type": "integer"
+                    },
+                    "minimumFileSize": {
+                      "type": "integer"
+                    },
+                    "maximumFileSize": {
                       "type": "integer"
                     }
                   }
@@ -531,30 +868,61 @@
         }
       }
     },
-    "/api/chittyevidence/ingest": {
+    "/api/chittyquality/validate": {
       "post": {
-        "summary": "Ingest Evidence",
-        "description": "Ingest and process evidence files",
-        "operationId": "ingestEvidence",
+        "summary": "Validate Document",
+        "description": "Analyze document for quality issues and return recommendation",
+        "operationId": "validateDocument",
+        "tags": [
+          "Quality"
+        ],
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chittyquality/validate/batch": {
+      "post": {
+        "summary": "Validate Multiple Documents",
+        "description": "Batch validate documents and return summary",
+        "operationId": "validateDocumentBatch",
+        "tags": [
+          "Quality"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "files"
+                ],
                 "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "caseId": {
-                    "type": "string"
-                  },
-                  "evidenceType": {
-                    "type": "string"
-                  },
-                  "metadata": {
-                    "type": "object"
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/DocumentInput"
+                    }
                   }
                 }
               }
@@ -563,22 +931,30 @@
         },
         "responses": {
           "200": {
-            "description": "Evidence ingested",
+            "description": "Batch validation summary",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "evidenceId": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "extractedData": {
-                      "type": "object"
-                    }
-                  }
+                  "$ref": "#/components/schemas/BatchValidationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check API health status",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             }
@@ -613,51 +989,18 @@
         }
       }
     },
-    "/api/thirdparty/notion/query": {
-      "post": {
-        "summary": "Query Notion Database",
-        "description": "Query Notion database via ChittyConnect proxy",
-        "operationId": "queryNotion",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "databaseId": {
-                    "type": "string"
-                  },
-                  "filter": {
-                    "type": "object"
-                  },
-                  "sorts": {
-                    "type": "array",
-                    "items": {
-                      "type": "object"
-                    }
-                  }
-                },
-                "required": ["databaseId"]
-              }
-            }
-          }
-        },
+    "/api/services/status": {
+      "get": {
+        "summary": "Check ChittyOS Services Status",
+        "description": "Get health status of all ChittyOS services",
+        "operationId": "getServicesStatus",
         "responses": {
           "200": {
-            "description": "Query results",
+            "description": "Service status retrieved",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ServicesStatusResponse"
                 }
               }
             }
@@ -685,7 +1028,9 @@
                     "items": {}
                   }
                 },
-                "required": ["query"]
+                "required": [
+                  "query"
+                ]
               }
             }
           }
@@ -706,6 +1051,60 @@
                     },
                     "rowCount": {
                       "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/thirdparty/notion/query": {
+      "post": {
+        "summary": "Query Notion Database",
+        "description": "Query Notion database via ChittyConnect proxy",
+        "operationId": "queryNotion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "databaseId": {
+                    "type": "string"
+                  },
+                  "filter": {
+                    "type": "object"
+                  },
+                  "sorts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": [
+                  "databaseId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
                     }
                   }
                 }
@@ -771,7 +1170,11 @@
               "properties": {
                 "status": {
                   "type": "string",
-                  "enum": ["healthy", "degraded", "down"]
+                  "enum": [
+                    "healthy",
+                    "degraded",
+                    "down"
+                  ]
                 },
                 "url": {
                   "type": "string"
@@ -804,7 +1207,309 @@
             "type": "string"
           }
         }
+      },
+      "ChronicleEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "service": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "user_email": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed",
+              "pending"
+            ]
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ChronicleEventInput": {
+        "type": "object",
+        "required": [
+          "service",
+          "action"
+        ],
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "Service name"
+          },
+          "action": {
+            "type": "string",
+            "description": "Action performed"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userEmail": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional context"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Services triggered"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed",
+              "pending"
+            ],
+            "default": "success"
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "TimelineEntry": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "service": {
+            "type": "string"
+          },
+          "event_count": {
+            "type": "integer"
+          },
+          "success_count": {
+            "type": "integer"
+          },
+          "failed_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "ChronicleStatistics": {
+        "type": "object",
+        "properties": {
+          "total_events": {
+            "type": "integer"
+          },
+          "service_count": {
+            "type": "integer"
+          },
+          "user_count": {
+            "type": "integer"
+          },
+          "success_count": {
+            "type": "integer"
+          },
+          "failed_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "ServiceHealth": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "total_events": {
+            "type": "integer"
+          },
+          "failed_count": {
+            "type": "integer"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "last_event": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DocumentInput": {
+        "type": "object",
+        "required": [
+          "filename",
+          "content"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Document filename"
+          },
+          "filesize": {
+            "type": "integer",
+            "description": "File size in bytes"
+          },
+          "content": {
+            "type": "string",
+            "description": "Document content text"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional metadata"
+          }
+        }
+      },
+      "ValidationResult": {
+        "type": "object",
+        "properties": {
+          "passed": {
+            "type": "boolean",
+            "description": "Whether validation passed"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confidence score (0.0-1.0)"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualityIssue"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/DocumentMetadata"
+          },
+          "recommendation": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "quarantine",
+              "reject"
+            ],
+            "description": "Quality gate recommendation"
+          },
+          "reasoning": {
+            "type": "string",
+            "description": "Explanation of recommendation"
+          }
+        }
+      },
+      "QualityIssue": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "draft_indicator",
+              "junk_content",
+              "incomplete",
+              "duplicate",
+              "size_limit",
+              "missing_metadata"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          }
+        }
+      },
+      "DocumentMetadata": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "filesize": {
+            "type": "integer"
+          },
+          "extension": {
+            "type": "string"
+          },
+          "contentLength": {
+            "type": "integer"
+          },
+          "wordCount": {
+            "type": "integer"
+          },
+          "hasVersionNumber": {
+            "type": "boolean"
+          },
+          "isDraft": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "BatchValidationResult": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "approved": {
+            "type": "integer"
+          },
+          "quarantined": {
+            "type": "integer"
+          },
+          "rejected": {
+            "type": "integer"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationResult"
+            }
+          }
+        }
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Chronicle",
+      "description": "Event logging and audit trail endpoints"
+    },
+    {
+      "name": "Quality",
+      "description": "Document quality validation endpoints"
+    }
+  ]
 }

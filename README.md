@@ -1,8 +1,35 @@
 # ChittyConnect - itsChitty™
 
-**The AI-intelligent spine with ContextConsciousness & MemoryCloude**
+The AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for the ChittyOS ecosystem.
 
-Comprehensive connector enabling custom GPTs and Claude to interact with the entire ChittyOS ecosystem and third-party integrations.
+ChittyConnect packages an HTTP API server (Cloudflare Workers/Hono) and an MCP server binary (`chittyconnect-mcp`) for model integrations. This package is intended to be used either as a deployed Worker or as a dependency to integrate with ChittyOS services.
+
+## Installation
+
+```bash
+npm install @chittyos/chittyconnect
+```
+
+## Usage
+
+### Programmatic (as a Worker app)
+
+The package exposes a Hono app at `src/index.js` that can be used as your Worker entry. In this repository we deploy using Wrangler.
+
+```bash
+wrangler dev
+wrangler deploy
+```
+
+### CLI (MCP Server)
+
+The package exposes a CLI for the MCP server:
+
+```bash
+npx chittyconnect-mcp
+```
+
+Use `--help` flags from your MCP client to connect. See `MCP_QUICK_REFERENCE.md` for tool list.
 
 ## 📚 Documentation
 
@@ -116,6 +143,16 @@ npm run deploy:staging
 # Deploy to production
 npm run deploy:production
 ```
+
+## Versioning & Publishing
+
+- Package name: `@chittyos/chittyconnect`
+- Follows semantic versioning.
+- Published files are restricted via `files` in `package.json` and `.npmignore`.
+
+## License
+
+MIT © ChittyOS
 
 ## 🔧 Usage
 
