@@ -10,6 +10,18 @@ ChittyConnect packages an HTTP API server (Cloudflare Workers/Hono) and an MCP s
 npm install @chittyos/chittyconnect
 ```
 
+If installing from GitHub Packages, configure `.npmrc`:
+
+```
+@chittyos:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+```
+Then install:
+
+```
+npm install @chittyos/chittyconnect
+```
+
 ## Usage
 
 ### Programmatic (as a Worker app)

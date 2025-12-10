@@ -39,13 +39,21 @@ jobs:
         run: npm publish
 
   publish-npm:
-    if: ${{ secrets.NPM_TOKEN != '' }}
+    if: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Read npm token from 1Password
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          NPM_TOKEN: op://CODEX CLI SECRETS/p7fkefvzjqus56w2n25oi7kpvy/credential
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -57,8 +65,6 @@ jobs:
       - name: Configure npm for npmjs
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install dependencies
         run: npm ci
