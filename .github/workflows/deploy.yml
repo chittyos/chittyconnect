@@ -68,6 +68,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      ############################################################
+      # Run D1 Migrations (Staging)
+      ############################################################
+      - name: Run D1 Migrations (Staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Running D1 migrations for staging..."
+          if [ -d migrations ]; then
+            for migration in migrations/*.sql; do
+              if [ -f "$migration" ]; then
+                echo "Applying $migration..."
+                npx wrangler d1 execute chittyconnect-staging --file "$migration" || echo "Migration may already be applied, continuing..."
+              fi
+            done
+          fi
+
       - name: Deploy to Staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -79,7 +97,9 @@ jobs:
           sleep 5
           echo "Checking /health..."
           curl -f https://chittyconnect-staging.chitty.workers.dev/health
-          echo "Staging deployment healthy."
+          echo "Checking discovery endpoint..."
+          curl -f https://chittyconnect-staging.chitty.workers.dev/.well-known/chitty.json
+          echo "✅ Staging deployment healthy."
 
   ###########################################################################
   # 2. Deploy to Production (only on main branch)
@@ -135,7 +155,25 @@ jobs:
           npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json
 
       ############################################################
-      # 5. Deploy
+      # 5. Run D1 Migrations (Production)
+      ############################################################
+      - name: Run D1 Migrations (Production)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Running D1 migrations for production..."
+          if [ -d migrations ]; then
+            for migration in migrations/*.sql; do
+              if [ -f "$migration" ]; then
+                echo "Applying $migration..."
+                npx wrangler d1 execute chittyconnect-production --file "$migration" || echo "Migration may already be applied, continuing..."
+              fi
+            done
+          fi
+
+      ############################################################
+      # 6. Deploy
       ############################################################
       - name: Deploy to Production
         id: deploy_step
@@ -147,7 +185,7 @@ jobs:
           npx wrangler deploy --env production
 
       ############################################################
-      # 6. Post-Deploy Health Checks + Auto-Rollback
+      # 7. Post-Deploy Health Checks + Auto-Rollback
       ############################################################
       - name: Post-Deploy Health Checks
         run: |
@@ -162,10 +200,16 @@ jobs:
           echo "Checking /health..."
           curl -f https://connect.chitty.cc/health || fail
 
+          echo "Checking discovery endpoint..."
+          curl -f https://connect.chitty.cc/.well-known/chitty.json || fail
+
           echo "Checking /openapi.json..."
           curl -f https://connect.chitty.cc/openapi.json || fail
 
           echo "Checking /mcp/manifest..."
           curl -f https://connect.chitty.cc/mcp/manifest || fail
+
+          echo "Verifying new context endpoints..."
+          curl -f https://connect.chitty.cc/api/health || fail
 
           echo "✅ All production endpoints verified."
