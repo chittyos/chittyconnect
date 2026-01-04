@@ -16,44 +16,10 @@ concurrency:
 
 jobs:
   ###########################################################################
-  # 0. Fetch ephemeral deploy creds from ChittyConnect
-  ###########################################################################
-  chitty-creds:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Fetch ChittyConnect ephemeral credentials
-        env:
-          API_KEY: ${{ secrets.CHITTYCONNECT_API_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${API_KEY:-}" ]; then
-            echo "❌ CHITTYCONNECT_API_KEY is not set in repository secrets." >&2
-            echo "If ChittyAuth provisions this dynamically, ensure that job runs earlier and exports API_KEY via GITHUB_ENV or sets this secret." >&2
-            exit 1
-          fi
-          # Fetch ephemeral creds
-          RESP=$(curl -fsS -H "Authorization: Bearer ${API_KEY}" https://connect.chitty.cc/credentials/deploy)
-          # Parse tokens
-          GITHUB_TOKEN=$(echo "$RESP" | jq -r '.github_token')
-          NPM_TOKEN=$(echo "$RESP" | jq -r '.npm_token')
-          if [ -z "$GITHUB_TOKEN" ] || [ -z "$NPM_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] || [ "$NPM_TOKEN" = "null" ]; then
-            echo "Invalid credentials response: $RESP" >&2
-            exit 1
-          fi
-          {
-            echo "github_token=$GITHUB_TOKEN"
-            echo "npm_token=$NPM_TOKEN"
-          } >> "$GITHUB_OUTPUT"
-
-  ###########################################################################
   # 1. Deploy to Staging (auto-triggered on staging branch)
   ###########################################################################
   deploy-staging:
     if: github.ref == 'refs/heads/staging'
-    needs: chitty-creds
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -106,7 +72,6 @@ jobs:
   ###########################################################################
   deploy-production:
     if: github.ref == 'refs/heads/main'
-    needs: chitty-creds
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
