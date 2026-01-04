@@ -59,9 +59,6 @@
     "vitest": "^4.0.8",
     "wrangler": "^4.56.0"
   },
-  "overrides": {
-    "blake3-wasm": "3.0.0"
-  },
   "lint-staged": {
     "src/**/*.{js,ts,json}": [
       "prettier --write",
