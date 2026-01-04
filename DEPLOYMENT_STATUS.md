@@ -1,9 +1,13 @@
 # ChittyConnect Unified Discovery & Routing - Deployment Status
 
-**Status**: 🚀 **DEPLOYED VIA CI/CD**
+**Status**: ⚠️ **BLOCKED - Awaiting Cloudflare API Credentials**
 **Deployment Date**: 2026-01-04
-**Commit**: `d45fe56` - ci: enhance deployment workflow with D1 migrations and endpoint verification
+**Latest Commit**: `06a5222` - fix(ci): make MCP manifest validation optional
 **Pipeline**: https://github.com/chittyos/chittyconnect/actions
+
+**Blocker**: GitHub Actions deployment failing with "Unable to authenticate request [code: 10001]"
+- Repository secret `CLOUDFLARE_API_TOKEN` is either missing, invalid, or expired
+- Manual intervention required to update Cloudflare credentials in GitHub repository secrets
 
 ---
 
@@ -64,6 +68,51 @@ ci: enhance deployment workflow with D1 migrations and endpoint verification
 - D1 migration runner for staging/production
 - Discovery endpoint verification
 - Endpoint remediation documentation
+```
+
+**Commit 3** (`84b8dda`):
+```
+fix(ci): remove circular dependency on ChittyConnect credentials
+- ChittyConnect cannot fetch credentials from itself during deployment
+- Use Cloudflare secrets directly instead of ephemeral credentials
+```
+
+**Commit 4** (`f521732`):
+```
+fix(deps): remove blake3-wasm override causing dependency resolution failure
+- Removed unused blake3-wasm override
+- Regenerated package-lock.json with clean dependency tree
+```
+
+**Commit 5** (`06a5222`):
+```
+fix(ci): make MCP manifest validation optional to unblock deployment
+- MCP manifest files don't exist yet
+- Changed to warning-only validation
+```
+
+---
+
+## ⚠️ Deployment Blockers
+
+### 1. Cloudflare API Credentials Invalid
+
+**Issue**: GitHub Actions deployment fails with authentication error:
+```
+✘ [ERROR] A request to the Cloudflare API failed.
+  Unable to authenticate request [code: 10001]
+```
+
+**Resolution Required**:
+1. Generate new Cloudflare API token with Workers deployment permissions
+2. Update GitHub repository secret `CLOUDFLARE_API_TOKEN`
+3. Verify `CLOUDFLARE_ACCOUNT_ID` is correct: `0bc21e3a5a9de1a4cc843be9c3e98121`
+
+**Manual Deployment Alternative**:
+```bash
+# Deploy locally with valid Cloudflare credentials
+npx wrangler login
+npx wrangler deploy --env production
 ```
 
 ---
