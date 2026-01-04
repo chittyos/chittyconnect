@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://canon.chitty.cc/schemas/unstructured-data.schema.json",
+  "title": "Unstructured Data",
+  "type": "object",
+  "required": ["resource_id", "entity_type", "status", "classification"],
+  "properties": {
+    "resource_id": { "type": "string" },
+    "entity_type": { "type": "string", "enum": ["UnstructuredData"] },
+    "status": { "type": "string", "enum": ["Active", "Archived", "Deleted"] },
+    "classification": { "type": "string", "enum": ["Public", "Internal", "Confidential", "Restricted"] },
+    "retention_policy": { "type": "string" },
+    "location": { "type": "string" }
+  },
+  "additionalProperties": false
+}

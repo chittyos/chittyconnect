@@ -1,0 +1,47 @@
+name: Auto-Register (Notion)
+
+on:
+  workflow_dispatch:
+    inputs:
+      entity_path:
+        description: 'Path to authority entity JSON'
+        required: true
+        default: 'authority/services/chittyconnect.json'
+      apply:
+        description: 'Actually write to Notion (true/false)'
+        required: true
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  plan_and_apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Plan auto-register actions
+        run: |
+          node scripts/plan-auto-registry.js --entity "${{ github.event.inputs.entity_path }}" > plan.json
+          cat plan.json
+
+      - name: Apply to Notion (only if apply=true)
+        if: ${{ github.event.inputs.apply == 'true' }}
+        env:
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+        run: |
+          node scripts/notion-register.js --entity "${{ github.event.inputs.entity_path }}" --apply
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notion-auto-register-plan
+          path: plan.json
+

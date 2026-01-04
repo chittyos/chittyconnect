@@ -12,6 +12,11 @@ compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
 account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
+# R2 bucket for shared files
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "chittyos-files"
+
 # KV Namespaces
 [[kv_namespaces]]
 binding = "IDEMP_KV"
@@ -132,6 +137,18 @@ name = "chittyconnect-production"
 [[env.production.routes]]
 pattern = "connect.chitty.cc/*"
 zone_name = "chitty.cc"
+
+[[env.production.routes]]
+pattern = "mcp.chitty.cc/*"
+zone_name = "chitty.cc"
+
+[[env.production.routes]]
+pattern = "api.chitty.cc/*"
+zone_name = "chitty.cc"
+
+[[env.production.r2_buckets]]
+binding = "FILES"
+bucket_name = "chittyos-files"
 
 [[env.production.kv_namespaces]]
 binding = "IDEMP_KV"

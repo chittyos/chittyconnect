@@ -1,0 +1,14 @@
+{
+  "name": "sync",
+  "title": "ChittySync",
+  "version": "3.0.3",
+  "repo": "https://github.com/chittyos/chittysync",
+  "docs": "https://sync.chitty.cc/docs",
+  "npm": {
+    "packages": ["@chitty/sync@^3.0.0"]
+  },
+  "bin": ["chittysync"],
+  "install": {
+    "script": "https://git.chitty.cc/sync/install"
+  }
+}

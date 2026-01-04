@@ -1,0 +1,31 @@
+{
+  "domain_routing": {
+    "depends_on": ["primary_domain", "routes.api"],
+    "outputs": [
+      "DNS: {primary_domain}",
+      "Gateway: api.chitty.cc/{service_name} → {routes.api}",
+      "MCP: mcp.chitty.cc/{service_name} → {routes.mcp}"
+    ]
+  },
+  "git_resolver": {
+    "depends_on": ["github_repo", "service_name"],
+    "outputs": [
+      "git.chitty.cc/{service_name}",
+      "git.chitty.cc/{service_name}.json",
+      "git.chitty.cc/{service_name}/install"
+    ]
+  },
+  "docs_pages": {
+    "depends_on": ["routes.docs"],
+    "outputs": [
+      "get.chitty.cc/service/{service_name}"
+    ]
+  },
+  "monitoring": {
+    "depends_on": ["routes.health"],
+    "outputs": [
+      "Health checks enabled"
+    ]
+  }
+}
+

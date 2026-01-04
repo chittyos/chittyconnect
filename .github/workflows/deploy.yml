@@ -30,7 +30,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${API_KEY:-}" ]; then
-            echo "Missing CHITTYCONNECT_API_KEY" >&2
+            echo "❌ CHITTYCONNECT_API_KEY is not set in repository secrets." >&2
+            echo "If ChittyAuth provisions this dynamically, ensure that job runs earlier and exports API_KEY via GITHUB_ENV or sets this secret." >&2
             exit 1
           fi
           # Fetch ephemeral creds
@@ -106,11 +107,16 @@ jobs:
       - name: Validate OpenAPI (local schema)
         run: |
           echo "Validating OpenAPI schema..."
-          if [ ! -f openapi.json ]; then
-            echo "❌ Missing openapi.json"
+          SPEC="openapi.json"
+          if [ ! -f "$SPEC" ] && [ -f "public/openapi.json" ]; then
+            SPEC="public/openapi.json"
+            echo "Using fallback: $SPEC"
+          fi
+          if [ ! -f "$SPEC" ]; then
+            echo "❌ Missing openapi.json (root) and fallback public/openapi.json"
             exit 1
           fi
-          npx @redocly/cli lint openapi.json
+          npx @redocly/cli lint "$SPEC"
 
       ############################################################
       # 4. Validate MCP Manifest Schema

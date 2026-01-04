@@ -1,0 +1,24 @@
+# Canonical scopes across ChittyOS services
+# Reference these in onboarding and CI checks
+
+scopes:
+  chittyid:
+    - identity:mint
+    - identity:validate
+  chittyauth:
+    - access:provision
+    - access:audit
+  chittyverify:
+    - verify:check
+  chittycert:
+    - certify:issue
+  chittyconnect:
+    - connect:orchestrate
+    - access:broker
+
+review:
+  required_labels:
+    - security-approved
+    - docs-approved
+    - access-reviewed
+

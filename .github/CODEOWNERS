@@ -1,0 +1,18 @@
+# Require reviews from owners for sensitive areas
+
+# Workflows and CI
+.github/workflows/*   @chittyos/security @chittyos/platform
+
+# Secrets and scopes
+wrangler.toml         @chittyos/security @chittyos/platform
+etc/chittyos/*        @chittyos/security
+
+# Auth paths
+src/auth/*            @chittyos/security
+
+# Public API contracts
+public/openapi.json   @chittyos/platform @chittyos/docs
+
+# Docs
+docs/**               @chittyos/docs
+

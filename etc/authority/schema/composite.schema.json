@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://canon.chitty.cc/schemas/composite.schema.json",
+  "title": "ChittyOS Composite Entity",
+  "type": "object",
+  "required": ["service_name", "entity_type", "status", "owners", "components"],
+  "properties": {
+    "service_name": { "type": "string", "pattern": "^[a-z][a-z0-9]*$" },
+    "entity_type": { "type": "string", "enum": ["Composite"] },
+    "status": { "type": "string", "enum": ["Planned", "In Progress", "Needs Deployment", "Live", "Active", "Deprecated"] },
+    "owners": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "owner_entity": { "type": "string" },
+    "components": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "entity_type"],
+        "properties": {
+          "name": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["Service", "DataLayer", "Infrastructure"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "primary_domain": { "type": "string" },
+    "routes": { "type": "object" },
+    "aliases": { "type": "array", "items": { "type": "string" } },
+    "related_entities": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
+

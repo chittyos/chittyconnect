@@ -1,0 +1,10 @@
+{
+  "service_registry_db_id": "notion-db-id-services",
+  "domain_registry_db_id": "notion-db-id-domains",
+  "infra_registry_db_id": "notion-db-id-infra",
+  "version_control_registry_db_id": "notion-db-id-vcs",
+  "legal_registry_db_id": "notion-db-id-legal",
+  "evidence_index_db_id": "notion-db-id-evidence",
+  "case_registry_db_id": "notion-db-id-cases",
+  "notion_api_integration_secret_name": "NOTION_API_TOKEN"
+}

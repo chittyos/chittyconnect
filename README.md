@@ -4,6 +4,8 @@
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/chittyos/chittyconnect)
 ![GitHub Package Version](https://img.shields.io/github/package-json/v/chittyos/chittyconnect?filename=package.json&label=gpr)
 ![npm](https://img.shields.io/npm/v/%40chittyos%2Fchittyconnect)
+![npm downloads](https://img.shields.io/npm/dm/%40chittyos%2Fchittyconnect)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 The AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for the ChittyOS ecosystem.
 

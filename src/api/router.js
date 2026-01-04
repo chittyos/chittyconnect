@@ -22,6 +22,9 @@ import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
+import contextRoutes from "./routes/context.js";
+import filesRoutes from "./routes/files.js";
+import tasksRoutes from "./routes/tasks.js";
 import { authenticate } from "./middleware/auth.js";
 
 const api = new Hono();
@@ -111,6 +114,9 @@ api.route("/api/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);
+api.route("/api/context", contextRoutes);
+api.route("/api/context/tasks", tasksRoutes);
+api.route("/api/files", filesRoutes);
 api.route("/mcp", mcpRoutes);
 
 export { api };

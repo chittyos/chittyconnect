@@ -12,10 +12,10 @@
  */
 
 import { Hono } from "hono";
+import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { verifyWebhookSignature } from "./auth/webhook.js";
 import { queueConsumer } from "./handlers/queue.js";
 import { api } from "./api/router.js";
-import { mcp } from "./mcp/server.js";
 import {
   ChittyOSEcosystem,
   initializeDatabase,
@@ -30,6 +30,7 @@ const app = new Hono();
 // Initialize ChittyOS ecosystem on first request (lazy + graceful)
 let ecosystemInitialized = false;
 let intelligenceModules = null;
+let streamingManager = null;
 
 async function ensureEcosystemInitialized(env) {
   if (ecosystemInitialized) return intelligenceModules;
@@ -69,6 +70,13 @@ async function ensureEcosystemInitialized(env) {
     ]);
 
     intelligenceModules = { consciousness, memory, coordinator };
+
+    // Initialize streaming manager (unified SSE) once per environment
+    try {
+      streamingManager = streamingManager || new StreamingManager(env);
+    } catch (err) {
+      console.warn("[ChittyConnect] Streaming manager init failed:", err?.message || err);
+    }
 
     // Initialize ChittyConnect context (non-blocking, best-effort)
     // Don't await - let it run in background
@@ -113,6 +121,9 @@ app.use("*", async (c, next) => {
 
   // Attach ecosystem and intelligence modules to context for use in handlers
   c.set("ecosystem", new ChittyOSEcosystem(c.env));
+  if (streamingManager) {
+    c.set("streaming", streamingManager);
+  }
 
   if (modules) {
     c.set("consciousness", modules.consciousness);
@@ -143,6 +154,7 @@ app.get("/health", (c) => {
     endpoints: {
       api: "/api/*",
       mcp: "/mcp/*",
+      sse: "/sse",
       github: "/integrations/github/*",
       intelligence: "/intelligence/*",
       openapi: "/openapi.json",
@@ -211,14 +223,90 @@ app.get("/intelligence/health", async (c) => {
 });
 
 /**
+ * Discovery endpoint for automatic agent configuration
+ */
+import { discoveryRoutes } from "./api/routes/discovery.js";
+app.route("/.well-known", discoveryRoutes);
+
+/**
+ * Root endpoint: content negotiation (JSON for agents, redirect for browsers)
+ */
+app.get("/", async (c) => {
+  const accept = c.req.header('Accept') || '';
+  if (accept.includes('application/json')) {
+    return c.redirect('/.well-known/chitty.json');
+  }
+  return c.redirect('https://get.chitty.cc');
+});
+
+/**
  * Mount API router for custom GPT integration
  */
 app.route("/", api);
 
+// /mcp is already routed via api.router (api.route("/mcp", mcpRoutes))
+
 /**
- * Mount MCP server for Claude integration
+ * Unified MCP SSE endpoint
+ * GET /sse?sessionId=...
  */
-app.route("/mcp", mcp);
+app.get("/sse", async (c) => {
+  const sessionId = c.req.query("sessionId") || "anonymous";
+  const sm = c.get("streaming");
+  if (!sm) return c.text("streaming unavailable", 503);
+  try {
+    return await sm.createStream(sessionId, {});
+  } catch (err) {
+    console.error("[SSE] Error creating stream:", err?.message || err);
+    return c.text("failed to create stream", 500);
+  }
+});
+
+/**
+ * Service-specific MCP proxy
+ * /:service/mcp/* -> https://{service}.chitty.cc/mcp/*
+ */
+app.all("/:service/mcp/*", async (c) => {
+  const service = c.req.param("service");
+  const base = `https://${service}.chitty.cc`;
+  const path = c.req.path.replace(`/${service}`, "");
+  const url = base + path;
+  const init = {
+    method: c.req.method,
+    headers: c.req.header(),
+    body: ["GET", "HEAD"].includes(c.req.method) ? undefined : await c.req.arrayBuffer(),
+  };
+  try {
+    const resp = await fetch(url, init);
+    return new Response(resp.body, { status: resp.status, headers: resp.headers });
+  } catch (err) {
+    console.error(`[MCP proxy] ${service}:`, err?.message || err);
+    return c.json({ error: "proxy_failed", message: String(err?.message || err) }, 502);
+  }
+});
+
+/**
+ * Service-specific API proxy
+ * /:service/api/* -> https://{service}.chitty.cc/api/*
+ */
+app.all("/:service/api/*", async (c) => {
+  const service = c.req.param("service");
+  const base = `https://${service}.chitty.cc`;
+  const path = c.req.path.replace(`/${service}`, "");
+  const url = base + path;
+  const init = {
+    method: c.req.method,
+    headers: c.req.header(),
+    body: ["GET", "HEAD"].includes(c.req.method) ? undefined : await c.req.arrayBuffer(),
+  };
+  try {
+    const resp = await fetch(url, init);
+    return new Response(resp.body, { status: resp.status, headers: resp.headers });
+  } catch (err) {
+    console.error(`[API proxy] ${service}:`, err?.message || err);
+    return c.json({ error: "proxy_failed", message: String(err?.message || err) }, 502);
+  }
+});
 
 /**
  * GitHub webhook endpoint

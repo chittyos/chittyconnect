@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://canon.chitty.cc/schemas/infrastructure.schema.json",
+  "title": "Infrastructure Resource",
+  "type": "object",
+  "required": ["resource_id", "entity_type", "provider", "resource_type", "status"],
+  "properties": {
+    "resource_id": { "type": "string" },
+    "entity_type": { "type": "string", "enum": ["Infrastructure"] },
+    "provider": { "type": "string" },
+    "resource_type": { "type": "string" },
+    "status": { "type": "string", "enum": ["Planned", "Active", "Deprecated"] },
+    "region": { "type": "string" },
+    "account": { "type": "string" },
+    "tags": { "type": "object" }
+  },
+  "additionalProperties": false
+}

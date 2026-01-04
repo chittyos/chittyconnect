@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://canon.chitty.cc/schemas/service.schema.json",
+  "title": "ChittyOS Service",
+  "type": "object",
+  "required": [
+    "service_name",
+    "entity_type",
+    "category",
+    "status",
+    "owners",
+    "github_repo",
+    "primary_domain"
+  ],
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "enum": ["Service"]
+    },
+    "service_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*$"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Foundation",
+        "Core",
+        "Data",
+        "Platform",
+        "Domain",
+        "Sync",
+        "Application"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Planned",
+        "In Progress",
+        "Needs Deployment",
+        "Live",
+        "Active",
+        "Deprecated"
+      ]
+    },
+    "owners": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "github_repo": {
+      "type": "string",
+      "format": "uri"
+    },
+    "primary_domain": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.chitty\\.cc$"
+    },
+    "owner_entity": {
+      "type": "string",
+      "description": "Legal owner of the domain/service (entity name)"
+    },
+    "ontology": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "scopes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "version": { "type": "string" },
+    "api_versions": { "type": "array", "items": { "type": "string" } },
+    "deprecation_policy": { "type": "string" },
+    "classification_status": { "type": "string", "enum": ["Final", "PendingDecision"] },
+    "aliases": { "type": "array", "items": { "type": "string" } },
+    "related_services": { "type": "array", "items": { "type": "string" } },
+    "overlaps_with": { "type": "array", "items": { "type": "string" } },
+    "license": { "type": "string" },
+    "exposes": {
+      "type": "object",
+      "properties": {
+        "api": { "type": "boolean" },
+        "mcp": { "type": "boolean" },
+        "openapi": { "type": "boolean" },
+        "docs": { "type": "boolean" },
+        "health": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "routes": {
+      "type": "object",
+      "properties": {
+        "root": { "type": "string", "format": "uri" },
+        "api": { "type": "string", "format": "uri" },
+        "mcp": { "type": "string", "format": "uri" },
+        "docs": { "type": "string", "format": "uri" },
+        "health": { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": false
+    },
+    "charter_url": { "type": "string", "format": "uri" },
+    "schema_topics": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

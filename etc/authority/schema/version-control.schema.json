@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://canon.chitty.cc/schemas/version-control.schema.json",
+  "title": "Version Control Repository",
+  "type": "object",
+  "required": ["repo_url", "entity_type", "provider", "default_branch", "visibility"],
+  "properties": {
+    "repo_url": { "type": "string", "format": "uri" },
+    "entity_type": { "type": "string", "enum": ["VersionControl"] },
+    "provider": { "type": "string" },
+    "default_branch": { "type": "string" },
+    "visibility": { "type": "string", "enum": ["public", "private", "internal"] },
+    "owners": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "license": { "type": "string" }
+  },
+  "additionalProperties": false
+}

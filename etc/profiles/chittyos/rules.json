@@ -1,0 +1,6 @@
+{
+  "rules": [
+    { "if": { "always": true }, "then": { "pattern": { "routes.api": ".*://[a-z0-9-]+\\.chitty\\.cc/api$" } }, "message": "API route should follow {name}.chitty.cc/api" },
+    { "if": { "always": true }, "then": { "pattern": { "primary_domain": "^[a-z0-9-]+\\.chitty\\.cc$" } }, "message": "Primary domain must be an *.chitty.cc subdomain" }
+  ]
+}

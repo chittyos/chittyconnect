@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "defaults": {
+    "allow": false,
+    "delete": false
+  },
+  "rules": [
+    {
+      "match": { "entity_type": "Service", "category": "Foundation", "field": "service_name" },
+      "immutable": true,
+      "reason": "Foundation identity is immutable"
+    },
+    {
+      "match": { "entity_type": "Service", "category": "Foundation", "field": "category" },
+      "immutable": true,
+      "reason": "Governance classification is immutable"
+    },
+    {
+      "match": { "entity_type": "Service", "category": "Foundation", "field": "github_repo" },
+      "allow": ["ChittyRegister"],
+      "requires_labels": ["security-approved"],
+      "reason": "Repo changes must be approved and come via ChittyRegister"
+    },
+    {
+      "match": { "entity_type": "Evidence", "field": "submitted_date" },
+      "immutable": true,
+      "reason": "Evidence timestamps are write-once"
+    },
+    {
+      "match": { "entity_type": "Evidence", "field": "evidence_id" },
+      "immutable": true,
+      "reason": "Evidence ID is immutable"
+    },
+    {
+      "match": { "entity_type": "Evidence", "field": "chain_hash" },
+      "immutable": true,
+      "reason": "Chain provenance is immutable"
+    },
+    {
+      "match": { "entity_type": "Service", "field": "schema_topics" },
+      "allow": ["ChittySchema"],
+      "reason": "Schema changes originate from ChittySchema"
+    },
+    {
+      "match": { "entity_type": "Service" },
+      "disallow_sources": ["GoogleSheets"],
+      "operations": ["delete"],
+      "reason": "Sheets cannot delete services; use deprecation workflow"
+    },
+    {
+      "match": { "entity_type": "Service", "category": "Foundation" },
+      "disallow_sources": ["GoogleSheets"],
+      "reason": "Sheets are read-only for Foundation services"
+    }
+  ]
+}
+

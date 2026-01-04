@@ -1,0 +1,14 @@
+{
+  "name": "<service-short-name>",
+  "title": "<Service Title>",
+  "version": "<semver>",
+  "repo": "https://github.com/<owner>/<repo>",
+  "docs": "https://<service>.chitty.cc/docs",
+  "npm": {
+    "packages": ["<package>@<version>"]
+  },
+  "bin": ["<binary>"],
+  "install": {
+    "script": "https://git.chitty.cc/<service>/install"
+  }
+}

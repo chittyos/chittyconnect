@@ -8,7 +8,14 @@
  * 4. Execute automations
  */
 
-import { normalizeGitHubEvent } from "../mcp/normalize.js";
+// Temporary inline normalization until MCP normalize module is wired
+const normalizeGitHubEvent = ({ delivery, event, payload, installationId, tenantId }) => ({
+  type: `github.${event}`,
+  delivery,
+  installationId,
+  tenantId,
+  payload,
+});
 import { getCachedInstallationToken } from "../auth/github.js";
 import { createComplianceCheck } from "../github/checks.js";
 import { autoLabelPullRequest } from "../github/labels.js";

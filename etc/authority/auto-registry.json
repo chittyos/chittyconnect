@@ -1,0 +1,18 @@
+{
+  "Service": {
+    "primary": ["ServiceRegistry"],
+    "related": [
+      { "when": { "statusIn": ["Live", "Active"] }, "create": ["DomainRegistry"] },
+      { "when": { "github_repo": "*" }, "create": ["VersionControlRegistry"] },
+      { "when": { "deployed": true }, "create": ["InfrastructureRegistry"] },
+      { "when": { "owner_entity": "*" }, "create": ["LegalRegistryLink"] }
+    ]
+  },
+  "Evidence": {
+    "primary": ["EvidenceIndex"],
+    "related": [
+      { "when": { "case_id": "*" }, "create": ["CaseRegistryLink"] },
+      { "when": { "always": true }, "create": ["LedgerRecord", "ChainProvenance"] }
+    ]
+  }
+}

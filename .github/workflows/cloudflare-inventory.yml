@@ -1,0 +1,43 @@
+name: Cloudflare Inventory
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Collect inventory
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/cloudflare-inventory.js --out cloudflare-inventory.json
+
+      - name: Prepare registry summary
+        run: |
+          node scripts/prepare-registry.js --in cloudflare-inventory.json --out registry.json
+
+      - name: Verify expected Workers exist (non-blocking)
+        continue-on-error: true
+        run: |
+          node scripts/verify-cloudflare-scripts.js --inv cloudflare-inventory.json --wrangler wrangler.toml
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-inventory
+          path: |
+            cloudflare-inventory.json
+            registry.json

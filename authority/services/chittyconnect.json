@@ -1,0 +1,20 @@
+{
+  "service_name": "chittyconnect",
+  "entity_type": "Service",
+  "category": "Core",
+  "status": "Live",
+  "owners": ["@chittyos/platform"],
+  "github_repo": "https://github.com/chittyos/chittyconnect",
+  "primary_domain": "connect.chitty.cc",
+  "owner_entity": "ChittyCorp LLC",
+  "ontology": ["connect:orchestrate", "access:broker"],
+  "scopes": ["connect:orchestrate", "access:broker"],
+  "exposes": { "api": true, "mcp": true, "openapi": true, "docs": true, "health": true },
+  "routes": {
+    "root": "https://connect.chitty.cc/",
+    "api": "https://connect.chitty.cc/api",
+    "mcp": "https://connect.chitty.cc/mcp",
+    "docs": "https://connect.chitty.cc/openapi.json",
+    "health": "https://connect.chitty.cc/health"
+  }
+}

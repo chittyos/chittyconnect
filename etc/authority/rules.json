@@ -1,0 +1,10 @@
+{
+  "rules": [
+    { "if": { "category": "Foundation", "status": "Live" }, "then": { "required": ["charter_url"] }, "message": "Foundation services must provide CHARTER.md (charter_url) when Live" },
+    { "if": { "category": "Foundation", "status": "Active" }, "then": { "required": ["charter_url"] }, "message": "Foundation services must provide CHARTER.md (charter_url) when Active" },
+    { "if": { "status": "Live" }, "then": { "required": ["routes.health"] }, "message": "Live services must expose a health endpoint" },
+    { "if": { "exposes.openapi": true }, "then": { "required": ["routes.docs"] }, "message": "If exposes.openapi=true, routes.docs (OpenAPI/Docs) is required or local public/openapi.json fallback" },
+    { "if": { "exposes.mcp": true }, "then": { "required": ["routes.mcp"] }, "message": "If exposes.mcp=true, routes.mcp is required" },
+    { "if": { "always": true }, "then": { "required": ["owner_entity"] }, "message": "owner_entity required for domain ownership (fallback allowed via config)" }
+  ]
+}

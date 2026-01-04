@@ -16,6 +16,7 @@
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.{js,ts,json}'",
+    "format:check": "prettier -c 'src/**/*.{js,ts,json}'",
     "mcp:start": "node mcp-server.js",
     "mcp:test": "DEBUG=true node mcp-server.js",
     "mcp:setup": "./scripts/setup-mcp.sh",
@@ -50,11 +51,22 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
     "@cloudflare/workers-types": "^4.20240208.0",
     "eslint": "^8.56.0",
     "prettier": "^3.2.0",
     "vitest": "^4.0.8",
-    "wrangler": "^4.46.0"
+    "wrangler": "^4.56.0"
+  },
+  "overrides": {
+    "blake3-wasm": "3.0.0"
+  },
+  "lint-staged": {
+    "src/**/*.{js,ts,json}": [
+      "prettier --write",
+      "eslint --fix"
+    ]
   },
   "engines": {
     "node": ">=18.0.0"

@@ -1,0 +1,86 @@
+name: Governance Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure baseline docs exist
+        run: |
+          set -e
+          test -f docs/onboarding/README.md || { echo "Missing docs/onboarding/README.md"; exit 1; }
+          test -f docs/governance/ACCESS_CONTROL.md || { echo "Missing docs/governance/ACCESS_CONTROL.md"; exit 1; }
+          test -f docs/governance/SECRETS_MODEL.md || { echo "Missing docs/governance/SECRETS_MODEL.md"; exit 1; }
+          test -f etc/chittyos/scopes.yml || { echo "Missing etc/chittyos/scopes.yml"; exit 1; }
+          test -f etc/authority/schema/service.schema.json || { echo "Missing etc/authority/schema/service.schema.json"; exit 1; }
+          test -f etc/authority/rules.json || { echo "Missing etc/authority/rules.json"; exit 1; }
+
+      - name: Detect critical changes
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -e
+          git diff --name-only "$BASE" "$HEAD" > changed.txt
+          echo "Changed files:"; cat changed.txt
+          critical=$(grep -E '^(\.github/workflows/|wrangler\.toml|etc/chittyos/|src/auth/|public/openapi\.json)' changed.txt || true)
+          if [ -n "$critical" ]; then
+            echo "critical=true" >> "$GITHUB_OUTPUT"
+            echo "critical_files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$critical" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "critical=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify required labels for critical changes
+        if: steps.changes.outputs.critical == 'true'
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -e
+          labels=$(jq -r '.pull_request.labels[].name' "$EVENT_PATH" | tr '\n' ' ')
+          echo "PR labels: $labels"
+          missing=0
+          need=(security-approved docs-approved access-reviewed)
+          for l in "${need[@]}"; do
+            echo "$labels" | grep -qw "$l" || { echo "Missing required label: $l"; missing=1; }
+          done
+          if [ $missing -ne 0 ]; then
+            echo "Add required labels before merge." >&2
+            exit 1
+          fi
+      - name: Validate Authority service entries against schema (per entity_type)
+        run: |
+          set -e
+          if ls authority/services/*.json >/dev/null 2>&1; then
+            for f in authority/services/*.json; do
+              et=$(jq -r '.entity_type // "Service"' "$f")
+              case "$et" in
+                Service) schema=etc/authority/schema/service.schema.json ;;
+                DataLayer) schema=etc/authority/schema/data-layer.schema.json ;;
+                Composite) schema=etc/authority/schema/composite.schema.json ;;
+                *) echo "Unknown or unsupported entity_type '$et' in $f"; exit 1 ;;
+              esac
+              echo "Validating $f against $schema"
+              npx -y ajv validate -s "$schema" -d "$f"
+            done
+          else
+            echo "No service entries to validate"
+          fi
+
+      - name: Check Authority conditional rules
+        run: |
+          node scripts/check-authority-rules.js || (echo "Authority rules check failed" && exit 1)

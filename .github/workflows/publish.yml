@@ -15,6 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create GitHub Release from draft
+        uses: release-drafter/release-drafter@v6
+        with:
+          publish: true
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:

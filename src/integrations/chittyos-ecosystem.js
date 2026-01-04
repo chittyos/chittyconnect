@@ -82,14 +82,18 @@ export class ChittyOSEcosystem {
       scopes: ["read", "write", "admin"],
     });
 
-    // 2d. Register with ChittyRegistry
-    await this.registerService({
-      chittyid,
-      name: contextName,
-      type: "integration",
-      capabilities: ["mcp", "rest-api", "github-app"],
-      health: `https://connect.chitty.cc/health`,
-    });
+    // 2d. Register with ChittyRegistry (opt-in via env flag)
+    if (this.env?.REGISTRY_AUTO_REGISTER === 'true') {
+      await this.registerService({
+        chittyid,
+        name: contextName,
+        type: "integration",
+        capabilities: ["mcp", "rest-api", "github-app"],
+        health: `https://connect.chitty.cc/health`,
+      });
+    } else {
+      console.log('[ChittyRegistry] Auto-register skipped (set REGISTRY_AUTO_REGISTER=true to enable)');
+    }
 
     // 2e. Verify context with ChittyVerify
     const verification = await this.verifyContext(chittyid, {
