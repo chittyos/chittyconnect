@@ -46,5 +46,13 @@ temp/
 build/
 out/
 
+# Security - Private keys & secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*private-key*
+*privatekey*
+
 # Project-specific
 -/
