@@ -43,7 +43,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
     "hono": "^4.0.0",
     "jose": "^5.2.0",
