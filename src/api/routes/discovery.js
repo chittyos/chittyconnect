@@ -31,16 +31,21 @@ discoveryRoutes.get('/chitty.json', async (c) => {
     const ecosystem = new ChittyOSEcosystem(env);
 
     // Discover services from ChittyRegistry (with ecosystem's built-in caching)
-    let services = [];
+    let servicesData = { services: [] };
     try {
-      services = await ecosystem.discoverServices();
+      servicesData = await ecosystem.discoverServices();
     } catch (error) {
       console.warn('[Discovery] Failed to fetch services from ChittyRegistry:', error.message);
       // Continue with empty services array - not critical for discovery
     }
 
+    // Extract services array from response (handles both array and object formats)
+    const servicesArray = Array.isArray(servicesData)
+      ? servicesData
+      : (servicesData?.services || []);
+
     // Map services to discovery format
-    const servicesFormatted = services.map(service => ({
+    const servicesFormatted = servicesArray.map(service => ({
       name: service.name,
       url: service.url || `https://${service.name}.chitty.cc`,
       mcp: `https://mcp.chitty.cc/${service.name}/mcp`,
