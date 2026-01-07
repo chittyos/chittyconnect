@@ -50,7 +50,7 @@ index_name = "context-embeddings"
 [[durable_objects.bindings]]
 name = "MCP_SESSIONS"
 class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect-production"
+script_name = "chittyconnect"
 
 # Durable Objects migrations
 [[migrations]]
@@ -132,19 +132,21 @@ CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Environment variables for production
 [env.production]
-name = "chittyconnect-production"
+name = "chittyconnect"
 
 [[env.production.routes]]
 pattern = "connect.chitty.cc/*"
 zone_name = "chitty.cc"
 
-[[env.production.routes]]
-pattern = "mcp.chitty.cc/*"
-zone_name = "chitty.cc"
-
-[[env.production.routes]]
-pattern = "api.chitty.cc/*"
-zone_name = "chitty.cc"
+# Note: mcp.chitty.cc/* and api.chitty.cc/* routes are currently assigned to
+# separate workers (chittymcp-production, chittyapi-production).
+# To consolidate, delete those workers first, then uncomment:
+# [[env.production.routes]]
+# pattern = "mcp.chitty.cc/*"
+# zone_name = "chitty.cc"
+# [[env.production.routes]]
+# pattern = "api.chitty.cc/*"
+# zone_name = "chitty.cc"
 
 [[env.production.r2_buckets]]
 binding = "FILES"
@@ -179,7 +181,7 @@ index_name = "context-embeddings"
 [[env.production.durable_objects.bindings]]
 name = "MCP_SESSIONS"
 class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect-production"
+script_name = "chittyconnect"
 
 [[env.production.d1_databases]]
 binding = "DB"
