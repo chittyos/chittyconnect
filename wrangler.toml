@@ -245,6 +245,12 @@ CREDENTIAL_FAILOVER_ENABLED = "true"
 [ai]
 binding = "AI"
 
+# Scheduled triggers for background tasks
+[triggers]
+crons = [
+  "0 * * * *"  # Hourly: Sync 1Password Events to ChittyChronicle
+]
+
 # Analytics and logging
 [observability]
 enabled = true

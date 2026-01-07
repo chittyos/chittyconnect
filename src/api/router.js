@@ -71,6 +71,7 @@ api.get("/api/health", (c) => {
       thirdparty: "/api/thirdparty",
       credentials: "/api/credentials",
       intelligence: "/api/intelligence",
+      githubActions: "/api/github-actions",
       mcp: "/mcp",
     },
   });

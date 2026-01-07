@@ -1,0 +1,96 @@
+name: 'ChittyConnect Credentials'
+description: 'Fetch credentials from ChittyConnect using GitHub OIDC - zero secrets required'
+author: 'ChittyOS'
+
+branding:
+  icon: 'key'
+  color: 'purple'
+
+inputs:
+  credentials:
+    description: 'Comma-separated list of credentials to fetch (e.g., CLOUDFLARE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID)'
+    required: true
+  chittyconnect-url:
+    description: 'ChittyConnect URL'
+    required: false
+    default: 'https://connect.chitty.cc'
+
+outputs:
+  CLOUDFLARE_API_TOKEN:
+    description: 'Cloudflare API Token'
+    value: ${{ steps.fetch.outputs.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID:
+    description: 'Cloudflare Account ID'
+    value: ${{ steps.fetch.outputs.CLOUDFLARE_ACCOUNT_ID }}
+  NEON_DATABASE_URL:
+    description: 'Neon Database URL'
+    value: ${{ steps.fetch.outputs.NEON_DATABASE_URL }}
+  GITHUB_APP_ID:
+    description: 'GitHub App ID'
+    value: ${{ steps.fetch.outputs.GITHUB_APP_ID }}
+  GITHUB_APP_PRIVATE_KEY:
+    description: 'GitHub App Private Key'
+    value: ${{ steps.fetch.outputs.GITHUB_APP_PRIVATE_KEY }}
+  OPENAI_API_KEY:
+    description: 'OpenAI API Key'
+    value: ${{ steps.fetch.outputs.OPENAI_API_KEY }}
+  NOTION_TOKEN:
+    description: 'Notion Token'
+    value: ${{ steps.fetch.outputs.NOTION_TOKEN }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get OIDC Token
+      id: oidc
+      shell: bash
+      run: |
+        # Request OIDC token from GitHub with ChittyConnect as audience
+        OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{ inputs.chittyconnect-url }}" \
+          | jq -r '.value')
+
+        if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" == "null" ]; then
+          echo "::error::Failed to get OIDC token from GitHub"
+          exit 1
+        fi
+
+        # Mask the token in logs
+        echo "::add-mask::$OIDC_TOKEN"
+        echo "token=$OIDC_TOKEN" >> $GITHUB_OUTPUT
+
+    - name: Fetch Credentials from ChittyConnect
+      id: fetch
+      shell: bash
+      run: |
+        # Convert comma-separated credentials to JSON array
+        CREDS_JSON=$(echo '${{ inputs.credentials }}' | tr ',' '\n' | jq -R . | jq -s .)
+
+        # Call ChittyConnect
+        RESPONSE=$(curl -sS -X POST "${{ inputs.chittyconnect-url }}/api/github-actions/credentials" \
+          -H "Authorization: Bearer ${{ steps.oidc.outputs.token }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"credentials\": $CREDS_JSON}")
+
+        # Check for success
+        SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+
+        if [ "$SUCCESS" != "true" ]; then
+          ERROR=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown error"')
+          echo "::error::ChittyConnect error: $ERROR"
+          exit 1
+        fi
+
+        # Extract and output each credential
+        IFS=',' read -ra CRED_ARRAY <<< "${{ inputs.credentials }}"
+        for CRED in "${CRED_ARRAY[@]}"; do
+          VALUE=$(echo "$RESPONSE" | jq -r ".credentials.$CRED // empty")
+          if [ -n "$VALUE" ]; then
+            # Mask sensitive values
+            echo "::add-mask::$VALUE"
+            echo "$CRED=$VALUE" >> $GITHUB_OUTPUT
+          fi
+        done
+
+        # Log metadata (non-sensitive)
+        echo "::notice::Credentials fetched from ChittyConnect for $(echo "$RESPONSE" | jq -r '.metadata.repository')"

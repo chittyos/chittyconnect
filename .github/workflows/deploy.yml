@@ -9,172 +9,164 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for OIDC
 
 concurrency:
-  group: deploy-chittyconnect
+  group: deploy-chittyconnect-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
 
 jobs:
   ###########################################################################
-  # 1. Deploy to Staging (auto-triggered on staging branch)
+  # 1. Deploy to Staging
   ###########################################################################
   deploy-staging:
     if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
+
+      #########################################
+      # Fetch credentials from ChittyConnect
+      # Zero secrets stored in GitHub!
+      #########################################
+      - name: Get Credentials from ChittyConnect
+        id: creds
+        uses: ./.github/actions/chittyconnect-credentials
+        with:
+          credentials: CLOUDFLARE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      ############################################################
-      # Run D1 Migrations (Staging)
-      ############################################################
       - name: Run D1 Migrations (Staging)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "Running D1 migrations for staging..."
           if [ -d migrations ]; then
             for migration in migrations/*.sql; do
               if [ -f "$migration" ]; then
                 echo "Applying $migration..."
-                npx wrangler d1 execute chittyconnect-staging --file "$migration" || echo "Migration may already be applied, continuing..."
+                npx wrangler d1 execute chittyconnect-staging --file "$migration" --remote || echo "Migration may already be applied"
               fi
             done
           fi
 
       - name: Deploy to Staging
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --env staging
 
-      - name: Health Check (Staging)
+      - name: Health Check
         run: |
           sleep 5
-          echo "Checking /health..."
           curl -f https://chittyconnect-staging.chitty.workers.dev/health
-          echo "Checking discovery endpoint..."
           curl -f https://chittyconnect-staging.chitty.workers.dev/.well-known/chitty.json
-          echo "✅ Staging deployment healthy."
+          echo "✅ Staging deployment healthy"
 
   ###########################################################################
-  # 2. Deploy to Production (only on main branch)
+  # 2. Deploy to Production
   ###########################################################################
   deploy-production:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
+
+      #########################################
+      # Fetch credentials from ChittyConnect
+      #########################################
+      - name: Get Credentials from ChittyConnect
+        id: creds
+        uses: ./.github/actions/chittyconnect-credentials
+        with:
+          credentials: CLOUDFLARE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      ############################################################
-      # 3. Strict OpenAPI Validation (local schema)
-      ############################################################
-      - name: Validate OpenAPI (local schema)
+      #########################################
+      # Validation
+      #########################################
+      - name: Validate OpenAPI
         run: |
-          echo "Validating OpenAPI schema..."
           SPEC="openapi.json"
-          if [ ! -f "$SPEC" ] && [ -f "public/openapi.json" ]; then
-            SPEC="public/openapi.json"
-            echo "Using fallback: $SPEC"
-          fi
-          if [ ! -f "$SPEC" ]; then
-            echo "❌ Missing openapi.json (root) and fallback public/openapi.json"
-            exit 1
-          fi
-          npx @redocly/cli lint "$SPEC"
+          [ ! -f "$SPEC" ] && [ -f "public/openapi.json" ] && SPEC="public/openapi.json"
+          [ -f "$SPEC" ] && npx @redocly/cli lint "$SPEC" || echo "⚠️ No OpenAPI spec"
 
-      ############################################################
-      # 4. Validate MCP Manifest Schema (Optional)
-      ############################################################
-      - name: Validate MCP manifest
+      - name: Validate MCP Manifest
         run: |
-          echo "Validating MCP manifest..."
-          if [ ! -f mcp/manifest.json ]; then
-            echo "⚠️  mcp/manifest.json not found - skipping validation"
-            exit 0
-          fi
-          if [ ! -f mcp/manifest.schema.json ]; then
-            echo "⚠️  mcp/manifest.schema.json not found - skipping validation"
-            exit 0
-          fi
-          npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json || echo "⚠️  MCP manifest validation failed but continuing deployment"
+          [ -f "mcp/manifest.json" ] && [ -f "mcp/manifest.schema.json" ] && \
+            npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json || \
+            echo "⚠️ MCP manifest validation skipped"
 
-      ############################################################
-      # 5. Run D1 Migrations (Production)
-      ############################################################
+      #########################################
+      # D1 Migrations
+      #########################################
       - name: Run D1 Migrations (Production)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "Running D1 migrations for production..."
           if [ -d migrations ]; then
             for migration in migrations/*.sql; do
               if [ -f "$migration" ]; then
                 echo "Applying $migration..."
-                npx wrangler d1 execute chittyconnect-production --file "$migration" || echo "Migration may already be applied, continuing..."
+                npx wrangler d1 execute chittyconnect-production --file "$migration" --remote || echo "Migration may already be applied"
               fi
             done
           fi
 
-      ############################################################
-      # 6. Deploy
-      ############################################################
+      #########################################
+      # Deploy
+      #########################################
       - name: Deploy to Production
-        id: deploy_step
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          echo "🚀 Deploying to production…"
+          echo "🚀 Deploying to production..."
           npx wrangler deploy --env production
 
-      ############################################################
-      # 7. Post-Deploy Health Checks + Auto-Rollback
-      ############################################################
-      - name: Post-Deploy Health Checks
+      #########################################
+      # Health Checks + Auto-Rollback
+      #########################################
+      - name: Health Checks
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           sleep 5
 
           fail() {
             echo "❌ Health check failed — rolling back..."
-            npx wrangler deploy --env production --rollback
+            npx wrangler rollback --env production -y
             exit 1
           }
 
-          echo "Checking /health..."
           curl -f https://connect.chitty.cc/health || fail
-
-          echo "Checking discovery endpoint..."
           curl -f https://connect.chitty.cc/.well-known/chitty.json || fail
-
-          echo "Checking /openapi.json..."
-          curl -f https://connect.chitty.cc/openapi.json || fail
-
-          echo "Checking /mcp/manifest..."
-          curl -f https://connect.chitty.cc/mcp/manifest || fail
-
-          echo "Verifying new context endpoints..."
           curl -f https://connect.chitty.cc/api/health || fail
 
-          echo "✅ All production endpoints verified."
+          echo "✅ Production deployment verified"

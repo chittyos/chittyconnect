@@ -1,0 +1,79 @@
+# ChittyConnect 1Password Environment Configuration
+# Used by Claude Code hooks to validate secret accessibility
+#
+# Format based on: https://github.com/1Password/cursor-hooks
+
+[project]
+name = "chittyconnect"
+description = "ChittyOS connection hub and credential management"
+
+# Cloudflare deployment credentials
+[[secrets]]
+ref = "op://Private/gxyne23yqngvk2nzjwl62uakx4/ChittyCorp LLC/account_id"
+description = "Cloudflare Account ID for ChittyCorp"
+required_for = ["deploy", "wrangler"]
+
+[[secrets]]
+ref = "op://Private/gxyne23yqngvk2nzjwl62uakx4/Global API Key/token"
+description = "Cloudflare Global API Token"
+required_for = ["deploy", "wrangler", "d1"]
+
+# 1Password Connect (for runtime credential access)
+[[secrets]]
+ref = "op://ChittyOS/chittyconnect/onepassword_connect_token"
+description = "1Password Connect API token"
+required_for = ["runtime"]
+
+# Service tokens
+[[secrets]]
+ref = "op://ChittyOS/chittyconnect/service_token"
+description = "ChittyConnect inter-service auth token"
+required_for = ["runtime", "test"]
+
+# Database
+[[secrets]]
+ref = "op://ChittyOS/neon/database_url"
+description = "Neon PostgreSQL connection string"
+required_for = ["runtime", "migrate"]
+
+# GitHub App
+[[secrets]]
+ref = "op://ChittyOS/github-app/private_key"
+description = "GitHub App private key (PEM)"
+required_for = ["runtime"]
+
+[[secrets]]
+ref = "op://ChittyOS/github-app/app_id"
+description = "GitHub App ID"
+required_for = ["runtime"]
+
+# External integrations
+[[secrets]]
+ref = "op://ChittyOS/openai/api_key"
+description = "OpenAI API key for AI features"
+required_for = ["runtime"]
+
+[[secrets]]
+ref = "op://ChittyOS/notion/api_key"
+description = "Notion integration token"
+required_for = ["runtime"]
+
+# Validation settings
+[validation]
+# Fail open if 1Password is unavailable
+fail_open = true
+
+# Only validate secrets for these command patterns
+validate_patterns = [
+  "op run",
+  "wrangler deploy",
+  "wrangler d1",
+  "npm run deploy"
+]
+
+# Skip validation for these patterns
+skip_patterns = [
+  "npm run lint",
+  "npm run typecheck",
+  "npm test"
+]

@@ -1,0 +1,97 @@
+name: PR Security Checks
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ###########################################################################
+  # Enforce Signed Commits
+  ###########################################################################
+  signed-commits:
+    name: Verify Signed Commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for signed commits
+        uses: 1password/check-signed-commits-action@v1
+        with:
+          comment: |
+            ## ⚠️ Unsigned Commits Detected
+
+            This PR contains unsigned commits. ChittyOS requires all commits to be cryptographically signed.
+
+            ### How to fix this:
+
+            **Option 1: Sign with SSH key (Recommended)**
+            ```bash
+            # Configure Git to use SSH signing
+            git config --global gpg.format ssh
+            git config --global user.signingkey ~/.ssh/id_ed25519.pub
+            git config --global commit.gpgsign true
+
+            # Re-sign your commits
+            git rebase --exec 'git commit --amend --no-edit -S' HEAD~N
+            git push --force-with-lease
+            ```
+
+            **Option 2: Sign with 1Password**
+            1. Enable "Sign Git commits" in 1Password settings
+            2. Configure Git: `git config --global gpg.program /path/to/op-ssh-sign`
+
+            **Option 3: Sign with GPG**
+            ```bash
+            git config --global commit.gpgsign true
+            git config --global user.signingkey YOUR_KEY_ID
+            ```
+
+            📚 [1Password SSH Signing Guide](https://developer.1password.com/docs/ssh/git-commit-signing/)
+
+  ###########################################################################
+  # Security Scanning
+  ###########################################################################
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check for secrets in code
+        run: |
+          echo "Scanning for potential secrets..."
+
+          # Patterns that should NOT be in code
+          PATTERNS=(
+            'op://[^"'\''[:space:]]+'  # 1Password refs (ok in workflows, not in src)
+            'AKIA[0-9A-Z]{16}'          # AWS Access Key
+            'sk-[a-zA-Z0-9]{48}'        # OpenAI API Key
+            'ghp_[a-zA-Z0-9]{36}'       # GitHub PAT
+            'gho_[a-zA-Z0-9]{36}'       # GitHub OAuth
+            'github_pat_[a-zA-Z0-9_]+'  # GitHub Fine-grained PAT
+          )
+
+          FOUND=0
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -rE "$pattern" src/ --include="*.js" --include="*.ts" 2>/dev/null; then
+              echo "⚠️ Potential secret pattern found: $pattern"
+              FOUND=1
+            fi
+          done
+
+          if [ $FOUND -eq 1 ]; then
+            echo "❌ Potential secrets detected in source code!"
+            echo "Please use 1Password secret references or environment variables instead."
+            exit 1
+          fi
+
+          echo "✅ No secrets detected in source code."
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          npm audit --audit-level=high || echo "⚠️ Vulnerabilities found - review required"

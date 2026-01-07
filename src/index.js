@@ -156,6 +156,7 @@ app.get("/health", (c) => {
       mcp: "/mcp/*",
       sse: "/sse",
       github: "/integrations/github/*",
+      githubActions: "/api/github-actions/*",
       intelligence: "/intelligence/*",
       openapi: "/openapi.json",
     },
@@ -226,7 +227,16 @@ app.get("/intelligence/health", async (c) => {
  * Discovery endpoint for automatic agent configuration
  */
 import { discoveryRoutes } from "./api/routes/discovery.js";
+import { githubActionsRoutes } from "./api/routes/github-actions.js";
+
 app.route("/.well-known", discoveryRoutes);
+
+/**
+ * GitHub Actions OIDC credential endpoint
+ * No API key required - uses GitHub OIDC tokens for authentication
+ * Zero secrets stored in GitHub - just OIDC trust
+ */
+app.route("/api/github-actions", githubActionsRoutes);
 
 /**
  * Root endpoint: content negotiation (JSON for agents, redirect for browsers)
@@ -367,6 +377,52 @@ app.post("/integrations/github/webhook", async (c) => {
   await c.env.IDEMP_KV.put(delivery, "processing", { expirationTtl: 86400 });
 
   return c.text("ok", 200);
+});
+
+/**
+ * General Webhook Router
+ * POST /webhooks/:source - Route webhooks to appropriate agents
+ * All webhooks are logged to ChittyChronicle before forwarding
+ */
+app.post("/webhooks/:source", async (c) => {
+  const { routeWebhook, validateWebhookSignature } = await import("./handlers/webhook-router.js");
+  const source = c.req.param("source");
+
+  try {
+    // Validate signature if present
+    const validation = await validateWebhookSignature(source, c.req.raw, c.env);
+    if (!validation.valid) {
+      return c.json({ error: "Invalid webhook signature" }, 401);
+    }
+
+    // Parse payload
+    const payload = await c.req.json();
+
+    // Route to appropriate agent
+    const result = await routeWebhook(source, payload, c.env);
+
+    return c.json({
+      received: true,
+      source,
+      ...result
+    });
+  } catch (error) {
+    console.error(`[Webhook] Error processing ${source} webhook:`, error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * List configured webhook agents
+ * GET /webhooks - Show available webhook routes
+ */
+app.get("/webhooks", async (c) => {
+  const { getConfiguredAgents } = await import("./handlers/webhook-router.js");
+  return c.json({
+    endpoint: "/webhooks/:source",
+    configured_agents: getConfiguredAgents(),
+    usage: "POST /webhooks/{source} with JSON payload"
+  });
 });
 
 /**
