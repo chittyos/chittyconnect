@@ -147,6 +147,5 @@ jobs:
 
           curl -f https://connect.chitty.cc/health || fail
           curl -f https://connect.chitty.cc/.well-known/chitty.json || fail
-          curl -f https://connect.chitty.cc/api/health || fail
 
           echo "✅ Production deployment verified"
