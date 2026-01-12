@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write  # Required for OIDC
 
 concurrency:
   group: deploy-chittyconnect-${{ github.ref }}
@@ -29,16 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      #########################################
-      # Fetch credentials from ChittyConnect
-      # Zero secrets stored in GitHub!
-      #########################################
-      - name: Get Credentials from ChittyConnect
-        id: creds
-        uses: ./.github/actions/chittyconnect-credentials
-        with:
-          credentials: CLOUDFLARE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -50,8 +39,8 @@ jobs:
 
       - name: Run D1 Migrations (Staging)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "Running D1 migrations for staging..."
           if [ -d migrations ]; then
@@ -65,8 +54,8 @@ jobs:
 
       - name: Deploy to Staging
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --env staging
 
       - name: Health Check
@@ -86,15 +75,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      #########################################
-      # Fetch credentials from ChittyConnect
-      #########################################
-      - name: Get Credentials from ChittyConnect
-        id: creds
-        uses: ./.github/actions/chittyconnect-credentials
-        with:
-          credentials: CLOUDFLARE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -125,8 +105,8 @@ jobs:
       #########################################
       - name: Run D1 Migrations (Production)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "Running D1 migrations for production..."
           if [ -d migrations ]; then
@@ -143,8 +123,8 @@ jobs:
       #########################################
       - name: Deploy to Production
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "🚀 Deploying to production..."
           npx wrangler deploy --env production
@@ -154,8 +134,8 @@ jobs:
       #########################################
       - name: Health Checks
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.creds.outputs.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.creds.outputs.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           sleep 5
 
