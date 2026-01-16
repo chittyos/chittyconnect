@@ -239,6 +239,26 @@ app.route("/.well-known", discoveryRoutes);
 app.route("/api/github-actions", githubActionsRoutes);
 
 /**
+ * Unified MCP SSE endpoint
+ * GET /sse?sessionId=...
+ * NOTE: Must be defined BEFORE api router mount to avoid route conflicts
+ */
+app.get("/sse", async (c) => {
+  const sessionId = c.req.query("sessionId") || "anonymous";
+  const sm = c.get("streaming");
+  if (!sm) {
+    console.warn("[SSE] StreamingManager not available");
+    return c.json({ error: "streaming_unavailable", message: "SSE streaming is not configured" }, 503);
+  }
+  try {
+    return await sm.createStream(sessionId, {});
+  } catch (err) {
+    console.error("[SSE] Error creating stream:", err?.message || err);
+    return c.json({ error: "stream_failed", message: String(err?.message || err) }, 500);
+  }
+});
+
+/**
  * Root endpoint: content negotiation (JSON for agents, redirect for browsers)
  */
 app.get("/", async (c) => {
@@ -255,22 +275,6 @@ app.get("/", async (c) => {
 app.route("/", api);
 
 // /mcp is already routed via api.router (api.route("/mcp", mcpRoutes))
-
-/**
- * Unified MCP SSE endpoint
- * GET /sse?sessionId=...
- */
-app.get("/sse", async (c) => {
-  const sessionId = c.req.query("sessionId") || "anonymous";
-  const sm = c.get("streaming");
-  if (!sm) return c.text("streaming unavailable", 503);
-  try {
-    return await sm.createStream(sessionId, {});
-  } catch (err) {
-    console.error("[SSE] Error creating stream:", err?.message || err);
-    return c.text("failed to create stream", 500);
-  }
-});
 
 /**
  * Service-specific MCP proxy

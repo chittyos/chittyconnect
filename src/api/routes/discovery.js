@@ -73,7 +73,7 @@ discoveryRoutes.get('/chitty.json', async (c) => {
       capabilities: {
         mcp: {
           protocol_version: '2024-11-05',
-          tools_count: 23,
+          tools_count: 21,
           supports_streaming: true,
           session_management: true
         },

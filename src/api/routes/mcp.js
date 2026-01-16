@@ -426,6 +426,12 @@ mcpRoutes.post("/tools/call", async (c) => {
     // Identity tools
     if (name === "chitty_id_mint") {
       const serviceToken = await getServiceToken(c.env, "chittyid");
+      if (!serviceToken) {
+        return c.json({
+          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
+          isError: true
+        }, 401);
+      }
       const response = await fetch("https://id.chitty.cc/api/v2/chittyid/mint", {
         method: "POST",
         headers: {
@@ -437,14 +443,34 @@ mcpRoutes.post("/tools/call", async (c) => {
           metadata: args.metadata
         })
       });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return c.json({
+          content: [{ type: "text", text: `ChittyID error (${response.status}): ${errorText}` }],
+          isError: true
+        }, response.status);
+      }
       result = await response.json();
     }
 
     else if (name === "chitty_id_validate") {
       const serviceToken = await getServiceToken(c.env, "chittyid");
+      if (!serviceToken) {
+        return c.json({
+          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
+          isError: true
+        }, 401);
+      }
       const response = await fetch(`https://id.chitty.cc/api/v2/chittyid/validate/${args.chitty_id}`, {
         headers: { "Authorization": `Bearer ${serviceToken}` }
       });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return c.json({
+          content: [{ type: "text", text: `ChittyID validation error (${response.status}): ${errorText}` }],
+          isError: true
+        }, response.status);
+      }
       result = await response.json();
     }
 
