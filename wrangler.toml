@@ -131,6 +131,7 @@ CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Environment variables for production
 [env.production]
+name = "chittyconnect"
 
 [[env.production.routes]]
 pattern = "connect.chitty.cc/*"
