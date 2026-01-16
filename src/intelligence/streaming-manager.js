@@ -16,8 +16,11 @@ export class StreamingManager {
 
   /**
    * Create SSE stream for a session
+   * NOTE: In Cloudflare Workers, we must return the Response immediately,
+   * then write to the stream asynchronously. Awaiting writes before returning
+   * the Response causes worker exceptions.
    */
-  async createStream(sessionId, options = {}) {
+  createStream(sessionId, options = {}) {
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -25,19 +28,29 @@ export class StreamingManager {
     // Store connection
     this.connections.set(sessionId, {
       writer,
+      encoder,
       lastActivity: Date.now(),
       filters: options.filters || [],
     });
 
-    // Send initial connection event
-    await this.sendEvent(sessionId, {
-      type: 'connected',
-      sessionId,
-      timestamp: Date.now(),
-      message: 'ChittyConnect streaming active',
-    });
+    // Send initial connection event asynchronously (don't await!)
+    // This runs after we return the Response
+    (async () => {
+      try {
+        const event = `data: ${JSON.stringify({
+          type: 'connected',
+          sessionId,
+          timestamp: Date.now(),
+          message: 'ChittyConnect streaming active',
+        })}\n\n`;
+        await writer.write(encoder.encode(event));
+        console.log(`[StreamingManager] Initial event sent for session ${sessionId}`);
+      } catch (err) {
+        console.error(`[StreamingManager] Failed to send initial event:`, err?.message || err);
+      }
+    })();
 
-    // Start heartbeat
+    // Start heartbeat (also async, runs after response)
     this.startHeartbeat(sessionId);
 
     console.log(`[StreamingManager] Stream created for session ${sessionId}`);
