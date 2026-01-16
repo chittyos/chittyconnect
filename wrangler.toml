@@ -70,6 +70,7 @@ queue = "github-events"
 
 # Environment variables for development
 [env.staging]
+name = "chittyconnect"
 
 [[env.staging.kv_namespaces]]
 binding = "IDEMP_KV"
@@ -100,7 +101,7 @@ index_name = "context-embeddings"
 [[env.staging.durable_objects.bindings]]
 name = "MCP_SESSIONS"
 class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect-staging"
+script_name = "chittyconnect"
 
 [[env.staging.d1_databases]]
 binding = "DB"
