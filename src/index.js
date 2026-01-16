@@ -251,6 +251,37 @@ app.get("/sse/health", (c) => {
 });
 
 /**
+ * Simple SSE test endpoint (debugging)
+ */
+app.get("/sse/test", (c) => {
+  const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  // Send initial event and close
+  (async () => {
+    try {
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`));
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "test", message: "SSE working!" })}\n\n`));
+      // Keep stream open for a moment then close
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await writer.close();
+    } catch (err) {
+      console.error("[SSE/test] Error:", err);
+    }
+  })();
+
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
+
+/**
  * Unified MCP SSE endpoint
  * GET /sse?sessionId=...
  * NOTE: Must be defined BEFORE api router mount to avoid route conflicts
