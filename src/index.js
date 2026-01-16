@@ -239,45 +239,13 @@ app.route("/.well-known", discoveryRoutes);
 app.route("/api/github-actions", githubActionsRoutes);
 
 /**
- * SSE Health check endpoint (for debugging)
+ * SSE Health check endpoint
  */
 app.get("/sse/health", (c) => {
   const sm = c.get("streaming");
   return c.json({
     status: sm ? "available" : "unavailable",
-    streamingManagerInitialized: !!sm,
     timestamp: new Date().toISOString()
-  });
-});
-
-/**
- * Simple SSE test endpoint (debugging)
- */
-app.get("/sse/test", (c) => {
-  const encoder = new TextEncoder();
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-
-  // Send initial event and close
-  (async () => {
-    try {
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`));
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "test", message: "SSE working!" })}\n\n`));
-      // Keep stream open for a moment then close
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await writer.close();
-    } catch (err) {
-      console.error("[SSE/test] Error:", err);
-    }
-  })();
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-      "Access-Control-Allow-Origin": "*",
-    },
   });
 });
 
@@ -286,24 +254,18 @@ app.get("/sse/test", (c) => {
  * GET /sse?sessionId=...
  * NOTE: Must be defined BEFORE api router mount to avoid route conflicts
  */
-app.get("/sse", async (c) => {
+app.get("/sse", (c) => {
   const sessionId = c.req.query("sessionId") || "anonymous";
   const sm = c.get("streaming");
 
-  console.log(`[SSE] Request for session ${sessionId}, streaming manager: ${!!sm}`);
-
   if (!sm) {
-    console.warn("[SSE] StreamingManager not available");
     return c.json({ error: "streaming_unavailable", message: "SSE streaming is not configured" }, 503);
   }
 
   try {
-    console.log(`[SSE] Creating stream for session ${sessionId}`);
-    const stream = await sm.createStream(sessionId, {});
-    console.log(`[SSE] Stream created successfully for session ${sessionId}`);
-    return stream;
+    return sm.createStream(sessionId, {});
   } catch (err) {
-    console.error("[SSE] Error creating stream:", err?.message || err, err?.stack);
+    console.error("[SSE] Error creating stream:", err?.message || err);
     return c.json({ error: "stream_failed", message: String(err?.message || err) }, 500);
   }
 });
