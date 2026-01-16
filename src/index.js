@@ -239,6 +239,18 @@ app.route("/.well-known", discoveryRoutes);
 app.route("/api/github-actions", githubActionsRoutes);
 
 /**
+ * SSE Health check endpoint (for debugging)
+ */
+app.get("/sse/health", (c) => {
+  const sm = c.get("streaming");
+  return c.json({
+    status: sm ? "available" : "unavailable",
+    streamingManagerInitialized: !!sm,
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
  * Unified MCP SSE endpoint
  * GET /sse?sessionId=...
  * NOTE: Must be defined BEFORE api router mount to avoid route conflicts
@@ -246,14 +258,21 @@ app.route("/api/github-actions", githubActionsRoutes);
 app.get("/sse", async (c) => {
   const sessionId = c.req.query("sessionId") || "anonymous";
   const sm = c.get("streaming");
+
+  console.log(`[SSE] Request for session ${sessionId}, streaming manager: ${!!sm}`);
+
   if (!sm) {
     console.warn("[SSE] StreamingManager not available");
     return c.json({ error: "streaming_unavailable", message: "SSE streaming is not configured" }, 503);
   }
+
   try {
-    return await sm.createStream(sessionId, {});
+    console.log(`[SSE] Creating stream for session ${sessionId}`);
+    const stream = await sm.createStream(sessionId, {});
+    console.log(`[SSE] Stream created successfully for session ${sessionId}`);
+    return stream;
   } catch (err) {
-    console.error("[SSE] Error creating stream:", err?.message || err);
+    console.error("[SSE] Error creating stream:", err?.message || err, err?.stack);
     return c.json({ error: "stream_failed", message: String(err?.message || err) }, 500);
   }
 });
