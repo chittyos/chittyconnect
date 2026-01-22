@@ -123,8 +123,8 @@ export class SessionStateDO {
   /**
    * Handle WebSocket connections for real-time updates
    */
-  handleWebSocketUpgrade(request) {
-    const pair = new WebSocketPair();
+  handleWebSocketUpgrade(_request) {
+    const pair = new globalThis.WebSocketPair();
     const [client, server] = Object.values(pair);
 
     this.state.acceptWebSocket(server);
@@ -277,7 +277,7 @@ export class SessionStateDO {
   /**
    * List all sessions for this ChittyID
    */
-  async listSessions(request) {
+  async listSessions(_request) {
     const sessions = Array.from(this.sessions.values())
       .filter(s => s.expires > Date.now())
       .sort((a, b) => b.updated - a.updated);
@@ -395,7 +395,7 @@ export class SessionStateDO {
   /**
    * Cleanup expired sessions
    */
-  async cleanupExpired(request) {
+  async cleanupExpired(_request) {
     const now = Date.now();
     let cleaned = 0;
 

@@ -21,7 +21,7 @@ export class ResourceURIResolver {
    * @returns {object} Parsed components
    */
   parseURI(uri) {
-    const match = uri.match(/^resource:\/\/connect\/([^\/]+)\/([a-f0-9]{64})-(.+)$/);
+    const match = uri.match(/^resource:\/\/connect\/([^/]+)\/([a-f0-9]{64})-(.+)$/);
     if (!match) {
       throw new Error(`Invalid resource URI format: ${uri}`);
     }

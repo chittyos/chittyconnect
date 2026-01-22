@@ -309,16 +309,18 @@ export class AlertManager {
     const confidence = Math.round(prediction.confidence * 100);
 
     switch (prediction.prediction_type) {
-      case 'failure':
+      case 'failure': {
         const minutes = Math.floor((prediction.time_to_failure || 0) / 60);
         return `${prediction.service_name} predicted to fail in ${minutes} minutes (${confidence}% confidence)`;
+      }
 
       case 'latency':
         return `${prediction.service_name} experiencing latency issues (${confidence}% confidence)`;
 
-      case 'cascade':
+      case 'cascade': {
         const affected = details.affected_services?.length || 0;
         return `${prediction.service_name} failure may cascade to ${affected} services (${confidence}% confidence)`;
+      }
 
       case 'anomaly':
         return `Anomaly detected in ${prediction.service_name} (${confidence}% confidence)`;
