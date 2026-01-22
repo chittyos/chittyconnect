@@ -190,7 +190,7 @@ app.get("/intelligence/health", async (c) => {
 
   if (memory) {
     try {
-      const stats = await memory.getStats("health-check");
+      await memory.getStats("health-check");
       memoryHealth = {
         available: true,
         hasVectorize: memory.hasVectorize,
@@ -447,7 +447,7 @@ app.get("/webhooks", async (c) => {
  */
 app.get("/integrations/github/callback", async (c) => {
   try {
-    const code = c.req.query("code");
+    const _code = c.req.query("code");
     const installationId = c.req.query("installation_id");
     const setupAction = c.req.query("setup_action");
 

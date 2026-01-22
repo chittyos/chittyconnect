@@ -15,7 +15,7 @@
  */
 
 import { Hono } from 'hono';
-import { validateGitHubOIDC, CHITTYOS_ALLOWED_REPOS } from '../../auth/github-oidc.js';
+import { validateGitHubOIDC } from '../../auth/github-oidc.js';
 import { OnePasswordConnectClient } from '../../services/1password-connect-client.js';
 
 const githubActionsRoutes = new Hono();

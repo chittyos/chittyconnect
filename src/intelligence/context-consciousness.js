@@ -481,11 +481,11 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
       credentialPath,
       requestingService,
       purpose,
-      sessionId,
-      userId,
+      sessionId: _sessionId,
+      userId: _userId,
       environment,
-      ipAddress,
-      userAgent
+      ipAddress: _ipAddress,
+      userAgent: _userAgent
     } = request;
 
     const analysis = {
@@ -517,7 +517,7 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
 
     // 2. Check time-based patterns
     const hour = new Date().getHours();
-    const dayOfWeek = new Date().getDay();
+    const _dayOfWeek = new Date().getDay();
 
     if (hour < 6 || hour > 22) {
       analysis.anomalies.push(`Access at unusual hour: ${hour}:00`);

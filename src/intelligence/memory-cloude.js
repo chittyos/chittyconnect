@@ -403,7 +403,7 @@ export class MemoryCloude {
   /**
    * Get user history across sessions
    */
-  async getUserHistory(userId, limit = 100) {
+  async getUserHistory(_userId, _limit = 100) {
     // This would require a user index, which we can implement
     // For now, return empty array
     console.warn("[MemoryCloude™] User history not yet implemented");

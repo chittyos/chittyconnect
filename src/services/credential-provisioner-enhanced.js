@@ -762,7 +762,7 @@ export class EnhancedCredentialProvisioner {
    *
    * @private
    */
-  async createScopedServiceToken(parentToken, scopes, context) {
+  async createScopedServiceToken(parentToken, scopes, _context) {
     // This would call ChittyAuth to create a derivative token
     // For now, return a mock implementation
     return {
@@ -777,7 +777,7 @@ export class EnhancedCredentialProvisioner {
    *
    * @private
    */
-  async createGitHubInstallationToken(appId, privateKey, repository, permissions) {
+  async createGitHubInstallationToken(_appId, _privateKey, _repository, _permissions) {
     // This would use GitHub App API to create installation token
     // For now, return a mock implementation
     return {

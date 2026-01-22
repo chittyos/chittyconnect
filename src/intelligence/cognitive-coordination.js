@@ -64,7 +64,7 @@ class TaskGraph {
     // Return nodes that have no pending dependencies
     const executable = [];
 
-    for (const [id, node] of this.nodes.entries()) {
+    for (const [_id, node] of this.nodes.entries()) {
       if (node.status === "pending") {
         const dependencies = node.dependencies || [];
         const allDepsComplete = dependencies.every((depId) => {
@@ -111,7 +111,7 @@ class ExecutionEngine {
   async execute(executionPlan, options = {}) {
     const {
       parallel = true,
-      dependencyAware = true,
+      dependencyAware: _dependencyAware = true,
       failover = true,
       timeout = 60000,
     } = options;
@@ -419,7 +419,7 @@ Respond in JSON format: {
       // Use ContextConsciousness™ to determine optimal dependencies
       const dependencies = await this.consciousness
         .getAwareness()
-        .then((awareness) => {
+        .then((_awareness) => {
           // Check if required services are available
           return subtask.dependencies || [];
         });

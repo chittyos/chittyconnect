@@ -200,7 +200,7 @@ export function registerSessionRoutes(app) {
    */
   app.get('/api/v1/sessions/:sessionId/context', async (c) => {
     try {
-      const sessionId = c.req.param('sessionId');
+      const _sessionId = c.req.param('sessionId');
       const chittyId = c.req.header('X-ChittyID');
       const key = c.req.query('key');
 
@@ -239,7 +239,7 @@ export function registerSessionRoutes(app) {
    */
   app.put('/api/v1/sessions/:sessionId/context', async (c) => {
     try {
-      const sessionId = c.req.param('sessionId');
+      const _sessionId = c.req.param('sessionId');
       const chittyId = c.req.header('X-ChittyID');
       const { key, value } = await c.req.json();
 
@@ -288,7 +288,7 @@ export function registerSessionRoutes(app) {
    */
   app.get('/api/v1/sessions/:sessionId/metrics', async (c) => {
     try {
-      const sessionId = c.req.param('sessionId');
+      const _sessionId = c.req.param('sessionId');
       const chittyId = c.req.header('X-ChittyID');
 
       if (!chittyId) {

@@ -50,7 +50,7 @@ export class ResourceURIResolver {
 
     // Resource URI - needs lookup
     if (uri.startsWith('resource://connect/')) {
-      const { session_id: parsedSession, sha256, basename } = this.parseURI(uri);
+      const { session_id: parsedSession, sha256 } = this.parseURI(uri);
 
       // Verify session access if provided
       if (session_id && session_id !== parsedSession) {

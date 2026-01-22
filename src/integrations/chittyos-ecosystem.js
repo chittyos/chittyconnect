@@ -11,7 +11,8 @@
  * - ChittyCanon: Canonical definitions and validation
  */
 
-import { chittyCanon } from "./chittycanon-client.js";
+// Import for future use
+// import { chittyCanon } from "./chittycanon-client.js";
 
 /**
  * ChittyOS Ecosystem Manager

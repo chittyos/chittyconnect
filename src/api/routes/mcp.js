@@ -780,7 +780,8 @@ mcpRoutes.post("/session/persist", async (c) => {
  * MCP sampling support for advanced features
  */
 mcpRoutes.post("/sampling/sample", async (c) => {
-  const { messages, maxTokens, sessionId } = await c.req.json();
+  // Extract request body (unused for now but kept for future implementation)
+  await c.req.json();
 
   try {
     // This would use Workers AI or proxy to OpenAI

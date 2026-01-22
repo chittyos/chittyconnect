@@ -3,7 +3,7 @@ export class MCPSessionDurableObject {
     this.state = state
     this.env = env
   }
-  async fetch(request) {
+  async fetch(_request) {
     // Minimal stub to satisfy DO binding; extend with real session logic as needed
     return new Response('OK', { status: 200 })
   }

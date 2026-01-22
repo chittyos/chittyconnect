@@ -19,7 +19,7 @@ export async function requestReviewers(
   prNumber,
   options = {},
 ) {
-  const { reviewers = [], teamReviewers = [], useCODEOWNERS = true } = options;
+  const { reviewers = [], teamReviewers = [], useCODEOWNERS: _useCODEOWNERS = true } = options;
 
   // TODO: Parse CODEOWNERS file and match changed files
   // For now, use fallback reviewers

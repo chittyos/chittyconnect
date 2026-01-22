@@ -342,7 +342,7 @@ export class PredictionEngine {
   /**
    * Store prediction in D1
    */
-  async storePrediction(prediction, sessionId) {
+  async storePrediction(prediction, _sessionId) {
     try {
       await this.db
         .prepare(

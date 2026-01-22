@@ -194,7 +194,7 @@ export class ExperienceAnchor {
   generateLocalChittyId(context) {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
-    const platform = (context.platform || 'UNK').substring(0, 3).toUpperCase();
+    const _platform = (context.platform || 'UNK').substring(0, 3).toUpperCase();
 
     // Format: AA-C-CTX-SSSS-I-YYMM-T-X (simplified)
     const now = new Date();

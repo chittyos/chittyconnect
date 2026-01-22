@@ -249,7 +249,7 @@ export class AlertManager {
   /**
    * Check for duplicate alert within window
    */
-  async isDuplicate(alertType, service, subtype) {
+  async isDuplicate(alertType, service, _subtype) {
     const since = Date.now() - this.alertDedupeWindow;
 
     const existing = await this.db
