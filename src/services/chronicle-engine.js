@@ -3,7 +3,7 @@
  * Database operations for event logging and audit trails
  */
 
-import { Client } from '@neondatabase/serverless';
+import { Client } from "@neondatabase/serverless";
 
 // ============================================================================
 // DATABASE SCHEMA
@@ -54,33 +54,36 @@ export class ChronicleEngine {
   }
 
   async logEvent(event) {
-    const result = await this.db.query(`
+    const result = await this.db.query(
+      `
       INSERT INTO chronicle_events (
         service, action, user_id, user_email, metadata,
         related_events, triggered_by, integrations, status, error_message
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, timestamp
-    `, [
-      event.service,
-      event.action,
-      event.userId || null,
-      event.userEmail || null,
-      event.metadata ? JSON.stringify(event.metadata) : null,
-      event.relatedEvents || null,
-      event.triggeredBy || null,
-      event.integrations || null,
-      event.status || 'success',
-      event.errorMessage || null
-    ]);
+    `,
+      [
+        event.service,
+        event.action,
+        event.userId || null,
+        event.userEmail || null,
+        event.metadata ? JSON.stringify(event.metadata) : null,
+        event.relatedEvents || null,
+        event.triggeredBy || null,
+        event.integrations || null,
+        event.status || "success",
+        event.errorMessage || null,
+      ],
+    );
 
     return {
       id: result.rows[0].id,
-      timestamp: result.rows[0].timestamp
+      timestamp: result.rows[0].timestamp,
     };
   }
 
   async searchEvents(params) {
-    let query = 'SELECT * FROM chronicle_events WHERE 1=1';
+    let query = "SELECT * FROM chronicle_events WHERE 1=1";
     const values = [];
     let paramCount = 1;
 
@@ -127,7 +130,7 @@ export class ChronicleEngine {
   }
 
   async getTimeline(params) {
-    const groupBy = params.groupBy || 'day';
+    const groupBy = params.groupBy || "day";
 
     let query = `
       SELECT
@@ -154,18 +157,22 @@ export class ChronicleEngine {
   }
 
   async getAuditTrail(entityId, entityType) {
-    const result = await this.db.query(`
+    const result = await this.db.query(
+      `
       SELECT * FROM chronicle_events
       WHERE metadata->>'entityId' = $1
         AND metadata->>'entityType' = $2
       ORDER BY timestamp ASC
-    `, [entityId, entityType]);
+    `,
+      [entityId, entityType],
+    );
 
     return result.rows;
   }
 
   async getStatistics(startDate, endDate) {
-    const result = await this.db.query(`
+    const result = await this.db.query(
+      `
       SELECT
         COUNT(*) as total_events,
         COUNT(DISTINCT service) as service_count,
@@ -175,7 +182,9 @@ export class ChronicleEngine {
       FROM chronicle_events
       WHERE ($1::timestamptz IS NULL OR timestamp >= $1)
         AND ($2::timestamptz IS NULL OR timestamp <= $2)
-    `, [startDate || null, endDate || null]);
+    `,
+      [startDate || null, endDate || null],
+    );
 
     return result.rows[0];
   }

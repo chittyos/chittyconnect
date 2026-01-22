@@ -20,15 +20,21 @@ export class AlertManager {
    */
   async alertFromPrediction(prediction) {
     // Check for duplicate
-    if (await this.isDuplicate('prediction', prediction.service_name, prediction.prediction_type)) {
-      console.log('[AlertManager] Duplicate prediction alert suppressed');
+    if (
+      await this.isDuplicate(
+        "prediction",
+        prediction.service_name,
+        prediction.prediction_type,
+      )
+    ) {
+      console.log("[AlertManager] Duplicate prediction alert suppressed");
       return null;
     }
 
-    const severity = this.calculateSeverity('prediction', prediction);
+    const severity = this.calculateSeverity("prediction", prediction);
     const alert = {
       id: `alert-pred-${prediction.id}`,
-      alertType: 'prediction',
+      alertType: "prediction",
       severity,
       sourceService: prediction.service_name,
       message: this.generatePredictionMessage(prediction),
@@ -37,7 +43,7 @@ export class AlertManager {
         predictionType: prediction.prediction_type,
         confidence: prediction.confidence,
         timeToFailure: prediction.time_to_failure,
-        details: JSON.parse(prediction.details || '{}'),
+        details: JSON.parse(prediction.details || "{}"),
       },
       predictionId: prediction.id,
     };
@@ -50,15 +56,15 @@ export class AlertManager {
    */
   async alertFromAnomaly(anomaly) {
     // Check for duplicate
-    if (await this.isDuplicate('anomaly', anomaly.service, anomaly.type)) {
-      console.log('[AlertManager] Duplicate anomaly alert suppressed');
+    if (await this.isDuplicate("anomaly", anomaly.service, anomaly.type)) {
+      console.log("[AlertManager] Duplicate anomaly alert suppressed");
       return null;
     }
 
-    const severity = this.calculateSeverity('anomaly', anomaly);
+    const severity = this.calculateSeverity("anomaly", anomaly);
     const alert = {
       id: `alert-anom-${anomaly.service}-${Date.now()}`,
-      alertType: 'anomaly',
+      alertType: "anomaly",
       severity,
       sourceService: anomaly.service,
       message: `Anomaly detected: ${anomaly.type} in ${anomaly.service}`,
@@ -80,8 +86,8 @@ export class AlertManager {
   async alertFromFailure(service, reason) {
     const alert = {
       id: `alert-fail-${service}-${Date.now()}`,
-      alertType: 'failure',
-      severity: 'critical',
+      alertType: "failure",
+      severity: "critical",
       sourceService: service,
       message: `Service ${service} has failed: ${reason}`,
       context: {
@@ -99,8 +105,8 @@ export class AlertManager {
   async alertFromRecovery(service) {
     const alert = {
       id: `alert-recov-${service}-${Date.now()}`,
-      alertType: 'recovery',
-      severity: 'low',
+      alertType: "recovery",
+      severity: "low",
       sourceService: service,
       message: `Service ${service} has recovered`,
       context: {
@@ -132,7 +138,7 @@ export class AlertManager {
         .prepare(
           `INSERT INTO alerts
            (id, alert_type, severity, source_service, message, context, prediction_id, decision_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -143,7 +149,7 @@ export class AlertManager {
           JSON.stringify(context),
           predictionId,
           decisionId,
-          Date.now()
+          Date.now(),
         )
         .run();
 
@@ -155,7 +161,7 @@ export class AlertManager {
       // Stream to connected clients
       if (this.streamingManager) {
         await this.streamingManager.broadcast({
-          type: 'alert:new',
+          type: "alert:new",
           data: alert,
           timestamp: Date.now(),
         });
@@ -163,7 +169,7 @@ export class AlertManager {
 
       return id;
     } catch (error) {
-      console.error('[AlertManager] Failed to create alert:', error.message);
+      console.error("[AlertManager] Failed to create alert:", error.message);
       throw error;
     }
   }
@@ -187,19 +193,25 @@ export class AlertManager {
     const channels = [];
 
     // Always send to MCP stream
-    channels.push({ type: 'mcp_stream', recipient: 'all' });
+    channels.push({ type: "mcp_stream", recipient: "all" });
 
     // Critical and high severity get webhook notifications
-    if (severity === 'critical' || severity === 'high') {
-      channels.push({ type: 'webhook', recipient: process.env.ALERT_WEBHOOK_URL || null });
+    if (severity === "critical" || severity === "high") {
+      channels.push({
+        type: "webhook",
+        recipient: process.env.ALERT_WEBHOOK_URL || null,
+      });
     }
 
     // Critical gets email (if configured)
-    if (severity === 'critical') {
-      channels.push({ type: 'email', recipient: process.env.ALERT_EMAIL || null });
+    if (severity === "critical") {
+      channels.push({
+        type: "email",
+        recipient: process.env.ALERT_EMAIL || null,
+      });
     }
 
-    return channels.filter(c => c.recipient);
+    return channels.filter((c) => c.recipient);
   }
 
   /**
@@ -214,20 +226,32 @@ export class AlertManager {
         .prepare(
           `INSERT INTO notifications
            (id, alert_id, channel, recipient, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .bind(notificationId, alertId, type, recipient || 'all', 'pending', Date.now())
+        .bind(
+          notificationId,
+          alertId,
+          type,
+          recipient || "all",
+          "pending",
+          Date.now(),
+        )
         .run();
 
       // Immediately process MCP stream notifications
-      if (type === 'mcp_stream') {
+      if (type === "mcp_stream") {
         await this.markNotificationSent(notificationId);
       }
 
-      console.log(`[AlertManager] Created notification ${notificationId} via ${type}`);
+      console.log(
+        `[AlertManager] Created notification ${notificationId} via ${type}`,
+      );
       return notificationId;
     } catch (error) {
-      console.warn('[AlertManager] Failed to create notification:', error.message);
+      console.warn(
+        "[AlertManager] Failed to create notification:",
+        error.message,
+      );
       return null;
     }
   }
@@ -240,7 +264,7 @@ export class AlertManager {
       .prepare(
         `UPDATE notifications
          SET status = 'sent', sent_at = ?
-         WHERE id = ?`
+         WHERE id = ?`,
       )
       .bind(Date.now(), notificationId)
       .run();
@@ -256,7 +280,7 @@ export class AlertManager {
       .prepare(
         `SELECT id FROM alerts
          WHERE alert_type = ? AND source_service = ? AND created_at > ?
-         LIMIT 1`
+         LIMIT 1`,
       )
       .bind(alertType, service, since)
       .first();
@@ -268,61 +292,68 @@ export class AlertManager {
    * Calculate alert severity
    */
   calculateSeverity(type, data) {
-    if (type === 'prediction') {
+    if (type === "prediction") {
       const { confidence, time_to_failure, prediction_type } = data;
 
       // Critical: high confidence failure prediction with short time
-      if (prediction_type === 'failure' && confidence > 0.8 && time_to_failure < 600) {
-        return 'critical';
+      if (
+        prediction_type === "failure" &&
+        confidence > 0.8 &&
+        time_to_failure < 600
+      ) {
+        return "critical";
       }
 
       // High: cascade or high-confidence failures
-      if ((prediction_type === 'cascade' || prediction_type === 'failure') && confidence > 0.7) {
-        return 'high';
+      if (
+        (prediction_type === "cascade" || prediction_type === "failure") &&
+        confidence > 0.7
+      ) {
+        return "high";
       }
 
       // Medium: latency or moderate confidence
-      if (prediction_type === 'latency' || confidence > 0.5) {
-        return 'medium';
+      if (prediction_type === "latency" || confidence > 0.5) {
+        return "medium";
       }
 
-      return 'low';
+      return "low";
     }
 
-    if (type === 'anomaly') {
+    if (type === "anomaly") {
       const { deviation } = data;
 
-      if (deviation > 3) return 'critical';
-      if (deviation > 2) return 'high';
-      if (deviation > 1) return 'medium';
-      return 'low';
+      if (deviation > 3) return "critical";
+      if (deviation > 2) return "high";
+      if (deviation > 1) return "medium";
+      return "low";
     }
 
-    return 'medium';
+    return "medium";
   }
 
   /**
    * Generate human-readable prediction message
    */
   generatePredictionMessage(prediction) {
-    const details = JSON.parse(prediction.details || '{}');
+    const details = JSON.parse(prediction.details || "{}");
     const confidence = Math.round(prediction.confidence * 100);
 
     switch (prediction.prediction_type) {
-      case 'failure': {
+      case "failure": {
         const minutes = Math.floor((prediction.time_to_failure || 0) / 60);
         return `${prediction.service_name} predicted to fail in ${minutes} minutes (${confidence}% confidence)`;
       }
 
-      case 'latency':
+      case "latency":
         return `${prediction.service_name} experiencing latency issues (${confidence}% confidence)`;
 
-      case 'cascade': {
+      case "cascade": {
         const affected = details.affected_services?.length || 0;
         return `${prediction.service_name} failure may cascade to ${affected} services (${confidence}% confidence)`;
       }
 
-      case 'anomaly':
+      case "anomaly":
         return `Anomaly detected in ${prediction.service_name} (${confidence}% confidence)`;
 
       default:
@@ -352,9 +383,12 @@ export class AlertManager {
     query += ` ORDER BY created_at DESC LIMIT ?`;
     bindings.push(limit);
 
-    const result = await this.db.prepare(query).bind(...bindings).all();
+    const result = await this.db
+      .prepare(query)
+      .bind(...bindings)
+      .all();
 
-    return (result.results || []).map(a => this.parseAlert(a));
+    return (result.results || []).map((a) => this.parseAlert(a));
   }
 
   /**
@@ -365,7 +399,7 @@ export class AlertManager {
       .prepare(
         `UPDATE alerts
          SET acknowledged_at = ?
-         WHERE id = ?`
+         WHERE id = ?`,
       )
       .bind(Date.now(), alertId)
       .run();
@@ -381,7 +415,7 @@ export class AlertManager {
       .prepare(
         `UPDATE alerts
          SET resolved_at = ?
-         WHERE id = ?`
+         WHERE id = ?`,
       )
       .bind(Date.now(), alertId)
       .run();
@@ -389,7 +423,7 @@ export class AlertManager {
     // Stream resolution
     if (this.streamingManager) {
       await this.streamingManager.broadcast({
-        type: 'alert:resolved',
+        type: "alert:resolved",
         data: { alertId },
         timestamp: Date.now(),
       });
@@ -408,7 +442,7 @@ export class AlertManager {
       severity: row.severity,
       sourceService: row.source_service,
       message: row.message,
-      context: JSON.parse(row.context || '{}'),
+      context: JSON.parse(row.context || "{}"),
       predictionId: row.prediction_id,
       decisionId: row.decision_id,
       acknowledgedAt: row.acknowledged_at,
@@ -434,7 +468,7 @@ export class AlertManager {
         `SELECT severity, COUNT(*) as count
          FROM alerts
          WHERE resolved_at IS NULL
-         GROUP BY severity`
+         GROUP BY severity`,
       )
       .all();
 

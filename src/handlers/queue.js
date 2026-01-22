@@ -9,7 +9,13 @@
  */
 
 // Temporary inline normalization until MCP normalize module is wired
-const normalizeGitHubEvent = ({ delivery, event, payload, installationId, tenantId }) => ({
+const normalizeGitHubEvent = ({
+  delivery,
+  event,
+  payload,
+  installationId,
+  tenantId,
+}) => ({
   type: `github.${event}`,
   delivery,
   installationId,

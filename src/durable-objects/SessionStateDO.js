@@ -49,21 +49,23 @@ export class SessionStateDO {
 
     try {
       // Load sessions from storage
-      const storedSessions = await this.state.storage.get('sessions');
+      const storedSessions = await this.state.storage.get("sessions");
       if (storedSessions) {
         this.sessions = new Map(Object.entries(storedSessions));
       }
 
       // Load recent decisions
-      this.decisions = (await this.state.storage.get('decisions')) || [];
+      this.decisions = (await this.state.storage.get("decisions")) || [];
 
       // Load context
-      this.context = (await this.state.storage.get('context')) || {};
+      this.context = (await this.state.storage.get("context")) || {};
 
       this.initialized = true;
-      console.log(`[SessionStateDO] Initialized with ${this.sessions.size} sessions`);
+      console.log(
+        `[SessionStateDO] Initialized with ${this.sessions.size} sessions`,
+      );
     } catch (error) {
-      console.error('[SessionStateDO] Initialization error:', error);
+      console.error("[SessionStateDO] Initialization error:", error);
       this.initialized = true; // Mark as initialized to prevent loops
     }
   }
@@ -79,44 +81,41 @@ export class SessionStateDO {
     const path = url.pathname;
 
     // Handle WebSocket upgrade requests
-    if (request.headers.get('Upgrade') === 'websocket') {
+    if (request.headers.get("Upgrade") === "websocket") {
       return this.handleWebSocketUpgrade(request);
     }
 
     try {
       switch (path) {
-        case '/session/create':
+        case "/session/create":
           return await this.createSession(request);
-        case '/session/update':
+        case "/session/update":
           return await this.updateSession(request);
-        case '/session/get':
+        case "/session/get":
           return await this.getSession(request);
-        case '/session/list':
+        case "/session/list":
           return await this.listSessions(request);
-        case '/decision/add':
+        case "/decision/add":
           return await this.addDecision(request);
-        case '/decision/list':
+        case "/decision/list":
           return await this.listDecisions(request);
-        case '/context/set':
+        case "/context/set":
           return await this.setContext(request);
-        case '/context/get':
+        case "/context/get":
           return await this.getContext(request);
-        case '/metrics':
+        case "/metrics":
           return await this.getMetrics(request);
-        case '/cleanup':
+        case "/cleanup":
           return await this.cleanupExpired(request);
         default:
-          return new Response('Not Found', { status: 404 });
+          return new Response("Not Found", { status: 404 });
       }
     } catch (error) {
-      console.error('[SessionStateDO] Request error:', error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      console.error("[SessionStateDO] Request error:", error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
   }
 
@@ -130,32 +129,36 @@ export class SessionStateDO {
     this.state.acceptWebSocket(server);
     this.websockets.add(server);
 
-    server.addEventListener('message', async (event) => {
+    server.addEventListener("message", async (event) => {
       try {
         const message = JSON.parse(event.data);
         await this.handleWebSocketMessage(server, message);
       } catch (error) {
-        server.send(JSON.stringify({
-          type: 'error',
-          message: error.message
-        }));
+        server.send(
+          JSON.stringify({
+            type: "error",
+            message: error.message,
+          }),
+        );
       }
     });
 
-    server.addEventListener('close', () => {
+    server.addEventListener("close", () => {
       this.websockets.delete(server);
     });
 
     // Send initial state
-    server.send(JSON.stringify({
-      type: 'connected',
-      sessions: Array.from(this.sessions.values()),
-      context: this.context
-    }));
+    server.send(
+      JSON.stringify({
+        type: "connected",
+        sessions: Array.from(this.sessions.values()),
+        context: this.context,
+      }),
+    );
 
     return new Response(null, {
       status: 101,
-      webSocket: client
+      webSocket: client,
     });
   }
 
@@ -166,23 +169,27 @@ export class SessionStateDO {
     const { type, data } = message;
 
     switch (type) {
-      case 'subscribe':
+      case "subscribe":
         // Client wants to subscribe to updates
-        ws.send(JSON.stringify({
-          type: 'subscribed',
-          sessionId: data.sessionId
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "subscribed",
+            sessionId: data.sessionId,
+          }),
+        );
         break;
 
-      case 'ping':
-        ws.send(JSON.stringify({ type: 'pong' }));
+      case "ping":
+        ws.send(JSON.stringify({ type: "pong" }));
         break;
 
       default:
-        ws.send(JSON.stringify({
-          type: 'error',
-          message: `Unknown message type: ${type}`
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: `Unknown message type: ${type}`,
+          }),
+        );
     }
   }
 
@@ -210,24 +217,24 @@ export class SessionStateDO {
 
     const session = {
       id: sessionId,
-      chittyId: request.headers.get('X-ChittyID'),
+      chittyId: request.headers.get("X-ChittyID"),
       created: Date.now(),
       updated: Date.now(),
-      expires: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+      expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       metadata,
-      state: 'active',
+      state: "active",
       decisions: [],
-      interactions: 0
+      interactions: 0,
     };
 
     this.sessions.set(sessionId, session);
     await this.persist();
 
     // Broadcast to WebSocket clients
-    this.broadcastUpdate('session_created', session);
+    this.broadcastUpdate("session_created", session);
 
     return new Response(JSON.stringify(session), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -239,21 +246,21 @@ export class SessionStateDO {
 
     const session = this.sessions.get(sessionId);
     if (!session) {
-      return new Response('Session not found', { status: 404 });
+      return new Response("Session not found", { status: 404 });
     }
 
     Object.assign(session, updates, {
       updated: Date.now(),
-      interactions: session.interactions + 1
+      interactions: session.interactions + 1,
     });
 
     await this.persist();
 
     // Broadcast to WebSocket clients
-    this.broadcastUpdate('session_updated', session);
+    this.broadcastUpdate("session_updated", session);
 
     return new Response(JSON.stringify(session), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -262,15 +269,15 @@ export class SessionStateDO {
    */
   async getSession(request) {
     const url = new URL(request.url);
-    const sessionId = url.searchParams.get('sessionId');
+    const sessionId = url.searchParams.get("sessionId");
 
     const session = this.sessions.get(sessionId);
     if (!session) {
-      return new Response('Session not found', { status: 404 });
+      return new Response("Session not found", { status: 404 });
     }
 
     return new Response(JSON.stringify(session), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -279,15 +286,18 @@ export class SessionStateDO {
    */
   async listSessions(_request) {
     const sessions = Array.from(this.sessions.values())
-      .filter(s => s.expires > Date.now())
+      .filter((s) => s.expires > Date.now())
       .sort((a, b) => b.updated - a.updated);
 
-    return new Response(JSON.stringify({
-      count: sessions.length,
-      sessions
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        count: sessions.length,
+        sessions,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   /**
@@ -297,7 +307,7 @@ export class SessionStateDO {
     const decision = await request.json();
 
     decision.timestamp = Date.now();
-    decision.chittyId = request.headers.get('X-ChittyID');
+    decision.chittyId = request.headers.get("X-ChittyID");
 
     this.decisions.push(decision);
 
@@ -309,10 +319,10 @@ export class SessionStateDO {
     await this.persist();
 
     // Broadcast to WebSocket clients
-    this.broadcastUpdate('decision_added', decision);
+    this.broadcastUpdate("decision_added", decision);
 
     return new Response(JSON.stringify(decision), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -321,16 +331,19 @@ export class SessionStateDO {
    */
   async listDecisions(request) {
     const url = new URL(request.url);
-    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const limit = parseInt(url.searchParams.get("limit") || "10");
 
     const recentDecisions = this.decisions.slice(-limit);
 
-    return new Response(JSON.stringify({
-      count: recentDecisions.length,
-      decisions: recentDecisions
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        count: recentDecisions.length,
+        decisions: recentDecisions,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   /**
@@ -345,10 +358,10 @@ export class SessionStateDO {
     await this.persist();
 
     // Broadcast to WebSocket clients
-    this.broadcastUpdate('context_updated', { key, value });
+    this.broadcastUpdate("context_updated", { key, value });
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -357,19 +370,22 @@ export class SessionStateDO {
    */
   async getContext(request) {
     const url = new URL(request.url);
-    const key = url.searchParams.get('key');
+    const key = url.searchParams.get("key");
 
     if (key) {
-      return new Response(JSON.stringify({
-        key,
-        value: this.context[key]
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({
+          key,
+          value: this.context[key],
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(JSON.stringify(this.context), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -378,17 +394,17 @@ export class SessionStateDO {
    */
   async getMetrics(request) {
     const metrics = {
-      chittyId: request.headers.get('X-ChittyID'),
+      chittyId: request.headers.get("X-ChittyID"),
       activeSessions: this.sessions.size,
       totalDecisions: this.decisions.length,
       contextKeys: Object.keys(this.context).length,
       websocketConnections: this.websockets.size,
       lastActivity: this.lastActivity,
-      memoryUsage: this.estimateMemoryUsage()
+      memoryUsage: this.estimateMemoryUsage(),
     };
 
     return new Response(JSON.stringify(metrics), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -408,22 +424,25 @@ export class SessionStateDO {
 
     if (cleaned > 0) {
       await this.persist();
-      this.broadcastUpdate('cleanup', { cleaned });
+      this.broadcastUpdate("cleanup", { cleaned });
     }
 
-    return new Response(JSON.stringify({
-      cleaned,
-      remaining: this.sessions.size
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        cleaned,
+        remaining: this.sessions.size,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   /**
    * Handle scheduled alarm for periodic cleanup
    */
   async alarm() {
-    console.log('[SessionStateDO] Running scheduled cleanup');
+    console.log("[SessionStateDO] Running scheduled cleanup");
 
     // Cleanup expired sessions
     const now = Date.now();
@@ -437,8 +456,8 @@ export class SessionStateDO {
     }
 
     // Cleanup old decisions (older than 7 days)
-    const weekAgo = now - (7 * 24 * 60 * 60 * 1000);
-    this.decisions = this.decisions.filter(d => d.timestamp > weekAgo);
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    this.decisions = this.decisions.filter((d) => d.timestamp > weekAgo);
 
     if (cleaned > 0 || this.decisions.length > 0) {
       await this.persist();
@@ -457,10 +476,10 @@ export class SessionStateDO {
         sessions: Object.fromEntries(this.sessions),
         decisions: this.decisions,
         context: this.context,
-        lastPersisted: Date.now()
+        lastPersisted: Date.now(),
       });
     } catch (error) {
-      console.error('[SessionStateDO] Persist error:', error);
+      console.error("[SessionStateDO] Persist error:", error);
     }
   }
 
@@ -477,7 +496,7 @@ export class SessionStateDO {
 
     // Set new hibernation timeout (60 seconds)
     this.hibernationTimeout = setTimeout(() => {
-      console.log('[SessionStateDO] Entering hibernation');
+      console.log("[SessionStateDO] Entering hibernation");
       // The DO will automatically hibernate when no requests come in
     }, 60000);
   }
@@ -486,7 +505,9 @@ export class SessionStateDO {
    * Estimate memory usage (for monitoring)
    */
   estimateMemoryUsage() {
-    const sessionSize = JSON.stringify(Object.fromEntries(this.sessions)).length;
+    const sessionSize = JSON.stringify(
+      Object.fromEntries(this.sessions),
+    ).length;
     const decisionSize = JSON.stringify(this.decisions).length;
     const contextSize = JSON.stringify(this.context).length;
 
@@ -494,7 +515,7 @@ export class SessionStateDO {
       sessions: `${(sessionSize / 1024).toFixed(2)} KB`,
       decisions: `${(decisionSize / 1024).toFixed(2)} KB`,
       context: `${(contextSize / 1024).toFixed(2)} KB`,
-      total: `${((sessionSize + decisionSize + contextSize) / 1024).toFixed(2)} KB`
+      total: `${((sessionSize + decisionSize + contextSize) / 1024).toFixed(2)} KB`,
     };
   }
 }

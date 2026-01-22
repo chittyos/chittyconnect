@@ -28,13 +28,17 @@ chittysyncRoutes.post("/sync", async (c) => {
       return c.json({ error: "source and target are required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittysync');
+    const serviceToken = await getServiceToken(c.env, "chittysync");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittySync service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittySync service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://sync.chitty.cc/api/sync", {
@@ -65,12 +69,15 @@ chittysyncRoutes.get("/status/:syncId", async (c) => {
   try {
     const syncId = c.req.param("syncId");
 
-    const serviceToken = await getServiceToken(c.env, 'chittysync');
+    const serviceToken = await getServiceToken(c.env, "chittysync");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittySync service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittySync service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(`https://sync.chitty.cc/api/sync/${syncId}`, {
@@ -103,12 +110,15 @@ chittysyncRoutes.get("/history", async (c) => {
     if (target) params.append("target", target);
     params.append("limit", limit);
 
-    const serviceToken = await getServiceToken(c.env, 'chittysync');
+    const serviceToken = await getServiceToken(c.env, "chittysync");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittySync service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittySync service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(

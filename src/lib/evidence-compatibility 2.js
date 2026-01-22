@@ -76,7 +76,7 @@ export class EvidenceCompatibilityLayer {
         evidence_id: evidence.evidence_id, // Include for migration
         priority_score: evidence.priority_score,
         storage_location: evidence.storage_location,
-        ...(evidence.custom_metadata || {})
+        ...(evidence.custom_metadata || {}),
       },
 
       // Map chain_of_custody JSON to legacy array format
@@ -87,8 +87,8 @@ export class EvidenceCompatibilityLayer {
       updated_at: evidence.updated_at,
 
       // Add migration hint
-      _schema_version: '2.0_legacy_compat',
-      _use_evidence_id: evidence.evidence_id
+      _schema_version: "2.0_legacy_compat",
+      _use_evidence_id: evidence.evidence_id,
     };
   }
 
@@ -104,7 +104,9 @@ export class EvidenceCompatibilityLayer {
       case_id: legacyRequest.caseId || legacyRequest.chitty_id,
 
       // Map category to document_type
-      document_type: this.mapCategoryToDocumentType(legacyRequest.category || legacyRequest.evidenceType),
+      document_type: this.mapCategoryToDocumentType(
+        legacyRequest.category || legacyRequest.evidenceType,
+      ),
 
       // Map exhibit_id to evidence_number (if provided)
       evidence_number: legacyRequest.exhibit_id,
@@ -116,14 +118,14 @@ export class EvidenceCompatibilityLayer {
       custom_metadata: {
         ...legacyRequest.metadata,
         legacy_migration: true,
-        original_category: legacyRequest.category
+        original_category: legacyRequest.category,
       },
 
       // File information
       file_hash: legacyRequest.file_hash,
       original_filename: legacyRequest.original_name || legacyRequest.fileName,
       file_size: legacyRequest.metadata?.file_size,
-      mime_type: legacyRequest.metadata?.mime_type
+      mime_type: legacyRequest.metadata?.mime_type,
     };
   }
 
@@ -138,7 +140,7 @@ export class EvidenceCompatibilityLayer {
     if (!uuid) return 0;
 
     // Take first 8 characters of UUID, convert to int
-    const hex = uuid.replace(/-/g, '').substring(0, 8);
+    const hex = uuid.replace(/-/g, "").substring(0, 8);
     return parseInt(hex, 16) >>> 0; // Unsigned 32-bit integer
   }
 
@@ -150,27 +152,27 @@ export class EvidenceCompatibilityLayer {
    */
   mapDocumentTypeToCategory(documentType) {
     const mapping = {
-      'affidavit': '01_TRO_PROCEEDINGS',
-      'motion': '07_COURT_FILINGS',
-      'petition': '07_COURT_FILINGS',
-      'order': '07_COURT_FILINGS',
-      'transcript': '01_TRO_PROCEEDINGS',
-      'deposition': '01_TRO_PROCEEDINGS',
-      'contract': '02_LLC_FORMATION',
-      'agreement': '02_LLC_FORMATION',
-      'deed': '05_PROPERTY_TRANSACTIONS',
-      'mortgage': '05_PROPERTY_TRANSACTIONS',
-      'bank_statement': '06_FINANCIAL_STATEMENTS',
-      'financial_record': '06_FINANCIAL_STATEMENTS',
-      'correspondence': '08_ATTORNEY_CORRESPONDENCE',
-      'email': '08_ATTORNEY_CORRESPONDENCE',
-      'lease': '12_LEASE_AGREEMENTS',
-      'photo': '00_KEY_EXHIBITS',
-      'video': '00_KEY_EXHIBITS',
-      'other': '99_UNSORTED'
+      affidavit: "01_TRO_PROCEEDINGS",
+      motion: "07_COURT_FILINGS",
+      petition: "07_COURT_FILINGS",
+      order: "07_COURT_FILINGS",
+      transcript: "01_TRO_PROCEEDINGS",
+      deposition: "01_TRO_PROCEEDINGS",
+      contract: "02_LLC_FORMATION",
+      agreement: "02_LLC_FORMATION",
+      deed: "05_PROPERTY_TRANSACTIONS",
+      mortgage: "05_PROPERTY_TRANSACTIONS",
+      bank_statement: "06_FINANCIAL_STATEMENTS",
+      financial_record: "06_FINANCIAL_STATEMENTS",
+      correspondence: "08_ATTORNEY_CORRESPONDENCE",
+      email: "08_ATTORNEY_CORRESPONDENCE",
+      lease: "12_LEASE_AGREEMENTS",
+      photo: "00_KEY_EXHIBITS",
+      video: "00_KEY_EXHIBITS",
+      other: "99_UNSORTED",
     };
 
-    return mapping[documentType] || '99_UNSORTED';
+    return mapping[documentType] || "99_UNSORTED";
   }
 
   /**
@@ -180,27 +182,27 @@ export class EvidenceCompatibilityLayer {
    * @returns {string} ChittyLedger document_type
    */
   mapCategoryToDocumentType(category) {
-    if (!category) return 'other';
+    if (!category) return "other";
 
     const mapping = {
-      '00_KEY_EXHIBITS': 'key_evidence',
-      '01_TRO_PROCEEDINGS': 'affidavit',
-      '02_LLC_FORMATION': 'contract',
-      '03_MEMBERSHIP_REMOVAL': 'legal_notice',
-      '04_PREMARITAL_FUNDING': 'financial_record',
-      '05_PROPERTY_TRANSACTIONS': 'deed',
-      '06_FINANCIAL_STATEMENTS': 'bank_statement',
-      '07_COURT_FILINGS': 'motion',
-      '08_ATTORNEY_CORRESPONDENCE': 'correspondence',
-      '09_PERJURY_EVIDENCE': 'sworn_statement',
-      '10_SANCTIONS_RULE137': 'motion',
-      '11_COLOMBIAN_PROPERTY': 'property_record',
-      '12_LEASE_AGREEMENTS': 'lease',
-      '98_DUPLICATES': 'duplicate',
-      '99_UNSORTED': 'other'
+      "00_KEY_EXHIBITS": "key_evidence",
+      "01_TRO_PROCEEDINGS": "affidavit",
+      "02_LLC_FORMATION": "contract",
+      "03_MEMBERSHIP_REMOVAL": "legal_notice",
+      "04_PREMARITAL_FUNDING": "financial_record",
+      "05_PROPERTY_TRANSACTIONS": "deed",
+      "06_FINANCIAL_STATEMENTS": "bank_statement",
+      "07_COURT_FILINGS": "motion",
+      "08_ATTORNEY_CORRESPONDENCE": "correspondence",
+      "09_PERJURY_EVIDENCE": "sworn_statement",
+      "10_SANCTIONS_RULE137": "motion",
+      "11_COLOMBIAN_PROPERTY": "property_record",
+      "12_LEASE_AGREEMENTS": "lease",
+      "98_DUPLICATES": "duplicate",
+      "99_UNSORTED": "other",
     };
 
-    return mapping[category] || 'other';
+    return mapping[category] || "other";
   }
 
   /**
@@ -222,19 +224,19 @@ export class EvidenceCompatibilityLayer {
 
     if (evidence.created_at) {
       events.push({
-        event_type: 'registered',
+        event_type: "registered",
         timestamp: evidence.created_at,
-        actor: 'chittyevidence_v2',
-        details: 'Evidence registered in ChittyLedger'
+        actor: "chittyevidence_v2",
+        details: "Evidence registered in ChittyLedger",
       });
     }
 
     if (evidence.chain_of_custody_verified) {
       events.push({
-        event_type: 'verified',
+        event_type: "verified",
         timestamp: evidence.custody_verified_at || evidence.updated_at,
-        actor: 'chittyevidence_v2',
-        details: 'Chain of custody verified'
+        actor: "chittyevidence_v2",
+        details: "Chain of custody verified",
       });
     }
 
@@ -252,7 +254,8 @@ export class EvidenceCompatibilityLayer {
     try {
       // Query ChittyLedger schema (things table has file_hash)
       // This assumes ChittyConnect has access to the shared database
-      const result = await this.env.DB.prepare(`
+      const result = await this.env.DB.prepare(
+        `
         SELECT
           e.id as evidence_id,
           e.thing_id,
@@ -280,7 +283,10 @@ export class EvidenceCompatibilityLayer {
         LEFT JOIN cases c ON e.case_id = c.id
         WHERE t.file_hash = ?
         LIMIT 1
-      `).bind(fileHash).first();
+      `,
+      )
+        .bind(fileHash)
+        .first();
 
       if (!result) {
         return null;
@@ -289,11 +295,11 @@ export class EvidenceCompatibilityLayer {
       // Parse JSON fields
       return {
         ...result,
-        ai_extracted_entities: JSON.parse(result.ai_extracted_entities || '[]'),
-        custom_metadata: JSON.parse(result.custom_metadata || '{}')
+        ai_extracted_entities: JSON.parse(result.ai_extracted_entities || "[]"),
+        custom_metadata: JSON.parse(result.custom_metadata || "{}"),
       };
     } catch (error) {
-      console.error('[EvidenceCompat] File hash lookup error:', error);
+      console.error("[EvidenceCompat] File hash lookup error:", error);
       return null;
     }
   }
@@ -305,28 +311,39 @@ export class EvidenceCompatibilityLayer {
    * @returns {Promise<boolean>} True if exists
    */
   async evidenceExists(identifier) {
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
 
     try {
       if (isUUID) {
         // Check by evidence_id
-        const result = await this.env.DB.prepare(`
+        const result = await this.env.DB.prepare(
+          `
           SELECT 1 FROM evidence WHERE id = ?::uuid
-        `).bind(identifier).first();
+        `,
+        )
+          .bind(identifier)
+          .first();
 
         return !!result;
       } else {
         // Check by file_hash
-        const result = await this.env.DB.prepare(`
+        const result = await this.env.DB.prepare(
+          `
           SELECT 1 FROM evidence e
           JOIN things t ON e.thing_id = t.id
           WHERE t.file_hash = ?
-        `).bind(identifier).first();
+        `,
+        )
+          .bind(identifier)
+          .first();
 
         return !!result;
       }
     } catch (error) {
-      console.error('[EvidenceCompat] Exists check error:', error);
+      console.error("[EvidenceCompat] Exists check error:", error);
       return false;
     }
   }
@@ -339,11 +356,15 @@ export class EvidenceCompatibilityLayer {
    * @returns {Promise<object|null>} Evidence record
    */
   async getEvidence(identifier) {
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
 
     if (isUUID) {
       // Query by evidence_id
-      const result = await this.env.DB.prepare(`
+      const result = await this.env.DB.prepare(
+        `
         SELECT
           e.id as evidence_id,
           e.thing_id,
@@ -370,13 +391,18 @@ export class EvidenceCompatibilityLayer {
         JOIN things t ON e.thing_id = t.id
         LEFT JOIN cases c ON e.case_id = c.id
         WHERE e.id = ?::uuid
-      `).bind(identifier).first();
+      `,
+      )
+        .bind(identifier)
+        .first();
 
       if (result) {
         return {
           ...result,
-          ai_extracted_entities: JSON.parse(result.ai_extracted_entities || '[]'),
-          custom_metadata: JSON.parse(result.custom_metadata || '{}')
+          ai_extracted_entities: JSON.parse(
+            result.ai_extracted_entities || "[]",
+          ),
+          custom_metadata: JSON.parse(result.custom_metadata || "{}"),
         };
       }
     }
@@ -397,7 +423,11 @@ export class EvidenceCompatibilityLayer {
 
     for (const ref of legacyReferences) {
       // Skip if already UUID
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref)) {
+      if (
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          ref,
+        )
+      ) {
         migrated.push(ref);
         continue;
       }

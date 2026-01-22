@@ -38,13 +38,17 @@ chittyidRoutes.post("/mint", async (c) => {
       return c.json({ error: "Invalid entity type" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyid');
+    const serviceToken = await getServiceToken(c.env, "chittyid");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyID service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyID service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyID service
@@ -80,12 +84,15 @@ chittyidRoutes.post("/validate", async (c) => {
       return c.json({ error: "chittyid is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyid');
+    const serviceToken = await getServiceToken(c.env, "chittyid");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyID service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyID service token not configured",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyID service
@@ -117,12 +124,15 @@ chittyidRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
 
-    const serviceToken = await getServiceToken(c.env, 'chittyid');
+    const serviceToken = await getServiceToken(c.env, "chittyid");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyID service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyID service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(`https://id.chitty.cc/v1/${id}`, {

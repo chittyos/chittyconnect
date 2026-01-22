@@ -7,11 +7,12 @@
  * @module auth/github-oidc
  */
 
-import * as jose from 'jose';
+import * as jose from "jose";
 
 // GitHub Actions OIDC configuration
-const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
-const GITHUB_OIDC_JWKS_URL = 'https://token.actions.githubusercontent.com/.well-known/jwks';
+const GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
+const GITHUB_OIDC_JWKS_URL =
+  "https://token.actions.githubusercontent.com/.well-known/jwks";
 
 // Cache JWKS for performance
 let jwksCache = null;
@@ -25,7 +26,7 @@ const JWKS_CACHE_TTL = 3600000; // 1 hour
 async function getGitHubJWKS() {
   const now = Date.now();
 
-  if (jwksCache && (now - jwksCacheTime) < JWKS_CACHE_TTL) {
+  if (jwksCache && now - jwksCacheTime < JWKS_CACHE_TTL) {
     return jwksCache;
   }
 
@@ -50,7 +51,7 @@ export async function validateGitHubOIDC(token, options = {}) {
   const {
     allowedRepositories = [],
     allowedWorkflows = [],
-    audience = 'https://connect.chitty.cc',
+    audience = "https://connect.chitty.cc",
   } = options;
 
   try {
@@ -121,7 +122,7 @@ export async function validateGitHubOIDC(token, options = {}) {
       },
     };
   } catch (error) {
-    console.error('[GitHub OIDC] Validation failed:', error.message);
+    console.error("[GitHub OIDC] Validation failed:", error.message);
     throw new Error(`OIDC validation failed: ${error.message}`);
   }
 }
@@ -143,14 +144,21 @@ export function githubOIDCMiddleware(options = {}) {
   const {
     allowedRepositories = [],
     allowedWorkflows = [],
-    audience = 'https://connect.chitty.cc',
-    allowedOrgs = ['CHITTYOS', 'CHITTYFOUNDATION', 'CHITTYAPPS', 'CHITTYCORP', 'CHICAGOAPPS', 'FURNISHED-CONDOS'],
+    audience = "https://connect.chitty.cc",
+    allowedOrgs = [
+      "CHITTYOS",
+      "CHITTYFOUNDATION",
+      "CHITTYAPPS",
+      "CHITTYCORP",
+      "CHICAGOAPPS",
+      "FURNISHED-CONDOS",
+    ],
   } = options;
 
   return async (c, next) => {
-    const authHeader = c.req.header('Authorization');
+    const authHeader = c.req.header("Authorization");
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       // Not an OIDC request, let other auth handle it
       return next();
     }
@@ -158,19 +166,19 @@ export function githubOIDCMiddleware(options = {}) {
     const token = authHeader.slice(7);
 
     // Check if this looks like a GitHub OIDC token (they're JWTs)
-    if (!token.includes('.') || token.split('.').length !== 3) {
+    if (!token.includes(".") || token.split(".").length !== 3) {
       // Not a JWT, let other auth handle it
       return next();
     }
 
     try {
       // Decode header to check issuer without verifying
-      const [headerB64] = token.split('.');
+      const [headerB64] = token.split(".");
       const header = JSON.parse(atob(headerB64));
 
       // Quick check - is this from GitHub?
       // We'll do full verification below
-      if (header.typ !== 'JWT') {
+      if (header.typ !== "JWT") {
         return next();
       }
 
@@ -185,41 +193,49 @@ export function githubOIDCMiddleware(options = {}) {
       if (allowedOrgs.length > 0) {
         const owner = result.claims.repositoryOwner;
         if (!allowedOrgs.includes(owner)) {
-          return c.json({
-            success: false,
-            error: {
-              code: 'OIDC_ORG_NOT_ALLOWED',
-              message: `Organization not allowed: ${owner}`,
+          return c.json(
+            {
+              success: false,
+              error: {
+                code: "OIDC_ORG_NOT_ALLOWED",
+                message: `Organization not allowed: ${owner}`,
+              },
             },
-          }, 403);
+            403,
+          );
         }
       }
 
       // Set auth context for downstream handlers
-      c.set('auth', {
-        type: 'github_oidc',
+      c.set("auth", {
+        type: "github_oidc",
         ...result.claims,
       });
 
-      c.set('apiKey', {
+      c.set("apiKey", {
         service: `github:${result.claims.repository}`,
         name: result.claims.workflow,
-        type: 'oidc',
+        type: "oidc",
       });
 
-      console.log(`[GitHub OIDC] Authenticated: ${result.claims.repository} (${result.claims.workflow})`);
+      console.log(
+        `[GitHub OIDC] Authenticated: ${result.claims.repository} (${result.claims.workflow})`,
+      );
 
       return next();
     } catch (error) {
       // If OIDC validation fails, return error (don't fall through)
-      if (error.message.includes('OIDC validation failed')) {
-        return c.json({
-          success: false,
-          error: {
-            code: 'OIDC_VALIDATION_FAILED',
-            message: error.message,
+      if (error.message.includes("OIDC validation failed")) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: "OIDC_VALIDATION_FAILED",
+              message: error.message,
+            },
           },
-        }, 401);
+          401,
+        );
       }
 
       // Other errors, let other auth handle
@@ -233,32 +249,32 @@ export function githubOIDCMiddleware(options = {}) {
  */
 export const CHITTYOS_ALLOWED_REPOS = [
   // Foundation
-  'CHITTYFOUNDATION/chittyid',
-  'CHITTYFOUNDATION/chittyauth',
-  'CHITTYFOUNDATION/chittytrust',
-  'CHITTYFOUNDATION/chittycert',
-  'CHITTYFOUNDATION/chittyschema',
-  'CHITTYFOUNDATION/chittyregister',
+  "CHITTYFOUNDATION/chittyid",
+  "CHITTYFOUNDATION/chittyauth",
+  "CHITTYFOUNDATION/chittytrust",
+  "CHITTYFOUNDATION/chittycert",
+  "CHITTYFOUNDATION/chittyschema",
+  "CHITTYFOUNDATION/chittyregister",
 
   // Core
-  'CHITTYOS/chittyconnect',
-  'CHITTYOS/chittyrouter',
-  'CHITTYOS/chittygateway',
-  'CHITTYOS/chittymonitor',
-  'CHITTYOS/chittydiscovery',
-  'CHITTYOS/chittybeacon',
+  "CHITTYOS/chittyconnect",
+  "CHITTYOS/chittyrouter",
+  "CHITTYOS/chittygateway",
+  "CHITTYOS/chittymonitor",
+  "CHITTYOS/chittydiscovery",
+  "CHITTYOS/chittybeacon",
 
   // Apps
-  'CHITTYAPPS/chittycases',
-  'CHITTYAPPS/chittyevidence',
-  'CHITTYAPPS/chittyportal',
+  "CHITTYAPPS/chittycases",
+  "CHITTYAPPS/chittyevidence",
+  "CHITTYAPPS/chittyportal",
 
   // Corp
-  'CHITTYCORP/chittyfinance',
-  'CHITTYCORP/chittyledger',
+  "CHITTYCORP/chittyfinance",
+  "CHITTYCORP/chittyledger",
 
   // Chicago Apps
-  'CHICAGOAPPS/chittycases',
+  "CHICAGOAPPS/chittycases",
 
   // Wildcard - allow all from trusted orgs
   // (handled by allowedOrgs check in middleware)

@@ -38,13 +38,17 @@ chittycontextualRoutes.post("/analyze", async (c) => {
       return c.json({ error: "Invalid analysisType" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittycontextual');
+    const serviceToken = await getServiceToken(c.env, "chittycontextual");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyContextual service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyContextual service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyContextual service
@@ -80,12 +84,15 @@ chittycontextualRoutes.post("/extract", async (c) => {
       return c.json({ error: "text is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittycontextual');
+    const serviceToken = await getServiceToken(c.env, "chittycontextual");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyContextual service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyContextual service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://contextual.chitty.cc/api/extract", {

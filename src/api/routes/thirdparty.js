@@ -21,7 +21,10 @@ async function getCredential(env, credentialPath, fallbackEnvVar) {
     const credential = await opClient.get(credentialPath);
     if (credential) return credential;
   } catch (error) {
-    console.warn(`[ThirdParty] 1Password retrieval failed for ${credentialPath}, using fallback:`, error.message);
+    console.warn(
+      `[ThirdParty] 1Password retrieval failed for ${credentialPath}, using fallback:`,
+      error.message,
+    );
   }
 
   // Fallback to environment variable
@@ -43,15 +46,19 @@ thirdpartyRoutes.post("/notion/query", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      'integrations/notion/api_key',
-      'NOTION_TOKEN'
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
     );
 
     if (!notionToken) {
-      return c.json({
-        error: "Notion API key not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "Notion API key not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -89,14 +96,17 @@ thirdpartyRoutes.post("/notion/page/create", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      'integrations/notion/api_key',
-      'NOTION_TOKEN'
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
     );
 
     if (!notionToken) {
-      return c.json({
-        error: "Notion API key not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "Notion API key not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://api.notion.com/v1/pages", {
@@ -135,14 +145,17 @@ thirdpartyRoutes.post("/neon/query", async (c) => {
     // Get Neon database URL from 1Password with fallback
     const neonDbUrl = await getCredential(
       c.env,
-      'infrastructure/neon/database_url',
-      'NEON_DATABASE_URL'
+      "infrastructure/neon/database_url",
+      "NEON_DATABASE_URL",
     );
 
     if (!neonDbUrl) {
-      return c.json({
-        error: "Neon database URL not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "Neon database URL not configured",
+        },
+        503,
+      );
     }
 
     // Use Neon serverless driver
@@ -185,14 +198,17 @@ thirdpartyRoutes.post("/openai/chat", async (c) => {
     // Get OpenAI API key from 1Password with fallback
     const openaiKey = await getCredential(
       c.env,
-      'integrations/openai/api_key',
-      'OPENAI_API_KEY'
+      "integrations/openai/api_key",
+      "OPENAI_API_KEY",
     );
 
     if (!openaiKey) {
-      return c.json({
-        error: "OpenAI API key not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "OpenAI API key not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -250,14 +266,17 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
     // Get Google access token from 1Password with fallback
     const googleToken = await getCredential(
       c.env,
-      'integrations/google/access_token',
-      'GOOGLE_ACCESS_TOKEN'
+      "integrations/google/access_token",
+      "GOOGLE_ACCESS_TOKEN",
     );
 
     if (!googleToken) {
-      return c.json({
-        error: "Google access token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "Google access token not configured",
+        },
+        503,
+      );
     }
 
     const params = new URLSearchParams({

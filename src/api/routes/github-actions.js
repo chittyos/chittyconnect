@@ -14,9 +14,9 @@
  * @module api/routes/github-actions
  */
 
-import { Hono } from 'hono';
-import { validateGitHubOIDC } from '../../auth/github-oidc.js';
-import { OnePasswordConnectClient } from '../../services/1password-connect-client.js';
+import { Hono } from "hono";
+import { validateGitHubOIDC } from "../../auth/github-oidc.js";
+import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
 
 const githubActionsRoutes = new Hono();
 
@@ -48,102 +48,124 @@ const githubActionsRoutes = new Hono();
  *   }
  * }
  */
-githubActionsRoutes.post('/credentials', async (c) => {
+githubActionsRoutes.post("/credentials", async (c) => {
   try {
     // Extract OIDC token
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'MISSING_TOKEN',
-          message: 'Authorization header with Bearer token required',
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "MISSING_TOKEN",
+            message: "Authorization header with Bearer token required",
+          },
         },
-      }, 401);
+        401,
+      );
     }
 
     const token = authHeader.slice(7);
 
     // Validate GitHub OIDC token
     const oidcResult = await validateGitHubOIDC(token, {
-      audience: 'https://connect.chitty.cc',
+      audience: "https://connect.chitty.cc",
     });
 
     // Check if repo is in allowed orgs
-    const allowedOrgs = ['CHITTYOS', 'CHITTYFOUNDATION', 'CHITTYAPPS', 'CHITTYCORP', 'CHICAGOAPPS', 'FURNISHED-CONDOS'];
+    const allowedOrgs = [
+      "CHITTYOS",
+      "CHITTYFOUNDATION",
+      "CHITTYAPPS",
+      "CHITTYCORP",
+      "CHICAGOAPPS",
+      "FURNISHED-CONDOS",
+    ];
     const repoOwner = oidcResult.claims.repositoryOwner;
 
     if (!allowedOrgs.includes(repoOwner)) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'ORG_NOT_ALLOWED',
-          message: `Organization ${repoOwner} is not authorized`,
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "ORG_NOT_ALLOWED",
+            message: `Organization ${repoOwner} is not authorized`,
+          },
         },
-      }, 403);
+        403,
+      );
     }
 
     // Parse request body
     const body = await c.req.json();
     const { credentials: requestedCredentials = [] } = body;
 
-    if (!Array.isArray(requestedCredentials) || requestedCredentials.length === 0) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'INVALID_REQUEST',
-          message: 'credentials array is required',
+    if (
+      !Array.isArray(requestedCredentials) ||
+      requestedCredentials.length === 0
+    ) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "INVALID_REQUEST",
+            message: "credentials array is required",
+          },
         },
-      }, 400);
+        400,
+      );
     }
 
     // Credential mapping - what can be requested and where it lives
     const credentialMap = {
       CLOUDFLARE_API_TOKEN: {
-        path: 'infrastructure/cloudflare/api_token',
-        env: 'CLOUDFLARE_MAKE_API_KEY', // Fallback
+        path: "infrastructure/cloudflare/api_token",
+        env: "CLOUDFLARE_MAKE_API_KEY", // Fallback
       },
       CLOUDFLARE_ACCOUNT_ID: {
-        path: 'infrastructure/cloudflare/account_id',
-        env: 'CLOUDFLARE_ACCOUNT_ID',
-        default: '0bc21e3a5a9de1a4cc843be9c3e98121',
+        path: "infrastructure/cloudflare/account_id",
+        env: "CLOUDFLARE_ACCOUNT_ID",
+        default: "0bc21e3a5a9de1a4cc843be9c3e98121",
       },
       NEON_DATABASE_URL: {
-        path: 'infrastructure/neon/database_url',
-        env: 'NEON_DATABASE_URL',
+        path: "infrastructure/neon/database_url",
+        env: "NEON_DATABASE_URL",
       },
       GITHUB_APP_ID: {
-        path: 'infrastructure/github/app_id',
-        env: 'GITHUB_APP_ID',
+        path: "infrastructure/github/app_id",
+        env: "GITHUB_APP_ID",
       },
       GITHUB_APP_PRIVATE_KEY: {
-        path: 'infrastructure/github/private_key',
-        env: 'GITHUB_APP_PK',
+        path: "infrastructure/github/private_key",
+        env: "GITHUB_APP_PK",
       },
       OPENAI_API_KEY: {
-        path: 'integrations/openai/api_key',
-        env: 'OPENAI_API_KEY',
+        path: "integrations/openai/api_key",
+        env: "OPENAI_API_KEY",
       },
       NOTION_TOKEN: {
-        path: 'integrations/notion/api_key',
-        env: 'NOTION_TOKEN',
+        path: "integrations/notion/api_key",
+        env: "NOTION_TOKEN",
       },
     };
 
     // Validate requested credentials are allowed
     const invalidCredentials = requestedCredentials.filter(
-      (cred) => !credentialMap[cred]
+      (cred) => !credentialMap[cred],
     );
 
     if (invalidCredentials.length > 0) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'INVALID_CREDENTIALS',
-          message: `Unknown credentials: ${invalidCredentials.join(', ')}`,
-          allowed: Object.keys(credentialMap),
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "INVALID_CREDENTIALS",
+            message: `Unknown credentials: ${invalidCredentials.join(", ")}`,
+            allowed: Object.keys(credentialMap),
+          },
         },
-      }, 400);
+        400,
+      );
     }
 
     // Fetch credentials
@@ -161,7 +183,10 @@ githubActionsRoutes.post('/credentials', async (c) => {
           continue;
         }
       } catch (error) {
-        console.warn(`[GitHub Actions] 1Password fetch failed for ${credName}:`, error.message);
+        console.warn(
+          `[GitHub Actions] 1Password fetch failed for ${credName}:`,
+          error.message,
+        );
       }
 
       // Fallback to environment variable
@@ -170,35 +195,44 @@ githubActionsRoutes.post('/credentials', async (c) => {
       } else if (config.default) {
         result[credName] = config.default;
       } else {
-        return c.json({
-          success: false,
-          error: {
-            code: 'CREDENTIAL_NOT_AVAILABLE',
-            message: `Credential ${credName} is not configured`,
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: "CREDENTIAL_NOT_AVAILABLE",
+              message: `Credential ${credName} is not configured`,
+            },
           },
-        }, 503);
+          503,
+        );
       }
     }
 
     // Log the access
-    console.log(`[GitHub Actions] Credentials issued to ${oidcResult.claims.repository} (${oidcResult.claims.workflow})`);
+    console.log(
+      `[GitHub Actions] Credentials issued to ${oidcResult.claims.repository} (${oidcResult.claims.workflow})`,
+    );
 
     // Log to D1
     try {
-      await c.env.DB.prepare(`
+      await c.env.DB.prepare(
+        `
         INSERT INTO github_actions_credential_access
         (repository, workflow, run_id, actor, credentials, timestamp)
         VALUES (?, ?, ?, ?, ?, datetime('now'))
-      `).bind(
-        oidcResult.claims.repository,
-        oidcResult.claims.workflow,
-        oidcResult.claims.runId,
-        oidcResult.claims.actor,
-        requestedCredentials.join(',')
-      ).run();
+      `,
+      )
+        .bind(
+          oidcResult.claims.repository,
+          oidcResult.claims.workflow,
+          oidcResult.claims.runId,
+          oidcResult.claims.actor,
+          requestedCredentials.join(","),
+        )
+        .run();
     } catch (error) {
       // Table might not exist yet, that's ok
-      console.warn('[GitHub Actions] Failed to log access:', error.message);
+      console.warn("[GitHub Actions] Failed to log access:", error.message);
     }
 
     return c.json({
@@ -215,25 +249,31 @@ githubActionsRoutes.post('/credentials', async (c) => {
       },
     });
   } catch (error) {
-    console.error('[GitHub Actions] Error:', error);
+    console.error("[GitHub Actions] Error:", error);
 
-    if (error.message.includes('OIDC validation failed')) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'OIDC_INVALID',
-          message: error.message,
+    if (error.message.includes("OIDC validation failed")) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "OIDC_INVALID",
+            message: error.message,
+          },
         },
-      }, 401);
+        401,
+      );
     }
 
-    return c.json({
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: error.message,
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error.message,
+        },
       },
-    }, 500);
+      500,
+    );
   }
 });
 
@@ -243,58 +283,59 @@ githubActionsRoutes.post('/credentials', async (c) => {
  * List available credentials that can be requested.
  * No auth required - this is public info.
  */
-githubActionsRoutes.get('/available', async (c) => {
+githubActionsRoutes.get("/available", async (c) => {
   return c.json({
     success: true,
     credentials: [
       {
-        name: 'CLOUDFLARE_API_TOKEN',
-        description: 'Cloudflare API token for Workers deployment',
-        required_for: ['wrangler deploy', 'wrangler d1'],
+        name: "CLOUDFLARE_API_TOKEN",
+        description: "Cloudflare API token for Workers deployment",
+        required_for: ["wrangler deploy", "wrangler d1"],
       },
       {
-        name: 'CLOUDFLARE_ACCOUNT_ID',
-        description: 'Cloudflare account ID',
-        required_for: ['wrangler deploy'],
+        name: "CLOUDFLARE_ACCOUNT_ID",
+        description: "Cloudflare account ID",
+        required_for: ["wrangler deploy"],
       },
       {
-        name: 'NEON_DATABASE_URL',
-        description: 'Neon PostgreSQL connection string',
-        required_for: ['database migrations'],
+        name: "NEON_DATABASE_URL",
+        description: "Neon PostgreSQL connection string",
+        required_for: ["database migrations"],
       },
       {
-        name: 'GITHUB_APP_ID',
-        description: 'GitHub App ID',
-        required_for: ['GitHub App authentication'],
+        name: "GITHUB_APP_ID",
+        description: "GitHub App ID",
+        required_for: ["GitHub App authentication"],
       },
       {
-        name: 'GITHUB_APP_PRIVATE_KEY',
-        description: 'GitHub App private key (PEM)',
-        required_for: ['GitHub App authentication'],
+        name: "GITHUB_APP_PRIVATE_KEY",
+        description: "GitHub App private key (PEM)",
+        required_for: ["GitHub App authentication"],
       },
       {
-        name: 'OPENAI_API_KEY',
-        description: 'OpenAI API key',
-        required_for: ['AI features'],
+        name: "OPENAI_API_KEY",
+        description: "OpenAI API key",
+        required_for: ["AI features"],
       },
       {
-        name: 'NOTION_TOKEN',
-        description: 'Notion integration token',
-        required_for: ['Notion integrations'],
+        name: "NOTION_TOKEN",
+        description: "Notion integration token",
+        required_for: ["Notion integrations"],
       },
     ],
     allowed_organizations: [
-      'CHITTYOS',
-      'CHITTYFOUNDATION',
-      'CHITTYAPPS',
-      'CHITTYCORP',
-      'CHICAGOAPPS',
-      'FURNISHED-CONDOS',
+      "CHITTYOS",
+      "CHITTYFOUNDATION",
+      "CHITTYAPPS",
+      "CHITTYCORP",
+      "CHICAGOAPPS",
+      "FURNISHED-CONDOS",
     ],
     authentication: {
-      method: 'GitHub Actions OIDC',
-      audience: 'https://connect.chitty.cc',
-      documentation: 'https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect',
+      method: "GitHub Actions OIDC",
+      audience: "https://connect.chitty.cc",
+      documentation:
+        "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect",
     },
   });
 });

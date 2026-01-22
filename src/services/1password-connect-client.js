@@ -18,7 +18,7 @@ export class OnePasswordConnectClient {
       infrastructure: env.ONEPASSWORD_VAULT_INFRASTRUCTURE,
       services: env.ONEPASSWORD_VAULT_SERVICES,
       integrations: env.ONEPASSWORD_VAULT_INTEGRATIONS,
-      emergency: env.ONEPASSWORD_VAULT_EMERGENCY
+      emergency: env.ONEPASSWORD_VAULT_EMERGENCY,
     };
 
     // Cache configuration
@@ -26,7 +26,7 @@ export class OnePasswordConnectClient {
       infrastructure: 3600, // 1 hour for infrastructure creds
       services: 1800, // 30 minutes for service tokens
       integrations: 900, // 15 minutes for third-party APIs
-      emergency: 0 // Never cache emergency credentials
+      emergency: 0, // Never cache emergency credentials
     };
 
     // Cached encryption key for performance
@@ -60,13 +60,15 @@ export class OnePasswordConnectClient {
       }
     }
 
-    console.log(`[1Password] Cache MISS for ${credentialPath}, fetching from Connect API`);
+    console.log(
+      `[1Password] Cache MISS for ${credentialPath}, fetching from Connect API`,
+    );
 
     // Fetch from 1Password Connect API
     const value = await this.fetchFromConnect(parsed);
 
     // Cache the result (unless emergency vault)
-    if (parsed.vault !== 'emergency') {
+    if (parsed.vault !== "emergency") {
       const ttl = cacheOverrideTTL || this.cacheTTL[parsed.vault] || 900;
       await this.setCache(credentialPath, value, ttl);
     }
@@ -84,7 +86,7 @@ export class OnePasswordConnectClient {
   parseCredentialPath(path) {
     // Expected format: {vault}/{item}/{field}
     // Example: infrastructure/cloudflare/make_api_key
-    const parts = path.split('/');
+    const parts = path.split("/");
 
     if (parts.length !== 3) {
       return null;
@@ -103,7 +105,7 @@ export class OnePasswordConnectClient {
       vaultId: this.vaults[vault],
       item,
       field,
-      fullPath: path
+      fullPath: path,
     };
   }
 
@@ -120,16 +122,16 @@ export class OnePasswordConnectClient {
       const itemsUrl = `${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`;
 
       const itemsResponse = await fetch(itemsUrl, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Authorization': `Bearer ${this.connectToken}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${this.connectToken}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (!itemsResponse.ok) {
         throw new Error(
-          `Failed to list items in vault ${parsed.vault}: ${itemsResponse.status} ${itemsResponse.statusText}`
+          `Failed to list items in vault ${parsed.vault}: ${itemsResponse.status} ${itemsResponse.statusText}`,
         );
       }
 
@@ -137,12 +139,12 @@ export class OnePasswordConnectClient {
 
       // Find item by title (case-insensitive match)
       const item = items.find(
-        i => i.title.toLowerCase() === parsed.item.toLowerCase()
+        (i) => i.title.toLowerCase() === parsed.item.toLowerCase(),
       );
 
       if (!item) {
         throw new Error(
-          `Item not found in vault ${parsed.vault}: ${parsed.item}`
+          `Item not found in vault ${parsed.vault}: ${parsed.item}`,
         );
       }
 
@@ -150,16 +152,16 @@ export class OnePasswordConnectClient {
       const itemUrl = `${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${item.id}`;
 
       const itemResponse = await fetch(itemUrl, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Authorization': `Bearer ${this.connectToken}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${this.connectToken}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (!itemResponse.ok) {
         throw new Error(
-          `Failed to get item details: ${itemResponse.status} ${itemResponse.statusText}`
+          `Failed to get item details: ${itemResponse.status} ${itemResponse.statusText}`,
         );
       }
 
@@ -167,13 +169,14 @@ export class OnePasswordConnectClient {
 
       // Step 3: Extract the requested field
       const field = itemDetails.fields?.find(
-        f => f.label?.toLowerCase() === parsed.field.toLowerCase() ||
-             f.id?.toLowerCase() === parsed.field.toLowerCase()
+        (f) =>
+          f.label?.toLowerCase() === parsed.field.toLowerCase() ||
+          f.id?.toLowerCase() === parsed.field.toLowerCase(),
       );
 
       if (!field) {
         throw new Error(
-          `Field not found in item ${parsed.item}: ${parsed.field}`
+          `Field not found in item ${parsed.item}: ${parsed.field}`,
         );
       }
 
@@ -181,21 +184,20 @@ export class OnePasswordConnectClient {
 
       if (!value) {
         throw new Error(
-          `Field ${parsed.field} in item ${parsed.item} has no value`
+          `Field ${parsed.field} in item ${parsed.item} has no value`,
         );
       }
 
       console.log(
-        `[1Password] Successfully retrieved ${parsed.fullPath} (${value.length} chars)`
+        `[1Password] Successfully retrieved ${parsed.fullPath} (${value.length} chars)`,
       );
 
       return value;
-
     } catch (error) {
       console.error(`[1Password] Fetch error for ${parsed.fullPath}:`, error);
 
       // Check if we should failover to environment variable
-      if (this.env.CREDENTIAL_FAILOVER_ENABLED === 'true') {
+      if (this.env.CREDENTIAL_FAILOVER_ENABLED === "true") {
         return await this.failoverToEnvironment(parsed);
       }
 
@@ -212,23 +214,25 @@ export class OnePasswordConnectClient {
    */
   async failoverToEnvironment(parsed) {
     console.warn(
-      `[1Password] Attempting failover to environment variables for ${parsed.fullPath}`
+      `[1Password] Attempting failover to environment variables for ${parsed.fullPath}`,
     );
 
     // Convert path to environment variable name
     // infrastructure/cloudflare/make_api_key -> CLOUDFLARE_MAKE_API_KEY
-    const envVarName = `${parsed.item}_${parsed.field}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const envVarName = `${parsed.item}_${parsed.field}`
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "_");
 
     const envValue = this.env[envVarName];
 
     if (!envValue) {
       throw new Error(
-        `Failover failed: Environment variable ${envVarName} not set`
+        `Failover failed: Environment variable ${envVarName} not set`,
       );
     }
 
     console.warn(
-      `[1Password] Failover SUCCESS - using ${envVarName} from environment`
+      `[1Password] Failover SUCCESS - using ${envVarName} from environment`,
     );
 
     return envValue;
@@ -276,7 +280,7 @@ export class OnePasswordConnectClient {
       const encrypted = await this.encrypt(value);
 
       await this.env.CREDENTIAL_CACHE.put(cacheKey, encrypted, {
-        expirationTtl: ttl
+        expirationTtl: ttl,
       });
 
       console.log(`[1Password] Cached ${credentialPath} for ${ttl}s`);
@@ -303,29 +307,29 @@ export class OnePasswordConnectClient {
     // Import key material (only once)
     if (!this.cachedKeyMaterial) {
       this.cachedKeyMaterial = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(this.env.ENCRYPTION_KEY || 'default-key-change-me'),
-        { name: 'PBKDF2' },
+        "raw",
+        encoder.encode(this.env.ENCRYPTION_KEY || "default-key-change-me"),
+        { name: "PBKDF2" },
         false,
-        ['deriveBits', 'deriveKey']
+        ["deriveBits", "deriveKey"],
       );
     }
 
     // Derive and cache the key
     this.cachedEncryptionKey = await crypto.subtle.deriveKey(
       {
-        name: 'PBKDF2',
-        salt: encoder.encode('chittyos-1password-salt'),
+        name: "PBKDF2",
+        salt: encoder.encode("chittyos-1password-salt"),
         iterations: 100000,
-        hash: 'SHA-256'
+        hash: "SHA-256",
       },
       this.cachedKeyMaterial,
-      { name: 'AES-GCM', length: 256 },
+      { name: "AES-GCM", length: 256 },
       false,
-      ['encrypt', 'decrypt']
+      ["encrypt", "decrypt"],
     );
 
-    console.log('[1Password] Encryption key cached for improved performance');
+    console.log("[1Password] Encryption key cached for improved performance");
     return this.cachedEncryptionKey;
   }
 
@@ -351,9 +355,9 @@ export class OnePasswordConnectClient {
 
     // Encrypt
     const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
+      { name: "AES-GCM", iv },
       key,
-      data
+      data,
     );
 
     // Combine IV + encrypted data
@@ -385,7 +389,9 @@ export class OnePasswordConnectClient {
 
     // Base64 decode
     const combined = new Uint8Array(
-      atob(encrypted).split('').map(c => c.charCodeAt(0))
+      atob(encrypted)
+        .split("")
+        .map((c) => c.charCodeAt(0)),
     );
 
     // Extract IV and encrypted data
@@ -397,9 +403,9 @@ export class OnePasswordConnectClient {
 
     // Decrypt
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: "AES-GCM", iv },
       key,
-      data
+      data,
     );
 
     const decryptTime = Date.now() - startTime;
@@ -417,10 +423,12 @@ export class OnePasswordConnectClient {
    * @returns {Promise<Map<string, string>>} Map of path to credential value
    */
   async prefetch(credentialPaths) {
-    console.log(`[1Password] Prefetching ${credentialPaths.length} credentials`);
+    console.log(
+      `[1Password] Prefetching ${credentialPaths.length} credentials`,
+    );
 
     const results = await Promise.allSettled(
-      credentialPaths.map(path => this.get(path))
+      credentialPaths.map((path) => this.get(path)),
     );
 
     const credentialMap = new Map();
@@ -428,7 +436,7 @@ export class OnePasswordConnectClient {
     results.forEach((result, index) => {
       const path = credentialPaths[index];
 
-      if (result.status === 'fulfilled') {
+      if (result.status === "fulfilled") {
         credentialMap.set(path, result.value);
         console.log(`[1Password] Prefetch SUCCESS: ${path}`);
       } else {
@@ -464,29 +472,29 @@ export class OnePasswordConnectClient {
     try {
       if (!this.connectUrl || !this.connectToken) {
         return {
-          status: 'not_configured',
-          message: '1Password Connect not configured',
-          timestamp: Date.now()
+          status: "not_configured",
+          message: "1Password Connect not configured",
+          timestamp: Date.now(),
         };
       }
 
       const response = await fetch(`${this.connectUrl}/health`, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Authorization': `Bearer ${this.connectToken}`
-        }
+          Authorization: `Bearer ${this.connectToken}`,
+        },
       });
 
       return {
-        status: response.ok ? 'healthy' : 'degraded',
+        status: response.ok ? "healthy" : "degraded",
         statusCode: response.status,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
     } catch (error) {
       return {
-        status: 'down',
+        status: "down",
         error: error.message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
     }
   }

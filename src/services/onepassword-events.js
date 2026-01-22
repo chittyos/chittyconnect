@@ -9,15 +9,15 @@
  * @module services/onepassword-events
  */
 
-const EVENTS_API_BASE = 'https://events.1password.com/api/v1';
+const EVENTS_API_BASE = "https://events.1password.com/api/v1";
 
 /**
  * Event types from 1Password Events API
  */
 export const EventTypes = {
-  SIGN_IN_ATTEMPTS: 'signinattempts',
-  ITEM_USAGES: 'itemusages',
-  AUDIT_EVENTS: 'auditevents',
+  SIGN_IN_ATTEMPTS: "signinattempts",
+  ITEM_USAGES: "itemusages",
+  AUDIT_EVENTS: "auditevents",
 };
 
 /**
@@ -60,16 +60,18 @@ export class OnePasswordEventsClient {
     }
 
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      throw new Error(`Events API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Events API error: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();
@@ -93,7 +95,10 @@ export class OnePasswordEventsClient {
    * @returns {Promise<object[]>} Sign-in events
    */
   async getSignInAttempts(options = {}) {
-    const { events } = await this.fetchEvents(EventTypes.SIGN_IN_ATTEMPTS, options);
+    const { events } = await this.fetchEvents(
+      EventTypes.SIGN_IN_ATTEMPTS,
+      options,
+    );
     return events.map(this.transformSignInEvent);
   }
 
@@ -124,9 +129,9 @@ export class OnePasswordEventsClient {
    */
   transformSignInEvent(event) {
     return {
-      type: 'onepassword.signin',
+      type: "onepassword.signin",
       timestamp: event.timestamp,
-      source: '1password-events-api',
+      source: "1password-events-api",
       data: {
         uuid: event.uuid,
         sessionUuid: event.session_uuid,
@@ -146,10 +151,10 @@ export class OnePasswordEventsClient {
       },
       // ChittyChronicle metadata
       chronicle: {
-        service: 'chittyconnect',
-        category: 'security',
-        severity: event.category === 'success' ? 'info' : 'warning',
-        action: 'signin_attempt',
+        service: "chittyconnect",
+        category: "security",
+        severity: event.category === "success" ? "info" : "warning",
+        action: "signin_attempt",
       },
     };
   }
@@ -159,9 +164,9 @@ export class OnePasswordEventsClient {
    */
   transformItemUsageEvent(event) {
     return {
-      type: 'onepassword.item_usage',
+      type: "onepassword.item_usage",
       timestamp: event.timestamp,
-      source: '1password-events-api',
+      source: "1password-events-api",
       data: {
         uuid: event.uuid,
         userUuid: event.user?.uuid,
@@ -177,10 +182,10 @@ export class OnePasswordEventsClient {
       },
       // ChittyChronicle metadata
       chronicle: {
-        service: 'chittyconnect',
-        category: 'credential_access',
-        severity: 'info',
-        action: 'item_access',
+        service: "chittyconnect",
+        category: "credential_access",
+        severity: "info",
+        action: "item_access",
       },
     };
   }
@@ -190,9 +195,9 @@ export class OnePasswordEventsClient {
    */
   transformAuditEvent(event) {
     return {
-      type: 'onepassword.audit',
+      type: "onepassword.audit",
       timestamp: event.timestamp,
-      source: '1password-events-api',
+      source: "1password-events-api",
       data: {
         uuid: event.uuid,
         actorUuid: event.actor_uuid,
@@ -209,9 +214,9 @@ export class OnePasswordEventsClient {
       },
       // ChittyChronicle metadata
       chronicle: {
-        service: 'chittyconnect',
-        category: 'audit',
-        severity: 'info',
+        service: "chittyconnect",
+        category: "audit",
+        severity: "info",
         action: event.action,
       },
     };
@@ -248,7 +253,7 @@ export function createEventsClient(env) {
   const token = env.OP_EVENTS_API_TOKEN;
 
   if (!token) {
-    throw new Error('OP_EVENTS_API_TOKEN not configured');
+    throw new Error("OP_EVENTS_API_TOKEN not configured");
   }
 
   return new OnePasswordEventsClient(token);
@@ -267,7 +272,9 @@ export async function syncEventsToChronicle(env, options = {}) {
   const client = createEventsClient(env);
 
   // Calculate start time
-  const startTime = new Date(Date.now() - sinceMinutes * 60 * 1000).toISOString();
+  const startTime = new Date(
+    Date.now() - sinceMinutes * 60 * 1000,
+  ).toISOString();
 
   // Fetch events
   const events = await client.getAllEvents({ startTime });
@@ -282,7 +289,7 @@ export async function syncEventsToChronicle(env, options = {}) {
       await env.DB.prepare(
         `INSERT INTO chronicle_events (id, type, timestamp, source, data, service, category, severity, action)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO NOTHING`
+         ON CONFLICT(id) DO NOTHING`,
       )
         .bind(
           event.data.uuid,
@@ -293,13 +300,16 @@ export async function syncEventsToChronicle(env, options = {}) {
           event.chronicle.service,
           event.chronicle.category,
           event.chronicle.severity,
-          event.chronicle.action
+          event.chronicle.action,
         )
         .run();
 
       synced++;
     } catch (error) {
-      console.error(`[1Password Events] Failed to sync event ${event.data.uuid}:`, error);
+      console.error(
+        `[1Password Events] Failed to sync event ${event.data.uuid}:`,
+        error,
+      );
       errors++;
     }
   }

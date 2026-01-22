@@ -38,11 +38,11 @@ export class DecisionCache {
         .prepare(
           `INSERT INTO decisions
            (id, session_id, service_name, decision_type, reasoning, confidence, context, actions, created_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           decisionId,
-          sessionId || 'system',
+          sessionId || "system",
           serviceName,
           decisionType,
           reasoning,
@@ -50,7 +50,7 @@ export class DecisionCache {
           JSON.stringify(context),
           JSON.stringify(actions),
           Date.now(),
-          expiresAt
+          expiresAt,
         )
         .run();
 
@@ -65,14 +65,16 @@ export class DecisionCache {
             confidence,
             timestamp: Date.now(),
           }),
-          { expirationTtl: Math.floor(expiresIn / 1000) }
+          { expirationTtl: Math.floor(expiresIn / 1000) },
         );
       }
 
-      console.log(`[DecisionCache] Stored decision ${decisionId} (confidence: ${confidence})`);
+      console.log(
+        `[DecisionCache] Stored decision ${decisionId} (confidence: ${confidence})`,
+      );
       return decisionId;
     } catch (error) {
-      console.error('[DecisionCache] Failed to store decision:', error.message);
+      console.error("[DecisionCache] Failed to store decision:", error.message);
       throw error;
     }
   }
@@ -101,7 +103,7 @@ export class DecisionCache {
         `SELECT * FROM decisions
          WHERE service_name = ? AND decision_type = ?
          ORDER BY created_at DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .bind(serviceName, decisionType)
       .first();
@@ -131,9 +133,12 @@ export class DecisionCache {
     query += ` ORDER BY created_at DESC LIMIT ?`;
     bindings.push(limit);
 
-    const result = await this.db.prepare(query).bind(...bindings).all();
+    const result = await this.db
+      .prepare(query)
+      .bind(...bindings)
+      .all();
 
-    return (result.results || []).map(d => this.parseDecision(d));
+    return (result.results || []).map((d) => this.parseDecision(d));
   }
 
   /**
@@ -148,12 +153,12 @@ export class DecisionCache {
         `SELECT * FROM decisions
          WHERE confidence >= ? AND created_at >= ?
          ORDER BY confidence DESC, created_at DESC
-         LIMIT ?`
+         LIMIT ?`,
       )
       .bind(minConfidence, since, limit)
       .all();
 
-    return (result.results || []).map(d => this.parseDecision(d));
+    return (result.results || []).map((d) => this.parseDecision(d));
   }
 
   /**
@@ -177,12 +182,12 @@ export class DecisionCache {
         `SELECT * FROM decisions
          WHERE session_id = ?
          ORDER BY created_at DESC
-         LIMIT ?`
+         LIMIT ?`,
       )
       .bind(sessionId, limit)
       .all();
 
-    return (result.results || []).map(d => this.parseDecision(d));
+    return (result.results || []).map((d) => this.parseDecision(d));
   }
 
   /**
@@ -196,8 +201,8 @@ export class DecisionCache {
       decisionType: row.decision_type,
       reasoning: row.reasoning,
       confidence: row.confidence,
-      context: JSON.parse(row.context || '{}'),
-      actions: JSON.parse(row.actions || '[]'),
+      context: JSON.parse(row.context || "{}"),
+      actions: JSON.parse(row.actions || "[]"),
       createdAt: row.created_at,
       expiresAt: row.expires_at,
     };
@@ -214,7 +219,7 @@ export class DecisionCache {
          FROM decisions
          WHERE service_name = ?
          GROUP BY decision_type
-         ORDER BY count DESC`
+         ORDER BY count DESC`,
       )
       .bind(serviceName)
       .all();
@@ -225,13 +230,15 @@ export class DecisionCache {
         `SELECT decision_type, AVG(confidence) as avg_confidence
          FROM decisions
          WHERE service_name = ? AND created_at > ?
-         GROUP BY decision_type`
+         GROUP BY decision_type`,
       )
       .bind(serviceName, Date.now() - 7 * 86400000) // Last 7 days
       .all();
 
     // Get common reasoning patterns
-    const recentDecisions = await this.getDecisionHistory(serviceName, { limit: 100 });
+    const recentDecisions = await this.getDecisionHistory(serviceName, {
+      limit: 100,
+    });
     const reasoningPatterns = this.extractReasoningPatterns(recentDecisions);
 
     return {
@@ -288,12 +295,50 @@ export class DecisionCache {
    * Extract keywords from reasoning text
    */
   extractKeywords(reasoning) {
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
+    const stopWords = new Set([
+      "the",
+      "a",
+      "an",
+      "and",
+      "or",
+      "but",
+      "in",
+      "on",
+      "at",
+      "to",
+      "for",
+      "of",
+      "with",
+      "by",
+      "is",
+      "was",
+      "are",
+      "were",
+      "been",
+      "be",
+      "have",
+      "has",
+      "had",
+      "do",
+      "does",
+      "did",
+      "will",
+      "would",
+      "could",
+      "should",
+      "may",
+      "might",
+      "can",
+      "this",
+      "that",
+      "these",
+      "those",
+    ]);
 
     const words = reasoning
       .toLowerCase()
       .split(/\W+/)
-      .filter(w => w.length > 3 && !stopWords.has(w));
+      .filter((w) => w.length > 3 && !stopWords.has(w));
 
     return [...new Set(words)];
   }
@@ -311,13 +356,13 @@ export class DecisionCache {
         `SELECT decision_type, COUNT(*) as count, AVG(confidence) as avg_confidence
          FROM decisions
          GROUP BY decision_type
-         ORDER BY count DESC`
+         ORDER BY count DESC`,
       )
       .all();
 
     const highConfidence = await this.db
       .prepare(
-        `SELECT COUNT(*) as count FROM decisions WHERE confidence >= 0.8`
+        `SELECT COUNT(*) as count FROM decisions WHERE confidence >= 0.8`,
       )
       .first();
 
@@ -339,7 +384,9 @@ export class DecisionCache {
       .bind(now)
       .run();
 
-    console.log(`[DecisionCache] Cleaned up ${result.meta?.changes || 0} expired decisions`);
+    console.log(
+      `[DecisionCache] Cleaned up ${result.meta?.changes || 0} expired decisions`,
+    );
     return result.meta?.changes || 0;
   }
 }

@@ -7,7 +7,7 @@
  * @module lib/credential-helper
  */
 
-import { OnePasswordConnectClient } from '../services/1password-connect-client.js';
+import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
 
 /**
  * Get credential with 1Password Connect fallback to environment variable
@@ -18,7 +18,12 @@ import { OnePasswordConnectClient } from '../services/1password-connect-client.j
  * @param {string} [logPrefix] - Optional prefix for log messages
  * @returns {Promise<string|undefined>} Credential value or undefined
  */
-export async function getCredential(env, credentialPath, fallbackEnvVar, logPrefix = 'Credential') {
+export async function getCredential(
+  env,
+  credentialPath,
+  fallbackEnvVar,
+  logPrefix = "Credential",
+) {
   try {
     const opClient = new OnePasswordConnectClient(env);
     const credential = await opClient.get(credentialPath);
@@ -26,7 +31,10 @@ export async function getCredential(env, credentialPath, fallbackEnvVar, logPref
       return credential;
     }
   } catch (error) {
-    console.warn(`[${logPrefix}] 1Password retrieval failed for ${credentialPath}, using fallback:`, error.message);
+    console.warn(
+      `[${logPrefix}] 1Password retrieval failed for ${credentialPath}, using fallback:`,
+      error.message,
+    );
   }
 
   // Fallback to environment variable
@@ -41,11 +49,11 @@ export async function getCredential(env, credentialPath, fallbackEnvVar, logPref
  * @returns {Promise<string|undefined>} Service token or undefined
  */
 export async function getServiceToken(env, serviceName) {
-  const tokenEnvVar = `CHITTY_${serviceName.toUpperCase().replace('CHITTY', '')}_TOKEN`;
+  const tokenEnvVar = `CHITTY_${serviceName.toUpperCase().replace("CHITTY", "")}_TOKEN`;
   return getCredential(
     env,
     `services/${serviceName}/service_token`,
     tokenEnvVar,
-    serviceName
+    serviceName,
   );
 }

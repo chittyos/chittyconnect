@@ -55,10 +55,10 @@ credentialsRoutes.post("/provision", async (c) => {
 
     // Gather request metadata for ContextConsciousness™
     const requestMetadata = {
-      sessionId: c.req.header('X-Session-ID'),
-      userId: c.req.header('X-User-ID'),
-      ipAddress: c.req.header('CF-Connecting-IP'),
-      userAgent: c.req.header('User-Agent')
+      sessionId: c.req.header("X-Session-ID"),
+      userId: c.req.header("X-User-ID"),
+      ipAddress: c.req.header("CF-Connecting-IP"),
+      userAgent: c.req.header("User-Agent"),
     };
 
     // Initialize provisioner
@@ -75,7 +75,7 @@ credentialsRoutes.post("/provision", async (c) => {
       type,
       context,
       requestingService,
-      requestMetadata
+      requestMetadata,
     );
 
     return c.json(result);
@@ -428,7 +428,7 @@ credentialsRoutes.get("/health", async (c) => {
     database: "unknown",
     rate_limit: c.env.RATE_LIMIT ? "available" : "missing",
     chronicle: c.env.CHITTY_CHRONICLE_TOKEN ? "configured" : "missing",
-    onepassword_connect: "unknown"
+    onepassword_connect: "unknown",
   };
 
   // Test database connection
@@ -449,7 +449,8 @@ credentialsRoutes.get("/health", async (c) => {
   }
 
   const isHealthy =
-    (checks.cloudflare_make_api_key === "configured" || checks.onepassword_connect === "healthy") &&
+    (checks.cloudflare_make_api_key === "configured" ||
+      checks.onepassword_connect === "healthy") &&
     checks.database === "connected";
 
   return c.json({

@@ -9,7 +9,13 @@
  */
 
 export class ProactiveMonitor {
-  constructor(env, consciousness, predictionEngine, cacheWarmer, streamingManager) {
+  constructor(
+    env,
+    consciousness,
+    predictionEngine,
+    cacheWarmer,
+    streamingManager,
+  ) {
     this.env = env;
     this.consciousness = consciousness;
     this.predictionEngine = predictionEngine;
@@ -36,12 +42,13 @@ export class ProactiveMonitor {
       results.steps.snapshot = await this.captureEcosystemSnapshot();
 
       // Step 2: Generate predictions
-      results.steps.predictions = await this.predictionEngine.analyzePredictions(sessionId);
+      results.steps.predictions =
+        await this.predictionEngine.analyzePredictions(sessionId);
 
       // Step 3: Warm caches based on predictions
       if (results.steps.predictions.length > 0) {
         results.steps.cacheWarming = await this.cacheWarmer.warmCaches(
-          results.steps.predictions
+          results.steps.predictions,
         );
       }
 
@@ -58,7 +65,10 @@ export class ProactiveMonitor {
 
       console.log(`[ProactiveMonitor] Cycle ${cycleId} completed successfully`);
     } catch (error) {
-      console.error(`[ProactiveMonitor] Cycle ${cycleId} failed:`, error.message);
+      console.error(
+        `[ProactiveMonitor] Cycle ${cycleId} failed:`,
+        error.message,
+      );
       results.error = error.message;
     }
 
@@ -95,17 +105,17 @@ export class ProactiveMonitor {
     let count = 0;
 
     for (const service of services) {
-      const status = service.health?.status || 'unknown';
+      const status = service.health?.status || "unknown";
       totalScore += healthScores[status] || 0;
       count++;
     }
 
     const avgScore = count > 0 ? totalScore / count : 0;
 
-    if (avgScore >= 0.9) return 'healthy';
-    if (avgScore >= 0.7) return 'degraded';
-    if (avgScore >= 0.4) return 'critical';
-    return 'emergency';
+    if (avgScore >= 0.9) return "healthy";
+    if (avgScore >= 0.7) return "degraded";
+    if (avgScore >= 0.4) return "critical";
+    return "emergency";
   }
 
   /**
@@ -117,7 +127,7 @@ export class ProactiveMonitor {
     // Stream consciousness update
     if (snapshot) {
       await this.streamingManager.broadcast({
-        type: 'consciousness:snapshot',
+        type: "consciousness:snapshot",
         data: snapshot,
         timestamp: Date.now(),
       });
@@ -125,11 +135,11 @@ export class ProactiveMonitor {
 
     // Stream predictions
     if (predictions && predictions.length > 0) {
-      const highConfidence = predictions.filter(p => p.confidence > 0.7);
+      const highConfidence = predictions.filter((p) => p.confidence > 0.7);
 
       for (const prediction of highConfidence) {
         await this.streamingManager.broadcast({
-          type: 'prediction:new',
+          type: "prediction:new",
           data: {
             ...prediction,
             details: JSON.parse(prediction.details),
@@ -143,14 +153,16 @@ export class ProactiveMonitor {
     if (anomalies && anomalies.length > 0) {
       for (const anomaly of anomalies) {
         await this.streamingManager.broadcast({
-          type: 'anomaly:detected',
+          type: "anomaly:detected",
           data: anomaly,
           timestamp: Date.now(),
         });
       }
     }
 
-    console.log(`[ProactiveMonitor] Streamed updates to ${this.streamingManager.getActiveSessionCount()} clients`);
+    console.log(
+      `[ProactiveMonitor] Streamed updates to ${this.streamingManager.getActiveSessionCount()} clients`,
+    );
   }
 
   /**
@@ -167,12 +179,12 @@ export class ProactiveMonitor {
           .prepare(
             `INSERT INTO monitoring_snapshots
              (id, service_name, health_status, latency_ms, error_rate, metadata, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             `snap-${service.name}-${Date.now()}`,
             service.name,
-            service.health?.status || 'unknown',
+            service.health?.status || "unknown",
             service.health?.latency || null,
             service.health?.errorRate || null,
             JSON.stringify({
@@ -180,11 +192,14 @@ export class ProactiveMonitor {
               version: service.version,
               capabilities: service.capabilities,
             }),
-            Date.now()
+            Date.now(),
           )
           .run();
       } catch (error) {
-        console.warn(`[ProactiveMonitor] Failed to store snapshot for ${service.name}:`, error.message);
+        console.warn(
+          `[ProactiveMonitor] Failed to store snapshot for ${service.name}:`,
+          error.message,
+        );
       }
     }
   }
@@ -202,7 +217,7 @@ export class ProactiveMonitor {
         `SELECT service_name, COUNT(*) as count
          FROM monitoring_snapshots
          WHERE created_at > ?
-         GROUP BY service_name`
+         GROUP BY service_name`,
       )
       .bind(Date.now() - 3600000) // Last hour
       .all();
@@ -226,7 +241,7 @@ export class ProactiveMonitor {
     } else {
       // Queue for async processing
       await this.env.EVENT_Q.send({
-        type: 'monitoring:trigger',
+        type: "monitoring:trigger",
         sessionId,
         timestamp: Date.now(),
       });
@@ -246,11 +261,11 @@ export class ProactiveMonitor {
 
     // More frequent monitoring for degraded systems
     if (ecosystemHealth < 0.7) {
-      return { interval: 60, unit: 'seconds' }; // Every minute
+      return { interval: 60, unit: "seconds" }; // Every minute
     } else if (ecosystemHealth < 0.9) {
-      return { interval: 5, unit: 'minutes' }; // Every 5 minutes
+      return { interval: 5, unit: "minutes" }; // Every 5 minutes
     } else {
-      return { interval: 15, unit: 'minutes' }; // Every 15 minutes
+      return { interval: 15, unit: "minutes" }; // Every 15 minutes
     }
   }
 }
