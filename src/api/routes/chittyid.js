@@ -38,23 +38,28 @@ chittyidRoutes.post("/mint", async (c) => {
       return c.json({ error: "Invalid entity type" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyid');
+    // ChittyID uses GET endpoint without auth requirement
+    // Map entity to the 'for' parameter
+    const entityMap = {
+      'PEO': 'person',
+      'PLACE': 'place',
+      'PROP': 'property',
+      'EVNT': 'event',
+      'AUTH': 'authority',
+      'INFO': 'info',
+      'FACT': 'fact',
+      'CONTEXT': 'CONTEXT',
+      'ACTOR': 'actor'
+    };
 
-    if (!serviceToken) {
-      return c.json({
-        error: "ChittyID service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
-    }
+    const forParam = entityMap[entity] || entity;
 
-    // Forward to ChittyID service
-    const response = await fetch("https://id.chitty.cc/v1/mint", {
-      method: "POST",
+    // Forward to ChittyID service (public endpoint)
+    const response = await fetch(`https://id.chitty.cc/api/get-chittyid?for=${forParam}`, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceToken}`,
-      },
-      body: JSON.stringify({ entity, metadata }),
+        "Content-Type": "application/json"
+      }
     });
 
     if (!response.ok) {

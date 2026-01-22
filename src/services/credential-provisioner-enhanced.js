@@ -101,15 +101,59 @@ export class EnhancedCredentialProvisioner {
         ttl: null, // Connection strings don't expire
         requiresContext: ['database', 'readonly']
       },
-      openai_api_key: {
-        type: 'openai',
-        ttl: null, // API keys managed by provider
-        requiresContext: ['service', 'model']
+      neon_api_key: {
+        type: 'integration_api_key',
+        platform: 'neon',
+        ttl: null,
+        requiresContext: ['purpose'],
+        onePasswordPath: 'integrations/neon/api_key',
+        envVar: 'NEON_API_KEY',
+        description: 'Neon API key for MCP server and database management'
       },
-      notion_integration_token: {
-        type: 'notion',
-        ttl: null, // Integration tokens managed by provider
-        requiresContext: ['workspace']
+      openai_api_key: {
+        type: 'integration_api_key',
+        platform: 'openai',
+        ttl: null,
+        requiresContext: ['purpose'],
+        onePasswordPath: 'integrations/openai/api_key',
+        envVar: 'OPENAI_API_KEY',
+        description: 'OpenAI API key for GPT models'
+      },
+      anthropic_api_key: {
+        type: 'integration_api_key',
+        platform: 'anthropic',
+        ttl: null,
+        requiresContext: ['purpose'],
+        onePasswordPath: 'integrations/anthropic/api_key',
+        envVar: 'ANTHROPIC_API_KEY',
+        description: 'Anthropic API key for Claude models'
+      },
+      notion_api_key: {
+        type: 'integration_api_key',
+        platform: 'notion',
+        ttl: null,
+        requiresContext: ['purpose'],
+        onePasswordPath: 'integrations/notion/api_key',
+        envVar: 'NOTION_TOKEN',
+        description: 'Notion integration token for workspace access'
+      },
+      github_api_key: {
+        type: 'integration_api_key',
+        platform: 'github',
+        ttl: null,
+        requiresContext: ['purpose'],
+        onePasswordPath: 'integrations/github/personal_access_token',
+        envVar: 'GITHUB_TOKEN',
+        description: 'GitHub personal access token'
+      },
+      stripe_api_key: {
+        type: 'integration_api_key',
+        platform: 'stripe',
+        ttl: null,
+        requiresContext: ['purpose', 'mode'],
+        onePasswordPath: 'integrations/stripe/api_key',
+        envVar: 'STRIPE_API_KEY',
+        description: 'Stripe API key for payment processing'
       }
     };
   }
@@ -151,13 +195,12 @@ export class EnhancedCredentialProvisioner {
       case "neon_database_connection":
         return await this.provisionNeonConnection(context, requestingService);
 
-      case "openai_api_key":
-        return await this.provisionOpenAIKey(context, requestingService);
-
-      case "notion_integration_token":
-        return await this.provisionNotionToken(context, requestingService);
-
       default:
+        // Check if it's an integration API key type
+        const typeConfig = this.credentialTypes[type];
+        if (typeConfig?.type === 'integration_api_key') {
+          return await this.provisionIntegrationApiKey(type, typeConfig, context, requestingService);
+        }
         throw new Error(`Unknown credential type: ${type}`);
     }
   }
@@ -663,97 +706,112 @@ export class EnhancedCredentialProvisioner {
   }
 
   /**
-   * Provision OpenAI API key
+   * Generic integration API key provisioner
+   *
+   * Dynamically provisions API keys for any configured integration platform.
+   * Uses credential type metadata to determine 1Password path, env var name, etc.
    *
    * @private
-   * @param {object} context - Context with service, model
-   * @param {string} requestingService - Requesting service
-   * @returns {Promise<object>} OpenAI API key
+   * @param {string} type - Credential type name (e.g., 'neon_api_key')
+   * @param {object} typeConfig - Credential type configuration from this.credentialTypes
+   * @param {object} context - Request context
+   * @param {string} requestingService - Service requesting the credential
+   * @returns {Promise<object>} Provisioned API key with usage instructions
    */
-  async provisionOpenAIKey(context, requestingService) {
-    const { service, model = 'gpt-4' } = context;
+  async provisionIntegrationApiKey(type, typeConfig, context, requestingService) {
+    const { platform, onePasswordPath, envVar, description } = typeConfig;
+    const { purpose = 'general' } = context;
 
-    // Retrieve OpenAI API key from 1Password
-    const apiKey = await this.onePassword.getIntegrationKey('openai', {
+    console.log(`[EnhancedCredentialProvisioner] Provisioning ${platform} API key via dynamic handler`);
+
+    // Retrieve API key from 1Password using configured path
+    const apiKey = await this.onePassword.get(onePasswordPath, {
       service: requestingService,
-      purpose: 'ai_processing',
-      model,
+      purpose,
       environment: context.environment || 'production'
     });
 
     if (!apiKey) {
-      throw new Error('Failed to retrieve OpenAI credentials from 1Password');
+      throw new Error(`Failed to retrieve ${platform} API key from 1Password (path: ${onePasswordPath})`);
     }
 
-    // Could create a rate-limited proxy key here if needed
-    // For now, return the actual key with usage tracking
-
     await this.logProvisionEvent({
-      type: 'openai_api_key',
-      service,
-      model,
+      type,
+      platform,
+      purpose,
       requestingService
     });
+
+    // Build platform-specific usage instructions
+    const usageInstructions = this.buildProviderUsageInstructions(platform, envVar, apiKey, context);
 
     return {
       success: true,
       credential: {
-        type: 'openai_api_key',
+        type,
         value: apiKey,
-        model,
-        provider: 'openai'
+        platform,
+        purpose,
+        provider: platform
       },
-      usage_instructions: {
-        environment_variable: 'OPENAI_API_KEY',
-        command: `wrangler secret put OPENAI_API_KEY`,
-        note: `API key for OpenAI ${model} model`,
-        warning: 'Monitor usage to control costs'
+      usage_instructions: usageInstructions,
+      metadata: {
+        provisioned_by: 'ChittyConnect Dynamic',
+        description,
+        onePasswordPath,
+        timestamp: new Date().toISOString()
       }
     };
   }
 
   /**
-   * Provision Notion integration token
+   * Build platform-specific usage instructions for integration API keys
    *
    * @private
-   * @param {object} context - Context with workspace
-   * @param {string} requestingService - Requesting service
-   * @returns {Promise<object>} Notion token
+   * @param {string} platform - Platform name (neon, openai, etc.)
+   * @param {string} envVar - Environment variable name
+   * @param {string} apiKey - The API key value
+   * @param {object} context - Request context
+   * @returns {object} Usage instructions
    */
-  async provisionNotionToken(context, requestingService) {
-    const { workspace } = context;
+  buildProviderUsageInstructions(platform, envVar, apiKey, context) {
+    const base = {
+      environment_variable: envVar,
+      wrangler_command: `wrangler secret put ${envVar}`,
+      github_secret_command: `gh secret set ${envVar}`
+    };
 
-    // Retrieve Notion token from 1Password
-    const token = await this.onePassword.getIntegrationKey('notion', {
-      service: requestingService,
-      purpose: 'workspace_integration',
-      workspace,
-      environment: context.environment || 'production'
-    });
-
-    if (!token) {
-      throw new Error('Failed to retrieve Notion credentials from 1Password');
-    }
-
-    await this.logProvisionEvent({
-      type: 'notion_integration_token',
-      workspace,
-      requestingService
-    });
+    // Platform-specific instructions
+    const platformInstructions = {
+      neon: {
+        mcp_command: `claude mcp add neon -- npx -y @neondatabase/mcp-server-neon start "${apiKey}"`,
+        note: 'Use with Neon MCP server or direct Neon API access for database management.'
+      },
+      openai: {
+        note: 'Use with OpenAI SDK or direct API calls. Monitor usage to control costs.',
+        sdk_example: `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: process.env.${envVar} });`
+      },
+      anthropic: {
+        note: 'Use with Anthropic SDK or direct API calls for Claude models.',
+        sdk_example: `import Anthropic from '@anthropic-ai/sdk'; const client = new Anthropic({ apiKey: process.env.${envVar} });`
+      },
+      notion: {
+        note: 'Use with Notion SDK or MCP server for workspace access.',
+        mcp_command: `claude mcp add notion -- npx -y @notionhq/client`
+      },
+      github: {
+        note: 'Use with GitHub CLI, Octokit SDK, or direct API calls.',
+        cli_command: `gh auth login --with-token <<< "${apiKey}"`
+      },
+      stripe: {
+        note: `Use with Stripe SDK. Mode: ${context.mode || 'test'}`,
+        sdk_example: `import Stripe from 'stripe'; const stripe = new Stripe(process.env.${envVar});`
+      }
+    };
 
     return {
-      success: true,
-      credential: {
-        type: 'notion_token',
-        value: token,
-        workspace,
-        provider: 'notion'
-      },
-      usage_instructions: {
-        environment_variable: 'NOTION_TOKEN',
-        command: `wrangler secret put NOTION_TOKEN`,
-        note: `Integration token for Notion workspace: ${workspace}`
-      }
+      ...base,
+      ...(platformInstructions[platform] || { note: `API key for ${platform}` })
     };
   }
 

@@ -124,10 +124,10 @@ CHITTYOS_DOMAIN = "chitty.cc"
 GITHUB_APP_ID = ""  # Set via wrangler secret
 # 1Password Connect Configuration (optional - enables dynamic credential retrieval)
 ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
-ONEPASSWORD_VAULT_INFRASTRUCTURE = "infrastructure-vault-uuid"
-ONEPASSWORD_VAULT_SERVICES = "services-vault-uuid"
-ONEPASSWORD_VAULT_INTEGRATIONS = "integrations-vault-uuid"
-ONEPASSWORD_VAULT_EMERGENCY = "emergency-vault-uuid"
+ONEPASSWORD_VAULT_INFRASTRUCTURE = "xgevq7nkt6t4bfokjaczht5gdy"  # ChittyOS-Deployment
+ONEPASSWORD_VAULT_SERVICES = "shl646vf4snnrkx6linyk3yis4"        # ChittyConnect Only
+ONEPASSWORD_VAULT_INTEGRATIONS = "3ngilqu4qsp4mlr53xhvyi4sry"    # ChittyOS-Integrations
+ONEPASSWORD_VAULT_EMERGENCY = "xrvuw4jn25fwwpowhaihztinoi"       # ChittyOS-SSH
 CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Environment variables for production
@@ -203,10 +203,10 @@ CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
 CHITTYOS_DOMAIN = "chitty.cc"
 # 1Password Connect Configuration (optional - enables dynamic credential retrieval)
 ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
-ONEPASSWORD_VAULT_INFRASTRUCTURE = "infrastructure-vault-uuid"
-ONEPASSWORD_VAULT_SERVICES = "services-vault-uuid"
-ONEPASSWORD_VAULT_INTEGRATIONS = "integrations-vault-uuid"
-ONEPASSWORD_VAULT_EMERGENCY = "emergency-vault-uuid"
+ONEPASSWORD_VAULT_INFRASTRUCTURE = "xgevq7nkt6t4bfokjaczht5gdy"  # ChittyOS-Deployment
+ONEPASSWORD_VAULT_SERVICES = "shl646vf4snnrkx6linyk3yis4"        # ChittyConnect Only
+ONEPASSWORD_VAULT_INTEGRATIONS = "3ngilqu4qsp4mlr53xhvyi4sry"    # ChittyOS-Integrations
+ONEPASSWORD_VAULT_EMERGENCY = "xrvuw4jn25fwwpowhaihztinoi"       # ChittyOS-SSH
 CREDENTIAL_FAILOVER_ENABLED = "true"
 
 # Secrets (set via: wrangler secret put <NAME>)
