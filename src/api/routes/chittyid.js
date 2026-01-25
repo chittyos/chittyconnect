@@ -1,73 +1,63 @@
 /**
  * ChittyID API Routes
- * Proxy for ChittyID service with 1Password Connect integration
+ * Proxy for ChittyID service (id.chitty.cc)
  *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Uses official ChittyIDClient from @chittyfoundation/chittyid
+ * ChittyFoundation maintains the minting service and client library.
  */
 
 import { Hono } from "hono";
+import { ChittyIDClient, EntityType } from "../../lib/chittyid-client.js";
 import { getServiceToken } from "../../lib/credential-helper.js";
 
 const chittyidRoutes = new Hono();
 
+// Legacy entity mapping for backward compatibility
+const LEGACY_ENTITY_MAP = {
+  PEO: EntityType.PERSON,
+  PLACE: EntityType.PLACE,
+  PROP: EntityType.THING,
+  EVNT: EntityType.EVENT,
+  AUTH: EntityType.AUTHORITY,
+  INFO: EntityType.THING,
+  FACT: EntityType.THING,
+  CONTEXT: EntityType.THING,
+  ACTOR: EntityType.PERSON
+};
+
 /**
  * POST /api/chittyid/mint
  * Mint a new ChittyID
+ *
+ * Body: { entity, metadata? }
+ * - entity: person | place | thing | event | authority
+ * - metadata: { region?, jurisdiction?, trust? }
  */
 chittyidRoutes.post("/mint", async (c) => {
   try {
-    const { entity, metadata } = await c.req.json();
+    const { entity, metadata = {} } = await c.req.json();
 
     if (!entity) {
       return c.json({ error: "entity is required" }, 400);
     }
 
-    const validEntities = [
-      "PEO",
-      "PLACE",
-      "PROP",
-      "EVNT",
-      "AUTH",
-      "INFO",
-      "FACT",
-      "CONTEXT",
-      "ACTOR",
-    ];
-    if (!validEntities.includes(entity)) {
-      return c.json({ error: "Invalid entity type" }, 400);
-    }
+    // Map legacy entity types
+    const entityType = LEGACY_ENTITY_MAP[entity] || entity.toLowerCase();
 
-    // ChittyID uses GET endpoint without auth requirement
-    // Map entity to the 'for' parameter
-    const entityMap = {
-      'PEO': 'person',
-      'PLACE': 'place',
-      'PROP': 'property',
-      'EVNT': 'event',
-      'AUTH': 'authority',
-      'INFO': 'info',
-      'FACT': 'fact',
-      'CONTEXT': 'CONTEXT',
-      'ACTOR': 'actor'
-    };
+    // Get service token for authenticated minting
+    const serviceToken = await getServiceToken(c.env, 'chittyid');
 
-    const forParam = entityMap[entity] || entity;
-
-    // Forward to ChittyID service (public endpoint)
-    const response = await fetch(`https://id.chitty.cc/api/get-chittyid?for=${forParam}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json"
-      }
+    const client = new ChittyIDClient({
+      token: serviceToken
     });
 
-    if (!response.ok) {
-      throw new Error(`ChittyID service error: ${response.status}`);
-    }
+    const result = await client.mint(entityType, {
+      region: metadata.region,
+      jurisdiction: metadata.jurisdiction,
+      trust: metadata.trust
+    });
 
-    const data = await response.json();
-    return c.json(data);
+    return c.json(result);
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
@@ -85,71 +75,62 @@ chittyidRoutes.post("/validate", async (c) => {
       return c.json({ error: "chittyid is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, "chittyid");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyID service token not configured",
-        },
-        503,
-      );
-    }
-
-    // Forward to ChittyID service
-    const response = await fetch("https://id.chitty.cc/v1/validate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceToken}`,
-      },
-      body: JSON.stringify({ chittyid }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`ChittyID service error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return c.json(data);
+    const client = new ChittyIDClient();
+    const result = await client.validate(chittyid);
+    return c.json(result);
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
 });
 
 /**
- * GET /api/chittyid/:id
- * Get ChittyID details
+ * GET /api/chittyid/parse/:id
+ * Parse ChittyID components (client-side, no network call)
  */
-chittyidRoutes.get("/:id", async (c) => {
+chittyidRoutes.get("/parse/:id", async (c) => {
   try {
     const id = c.req.param("id");
+    const components = ChittyIDClient.parse(id);
 
-    const serviceToken = await getServiceToken(c.env, "chittyid");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyID service token not configured",
-        },
-        503,
-      );
+    if (!components) {
+      return c.json({ error: "Invalid ChittyID format" }, 400);
     }
 
-    const response = await fetch(`https://id.chitty.cc/v1/${id}`, {
-      headers: {
-        Authorization: `Bearer ${serviceToken}`,
-      },
+    return c.json({
+      success: true,
+      chittyId: id,
+      components
     });
-
-    if (!response.ok) {
-      throw new Error(`ChittyID service error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return c.json(data);
   } catch (error) {
     return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/chittyid/spec
+ * Get ChittyID specification
+ */
+chittyidRoutes.get("/spec", async (c) => {
+  try {
+    const client = new ChittyIDClient();
+    const result = await client.getSpec();
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/chittyid/health
+ * Check ChittyID service health
+ */
+chittyidRoutes.get("/health", async (c) => {
+  try {
+    const client = new ChittyIDClient();
+    const result = await client.health();
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: error.message, healthy: false }, 500);
   }
 });
 

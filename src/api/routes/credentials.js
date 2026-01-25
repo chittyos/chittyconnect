@@ -221,6 +221,15 @@ credentialsRoutes.get("/types", async (c) => {
       provider: "stripe",
       status: "available",
     },
+    {
+      type: "twilio_credentials",
+      description: "Twilio account SID, auth token, and phone number for SMS/Voice",
+      required_context: [],
+      optional_context: [],
+      provider: "twilio",
+      endpoint: "GET /api/credentials/twilio",
+      status: "available",
+    },
   ];
 
   return c.json({
@@ -434,6 +443,84 @@ credentialsRoutes.delete("/revoke", async (c) => {
       },
       500,
     );
+  }
+});
+
+/**
+ * GET /api/credentials/twilio
+ *
+ * Get Twilio credentials for ChittyConcierge and other services.
+ * Returns account SID, auth token, and phone number.
+ *
+ * Headers:
+ * - X-Service-Name: The requesting service name (required)
+ *
+ * Response:
+ * {
+ *   "accountSid": "AC...",
+ *   "authToken": "...",
+ *   "phoneNumber": "+1..."
+ * }
+ */
+credentialsRoutes.get("/twilio", async (c) => {
+  try {
+    const serviceName = c.req.header('X-Service-Name') || c.get('apiKey')?.service || 'unknown';
+
+    console.log(`[Credentials] Twilio credentials requested by: ${serviceName}`);
+
+    // Initialize 1Password client
+    const opClient = new OnePasswordConnectClient(c.env);
+
+    let accountSid, authToken, phoneNumber;
+
+    try {
+      // Try 1Password first
+      accountSid = await opClient.get('integrations/twilio/account_sid');
+      authToken = await opClient.get('integrations/twilio/auth_token');
+      phoneNumber = await opClient.get('integrations/twilio/phone_number');
+    } catch (opError) {
+      console.warn('[Credentials] 1Password unavailable, falling back to env vars:', opError.message);
+
+      // Fallback to environment variables
+      accountSid = c.env.TWILIO_ACCOUNT_SID;
+      authToken = c.env.TWILIO_AUTH_TOKEN;
+      phoneNumber = c.env.TWILIO_PHONE_NUMBER;
+    }
+
+    if (!accountSid || !authToken || !phoneNumber) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'CREDENTIALS_NOT_FOUND',
+          message: 'Twilio credentials not configured in 1Password or environment'
+        }
+      }, 503);
+    }
+
+    // Log credential access (no sensitive data)
+    try {
+      await c.env.DB.prepare(`
+        INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at)
+        VALUES ('twilio_credentials', 'twilio', 'sms_voice', ?, datetime('now'))
+      `).bind(serviceName).run();
+    } catch (dbError) {
+      console.warn('[Credentials] Failed to log credential access:', dbError.message);
+    }
+
+    return c.json({
+      accountSid,
+      authToken,
+      phoneNumber
+    });
+  } catch (error) {
+    console.error('[Credentials] Twilio credentials error:', error);
+    return c.json({
+      success: false,
+      error: {
+        code: 'TWILIO_CREDENTIALS_FAILED',
+        message: error.message
+      }
+    }, 500);
   }
 });
 

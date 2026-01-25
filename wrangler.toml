@@ -185,8 +185,8 @@ script_name = "chittyconnect"
 
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "chittyconnect-production"
-database_id = "39f76706-5d67-401f-b1bf-9a212de4da0b"
+database_name = "chittyconnect"
+database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 
 [[env.production.queues.producers]]
 binding = "EVENT_Q"
