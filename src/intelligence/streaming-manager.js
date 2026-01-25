@@ -38,15 +38,20 @@ export class StreamingManager {
     (async () => {
       try {
         const event = `data: ${JSON.stringify({
-          type: 'connected',
+          type: "connected",
           sessionId,
           timestamp: Date.now(),
-          message: 'ChittyConnect streaming active',
+          message: "ChittyConnect streaming active",
         })}\n\n`;
         await writer.write(encoder.encode(event));
-        console.log(`[StreamingManager] Initial event sent for session ${sessionId}`);
+        console.log(
+          `[StreamingManager] Initial event sent for session ${sessionId}`,
+        );
       } catch (err) {
-        console.error(`[StreamingManager] Failed to send initial event:`, err?.message || err);
+        console.error(
+          `[StreamingManager] Failed to send initial event:`,
+          err?.message || err,
+        );
       }
     })();
 
@@ -57,10 +62,10 @@ export class StreamingManager {
 
     return new Response(readable, {
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   }
@@ -92,7 +97,10 @@ export class StreamingManager {
 
       return true;
     } catch (error) {
-      console.error(`[StreamingManager] Failed to send event to ${sessionId}:`, error.message);
+      console.error(
+        `[StreamingManager] Failed to send event to ${sessionId}:`,
+        error.message,
+      );
       this.closeStream(sessionId);
       return false;
     }
@@ -135,7 +143,7 @@ export class StreamingManager {
 
       // Send heartbeat
       await this.sendEvent(sessionId, {
-        type: 'heartbeat',
+        type: "heartbeat",
         timestamp: Date.now(),
         uptime: timeSinceActivity,
       });
@@ -159,7 +167,10 @@ export class StreamingManager {
     try {
       await connection.writer.close();
     } catch (error) {
-      console.warn(`[StreamingManager] Error closing stream for ${sessionId}:`, error.message);
+      console.warn(
+        `[StreamingManager] Error closing stream for ${sessionId}:`,
+        error.message,
+      );
     }
 
     this.connections.delete(sessionId);
@@ -194,7 +205,7 @@ export class StreamingManager {
    */
   async streamConsciousnessUpdate(sessionId, awareness) {
     return await this.sendEvent(sessionId, {
-      type: 'consciousness:update',
+      type: "consciousness:update",
       data: awareness,
       timestamp: Date.now(),
     });
@@ -205,7 +216,7 @@ export class StreamingManager {
    */
   async streamPrediction(sessionId, prediction) {
     return await this.sendEvent(sessionId, {
-      type: 'prediction:new',
+      type: "prediction:new",
       data: prediction,
       timestamp: Date.now(),
     });
@@ -216,7 +227,7 @@ export class StreamingManager {
    */
   async streamAlert(sessionId, alert) {
     return await this.sendEvent(sessionId, {
-      type: 'alert:new',
+      type: "alert:new",
       data: alert,
       timestamp: Date.now(),
     });
@@ -227,7 +238,7 @@ export class StreamingManager {
    */
   async streamDecision(sessionId, decision) {
     return await this.sendEvent(sessionId, {
-      type: 'decision:made',
+      type: "decision:made",
       data: decision,
       timestamp: Date.now(),
     });
@@ -238,7 +249,7 @@ export class StreamingManager {
    */
   async streamMemoryUpdate(sessionId, memory) {
     return await this.sendEvent(sessionId, {
-      type: 'memory:update',
+      type: "memory:update",
       data: memory,
       timestamp: Date.now(),
     });

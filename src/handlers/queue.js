@@ -9,7 +9,13 @@
  */
 
 // Temporary inline normalization until MCP normalize module is wired
-const normalizeGitHubEvent = ({ delivery, event, payload, installationId, tenantId }) => ({
+const normalizeGitHubEvent = ({
+  delivery,
+  event,
+  payload,
+  installationId,
+  tenantId,
+}) => ({
   type: `github.${event}`,
   delivery,
   installationId,
@@ -52,7 +58,7 @@ export async function queueConsumer(batch, env) {
  * @param {object} env - Worker environment
  */
 async function processEvent(message, env) {
-  const { delivery, event, payload, timestamp } = message;
+  const { delivery, event, payload } = message;
 
   try {
     // Get installation ID from payload
@@ -72,8 +78,8 @@ async function processEvent(message, env) {
       return;
     }
 
-    // Normalize into MCP event schema
-    const mcpEvent = normalizeGitHubEvent({
+    // Normalize into MCP event schema (prepared for future MCP dispatch)
+    normalizeGitHubEvent({
       delivery,
       event,
       payload,

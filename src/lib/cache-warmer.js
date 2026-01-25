@@ -29,17 +29,17 @@ export class CacheWarmer {
       if (prediction.confidence < 0.6) continue; // Only warm high-confidence
 
       switch (prediction.prediction_type) {
-        case 'failure':
+        case "failure":
           await this.warmFailoverCaches(prediction);
           warmed.serviceData++;
           break;
 
-        case 'latency':
+        case "latency":
           await this.warmPerformanceCaches(prediction);
           warmed.serviceData++;
           break;
 
-        case 'cascade':
+        case "cascade":
           await this.warmCascadeCaches(prediction);
           warmed.serviceData++;
           break;
@@ -62,11 +62,11 @@ export class CacheWarmer {
       fallbackKey,
       JSON.stringify({
         primaryService: serviceName,
-        fallbackStrategy: 'degraded-mode',
+        fallbackStrategy: "degraded-mode",
         cacheHit: true,
         warmedAt: Date.now(),
       }),
-      { expirationTtl: 3600 } // 1 hour
+      { expirationTtl: 3600 }, // 1 hour
     );
 
     // Pre-cache health check results
@@ -74,11 +74,11 @@ export class CacheWarmer {
     await this.cache.put(
       healthKey,
       JSON.stringify({
-        status: 'predicted-failure',
+        status: "predicted-failure",
         predictionId: prediction.id,
         warmedAt: Date.now(),
       }),
-      { expirationTtl: 1800 } // 30 minutes
+      { expirationTtl: 1800 }, // 30 minutes
     );
   }
 
@@ -93,13 +93,13 @@ export class CacheWarmer {
     await this.cache.put(
       strategyKey,
       JSON.stringify({
-        mode: 'aggressive',
+        mode: "aggressive",
         ttl: 300, // 5 minutes
-        reason: 'latency-prediction',
+        reason: "latency-prediction",
         predictionId: prediction.id,
         warmedAt: Date.now(),
       }),
-      { expirationTtl: 3600 } // 1 hour
+      { expirationTtl: 3600 }, // 1 hour
     );
 
     // Pre-cache service response templates
@@ -111,7 +111,7 @@ export class CacheWarmer {
         serviceUnavailable: false,
         warmedAt: Date.now(),
       }),
-      { expirationTtl: 900 } // 15 minutes
+      { expirationTtl: 900 }, // 15 minutes
     );
   }
 
@@ -133,7 +133,7 @@ export class CacheWarmer {
           predictionId: prediction.id,
           warmedAt: Date.now(),
         }),
-        { expirationTtl: 1800 } // 30 minutes
+        { expirationTtl: 1800 }, // 30 minutes
       );
     }
 
@@ -142,11 +142,11 @@ export class CacheWarmer {
     await this.cache.put(
       circuitKey,
       JSON.stringify({
-        state: 'half-open',
-        reason: 'cascade-prediction',
+        state: "half-open",
+        reason: "cascade-prediction",
         warmedAt: Date.now(),
       }),
-      { expirationTtl: 1800 } // 30 minutes
+      { expirationTtl: 1800 }, // 30 minutes
     );
   }
 
@@ -157,7 +157,10 @@ export class CacheWarmer {
     if (!this.memory) return { warmed: 0 };
 
     // Get recent interactions from MemoryCloude
-    const interactions = await this.memory.getSessionInteractions(sessionId, 50);
+    const interactions = await this.memory.getSessionInteractions(
+      sessionId,
+      50,
+    );
 
     const accessCounts = new Map();
 
@@ -173,11 +176,16 @@ export class CacheWarmer {
 
     // Warm top accessed entities
     let warmed = 0;
-    const sorted = Array.from(accessCounts.entries()).sort((a, b) => b[1] - a[1]);
+    const sorted = Array.from(accessCounts.entries()).sort(
+      (a, b) => b[1] - a[1],
+    );
 
     for (const [entityKey, count] of sorted.slice(0, 10)) {
       const cacheKey = `entity:${entityKey}:data`;
-      const entityData = await this.memory.kv.get(`entity:${entityKey}`, 'json');
+      const entityData = await this.memory.kv.get(
+        `entity:${entityKey}`,
+        "json",
+      );
 
       if (entityData) {
         await this.cache.put(
@@ -187,7 +195,7 @@ export class CacheWarmer {
             accessCount: count,
             warmedAt: Date.now(),
           }),
-          { expirationTtl: 3600 } // 1 hour
+          { expirationTtl: 3600 }, // 1 hour
         );
         warmed++;
       }
@@ -223,9 +231,9 @@ export class CacheWarmer {
     // This would require tracking warmed entries
     // For now, return basic info
     return {
-      engine: 'prediction-driven',
-      status: 'active',
-      strategies: ['failover', 'performance', 'cascade', 'access-pattern'],
+      engine: "prediction-driven",
+      status: "active",
+      strategies: ["failover", "performance", "cascade", "access-pattern"],
     };
   }
 }

@@ -77,26 +77,30 @@ api.get("/api/health", (c) => {
   });
 });
 
-// OpenAPI spec endpoint - import and serve statically
-// In Cloudflare Workers, we use import attributes to load JSON
+// OpenAPI spec endpoint - serve from public directory
+// Note: Import attributes not yet supported by ESLint parser, so we use fetch
 api.get("/openapi.json", async (c) => {
   try {
-    // Use dynamic import with assertion for JSON module
-    const { default: openapiSpec } = await import('../../public/openapi.json', {
-      assert: { type: 'json' }
-    });
+    // Fetch the OpenAPI spec from the public directory
+    // In Workers, this will be served from the asset binding
+    const url = new URL("../../public/openapi.json", import.meta.url);
+    const response = await fetch(url.href);
+    const openapiSpec = await response.json();
 
     // Set proper CORS headers for OpenAPI spec
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('Content-Type', 'application/json');
+    c.header("Access-Control-Allow-Origin", "*");
+    c.header("Content-Type", "application/json");
 
     return c.json(openapiSpec);
   } catch (error) {
-    console.error('[OpenAPI] Failed to load spec:', error);
-    return c.json({
-      error: 'OpenAPI spec not available',
-      message: error.message
-    }, 500);
+    console.error("[OpenAPI] Failed to load spec:", error);
+    return c.json(
+      {
+        error: "OpenAPI spec not available",
+        message: error.message,
+      },
+      500,
+    );
   }
 });
 

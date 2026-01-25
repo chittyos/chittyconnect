@@ -27,14 +27,15 @@ const TOOLS = [
   // Identity Tools
   {
     name: "chitty_id_mint",
-    description: "Mint a new ChittyID for a person, trust, organization, case, or location. Returns cryptographically secure DID with drand beacon randomness.",
+    description:
+      "Mint a new ChittyID for a person, trust, organization, case, or location. Returns cryptographically secure DID with drand beacon randomness.",
     inputSchema: {
       type: "object",
       properties: {
         entity_type: {
           type: "string",
           enum: ["PERSON", "TRUST", "ORGANIZATION", "CASE", "LOCATION"],
-          description: "Type of entity for ChittyID generation"
+          description: "Type of entity for ChittyID generation",
         },
         metadata: {
           type: "object",
@@ -42,38 +43,40 @@ const TOOLS = [
           properties: {
             name: { type: "string" },
             jurisdiction: { type: "string" },
-            description: { type: "string" }
-          }
-        }
+            description: { type: "string" },
+          },
+        },
       },
-      required: ["entity_type"]
-    }
+      required: ["entity_type"],
+    },
   },
   {
     name: "chitty_id_validate",
-    description: "Validate a ChittyID format and verify it exists in the registry. Returns validation status and entity details.",
+    description:
+      "Validate a ChittyID format and verify it exists in the registry. Returns validation status and entity details.",
     inputSchema: {
       type: "object",
       properties: {
         chitty_id: {
           type: "string",
-          description: "ChittyID to validate (format: VV-G-LLL-SSSS-T-YM-C-X)"
-        }
+          description: "ChittyID to validate (format: VV-G-LLL-SSSS-T-YM-C-X)",
+        },
       },
-      required: ["chitty_id"]
-    }
+      required: ["chitty_id"],
+    },
   },
 
   // Case Management Tools
   {
     name: "chitty_case_create",
-    description: "Create a new legal case with parties, jurisdiction, and case type. Returns case ChittyID and structure.",
+    description:
+      "Create a new legal case with parties, jurisdiction, and case type. Returns case ChittyID and structure.",
     inputSchema: {
       type: "object",
       properties: {
         case_type: {
           type: "string",
-          description: "Type of legal case (civil, criminal, family, etc.)"
+          description: "Type of legal case (civil, criminal, family, etc.)",
         },
         parties: {
           type: "array",
@@ -84,47 +87,55 @@ const TOOLS = [
               chitty_id: { type: "string" },
               role: {
                 type: "string",
-                enum: ["plaintiff", "defendant", "witness", "attorney", "judge"]
-              }
-            }
-          }
+                enum: [
+                  "plaintiff",
+                  "defendant",
+                  "witness",
+                  "attorney",
+                  "judge",
+                ],
+              },
+            },
+          },
         },
         jurisdiction: { type: "string" },
-        description: { type: "string" }
+        description: { type: "string" },
       },
-      required: ["case_type", "parties"]
-    }
+      required: ["case_type", "parties"],
+    },
   },
   {
     name: "chitty_case_get",
-    description: "Retrieve full case details including parties, evidence, timeline, and status.",
+    description:
+      "Retrieve full case details including parties, evidence, timeline, and status.",
     inputSchema: {
       type: "object",
       properties: {
         case_id: {
           type: "string",
-          description: "ChittyID of the case"
-        }
+          description: "ChittyID of the case",
+        },
       },
-      required: ["case_id"]
-    }
+      required: ["case_id"],
+    },
   },
 
   // Evidence Tools
   {
     name: "chitty_evidence_ingest",
-    description: "Ingest evidence with chain of custody tracking. Supports documents, media, and digital artifacts.",
+    description:
+      "Ingest evidence with chain of custody tracking. Supports documents, media, and digital artifacts.",
     inputSchema: {
       type: "object",
       properties: {
         case_id: { type: "string" },
         evidence_type: {
           type: "string",
-          enum: ["document", "photo", "video", "audio", "digital"]
+          enum: ["document", "photo", "video", "audio", "digital"],
         },
         content_url: {
           type: "string",
-          description: "URL to evidence content (or base64 data)"
+          description: "URL to evidence content (or base64 data)",
         },
         metadata: {
           type: "object",
@@ -132,29 +143,31 @@ const TOOLS = [
             source: { type: "string" },
             timestamp: { type: "string" },
             location: { type: "string" },
-            chain_of_custody: { type: "array" }
-          }
-        }
+            chain_of_custody: { type: "array" },
+          },
+        },
       },
-      required: ["case_id", "evidence_type", "content_url"]
-    }
+      required: ["case_id", "evidence_type", "content_url"],
+    },
   },
   {
     name: "chitty_evidence_verify",
-    description: "Verify evidence authenticity and integrity. Checks blockchain records and contradiction detection.",
+    description:
+      "Verify evidence authenticity and integrity. Checks blockchain records and contradiction detection.",
     inputSchema: {
       type: "object",
       properties: {
-        evidence_id: { type: "string" }
+        evidence_id: { type: "string" },
       },
-      required: ["evidence_id"]
-    }
+      required: ["evidence_id"],
+    },
   },
 
   // Finance Tools
   {
     name: "chitty_finance_connect_bank",
-    description: "Connect a bank account for financial analysis and transaction monitoring.",
+    description:
+      "Connect a bank account for financial analysis and transaction monitoring.",
     inputSchema: {
       type: "object",
       properties: {
@@ -162,15 +175,16 @@ const TOOLS = [
         institution: { type: "string" },
         account_type: {
           type: "string",
-          enum: ["checking", "savings", "credit", "investment"]
-        }
+          enum: ["checking", "savings", "credit", "investment"],
+        },
       },
-      required: ["chitty_id", "institution"]
-    }
+      required: ["chitty_id", "institution"],
+    },
   },
   {
     name: "chitty_finance_analyze",
-    description: "Analyze financial transactions for a ChittyID. Detects patterns, anomalies, and risks.",
+    description:
+      "Analyze financial transactions for a ChittyID. Detects patterns, anomalies, and risks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -179,43 +193,45 @@ const TOOLS = [
           type: "object",
           properties: {
             start: { type: "string", format: "date-time" },
-            end: { type: "string", format: "date-time" }
-          }
-        }
+            end: { type: "string", format: "date-time" },
+          },
+        },
       },
-      required: ["chitty_id"]
-    }
+      required: ["chitty_id"],
+    },
   },
 
   // Intelligence Tools
   {
     name: "chitty_intelligence_analyze",
-    description: "Deep contextual analysis using ContextConsciousness™. Extracts entities, sentiment, relationships, and legal/financial implications.",
+    description:
+      "Deep contextual analysis using ContextConsciousness™. Extracts entities, sentiment, relationships, and legal/financial implications.",
     inputSchema: {
       type: "object",
       properties: {
         content: {
           type: "string",
-          description: "Content to analyze (text, document, transcript)"
+          description: "Content to analyze (text, document, transcript)",
         },
         depth: {
           type: "string",
           enum: ["quick", "standard", "deep"],
-          description: "Analysis depth level"
+          description: "Analysis depth level",
         },
         context: {
           type: "object",
-          description: "Additional context (case_id, party_ids, etc.)"
-        }
+          description: "Additional context (case_id, party_ids, etc.)",
+        },
       },
-      required: ["content"]
-    }
+      required: ["content"],
+    },
   },
 
   // Memory Tools (MemoryCloude™)
   {
     name: "memory_persist_interaction",
-    description: "Explicitly persist an interaction to MemoryCloude™ for long-term recall (90 days).",
+    description:
+      "Explicitly persist an interaction to MemoryCloude™ for long-term recall (90 days).",
     inputSchema: {
       type: "object",
       properties: {
@@ -228,64 +244,67 @@ const TOOLS = [
             entities: { type: "array" },
             importance: {
               type: "string",
-              enum: ["low", "medium", "high", "critical"]
-            }
-          }
-        }
+              enum: ["low", "medium", "high", "critical"],
+            },
+          },
+        },
       },
-      required: ["session_id", "interaction"]
-    }
+      required: ["session_id", "interaction"],
+    },
   },
   {
     name: "memory_recall_context",
-    description: "Recall relevant context from MemoryCloude™ based on semantic search.",
+    description:
+      "Recall relevant context from MemoryCloude™ based on semantic search.",
     inputSchema: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Semantic search query"
+          description: "Semantic search query",
         },
         session_id: { type: "string" },
-        limit: { type: "number", default: 10 }
+        limit: { type: "number", default: 10 },
       },
-      required: ["query"]
-    }
+      required: ["query"],
+    },
   },
   {
     name: "memory_get_session_summary",
-    description: "Get a summary of the current session including entities, decisions, and tool usage.",
+    description:
+      "Get a summary of the current session including entities, decisions, and tool usage.",
     inputSchema: {
       type: "object",
       properties: {
-        session_id: { type: "string" }
+        session_id: { type: "string" },
       },
-      required: ["session_id"]
-    }
+      required: ["session_id"],
+    },
   },
 
   // Credential Tools
   {
     name: "chitty_credential_retrieve",
-    description: "Securely retrieve credentials from 1Password with ContextConsciousness™ validation. Risk-based access control.",
+    description:
+      "Securely retrieve credentials from 1Password with ContextConsciousness™ validation. Risk-based access control.",
     inputSchema: {
       type: "object",
       properties: {
         credential_type: {
           type: "string",
-          enum: ["service_token", "api_key", "oauth_token", "database_url"]
+          enum: ["service_token", "api_key", "oauth_token", "database_url"],
         },
         target: {
           type: "string",
-          description: "Target service (chittyid, notion, openai, etc.)"
+          description: "Target service (chittyid, notion, openai, etc.)",
         },
         purpose: {
           type: "string",
-          description: "Purpose of credential usage"
-        }
+          description: "Purpose of credential usage",
+        },
       },
-      required: ["credential_type", "target", "purpose"]
-    }
+      required: ["credential_type", "target", "purpose"],
+    },
   },
   {
     name: "chitty_credential_audit",
@@ -298,11 +317,11 @@ const TOOLS = [
           type: "object",
           properties: {
             start: { type: "string" },
-            end: { type: "string" }
-          }
-        }
-      }
-    }
+            end: { type: "string" },
+          },
+        },
+      },
+    },
   },
 
   // Service Health Tools
@@ -315,77 +334,82 @@ const TOOLS = [
         services: {
           type: "array",
           items: { type: "string" },
-          description: "Optional: specific services to check"
-        }
-      }
-    }
+          description: "Optional: specific services to check",
+        },
+      },
+    },
   },
   {
     name: "chitty_ecosystem_awareness",
-    description: "Get real-time ContextConsciousness™ ecosystem awareness including service health, credential status, and anomaly detection.",
+    description:
+      "Get real-time ContextConsciousness™ ecosystem awareness including service health, credential status, and anomaly detection.",
     inputSchema: {
       type: "object",
       properties: {
         include_credentials: { type: "boolean", default: false },
-        include_anomalies: { type: "boolean", default: true }
-      }
-    }
+        include_anomalies: { type: "boolean", default: true },
+      },
+    },
   },
 
   // Chronicle/Audit Tools
   {
     name: "chitty_chronicle_log",
-    description: "Create an audit log entry in ChittyChronicle for compliance and tracking.",
+    description:
+      "Create an audit log entry in ChittyChronicle for compliance and tracking.",
     inputSchema: {
       type: "object",
       properties: {
         event_type: { type: "string" },
         entity_id: { type: "string" },
         description: { type: "string" },
-        metadata: { type: "object" }
+        metadata: { type: "object" },
       },
-      required: ["event_type", "description"]
-    }
+      required: ["event_type", "description"],
+    },
   },
 
   // Third-Party Integration Tools
   {
     name: "chitty_notion_query",
-    description: "Query Notion databases through ChittyConnect proxy with 1Password credential retrieval.",
+    description:
+      "Query Notion databases through ChittyConnect proxy with 1Password credential retrieval.",
     inputSchema: {
       type: "object",
       properties: {
         database_id: { type: "string" },
         filter: { type: "object" },
-        sorts: { type: "array" }
+        sorts: { type: "array" },
       },
-      required: ["database_id"]
-    }
+      required: ["database_id"],
+    },
   },
   {
     name: "chitty_openai_chat",
-    description: "Chat with OpenAI through ChittyConnect proxy for AI analysis and generation.",
+    description:
+      "Chat with OpenAI through ChittyConnect proxy for AI analysis and generation.",
     inputSchema: {
       type: "object",
       properties: {
         messages: { type: "array" },
         model: { type: "string", default: "gpt-4" },
-        temperature: { type: "number", default: 0.7 }
+        temperature: { type: "number", default: 0.7 },
       },
-      required: ["messages"]
-    }
+      required: ["messages"],
+    },
   },
   {
     name: "chitty_neon_query",
-    description: "Execute SQL queries against Neon database through secure proxy.",
+    description:
+      "Execute SQL queries against Neon database through secure proxy.",
     inputSchema: {
       type: "object",
       properties: {
         sql: { type: "string" },
-        params: { type: "array" }
+        params: { type: "array" },
       },
-      required: ["sql"]
-    }
+      required: ["sql"],
+    },
   },
 
   // Sync Tools
@@ -397,11 +421,11 @@ const TOOLS = [
       properties: {
         source_service: { type: "string" },
         target_service: { type: "string" },
-        entity_ids: { type: "array" }
+        entity_ids: { type: "array" },
       },
-      required: ["source_service", "target_service"]
-    }
-  }
+      required: ["source_service", "target_service"],
+    },
+  },
 ];
 
 /**
@@ -427,49 +451,85 @@ mcpRoutes.post("/tools/call", async (c) => {
     if (name === "chitty_id_mint") {
       const serviceToken = await getServiceToken(c.env, "chittyid");
       if (!serviceToken) {
-        return c.json({
-          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
-          isError: true
-        }, 401);
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: "Authentication required: No service token available for ChittyID",
+              },
+            ],
+            isError: true,
+          },
+          401,
+        );
       }
-      const response = await fetch("https://id.chitty.cc/api/v2/chittyid/mint", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${serviceToken}`,
-          "Content-Type": "application/json"
+      const response = await fetch(
+        "https://id.chitty.cc/api/v2/chittyid/mint",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            entity: args.entity_type,
+            metadata: args.metadata,
+          }),
         },
-        body: JSON.stringify({
-          entity: args.entity_type,
-          metadata: args.metadata
-        })
-      });
+      );
       if (!response.ok) {
         const errorText = await response.text();
-        return c.json({
-          content: [{ type: "text", text: `ChittyID error (${response.status}): ${errorText}` }],
-          isError: true
-        }, response.status);
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: `ChittyID error (${response.status}): ${errorText}`,
+              },
+            ],
+            isError: true,
+          },
+          response.status,
+        );
       }
       result = await response.json();
-    }
-
-    else if (name === "chitty_id_validate") {
+    } else if (name === "chitty_id_validate") {
       const serviceToken = await getServiceToken(c.env, "chittyid");
       if (!serviceToken) {
-        return c.json({
-          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
-          isError: true
-        }, 401);
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: "Authentication required: No service token available for ChittyID",
+              },
+            ],
+            isError: true,
+          },
+          401,
+        );
       }
-      const response = await fetch(`https://id.chitty.cc/api/v2/chittyid/validate/${args.chitty_id}`, {
-        headers: { "Authorization": `Bearer ${serviceToken}` }
-      });
+      const response = await fetch(
+        `https://id.chitty.cc/api/v2/chittyid/validate/${args.chitty_id}`,
+        {
+          headers: { Authorization: `Bearer ${serviceToken}` },
+        },
+      );
       if (!response.ok) {
         const errorText = await response.text();
-        return c.json({
-          content: [{ type: "text", text: `ChittyID validation error (${response.status}): ${errorText}` }],
-          isError: true
-        }, response.status);
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: `ChittyID validation error (${response.status}): ${errorText}`,
+              },
+            ],
+            isError: true,
+          },
+          response.status,
+        );
       }
       result = await response.json();
     }
@@ -477,16 +537,19 @@ mcpRoutes.post("/tools/call", async (c) => {
     // Case tools - delegate to local routes
     else if (name.startsWith("chitty_case_")) {
       const action = name.replace("chitty_case_", "");
-      const endpoint = action === "create" ? "/api/chittycases/create" : `/api/chittycases/${args.case_id}`;
+      const endpoint =
+        action === "create"
+          ? "/api/chittycases/create"
+          : `/api/chittycases/${args.case_id}`;
       const method = action === "create" ? "POST" : "GET";
 
       const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
         method,
         headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+          Authorization: c.req.header("Authorization"),
+          "Content-Type": "application/json",
         },
-        body: action === "create" ? JSON.stringify(args) : undefined
+        body: action === "create" ? JSON.stringify(args) : undefined,
       });
       result = await response.json();
     }
@@ -494,15 +557,18 @@ mcpRoutes.post("/tools/call", async (c) => {
     // Evidence tools
     else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
-      const endpoint = action === "ingest" ? "/api/chittyevidence/ingest" : `/api/chittyevidence/${args.evidence_id}`;
+      const endpoint =
+        action === "ingest"
+          ? "/api/chittyevidence/ingest"
+          : `/api/chittyevidence/${args.evidence_id}`;
 
       const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
         method: action === "ingest" ? "POST" : "GET",
         headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+          Authorization: c.req.header("Authorization"),
+          "Content-Type": "application/json",
         },
-        body: action === "ingest" ? JSON.stringify(args) : undefined
+        body: action === "ingest" ? JSON.stringify(args) : undefined,
       });
       result = await response.json();
     }
@@ -515,24 +581,27 @@ mcpRoutes.post("/tools/call", async (c) => {
       const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
         method: "POST",
         headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+          Authorization: c.req.header("Authorization"),
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(args)
+        body: JSON.stringify(args),
       });
       result = await response.json();
     }
 
     // Intelligence tools
     else if (name === "chitty_intelligence_analyze") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/intelligence/analyze`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/intelligence/analyze`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
     }
 
@@ -543,121 +612,150 @@ mcpRoutes.post("/tools/call", async (c) => {
       result = {
         success: true,
         message: `Memory operation ${name} executed`,
-        data: { session_id: context?.sessionId || "unknown" }
+        data: { session_id: context?.sessionId || "unknown" },
       };
     }
 
     // Credential tools
     else if (name.startsWith("chitty_credential_")) {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/credentials/${name.replace("chitty_credential_", "")}`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/credentials/${name.replace("chitty_credential_", "")}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
     }
 
     // Service health tools
-    else if (name.startsWith("chitty_services_") || name === "chitty_ecosystem_awareness") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/services/status`, {
-        headers: { "Authorization": c.req.header("Authorization") }
-      });
+    else if (
+      name.startsWith("chitty_services_") ||
+      name === "chitty_ecosystem_awareness"
+    ) {
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/services/status`,
+        {
+          headers: { Authorization: c.req.header("Authorization") },
+        },
+      );
       result = await response.json();
     }
 
     // Chronicle tools
     else if (name === "chitty_chronicle_log") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/chittychronicle/log`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/chittychronicle/log`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
     }
 
     // Third-party integration tools
     else if (name === "chitty_notion_query") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/thirdparty/notion/query`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/thirdparty/notion/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
-    }
-
-    else if (name === "chitty_openai_chat") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/thirdparty/openai/chat`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+    } else if (name === "chitty_openai_chat") {
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/thirdparty/openai/chat`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
-    }
-
-    else if (name === "chitty_neon_query") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/thirdparty/neon/query`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+    } else if (name === "chitty_neon_query") {
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/thirdparty/neon/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
     }
 
     // Sync tools
     else if (name === "chitty_sync_data") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/chittysync/sync`, {
-        method: "POST",
-        headers: {
-          "Authorization": c.req.header("Authorization"),
-          "Content-Type": "application/json"
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/chittysync/sync`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: c.req.header("Authorization"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args)
-      });
+      );
       result = await response.json();
-    }
-
-    else {
-      return c.json({
-        content: [{
-          type: "text",
-          text: `Unknown tool: ${name}`
-        }],
-        isError: true
-      }, 400);
+    } else {
+      return c.json(
+        {
+          content: [
+            {
+              type: "text",
+              text: `Unknown tool: ${name}`,
+            },
+          ],
+          isError: true,
+        },
+        400,
+      );
     }
 
     // Format response for MCP
     return c.json({
-      content: [{
-        type: "text",
-        text: JSON.stringify(result, null, 2)
-      }]
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
     });
-
   } catch (error) {
     console.error(`[MCP] Tool execution error for ${name}:`, error);
-    return c.json({
-      content: [{
-        type: "text",
-        text: `Error executing ${name}: ${error.message}`
-      }],
-      isError: true
-    }, 500);
+    return c.json(
+      {
+        content: [
+          {
+            type: "text",
+            text: `Error executing ${name}: ${error.message}`,
+          },
+        ],
+        isError: true,
+      },
+      500,
+    );
   }
 });
 
@@ -672,21 +770,21 @@ mcpRoutes.get("/resources/list", async (c) => {
         uri: "chitty://ecosystem/status",
         name: "Ecosystem Status",
         description: "Real-time status of all ChittyOS services",
-        mimeType: "application/json"
+        mimeType: "application/json",
       },
       {
         uri: "chitty://memory/session/{id}",
         name: "Session Memory",
         description: "MemoryCloude™ session context and history",
-        mimeType: "application/json"
+        mimeType: "application/json",
       },
       {
         uri: "chitty://credentials/audit",
         name: "Credential Audit Log",
         description: "Credential access patterns and security posture",
-        mimeType: "application/json"
-      }
-    ]
+        mimeType: "application/json",
+      },
+    ],
   });
 });
 
@@ -701,49 +799,69 @@ mcpRoutes.get("/resources/read", async (c) => {
     let content;
 
     if (uri === "chitty://ecosystem/status") {
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}/api/services/status`, {
-        headers: { "Authorization": c.req.header("Authorization") }
-      });
+      const response = await fetch(
+        `${c.req.url.split("/mcp")[0]}/api/services/status`,
+        {
+          headers: { Authorization: c.req.header("Authorization") },
+        },
+      );
       content = await response.text();
-    }
-    else if (uri.startsWith("chitty://memory/session/")) {
+    } else if (uri.startsWith("chitty://memory/session/")) {
       const sessionId = uri.split("/").pop();
-      content = JSON.stringify({
-        session_id: sessionId,
-        message: "Session memory retrieval from Durable Objects (placeholder)"
-      }, null, 2);
+      content = JSON.stringify(
+        {
+          session_id: sessionId,
+          message:
+            "Session memory retrieval from Durable Objects (placeholder)",
+        },
+        null,
+        2,
+      );
+    } else if (uri === "chitty://credentials/audit") {
+      content = JSON.stringify(
+        {
+          message: "Credential audit log (placeholder)",
+        },
+        null,
+        2,
+      );
+    } else {
+      return c.json(
+        {
+          contents: [
+            {
+              uri,
+              mimeType: "text/plain",
+              text: `Unknown resource: ${uri}`,
+            },
+          ],
+        },
+        404,
+      );
     }
-    else if (uri === "chitty://credentials/audit") {
-      content = JSON.stringify({
-        message: "Credential audit log (placeholder)"
-      }, null, 2);
-    }
-    else {
-      return c.json({
-        contents: [{
+
+    return c.json({
+      contents: [
+        {
           uri,
-          mimeType: "text/plain",
-          text: `Unknown resource: ${uri}`
-        }]
-      }, 404);
-    }
-
-    return c.json({
-      contents: [{
-        uri,
-        mimeType: "application/json",
-        text: content
-      }]
+          mimeType: "application/json",
+          text: content,
+        },
+      ],
     });
-
   } catch (error) {
-    return c.json({
-      contents: [{
-        uri,
-        mimeType: "text/plain",
-        text: `Error reading resource: ${error.message}`
-      }]
-    }, 500);
+    return c.json(
+      {
+        contents: [
+          {
+            uri,
+            mimeType: "text/plain",
+            text: `Error reading resource: ${error.message}`,
+          },
+        ],
+      },
+      500,
+    );
   }
 });
 
@@ -764,14 +882,17 @@ mcpRoutes.post("/session/persist", async (c) => {
         toolHistory: toolHistory.length,
         contextKeys: Object.keys(context).length,
         platform,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     });
   } catch (error) {
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
+    return c.json(
+      {
+        success: false,
+        error: error.message,
+      },
+      500,
+    );
   }
 });
 
@@ -780,7 +901,8 @@ mcpRoutes.post("/session/persist", async (c) => {
  * MCP sampling support for advanced features
  */
 mcpRoutes.post("/sampling/sample", async (c) => {
-  const { messages, maxTokens, sessionId } = await c.req.json();
+  // Extract request body (unused for now but kept for future implementation)
+  await c.req.json();
 
   try {
     // This would use Workers AI or proxy to OpenAI
@@ -788,7 +910,7 @@ mcpRoutes.post("/sampling/sample", async (c) => {
     return c.json({
       content: "Sampling support via Workers AI (placeholder)",
       model: "@cf/meta/llama-3-8b-instruct",
-      stopReason: "end_turn"
+      stopReason: "end_turn",
     });
   } catch (error) {
     return c.json({ error: error.message }, 500);

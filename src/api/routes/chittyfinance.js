@@ -23,13 +23,17 @@ chittyfinanceRoutes.get("/account/balance", async (c) => {
       return c.json({ error: "accountId is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyfinance');
+    const serviceToken = await getServiceToken(c.env, "chittyfinance");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyFinance service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyFinance service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyFinance service
@@ -70,12 +74,15 @@ chittyfinanceRoutes.post("/banking/connect", async (c) => {
       return c.json({ error: "Invalid provider" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyfinance');
+    const serviceToken = await getServiceToken(c.env, "chittyfinance");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyFinance service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyFinance service token not configured",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyFinance banking integration
@@ -108,12 +115,15 @@ chittyfinanceRoutes.post("/banking/connect", async (c) => {
  */
 chittyfinanceRoutes.get("/accounts", async (c) => {
   try {
-    const serviceToken = await getServiceToken(c.env, 'chittyfinance');
+    const serviceToken = await getServiceToken(c.env, "chittyfinance");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyFinance service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyFinance service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://finance.chitty.cc/api/accounts", {
@@ -145,12 +155,15 @@ chittyfinanceRoutes.post("/transactions", async (c) => {
       return c.json({ error: "accountId is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyfinance');
+    const serviceToken = await getServiceToken(c.env, "chittyfinance");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyFinance service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyFinance service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://finance.chitty.cc/api/transactions", {

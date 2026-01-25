@@ -75,7 +75,10 @@ async function ensureEcosystemInitialized(env) {
     try {
       streamingManager = streamingManager || new StreamingManager(env);
     } catch (err) {
-      console.warn("[ChittyConnect] Streaming manager init failed:", err?.message || err);
+      console.warn(
+        "[ChittyConnect] Streaming manager init failed:",
+        err?.message || err,
+      );
     }
 
     // Initialize ChittyConnect context (non-blocking, best-effort)
@@ -190,7 +193,7 @@ app.get("/intelligence/health", async (c) => {
 
   if (memory) {
     try {
-      const stats = await memory.getStats("health-check");
+      await memory.getStats("health-check");
       memoryHealth = {
         available: true,
         hasVectorize: memory.hasVectorize,
@@ -245,7 +248,7 @@ app.get("/sse/health", (c) => {
   const sm = c.get("streaming");
   return c.json({
     status: sm ? "available" : "unavailable",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -259,14 +262,23 @@ app.get("/sse", (c) => {
   const sm = c.get("streaming");
 
   if (!sm) {
-    return c.json({ error: "streaming_unavailable", message: "SSE streaming is not configured" }, 503);
+    return c.json(
+      {
+        error: "streaming_unavailable",
+        message: "SSE streaming is not configured",
+      },
+      503,
+    );
   }
 
   try {
     return sm.createStream(sessionId, {});
   } catch (err) {
     console.error("[SSE] Error creating stream:", err?.message || err);
-    return c.json({ error: "stream_failed", message: String(err?.message || err) }, 500);
+    return c.json(
+      { error: "stream_failed", message: String(err?.message || err) },
+      500,
+    );
   }
 });
 
@@ -274,11 +286,11 @@ app.get("/sse", (c) => {
  * Root endpoint: content negotiation (JSON for agents, redirect for browsers)
  */
 app.get("/", async (c) => {
-  const accept = c.req.header('Accept') || '';
-  if (accept.includes('application/json')) {
-    return c.redirect('/.well-known/chitty.json');
+  const accept = c.req.header("Accept") || "";
+  if (accept.includes("application/json")) {
+    return c.redirect("/.well-known/chitty.json");
   }
-  return c.redirect('https://get.chitty.cc');
+  return c.redirect("https://get.chitty.cc");
 });
 
 /**
@@ -300,14 +312,22 @@ app.all("/:service/mcp/*", async (c) => {
   const init = {
     method: c.req.method,
     headers: c.req.header(),
-    body: ["GET", "HEAD"].includes(c.req.method) ? undefined : await c.req.arrayBuffer(),
+    body: ["GET", "HEAD"].includes(c.req.method)
+      ? undefined
+      : await c.req.arrayBuffer(),
   };
   try {
     const resp = await fetch(url, init);
-    return new Response(resp.body, { status: resp.status, headers: resp.headers });
+    return new Response(resp.body, {
+      status: resp.status,
+      headers: resp.headers,
+    });
   } catch (err) {
     console.error(`[MCP proxy] ${service}:`, err?.message || err);
-    return c.json({ error: "proxy_failed", message: String(err?.message || err) }, 502);
+    return c.json(
+      { error: "proxy_failed", message: String(err?.message || err) },
+      502,
+    );
   }
 });
 
@@ -323,14 +343,22 @@ app.all("/:service/api/*", async (c) => {
   const init = {
     method: c.req.method,
     headers: c.req.header(),
-    body: ["GET", "HEAD"].includes(c.req.method) ? undefined : await c.req.arrayBuffer(),
+    body: ["GET", "HEAD"].includes(c.req.method)
+      ? undefined
+      : await c.req.arrayBuffer(),
   };
   try {
     const resp = await fetch(url, init);
-    return new Response(resp.body, { status: resp.status, headers: resp.headers });
+    return new Response(resp.body, {
+      status: resp.status,
+      headers: resp.headers,
+    });
   } catch (err) {
     console.error(`[API proxy] ${service}:`, err?.message || err);
-    return c.json({ error: "proxy_failed", message: String(err?.message || err) }, 502);
+    return c.json(
+      { error: "proxy_failed", message: String(err?.message || err) },
+      502,
+    );
   }
 });
 
@@ -401,7 +429,8 @@ app.post("/integrations/github/webhook", async (c) => {
  * All webhooks are logged to ChittyChronicle before forwarding
  */
 app.post("/webhooks/:source", async (c) => {
-  const { routeWebhook, validateWebhookSignature } = await import("./handlers/webhook-router.js");
+  const { routeWebhook, validateWebhookSignature } =
+    await import("./handlers/webhook-router.js");
   const source = c.req.param("source");
 
   try {
@@ -420,7 +449,7 @@ app.post("/webhooks/:source", async (c) => {
     return c.json({
       received: true,
       source,
-      ...result
+      ...result,
     });
   } catch (error) {
     console.error(`[Webhook] Error processing ${source} webhook:`, error);
@@ -437,7 +466,7 @@ app.get("/webhooks", async (c) => {
   return c.json({
     endpoint: "/webhooks/:source",
     configured_agents: getConfiguredAgents(),
-    usage: "POST /webhooks/{source} with JSON payload"
+    usage: "POST /webhooks/{source} with JSON payload",
   });
 });
 
@@ -447,7 +476,7 @@ app.get("/webhooks", async (c) => {
  */
 app.get("/integrations/github/callback", async (c) => {
   try {
-    const code = c.req.query("code");
+    const _code = c.req.query("code");
     const installationId = c.req.query("installation_id");
     const setupAction = c.req.query("setup_action");
 
@@ -460,9 +489,8 @@ app.get("/integrations/github/callback", async (c) => {
     );
 
     // 1. Get GitHub App token to fetch installation details
-    const { generateAppJWT, getInstallationToken } = await import(
-      "./auth/github.js"
-    );
+    const { generateAppJWT, getInstallationToken } =
+      await import("./auth/github.js");
     const appJwt = await generateAppJWT(
       c.env.GITHUB_APP_ID,
       c.env.GITHUB_APP_PK,

@@ -24,7 +24,8 @@ function rateLimit(ip) {
     return true;
   }
 
-  if (limit.count >= 60) { // 60 requests per minute
+  if (limit.count >= 60) {
+    // 60 requests per minute
     return false;
   }
 
@@ -38,10 +39,10 @@ function rateLimit(ip) {
  */
 chittychronicleRoutes.get("/", (c) => {
   return c.json({
-    service: 'ChittyChronicle',
-    version: '1.0.0',
-    status: 'healthy',
-    description: 'Event logging and audit trail system'
+    service: "ChittyChronicle",
+    version: "1.0.0",
+    status: "healthy",
+    description: "Event logging and audit trail system",
   });
 });
 
@@ -50,25 +51,29 @@ chittychronicleRoutes.get("/", (c) => {
  * Log new event
  */
 chittychronicleRoutes.post("/events", async (c) => {
-  const ip = c.req.header('cf-connecting-ip') || 'unknown';
+  const ip = c.req.header("cf-connecting-ip") || "unknown";
 
   if (!rateLimit(ip)) {
-    return c.json({ error: 'Rate limit exceeded' }, 429);
+    return c.json({ error: "Rate limit exceeded" }, 429);
   }
 
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({
-        error: 'Database connection not configured',
-        details: 'Neither 1Password Connect nor environment variable available'
-      }, 503);
+      return c.json(
+        {
+          error: "Database connection not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
@@ -79,7 +84,7 @@ chittychronicleRoutes.post("/events", async (c) => {
 
     return c.json(result);
   } catch (error) {
-    console.error('Error logging event:', error);
+    console.error("Error logging event:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -89,42 +94,42 @@ chittychronicleRoutes.post("/events", async (c) => {
  * Search events
  */
 chittychronicleRoutes.get("/events", async (c) => {
-  const ip = c.req.header('cf-connecting-ip') || 'unknown';
+  const ip = c.req.header("cf-connecting-ip") || "unknown";
 
   if (!rateLimit(ip)) {
-    return c.json({ error: 'Rate limit exceeded' }, 429);
+    return c.json({ error: "Rate limit exceeded" }, 429);
   }
 
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({ error: 'Database connection not configured' }, 503);
+      return c.json({ error: "Database connection not configured" }, 503);
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
     await chronicle.connect();
 
     const params = {
-      service: c.req.query('service'),
-      action: c.req.query('action'),
-      userId: c.req.query('userId'),
-      startDate: c.req.query('startDate'),
-      endDate: c.req.query('endDate'),
-      status: c.req.query('status'),
-      query: c.req.query('query'),
-      limit: c.req.query('limit') ? parseInt(c.req.query('limit')) : 100
+      service: c.req.query("service"),
+      action: c.req.query("action"),
+      userId: c.req.query("userId"),
+      startDate: c.req.query("startDate"),
+      endDate: c.req.query("endDate"),
+      status: c.req.query("status"),
+      query: c.req.query("query"),
+      limit: c.req.query("limit") ? parseInt(c.req.query("limit")) : 100,
     };
 
     const results = await chronicle.searchEvents(params);
     return c.json(results);
   } catch (error) {
-    console.error('Error searching events:', error);
+    console.error("Error searching events:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -137,38 +142,38 @@ chittychronicleRoutes.get("/timeline", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({ error: 'Database connection not configured' }, 503);
+      return c.json({ error: "Database connection not configured" }, 503);
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
     await chronicle.connect();
 
-    const startDate = c.req.query('startDate');
-    const endDate = c.req.query('endDate');
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
 
     if (!startDate || !endDate) {
-      return c.json({ error: 'startDate and endDate are required' }, 400);
+      return c.json({ error: "startDate and endDate are required" }, 400);
     }
 
-    const services = c.req.query('services')?.split(',');
-    const groupBy = c.req.query('groupBy');
+    const services = c.req.query("services")?.split(",");
+    const groupBy = c.req.query("groupBy");
 
     const timeline = await chronicle.getTimeline({
       startDate,
       endDate,
       services,
-      groupBy
+      groupBy,
     });
 
     return c.json(timeline);
   } catch (error) {
-    console.error('Error getting timeline:', error);
+    console.error("Error getting timeline:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -181,29 +186,29 @@ chittychronicleRoutes.get("/audit/:entityId", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({ error: 'Database connection not configured' }, 503);
+      return c.json({ error: "Database connection not configured" }, 503);
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
     await chronicle.connect();
 
-    const entityId = c.req.param('entityId');
-    const entityType = c.req.query('entityType');
+    const entityId = c.req.param("entityId");
+    const entityType = c.req.query("entityType");
 
     if (!entityType) {
-      return c.json({ error: 'entityType query parameter is required' }, 400);
+      return c.json({ error: "entityType query parameter is required" }, 400);
     }
 
     const trail = await chronicle.getAuditTrail(entityId, entityType);
     return c.json(trail);
   } catch (error) {
-    console.error('Error getting audit trail:', error);
+    console.error("Error getting audit trail:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -216,25 +221,25 @@ chittychronicleRoutes.get("/statistics", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({ error: 'Database connection not configured' }, 503);
+      return c.json({ error: "Database connection not configured" }, 503);
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
     await chronicle.connect();
 
-    const startDate = c.req.query('startDate');
-    const endDate = c.req.query('endDate');
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
 
     const stats = await chronicle.getStatistics(startDate, endDate);
     return c.json(stats);
   } catch (error) {
-    console.error('Error getting statistics:', error);
+    console.error("Error getting statistics:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -247,13 +252,13 @@ chittychronicleRoutes.get("/health", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      'database/neon/chittyos_core',
-      'NEON_DATABASE_URL',
-      'ChittyChronicle'
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyChronicle",
     );
 
     if (!databaseUrl) {
-      return c.json({ error: 'Database connection not configured' }, 503);
+      return c.json({ error: "Database connection not configured" }, 503);
     }
 
     const chronicle = new ChronicleEngine(databaseUrl);
@@ -262,7 +267,7 @@ chittychronicleRoutes.get("/health", async (c) => {
     const health = await chronicle.getServiceHealth();
     return c.json(health);
   } catch (error) {
-    console.error('Error getting health:', error);
+    console.error("Error getting health:", error);
     return c.json({ error: error.message }, 500);
   }
 });

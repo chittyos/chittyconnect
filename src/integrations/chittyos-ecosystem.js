@@ -11,7 +11,8 @@
  * - ChittyCanon: Canonical definitions and validation
  */
 
-import { chittyCanon } from "./chittycanon-client.js";
+// Import for future use
+// import { chittyCanon } from "./chittycanon-client.js";
 
 /**
  * ChittyOS Ecosystem Manager
@@ -83,7 +84,7 @@ export class ChittyOSEcosystem {
     });
 
     // 2d. Register with ChittyRegistry (opt-in via env flag)
-    if (this.env?.REGISTRY_AUTO_REGISTER === 'true') {
+    if (this.env?.REGISTRY_AUTO_REGISTER === "true") {
       await this.registerService({
         chittyid,
         name: contextName,
@@ -92,7 +93,9 @@ export class ChittyOSEcosystem {
         health: `https://connect.chitty.cc/health`,
       });
     } else {
-      console.log('[ChittyRegistry] Auto-register skipped (set REGISTRY_AUTO_REGISTER=true to enable)');
+      console.log(
+        "[ChittyRegistry] Auto-register skipped (set REGISTRY_AUTO_REGISTER=true to enable)",
+      );
     }
 
     // 2e. Verify context with ChittyVerify

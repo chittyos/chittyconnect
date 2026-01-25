@@ -36,13 +36,17 @@ chittyevidenceRoutes.post("/ingest", async (c) => {
       return c.json({ error: "file and caseId are required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyEvidence service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyEvidence service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     // Forward to ChittyEvidence service
@@ -89,16 +93,22 @@ chittyevidenceRoutes.get("/:identifier", async (c) => {
     const identifier = c.req.param("identifier");
     const legacyFormat = c.req.query("legacy") === "true"; // Optional legacy response format
 
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyEvidence service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyEvidence service token not configured",
+        },
+        503,
+      );
     }
 
     // Detect if identifier is UUID or file_hash
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
 
     let response;
 
@@ -114,7 +124,9 @@ chittyevidenceRoutes.get("/:identifier", async (c) => {
       );
     } else {
       // Legacy path: Query by file_hash (deprecated)
-      console.warn(`[ChittyEvidence] Deprecated: file_hash lookup for ${identifier}`);
+      console.warn(
+        `[ChittyEvidence] Deprecated: file_hash lookup for ${identifier}`,
+      );
 
       response = await fetch(
         `https://evidence.chitty.cc/api/compat/legacy/${identifier}`,
@@ -161,12 +173,15 @@ chittyevidenceRoutes.get("/case/:caseId", async (c) => {
     const limit = c.req.query("limit") || "50";
     const offset = c.req.query("offset") || "0";
 
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyEvidence service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyEvidence service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -199,12 +214,15 @@ chittyevidenceRoutes.get("/:evidenceId/sync-status", async (c) => {
   try {
     const evidenceId = c.req.param("evidenceId");
 
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyEvidence service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyEvidence service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -238,12 +256,15 @@ chittyevidenceRoutes.post("/:evidenceId/verify", async (c) => {
     const evidenceId = c.req.param("evidenceId");
     const verificationOptions = await c.req.json();
 
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyEvidence service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyEvidence service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -275,13 +296,16 @@ chittyevidenceRoutes.post("/:evidenceId/verify", async (c) => {
  */
 chittyevidenceRoutes.get("/health", async (c) => {
   try {
-    const serviceToken = await getServiceToken(c.env, 'chittyevidence');
+    const serviceToken = await getServiceToken(c.env, "chittyevidence");
 
     if (!serviceToken) {
-      return c.json({
-        status: "degraded",
-        error: "Service token not available"
-      }, 503);
+      return c.json(
+        {
+          status: "degraded",
+          error: "Service token not available",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://evidence.chitty.cc/health", {
@@ -291,10 +315,13 @@ chittyevidenceRoutes.get("/health", async (c) => {
     });
 
     if (!response.ok) {
-      return c.json({
-        status: "degraded",
-        error: `Service returned ${response.status}`
-      }, 503);
+      return c.json(
+        {
+          status: "degraded",
+          error: `Service returned ${response.status}`,
+        },
+        503,
+      );
     }
 
     const health = await response.json();
@@ -308,13 +335,16 @@ chittyevidenceRoutes.get("/health", async (c) => {
         backward_compatible: c.env.EVIDENCE_LEGACY_MODE === "true",
         supports_uuid: true,
         supports_file_hash: true, // Deprecated
-      }
+      },
     });
   } catch (error) {
-    return c.json({
-      status: "down",
-      error: error.message
-    }, 500);
+    return c.json(
+      {
+        status: "down",
+        error: error.message,
+      },
+      500,
+    );
   }
 });
 

@@ -23,13 +23,17 @@ chittyauthRoutes.post("/verify", async (c) => {
       return c.json({ error: "token is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyauth');
+    const serviceToken = await getServiceToken(c.env, "chittyauth");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyAuth service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyAuth service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://auth.chitty.cc/api/verify", {
@@ -64,12 +68,15 @@ chittyauthRoutes.post("/refresh", async (c) => {
       return c.json({ error: "refreshToken is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittyauth');
+    const serviceToken = await getServiceToken(c.env, "chittyauth");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyAuth service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyAuth service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://auth.chitty.cc/api/refresh", {

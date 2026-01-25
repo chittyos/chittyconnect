@@ -481,43 +481,43 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
       credentialPath,
       requestingService,
       purpose,
-      sessionId,
-      userId,
+      sessionId: _sessionId,
+      userId: _userId,
       environment,
-      ipAddress,
-      userAgent
+      ipAddress: _ipAddress,
+      userAgent: _userAgent,
     } = request;
 
     const analysis = {
-      serviceStatus: 'unknown',
+      serviceStatus: "unknown",
       anomalyDetected: false,
       anomalies: [],
       riskScore: 0,
       recommendations: [],
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     // 1. Check service health and status
     const serviceInfo = this.services.get(requestingService);
     if (serviceInfo) {
-      analysis.serviceStatus = serviceInfo.health?.status || 'unknown';
+      analysis.serviceStatus = serviceInfo.health?.status || "unknown";
 
-      if (analysis.serviceStatus === 'down') {
+      if (analysis.serviceStatus === "down") {
         analysis.anomalyDetected = true;
-        analysis.anomalies.push('Service is down but requesting credentials');
+        analysis.anomalies.push("Service is down but requesting credentials");
         analysis.riskScore += 50;
-      } else if (analysis.serviceStatus === 'degraded') {
+      } else if (analysis.serviceStatus === "degraded") {
         analysis.riskScore += 20;
       }
     } else {
       analysis.anomalyDetected = true;
-      analysis.anomalies.push('Unknown service requesting credentials');
+      analysis.anomalies.push("Unknown service requesting credentials");
       analysis.riskScore += 70;
     }
 
     // 2. Check time-based patterns
     const hour = new Date().getHours();
-    const dayOfWeek = new Date().getDay();
+    const _dayOfWeek = new Date().getDay();
 
     if (hour < 6 || hour > 22) {
       analysis.anomalies.push(`Access at unusual hour: ${hour}:00`);
@@ -526,29 +526,36 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     }
 
     // 3. Validate purpose alignment
-    const purposeValid = this.validateCredentialPurpose(credentialPath, purpose);
+    const purposeValid = this.validateCredentialPurpose(
+      credentialPath,
+      purpose,
+    );
     if (!purposeValid) {
-      analysis.anomalies.push(`Purpose '${purpose}' not expected for ${credentialPath}`);
+      analysis.anomalies.push(
+        `Purpose '${purpose}' not expected for ${credentialPath}`,
+      );
       analysis.riskScore += 30;
       analysis.anomalyDetected = true;
     }
 
     // 4. Check for suspicious patterns
-    if (environment === 'production' && credentialPath.includes('emergency')) {
-      analysis.anomalies.push('Emergency credentials accessed in production');
+    if (environment === "production" && credentialPath.includes("emergency")) {
+      analysis.anomalies.push("Emergency credentials accessed in production");
       analysis.riskScore += 40;
       analysis.anomalyDetected = true;
     }
 
     // 5. Generate recommendations
     if (analysis.riskScore >= 70) {
-      analysis.recommendations.push('DENY: Risk score too high - manual review required');
-      analysis.recommendations.push('Alert security team immediately');
+      analysis.recommendations.push(
+        "DENY: Risk score too high - manual review required",
+      );
+      analysis.recommendations.push("Alert security team immediately");
     } else if (analysis.riskScore >= 50) {
-      analysis.recommendations.push('Require additional authentication');
-      analysis.recommendations.push('Enable detailed audit logging');
+      analysis.recommendations.push("Require additional authentication");
+      analysis.recommendations.push("Enable detailed audit logging");
     } else if (analysis.riskScore >= 30) {
-      analysis.recommendations.push('Log access with enhanced detail');
+      analysis.recommendations.push("Log access with enhanced detail");
     }
 
     return analysis;
@@ -560,10 +567,10 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
    */
   validateCredentialPurpose(credentialPath, purpose) {
     const expectedPurposes = {
-      'infrastructure/cloudflare': ['deployment', 'configuration', 'emergency'],
-      'infrastructure/neon': ['database-access', 'migration', 'backup'],
-      'services/': ['inter-service-call', 'authentication', 'initialization'],
-      'integrations/': ['api-call', 'webhook', 'sync', 'query']
+      "infrastructure/cloudflare": ["deployment", "configuration", "emergency"],
+      "infrastructure/neon": ["database-access", "migration", "backup"],
+      "services/": ["inter-service-call", "authentication", "initialization"],
+      "integrations/": ["api-call", "webhook", "sync", "query"],
     };
 
     for (const [pathPattern, purposes] of Object.entries(expectedPurposes)) {
@@ -588,28 +595,24 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
 
     // Common credential chains
     const credentialChains = {
-      'infrastructure/cloudflare/make_api_key': [
-        'infrastructure/cloudflare/account_id',
-        'infrastructure/cloudflare/zone_id'
+      "infrastructure/cloudflare/make_api_key": [
+        "infrastructure/cloudflare/account_id",
+        "infrastructure/cloudflare/zone_id",
       ],
-      'services/chittyid/service_token': [
-        'services/chittyauth/service_token'
-      ],
-      'integrations/openai/api_key': [
-        'integrations/openai/org_id'
-      ],
-      'integrations/notion/api_key': [
-        'integrations/notion/workspace_id'
-      ]
+      "services/chittyid/service_token": ["services/chittyauth/service_token"],
+      "integrations/openai/api_key": ["integrations/openai/org_id"],
+      "integrations/notion/api_key": ["integrations/notion/workspace_id"],
     };
 
     if (credentialChains[credentialPath]) {
-      predictions.push(...credentialChains[credentialPath].map(path => ({
-        credential: path,
-        probability: 0.8,
-        timeframe: '5 minutes',
-        reason: 'Common credential pairing'
-      })));
+      predictions.push(
+        ...credentialChains[credentialPath].map((path) => ({
+          credential: path,
+          probability: 0.8,
+          timeframe: "5 minutes",
+          reason: "Common credential pairing",
+        })),
+      );
     }
 
     return predictions;
@@ -624,7 +627,8 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
   async getCredentialInsights(service) {
     try {
       // Query database for credential access patterns
-      const patterns = await this.env.DB.prepare(`
+      const patterns = await this.env.DB.prepare(
+        `
         SELECT
           service,
           credential_path,
@@ -638,34 +642,42 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
         WHERE service = ?
         ORDER BY access_count DESC
         LIMIT 10
-      `).bind(service).all();
+      `,
+      )
+        .bind(service)
+        .all();
 
       const insights = {
         service,
         topCredentials: patterns.results || [],
-        riskTrend: 'stable',
-        recommendations: []
+        riskTrend: "stable",
+        recommendations: [],
       };
 
       // Analyze risk trend
-      const avgRisk = insights.topCredentials.reduce((sum, p) => sum + (p.average_risk_score || 0), 0) /
-                      (insights.topCredentials.length || 1);
+      const avgRisk =
+        insights.topCredentials.reduce(
+          (sum, p) => sum + (p.average_risk_score || 0),
+          0,
+        ) / (insights.topCredentials.length || 1);
 
       if (avgRisk > 50) {
-        insights.riskTrend = 'increasing';
-        insights.recommendations.push('Review service credential access patterns');
+        insights.riskTrend = "increasing";
+        insights.recommendations.push(
+          "Review service credential access patterns",
+        );
       } else if (avgRisk < 20) {
-        insights.riskTrend = 'decreasing';
+        insights.riskTrend = "decreasing";
       }
 
       return insights;
     } catch (error) {
-      console.warn('[ContextConsciousness™] Credential insights error:', error);
+      console.warn("[ContextConsciousness™] Credential insights error:", error);
       return {
         service,
         topCredentials: [],
-        riskTrend: 'unknown',
-        recommendations: []
+        riskTrend: "unknown",
+        recommendations: [],
       };
     }
   }

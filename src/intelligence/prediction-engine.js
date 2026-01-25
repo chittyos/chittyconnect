@@ -54,24 +54,24 @@ export class PredictionEngine {
     const now = Date.now();
 
     // Failure prediction based on health status
-    if (service.health?.status === 'degraded') {
+    if (service.health?.status === "degraded") {
       const confidence = 0.65 + (service.health.errorRate || 0) * 0.3;
       const timeToFailure = this.estimateTimeToFailure(service);
 
       predictions.push({
         id: `pred-${service.name}-failure-${now}`,
         service_name: service.name,
-        prediction_type: 'failure',
+        prediction_type: "failure",
         confidence: Math.min(confidence, 0.95),
         time_to_failure: timeToFailure,
         details: JSON.stringify({
           current_status: service.health.status,
           error_rate: service.health.errorRate,
           latency: service.health.latency,
-          trend: 'declining',
-          reasoning: 'Service health degraded with increasing error rate',
+          trend: "declining",
+          reasoning: "Service health degraded with increasing error rate",
         }),
-        expires_at: now + (24 * 3600 * 1000), // 24 hours
+        expires_at: now + 24 * 3600 * 1000, // 24 hours
       });
     }
 
@@ -83,37 +83,40 @@ export class PredictionEngine {
         predictions.push({
           id: `pred-${service.name}-latency-${now}`,
           service_name: service.name,
-          prediction_type: 'latency',
+          prediction_type: "latency",
           confidence: latencyTrend.confidence,
           time_to_failure: null,
           details: JSON.stringify({
             current_latency: service.health.latency,
             predicted_latency: latencyTrend.predicted,
             slope: latencyTrend.slope,
-            reasoning: 'Latency trending upward, performance degradation likely',
+            reasoning:
+              "Latency trending upward, performance degradation likely",
           }),
-          expires_at: now + (6 * 3600 * 1000), // 6 hours
+          expires_at: now + 6 * 3600 * 1000, // 6 hours
         });
       }
     }
 
     // Anomaly prediction
     const anomalies = await this.consciousness.detectAnomalies();
-    const serviceAnomalies = anomalies.filter(a => a.service === service.name);
+    const serviceAnomalies = anomalies.filter(
+      (a) => a.service === service.name,
+    );
 
     if (serviceAnomalies.length > 0) {
       predictions.push({
         id: `pred-${service.name}-anomaly-${now}`,
         service_name: service.name,
-        prediction_type: 'anomaly',
+        prediction_type: "anomaly",
         confidence: 0.7,
         time_to_failure: null,
         details: JSON.stringify({
           anomaly_count: serviceAnomalies.length,
-          anomalies: serviceAnomalies.map(a => a.type),
-          reasoning: 'Multiple anomalies detected, potential incident',
+          anomalies: serviceAnomalies.map((a) => a.type),
+          reasoning: "Multiple anomalies detected, potential incident",
         }),
-        expires_at: now + (2 * 3600 * 1000), // 2 hours
+        expires_at: now + 2 * 3600 * 1000, // 2 hours
       });
     }
 
@@ -145,21 +148,27 @@ export class PredictionEngine {
 
     // Check each failing/degraded service for cascade potential
     for (const service of services) {
-      if (service.health?.status === 'down' || service.health?.status === 'degraded') {
+      if (
+        service.health?.status === "down" ||
+        service.health?.status === "degraded"
+      ) {
         // Find dependent services
-        const affectedServices = this.findDependentServices(service.name, depMap);
+        const affectedServices = this.findDependentServices(
+          service.name,
+          depMap,
+        );
 
         if (affectedServices.length > 0) {
           const cascadeConfidence = this.calculateCascadeConfidence(
             service,
             affectedServices,
-            depMap
+            depMap,
           );
 
           predictions.push({
             id: `pred-cascade-${service.name}-${now}`,
             service_name: service.name,
-            prediction_type: 'cascade',
+            prediction_type: "cascade",
             confidence: cascadeConfidence,
             time_to_failure: 300, // 5 minutes for cascade propagation
             details: JSON.stringify({
@@ -168,7 +177,7 @@ export class PredictionEngine {
               cascade_depth: this.calculateCascadeDepth(service.name, depMap),
               reasoning: `${service.name} failure may cascade to ${affectedServices.length} dependent services`,
             }),
-            expires_at: now + (1 * 3600 * 1000), // 1 hour
+            expires_at: now + 1 * 3600 * 1000, // 1 hour
           });
         }
       }
@@ -204,7 +213,7 @@ export class PredictionEngine {
          FROM monitoring_snapshots
          WHERE service_name = ?
          ORDER BY created_at DESC
-         LIMIT 20`
+         LIMIT 20`,
       )
       .bind(serviceName)
       .all();
@@ -246,7 +255,10 @@ export class PredictionEngine {
 
     // Calculate R² (confidence)
     const yMean = sumY / n;
-    const ssTotal = points.reduce((sum, p) => sum + Math.pow(p.y - yMean, 2), 0);
+    const ssTotal = points.reduce(
+      (sum, p) => sum + Math.pow(p.y - yMean, 2),
+      0,
+    );
     const ssResidual = points.reduce((sum, p) => {
       const predicted = slope * p.x + intercept;
       return sum + Math.pow(p.y - predicted, 2);
@@ -271,7 +283,7 @@ export class PredictionEngine {
     return await this.db
       .prepare(
         `SELECT service_name, depends_on, dependency_type, weight
-         FROM service_dependencies`
+         FROM service_dependencies`,
       )
       .all();
   }
@@ -283,7 +295,7 @@ export class PredictionEngine {
     const dependent = [];
 
     for (const [service, deps] of depMap) {
-      const hasDependency = deps.some(d => d.service === serviceName);
+      const hasDependency = deps.some((d) => d.service === serviceName);
       if (hasDependency) {
         dependent.push(service);
       }
@@ -306,11 +318,11 @@ export class PredictionEngine {
 
     for (const affectedService of affectedServices) {
       const deps = depMap.get(affectedService) || [];
-      const dep = deps.find(d => d.service === failingService.name);
+      const dep = deps.find((d) => d.service === failingService.name);
 
       if (dep) {
         totalWeight += dep.weight;
-        if (dep.type === 'critical') criticalCount++;
+        if (dep.type === "critical") criticalCount++;
       }
     }
 
@@ -332,8 +344,8 @@ export class PredictionEngine {
     const dependent = this.findDependentServices(serviceName, depMap);
     if (dependent.length === 0) return 1;
 
-    const depths = dependent.map(s =>
-      this.calculateCascadeDepth(s, depMap, visited)
+    const depths = dependent.map((s) =>
+      this.calculateCascadeDepth(s, depMap, visited),
     );
 
     return 1 + Math.max(...depths);
@@ -342,12 +354,12 @@ export class PredictionEngine {
   /**
    * Store prediction in D1
    */
-  async storePrediction(prediction, sessionId) {
+  async storePrediction(prediction, _sessionId) {
     try {
       await this.db
         .prepare(
           `INSERT INTO predictions (id, service_name, prediction_type, confidence, time_to_failure, details, created_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           prediction.id,
@@ -357,13 +369,16 @@ export class PredictionEngine {
           prediction.time_to_failure,
           prediction.details,
           Date.now(),
-          prediction.expires_at
+          prediction.expires_at,
         )
         .run();
 
       console.log(`[PredictionEngine] Stored prediction ${prediction.id}`);
     } catch (error) {
-      console.warn('[PredictionEngine] Failed to store prediction:', error.message);
+      console.warn(
+        "[PredictionEngine] Failed to store prediction:",
+        error.message,
+      );
     }
   }
 
@@ -371,20 +386,20 @@ export class PredictionEngine {
    * Cache high-confidence predictions in KV
    */
   async cacheHighConfidencePredictions(predictions) {
-    const highConfidence = predictions.filter(p => p.confidence > 0.7);
+    const highConfidence = predictions.filter((p) => p.confidence > 0.7);
 
     for (const prediction of highConfidence) {
       const cacheKey = `prediction:${prediction.service_name}:${prediction.prediction_type}`;
       const ttl = Math.floor((prediction.expires_at - Date.now()) / 1000);
 
-      await this.predictionCache.put(
-        cacheKey,
-        JSON.stringify(prediction),
-        { expirationTtl: ttl }
-      );
+      await this.predictionCache.put(cacheKey, JSON.stringify(prediction), {
+        expirationTtl: ttl,
+      });
     }
 
-    console.log(`[PredictionEngine] Cached ${highConfidence.length} high-confidence predictions`);
+    console.log(
+      `[PredictionEngine] Cached ${highConfidence.length} high-confidence predictions`,
+    );
   }
 
   /**
@@ -405,18 +420,22 @@ export class PredictionEngine {
     let query;
 
     if (serviceName) {
-      query = this.db.prepare(
-        `SELECT * FROM predictions
+      query = this.db
+        .prepare(
+          `SELECT * FROM predictions
          WHERE service_name = ? AND resolved_at IS NULL AND expires_at > ?
-         ORDER BY confidence DESC, created_at DESC`
-      ).bind(serviceName, now);
+         ORDER BY confidence DESC, created_at DESC`,
+        )
+        .bind(serviceName, now);
     } else {
-      query = this.db.prepare(
-        `SELECT * FROM predictions
+      query = this.db
+        .prepare(
+          `SELECT * FROM predictions
          WHERE resolved_at IS NULL AND expires_at > ?
          ORDER BY confidence DESC, created_at DESC
-         LIMIT 50`
-      ).bind(now);
+         LIMIT 50`,
+        )
+        .bind(now);
     }
 
     const result = await query.all();
@@ -431,7 +450,7 @@ export class PredictionEngine {
       .prepare(
         `UPDATE predictions
          SET acknowledged_at = ?
-         WHERE id = ?`
+         WHERE id = ?`,
       )
       .bind(Date.now(), predictionId)
       .run();
@@ -445,7 +464,7 @@ export class PredictionEngine {
       .prepare(
         `UPDATE predictions
          SET resolved_at = ?
-         WHERE id = ?`
+         WHERE id = ?`,
       )
       .bind(Date.now(), predictionId)
       .run();
@@ -460,7 +479,9 @@ export class PredictionEngine {
       .first();
 
     const active = await this.db
-      .prepare(`SELECT COUNT(*) as count FROM predictions WHERE resolved_at IS NULL`)
+      .prepare(
+        `SELECT COUNT(*) as count FROM predictions WHERE resolved_at IS NULL`,
+      )
       .first();
 
     const byType = await this.db
@@ -468,7 +489,7 @@ export class PredictionEngine {
         `SELECT prediction_type, COUNT(*) as count, AVG(confidence) as avg_confidence
          FROM predictions
          WHERE resolved_at IS NULL
-         GROUP BY prediction_type`
+         GROUP BY prediction_type`,
       )
       .all();
 

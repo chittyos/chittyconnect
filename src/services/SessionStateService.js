@@ -27,13 +27,13 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/session/create', {
-        method: 'POST',
+      const response = await durableObject.fetch("https://do/session/create", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-ChittyID': chittyId
+          "Content-Type": "application/json",
+          "X-ChittyID": chittyId,
         },
-        body: JSON.stringify({ sessionId, metadata })
+        body: JSON.stringify({ sessionId, metadata }),
       });
 
       if (!response.ok) {
@@ -47,7 +47,7 @@ export class SessionStateService {
 
       return session;
     } catch (error) {
-      console.error('[SessionStateService] Create session error:', error);
+      console.error("[SessionStateService] Create session error:", error);
 
       // Fallback to KV storage if DO fails
       return await this.createSessionKVFallback(chittyId, sessionId, metadata);
@@ -61,13 +61,13 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/session/update', {
-        method: 'POST',
+      const response = await durableObject.fetch("https://do/session/update", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-ChittyID': chittyId
+          "Content-Type": "application/json",
+          "X-ChittyID": chittyId,
         },
-        body: JSON.stringify({ sessionId, updates })
+        body: JSON.stringify({ sessionId, updates }),
       });
 
       if (!response.ok) {
@@ -81,7 +81,7 @@ export class SessionStateService {
 
       return session;
     } catch (error) {
-      console.error('[SessionStateService] Update session error:', error);
+      console.error("[SessionStateService] Update session error:", error);
 
       // Fallback to KV storage
       return await this.updateSessionKVFallback(chittyId, sessionId, updates);
@@ -103,9 +103,9 @@ export class SessionStateService {
       const response = await durableObject.fetch(
         `https://do/session/get?sessionId=${sessionId}`,
         {
-          method: 'GET',
-          headers: { 'X-ChittyID': chittyId }
-        }
+          method: "GET",
+          headers: { "X-ChittyID": chittyId },
+        },
       );
 
       if (!response.ok) {
@@ -122,7 +122,7 @@ export class SessionStateService {
 
       return session;
     } catch (error) {
-      console.error('[SessionStateService] Get session error:', error);
+      console.error("[SessionStateService] Get session error:", error);
 
       // Fallback to KV storage
       return await this.getSessionKVFallback(sessionId);
@@ -136,9 +136,9 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/session/list', {
-        method: 'GET',
-        headers: { 'X-ChittyID': chittyId }
+      const response = await durableObject.fetch("https://do/session/list", {
+        method: "GET",
+        headers: { "X-ChittyID": chittyId },
       });
 
       if (!response.ok) {
@@ -147,7 +147,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] List sessions error:', error);
+      console.error("[SessionStateService] List sessions error:", error);
       return { count: 0, sessions: [] };
     }
   }
@@ -159,13 +159,13 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/decision/add', {
-        method: 'POST',
+      const response = await durableObject.fetch("https://do/decision/add", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-ChittyID': chittyId
+          "Content-Type": "application/json",
+          "X-ChittyID": chittyId,
         },
-        body: JSON.stringify(decision)
+        body: JSON.stringify(decision),
       });
 
       if (!response.ok) {
@@ -174,7 +174,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] Add decision error:', error);
+      console.error("[SessionStateService] Add decision error:", error);
 
       // Store in D1 as fallback
       return await this.addDecisionD1Fallback(chittyId, decision);
@@ -191,9 +191,9 @@ export class SessionStateService {
       const response = await durableObject.fetch(
         `https://do/decision/list?limit=${limit}`,
         {
-          method: 'GET',
-          headers: { 'X-ChittyID': chittyId }
-        }
+          method: "GET",
+          headers: { "X-ChittyID": chittyId },
+        },
       );
 
       if (!response.ok) {
@@ -202,7 +202,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] Get decisions error:', error);
+      console.error("[SessionStateService] Get decisions error:", error);
       return { count: 0, decisions: [] };
     }
   }
@@ -214,13 +214,13 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/context/set', {
-        method: 'POST',
+      const response = await durableObject.fetch("https://do/context/set", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-ChittyID': chittyId
+          "Content-Type": "application/json",
+          "X-ChittyID": chittyId,
         },
-        body: JSON.stringify({ key, value })
+        body: JSON.stringify({ key, value }),
       });
 
       if (!response.ok) {
@@ -229,7 +229,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] Set context error:', error);
+      console.error("[SessionStateService] Set context error:", error);
 
       // Fallback to KV
       return await this.setContextKVFallback(chittyId, key, value);
@@ -245,11 +245,11 @@ export class SessionStateService {
 
       const url = key
         ? `https://do/context/get?key=${key}`
-        : 'https://do/context/get';
+        : "https://do/context/get";
 
       const response = await durableObject.fetch(url, {
-        method: 'GET',
-        headers: { 'X-ChittyID': chittyId }
+        method: "GET",
+        headers: { "X-ChittyID": chittyId },
       });
 
       if (!response.ok) {
@@ -258,7 +258,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] Get context error:', error);
+      console.error("[SessionStateService] Get context error:", error);
 
       // Fallback to KV
       return await this.getContextKVFallback(chittyId, key);
@@ -272,17 +272,17 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/ws', {
+      const response = await durableObject.fetch("https://do/ws", {
         headers: {
-          'Upgrade': 'websocket',
-          'X-ChittyID': chittyId,
-          'X-Session-ID': sessionId
-        }
+          Upgrade: "websocket",
+          "X-ChittyID": chittyId,
+          "X-Session-ID": sessionId,
+        },
       });
 
       const webSocket = response.webSocket;
       if (!webSocket) {
-        throw new Error('WebSocket upgrade failed');
+        throw new Error("WebSocket upgrade failed");
       }
 
       // Accept the WebSocket connection
@@ -290,7 +290,7 @@ export class SessionStateService {
 
       return webSocket;
     } catch (error) {
-      console.error('[SessionStateService] WebSocket connection error:', error);
+      console.error("[SessionStateService] WebSocket connection error:", error);
       return null;
     }
   }
@@ -302,9 +302,9 @@ export class SessionStateService {
     try {
       const durableObject = this.getDurableObject(chittyId);
 
-      const response = await durableObject.fetch('https://do/metrics', {
-        method: 'GET',
-        headers: { 'X-ChittyID': chittyId }
+      const response = await durableObject.fetch("https://do/metrics", {
+        method: "GET",
+        headers: { "X-ChittyID": chittyId },
       });
 
       if (!response.ok) {
@@ -313,7 +313,7 @@ export class SessionStateService {
 
       return await response.json();
     } catch (error) {
-      console.error('[SessionStateService] Get metrics error:', error);
+      console.error("[SessionStateService] Get metrics error:", error);
       return null;
     }
   }
@@ -325,15 +325,21 @@ export class SessionStateService {
     try {
       // Get existing session from KV
       const kvKey = `session:${sessionId}`;
-      const existingData = await this.env.TOKEN_KV.get(kvKey, { type: 'json' });
+      const existingData = await this.env.TOKEN_KV.get(kvKey, { type: "json" });
 
       if (!existingData) {
-        console.log(`[SessionStateService] No KV session to migrate: ${sessionId}`);
+        console.log(
+          `[SessionStateService] No KV session to migrate: ${sessionId}`,
+        );
         return null;
       }
 
       // Create session in DO
-      const session = await this.createSession(chittyId, sessionId, existingData);
+      const session = await this.createSession(
+        chittyId,
+        sessionId,
+        existingData,
+      );
 
       // Delete from KV after successful migration
       await this.env.TOKEN_KV.delete(kvKey);
@@ -341,7 +347,7 @@ export class SessionStateService {
       console.log(`[SessionStateService] Migrated session ${sessionId} to DO`);
       return session;
     } catch (error) {
-      console.error('[SessionStateService] Migration error:', error);
+      console.error("[SessionStateService] Migration error:", error);
       return null;
     }
   }
@@ -357,15 +363,15 @@ export class SessionStateService {
       chittyId,
       created: Date.now(),
       updated: Date.now(),
-      expires: Date.now() + (24 * 60 * 60 * 1000),
+      expires: Date.now() + 24 * 60 * 60 * 1000,
       metadata,
-      state: 'active'
+      state: "active",
     };
 
     await this.env.TOKEN_KV.put(
       `session:${sessionId}`,
       JSON.stringify(session),
-      { expirationTtl: 86400 } // 24 hours
+      { expirationTtl: 86400 }, // 24 hours
     );
 
     return session;
@@ -375,22 +381,24 @@ export class SessionStateService {
    * KV Fallback: Update session
    */
   async updateSessionKVFallback(chittyId, sessionId, updates) {
-    const existing = await this.env.TOKEN_KV.get(`session:${sessionId}`, { type: 'json' });
+    const existing = await this.env.TOKEN_KV.get(`session:${sessionId}`, {
+      type: "json",
+    });
 
     if (!existing) {
-      throw new Error('Session not found');
+      throw new Error("Session not found");
     }
 
     const updated = {
       ...existing,
       ...updates,
-      updated: Date.now()
+      updated: Date.now(),
     };
 
     await this.env.TOKEN_KV.put(
       `session:${sessionId}`,
       JSON.stringify(updated),
-      { expirationTtl: 86400 }
+      { expirationTtl: 86400 },
     );
 
     return updated;
@@ -400,7 +408,9 @@ export class SessionStateService {
    * KV Fallback: Get session
    */
   async getSessionKVFallback(sessionId) {
-    return await this.env.TOKEN_KV.get(`session:${sessionId}`, { type: 'json' });
+    return await this.env.TOKEN_KV.get(`session:${sessionId}`, {
+      type: "json",
+    });
   }
 
   /**
@@ -410,7 +420,7 @@ export class SessionStateService {
     await this.env.TOKEN_KV.put(
       `context:${chittyId}:${key}`,
       JSON.stringify(value),
-      { expirationTtl: 86400 }
+      { expirationTtl: 86400 },
     );
 
     return { success: true };
@@ -421,7 +431,9 @@ export class SessionStateService {
    */
   async getContextKVFallback(chittyId, key) {
     if (key) {
-      const value = await this.env.TOKEN_KV.get(`context:${chittyId}:${key}`, { type: 'json' });
+      const value = await this.env.TOKEN_KV.get(`context:${chittyId}:${key}`, {
+        type: "json",
+      });
       return { key, value };
     }
 
@@ -435,21 +447,25 @@ export class SessionStateService {
   async addDecisionD1Fallback(chittyId, decision) {
     const id = crypto.randomUUID();
 
-    await this.env.DB.prepare(`
+    await this.env.DB.prepare(
+      `
       INSERT INTO decisions (
         id, session_id, service_name, decision_type,
         reasoning, confidence, context, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id,
-      decision.sessionId || 'unknown',
-      'chittyconnect',
-      decision.type || 'general',
-      decision.reasoning || '',
-      decision.confidence || 0.5,
-      JSON.stringify(decision.context || {}),
-      Date.now()
-    ).run();
+    `,
+    )
+      .bind(
+        id,
+        decision.sessionId || "unknown",
+        "chittyconnect",
+        decision.type || "general",
+        decision.reasoning || "",
+        decision.confidence || 0.5,
+        JSON.stringify(decision.context || {}),
+        Date.now(),
+      )
+      .run();
 
     return { ...decision, id, timestamp: Date.now() };
   }

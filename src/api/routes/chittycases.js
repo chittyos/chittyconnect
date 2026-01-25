@@ -28,13 +28,17 @@ chittycasesRoutes.post("/create", async (c) => {
       return c.json({ error: "Invalid caseType" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, 'chittycases');
+    const serviceToken = await getServiceToken(c.env, "chittycases");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyCases service token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyCases service token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const response = await fetch("https://cases.chitty.cc/api/cases", {
@@ -65,12 +69,15 @@ chittycasesRoutes.get("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
 
-    const serviceToken = await getServiceToken(c.env, 'chittycases');
+    const serviceToken = await getServiceToken(c.env, "chittycases");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyCases service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyCases service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -102,12 +109,15 @@ chittycasesRoutes.put("/:caseId", async (c) => {
     const caseId = c.req.param("caseId");
     const updates = await c.req.json();
 
-    const serviceToken = await getServiceToken(c.env, 'chittycases');
+    const serviceToken = await getServiceToken(c.env, "chittycases");
 
     if (!serviceToken) {
-      return c.json({
-        error: "ChittyCases service token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "ChittyCases service token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
