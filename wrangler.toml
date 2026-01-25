@@ -1,6 +1,9 @@
 # Wrangler configuration for ChittyConnect - itsChitty™
 # The AI-intelligent spine with ContextConsciousness & MemoryCloude
 #
+# SINGLE WORKER - No staging/dev/production variants
+# All services should route through this central hub
+#
 # Routes:
 # - /api/* - REST API for custom GPT Actions
 # - /mcp/* - MCP protocol for Claude integration
@@ -12,30 +15,32 @@ compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
 account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
+# Custom domain route
+[[routes]]
+pattern = "connect.chitty.cc/*"
+zone_name = "chitty.cc"
+
 # R2 bucket for shared files
 [[r2_buckets]]
 binding = "FILES"
 bucket_name = "chittyos-files"
 
-# KV Namespaces
+# KV Namespaces (production IDs)
 [[kv_namespaces]]
 binding = "IDEMP_KV"
-id = "ea43bc974b894701a069e4804be765ba"
+id = "9ad1ec9795d243ca94f7502e6efb6a62"
 
 [[kv_namespaces]]
 binding = "TOKEN_KV"
-id = "d8051882226b470ba10035b30447a8b7"
+id = "788d2fce231d4819a11b46d5f4678b04"
 
 [[kv_namespaces]]
 binding = "API_KEYS"
-id = "3a29a9de28c84b7e8b87070cbf006415"
-
-# RATE_LIMIT namespace removed - using in-memory rate limiting for free tier optimization
-# Saves 5,000 KV writes/day
+id = "cf6da7757caf4da5a8a365be2174f391"
 
 [[kv_namespaces]]
 binding = "CREDENTIAL_CACHE"
-id = "7b71b58ad724477888b37d8beeb5d825"
+id = "aa18a59a2eb24fb29cfe08ef62519f4d"
 
 # Vectorize for MemoryCloude and ContextConsciousness
 [[vectorize]]
@@ -68,146 +73,34 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 binding = "EVENT_Q"
 queue = "github-events"
 
-# Environment variables for development
-[env.staging]
-name = "chittyconnect"
-
-[[env.staging.kv_namespaces]]
-binding = "IDEMP_KV"
-id = "ea43bc974b894701a069e4804be765ba"
-
-[[env.staging.kv_namespaces]]
-binding = "TOKEN_KV"
-id = "d8051882226b470ba10035b30447a8b7"
-
-[[env.staging.kv_namespaces]]
-binding = "API_KEYS"
-id = "3a29a9de28c84b7e8b87070cbf006415"
-
-# RATE_LIMIT namespace removed for staging - using in-memory rate limiting
-
-[[env.staging.kv_namespaces]]
-binding = "CREDENTIAL_CACHE"
-id = "944ba0b2eb874119ada9961e922ff4a9"
-
-[[env.staging.vectorize]]
-binding = "MEMORY_VECTORIZE"
-index_name = "memory-cloude"
-
-[[env.staging.vectorize]]
-binding = "CONTEXT_VECTORIZE"
-index_name = "context-embeddings"
-
-[[env.staging.durable_objects.bindings]]
-name = "MCP_SESSIONS"
-class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect"
-
-[[env.staging.d1_databases]]
-binding = "DB"
-database_name = "chittyconnect"
-database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
-
-[[env.staging.queues.producers]]
-binding = "EVENT_Q"
-queue = "github-events"
-
-[env.staging.ai]
+# Cloudflare Workers AI binding
+[ai]
 binding = "AI"
 
-[env.staging.vars]
-ENVIRONMENT = "staging"
-CHITTYID_SERVICE_URL = "https://id.chitty.cc"
-REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
-CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
-CHITTYOS_DOMAIN = "chitty.cc"
-GITHUB_APP_ID = ""  # Set via wrangler secret
-# 1Password Connect Configuration (optional - enables dynamic credential retrieval)
-ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
-ONEPASSWORD_VAULT_INFRASTRUCTURE = "xgevq7nkt6t4bfokjaczht5gdy"  # ChittyOS-Deployment
-ONEPASSWORD_VAULT_SERVICES = "shl646vf4snnrkx6linyk3yis4"        # ChittyConnect Only
-ONEPASSWORD_VAULT_INTEGRATIONS = "3ngilqu4qsp4mlr53xhvyi4sry"    # ChittyOS-Integrations
-ONEPASSWORD_VAULT_EMERGENCY = "xrvuw4jn25fwwpowhaihztinoi"       # ChittyOS-SSH
-CREDENTIAL_FAILOVER_ENABLED = "true"
-
-# Environment variables for production
-[env.production]
-name = "chittyconnect"
-
-[[env.production.routes]]
-pattern = "connect.chitty.cc/*"
-zone_name = "chitty.cc"
-
-# Note: mcp.chitty.cc/* and api.chitty.cc/* routes are currently assigned to
-# separate workers (chittymcp-production, chittyapi-production).
-# To consolidate, delete those workers first, then uncomment:
-# [[env.production.routes]]
-# pattern = "mcp.chitty.cc/*"
-# zone_name = "chitty.cc"
-# [[env.production.routes]]
-# pattern = "api.chitty.cc/*"
-# zone_name = "chitty.cc"
-
-[[env.production.r2_buckets]]
-binding = "FILES"
-bucket_name = "chittyos-files"
-
-[[env.production.kv_namespaces]]
-binding = "IDEMP_KV"
-id = "9ad1ec9795d243ca94f7502e6efb6a62"
-
-[[env.production.kv_namespaces]]
-binding = "TOKEN_KV"
-id = "788d2fce231d4819a11b46d5f4678b04"
-
-[[env.production.kv_namespaces]]
-binding = "API_KEYS"
-id = "cf6da7757caf4da5a8a365be2174f391"
-
-# RATE_LIMIT namespace removed for production - using in-memory rate limiting
-
-[[env.production.kv_namespaces]]
-binding = "CREDENTIAL_CACHE"
-id = "aa18a59a2eb24fb29cfe08ef62519f4d"
-
-[[env.production.vectorize]]
-binding = "MEMORY_VECTORIZE"
-index_name = "memory-cloude"
-
-[[env.production.vectorize]]
-binding = "CONTEXT_VECTORIZE"
-index_name = "context-embeddings"
-
-[[env.production.durable_objects.bindings]]
-name = "MCP_SESSIONS"
-class_name = "MCPSessionDurableObject"
-script_name = "chittyconnect"
-
-[[env.production.d1_databases]]
-binding = "DB"
-database_name = "chittyconnect"
-database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
-
-[[env.production.queues.producers]]
-binding = "EVENT_Q"
-queue = "github-events"
-
-[env.production.ai]
-binding = "AI"
-
-[env.production.vars]
+# Environment variables
+[vars]
 ENVIRONMENT = "production"
 CHITTYID_SERVICE_URL = "https://id.chitty.cc"
 REGISTRY_SERVICE_URL = "https://registry.chitty.cc"
 CHITTYOS_ACCOUNT_ID = "0bc21e3a5a9de1a4cc843be9c3e98121"
 CHITTYOS_DOMAIN = "chitty.cc"
-# 1Password Connect Configuration (optional - enables dynamic credential retrieval)
+# 1Password Connect Configuration
 ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"
-ONEPASSWORD_VAULT_INFRASTRUCTURE = "xgevq7nkt6t4bfokjaczht5gdy"  # ChittyOS-Deployment
-ONEPASSWORD_VAULT_SERVICES = "shl646vf4snnrkx6linyk3yis4"        # ChittyConnect Only
-ONEPASSWORD_VAULT_INTEGRATIONS = "3ngilqu4qsp4mlr53xhvyi4sry"    # ChittyOS-Integrations
-ONEPASSWORD_VAULT_EMERGENCY = "xrvuw4jn25fwwpowhaihztinoi"       # ChittyOS-SSH
+ONEPASSWORD_VAULT_INFRASTRUCTURE = "xgevq7nkt6t4bfokjaczht5gdy"
+ONEPASSWORD_VAULT_SERVICES = "shl646vf4snnrkx6linyk3yis4"
+ONEPASSWORD_VAULT_INTEGRATIONS = "3ngilqu4qsp4mlr53xhvyi4sry"
+ONEPASSWORD_VAULT_EMERGENCY = "xrvuw4jn25fwwpowhaihztinoi"
 CREDENTIAL_FAILOVER_ENABLED = "true"
+
+# Scheduled triggers for background tasks
+[triggers]
+crons = [
+  "0 * * * *"  # Hourly: Sync 1Password Events to ChittyChronicle
+]
+
+# Analytics and logging
+[observability]
+enabled = true
 
 # Secrets (set via: wrangler secret put <NAME>)
 #
@@ -234,30 +127,10 @@ CREDENTIAL_FAILOVER_ENABLED = "true"
 # - NEON_DATABASE_URL
 #
 # Credential Provisioning:
-# - CLOUDFLARE_MAKE_API_KEY (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/m4unvf5sbz3rm7ny2ys5siy5om/make_api_key)
-# - CLOUDFLARE_ACCOUNT_ID (from 1Password: op://Private/gxyne23yqngvk2nzjwl62uakx4/ChittyCorp LLC/account_id)
-#   Note: CLOUDFLARE_ACCOUNT_ID defaults to 0bc21e3a5a9de1a4cc843be9c3e98121 if not set
+# - CLOUDFLARE_MAKE_API_KEY
+# - CLOUDFLARE_ACCOUNT_ID (defaults to 0bc21e3a5a9de1a4cc843be9c3e98121)
 #
-# 1Password Connect (optional - enables dynamic credential retrieval at runtime):
-# - ONEPASSWORD_CONNECT_TOKEN (Bearer token for 1Password Connect API)
-# - EMERGENCY_REVOKE_TOKEN (Special token for emergency credential cache clearing - high entropy random string)
-# - ENCRYPTION_KEY (for encrypting cached credentials in KV - 32+ character random string)
-
-# Cloudflare Workers AI binding
-[ai]
-binding = "AI"
-
-# Scheduled triggers for background tasks
-[triggers]
-crons = [
-  "0 * * * *"  # Hourly: Sync 1Password Events to ChittyChronicle
-]
-
-# Analytics and logging
-[observability]
-enabled = true
-
-# Build configuration
-[build]
-command = ""
-cwd = "."
+# 1Password Connect:
+# - ONEPASSWORD_CONNECT_TOKEN
+# - EMERGENCY_REVOKE_TOKEN
+# - ENCRYPTION_KEY
