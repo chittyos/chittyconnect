@@ -525,6 +525,111 @@ credentialsRoutes.get("/twilio", async (c) => {
 });
 
 /**
+ * GET /api/credentials/:vault/:item/:field
+ *
+ * Retrieve a specific credential from 1Password by path.
+ * This is the secure way for ChittyOS services to access credentials.
+ *
+ * Path parameters:
+ * - vault: The 1Password vault (infrastructure, services, integrations)
+ * - item: The item name in the vault
+ * - field: The field name within the item
+ *
+ * Example: GET /api/credentials/infrastructure/neon/chittycanon_db_url
+ *
+ * Response:
+ * {
+ *   "success": true,
+ *   "value": "postgres://...",
+ *   "metadata": {
+ *     "vault": "infrastructure",
+ *     "item": "neon",
+ *     "field": "chittycanon_db_url",
+ *     "cached": false
+ *   }
+ * }
+ */
+credentialsRoutes.get("/:vault/:item/:field", async (c) => {
+  try {
+    const vault = c.req.param("vault");
+    const item = c.req.param("item");
+    const field = c.req.param("field");
+
+    // Validate vault name
+    const validVaults = ["infrastructure", "services", "integrations"];
+    if (!validVaults.includes(vault)) {
+      return c.json({
+        success: false,
+        error: {
+          code: "INVALID_VAULT",
+          message: `Invalid vault: ${vault}. Must be one of: ${validVaults.join(", ")}`
+        }
+      }, 400);
+    }
+
+    // Get requesting service from API key metadata
+    const apiKeyInfo = c.get("apiKey");
+    const requestingService = apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
+
+    console.log(`[Credentials] ${requestingService} requesting ${vault}/${item}/${field}`);
+
+    // Initialize 1Password client
+    const opClient = new OnePasswordConnectClient(c.env);
+
+    // Build credential path
+    const credentialPath = `${vault}/${item}/${field}`;
+
+    // Fetch from 1Password
+    const value = await opClient.get(credentialPath);
+
+    // Log credential access (no sensitive data)
+    try {
+      await c.env.DB.prepare(`
+        INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at)
+        VALUES ('1password_retrieval', ?, ?, ?, datetime('now'))
+      `).bind(item, field, requestingService).run();
+    } catch (dbError) {
+      console.warn('[Credentials] Failed to log credential access:', dbError.message);
+    }
+
+    return c.json({
+      success: true,
+      value,
+      metadata: {
+        vault,
+        item,
+        field,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[Credentials] Retrieval error:', error);
+
+    let status = 500;
+    let code = "RETRIEVAL_FAILED";
+
+    if (error.message.includes("Unknown vault") || error.message.includes("Invalid credential path")) {
+      status = 400;
+      code = "INVALID_PATH";
+    } else if (error.message.includes("not found") || error.message.includes("has no value")) {
+      status = 404;
+      code = "NOT_FOUND";
+    } else if (error.message.includes("not configured")) {
+      status = 503;
+      code = "SERVICE_UNAVAILABLE";
+    }
+
+    return c.json({
+      success: false,
+      error: {
+        code,
+        message: error.message
+      }
+    }, status);
+  }
+});
+
+/**
  * GET /api/credentials/health
  *
  * Check credential provisioning service health
