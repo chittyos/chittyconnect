@@ -25,7 +25,11 @@ import { mcpRoutes } from "./routes/mcp.js";
 import contextRoutes from "./routes/context.js";
 import filesRoutes from "./routes/files.js";
 import tasksRoutes from "./routes/tasks.js";
+import { dashboard } from "./routes/dashboard.js";
+import contextResolution from "./routes/context-resolution.js";
+import contextIntelligence from "./routes/context-intelligence.js";
 import { authenticate } from "./middleware/auth.js";
+import { autoRateLimit } from "./middleware/rateLimit.js";
 
 const api = new Hono();
 
@@ -34,9 +38,17 @@ api.use("*", logger());
 api.use(
   "*",
   cors({
-    origin: ["https://chat.openai.com", "https://chatgpt.com"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-ChittyOS-API-Key"],
+    origin: [
+      "https://chat.openai.com",
+      "https://chatgpt.com",
+      "https://chittyconnect-ui.pages.dev",
+      /\.chittyconnect-ui\.pages\.dev$/,
+      "https://dashboard.chitty.cc",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-ChittyOS-API-Key", "X-ChittyID"],
     exposeHeaders: ["Content-Length", "X-Request-ID"],
     maxAge: 86400,
     credentials: true,
@@ -45,6 +57,9 @@ api.use(
 
 // Authentication middleware for all API routes
 api.use("/api/*", authenticate);
+
+// Rate limiting for intelligence endpoints
+api.use("/api/v1/intelligence/*", autoRateLimit());
 
 // CORS preflight handler
 api.options("*", (c) => c.text("", 204));
@@ -71,6 +86,8 @@ api.get("/api/health", (c) => {
       thirdparty: "/api/thirdparty",
       credentials: "/api/credentials",
       intelligence: "/api/intelligence",
+      dashboard: "/api/dashboard",
+      contextResolution: "/api/v1/context",
       githubActions: "/api/github-actions",
       mcp: "/mcp",
     },
@@ -122,6 +139,9 @@ api.route("/api/intelligence", intelligence);
 api.route("/api/context", contextRoutes);
 api.route("/api/context/tasks", tasksRoutes);
 api.route("/api/files", filesRoutes);
+api.route("/api/dashboard", dashboard);
+api.route("/api/v1/context", contextResolution);
+api.route("/api/v1/intelligence", contextIntelligence);
 api.route("/mcp", mcpRoutes);
 
 export { api };

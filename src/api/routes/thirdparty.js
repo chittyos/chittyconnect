@@ -251,6 +251,152 @@ thirdpartyRoutes.post("/cloudflare/ai/run", async (c) => {
 });
 
 /**
+ * PATCH /api/thirdparty/notion/page/update
+ * Update Notion page
+ */
+thirdpartyRoutes.patch("/notion/page/update", async (c) => {
+  try {
+    const { pageId, ...properties } = await c.req.json();
+
+    if (!pageId) {
+      return c.json({ error: "pageId is required" }, 400);
+    }
+
+    // Get Notion token from 1Password with fallback
+    const notionToken = await getCredential(
+      c.env,
+      'integrations/notion/api_key',
+      'NOTION_TOKEN'
+    );
+
+    if (!notionToken) {
+      return c.json({
+        error: "Notion API key not configured"
+      }, 503);
+    }
+
+    const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(properties),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Notion API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * PUT /api/thirdparty/github/repos/:owner/:repo/contents/*
+ * Create or update file in GitHub repository
+ */
+thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
+  try {
+    const { owner, repo } = c.req.param();
+    const path = c.req.path.replace(`/api/thirdparty/github/repos/${owner}/${repo}/contents/`, '');
+    const body = await c.req.json();
+
+    if (!body.content) {
+      return c.json({ error: "content is required" }, 400);
+    }
+
+    // Get GitHub token from 1Password with fallback
+    const githubToken = await getCredential(
+      c.env,
+      'integrations/github/token',
+      'GITHUB_TOKEN'
+    );
+
+    if (!githubToken) {
+      return c.json({
+        error: "GitHub token not configured",
+        details: "Neither 1Password Connect nor environment variable available"
+      }, 503);
+    }
+
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+          "User-Agent": "ChittyConnect/1.0"
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/contents/*
+ * Get file contents from GitHub repository
+ */
+thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
+  try {
+    const { owner, repo } = c.req.param();
+    const path = c.req.path.replace(`/api/thirdparty/github/repos/${owner}/${repo}/contents/`, '');
+
+    // Get GitHub token from 1Password with fallback
+    const githubToken = await getCredential(
+      c.env,
+      'integrations/github/token',
+      'GITHUB_TOKEN'
+    );
+
+    if (!githubToken) {
+      return c.json({
+        error: "GitHub token not configured"
+      }, 503);
+    }
+
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "ChittyConnect/1.0"
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
  * GET /api/thirdparty/google/calendar/events
  * List Google Calendar events
  */

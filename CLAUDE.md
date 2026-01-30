@@ -55,6 +55,109 @@ Unified proxy for external services:
 - **Google Calendar** - Event management
 - **Cloudflare AI** - Workers AI models
 
+### Context Intelligence Layer
+
+The intelligence layer provides decision-making capabilities based on accumulated context DNA:
+
+#### Modules (`src/intelligence/`)
+
+| Module | Purpose |
+|--------|---------|
+| `context-resolver.js` | Resolves session hints to context entities |
+| `context-intelligence.js` | Decision engine - coherence, autonomy, guardrails |
+| `context-behavior.js` | Behavioral tracking - traits, trends, red flags |
+| `context-taxonomy.js` | Context type classification (20 types, 10 categories) |
+| `alchemist-daemon.js` | Capability assessment, experiments, evolution observation |
+| `context-alchemy.js` | Chemistry-inspired naming for lifecycle operations |
+| `context-periodic-table.js` | Extended taxonomy (deprecated, use taxonomy.js) |
+
+#### Key Concepts
+
+**Context Taxonomy** - 20 predefined context types:
+- Technical: Developer, Frontend, Backend
+- Operations: DevOps, SRE
+- Data: Analyst, Engineer, Scientist
+- AI/ML: AI Engineer, ML Engineer
+- Design: UX, UI
+- Management: PM, PO, Tech Lead
+- Security: Security, Compliance
+- Business: Legal, Finance
+- Synthetic: Supernova, Fission, Derivative, Suspension
+
+**Behavioral Traits** (0.0-1.0 scores):
+- `volatile` - Tendency toward erratic behavior (lower is better)
+- `compliant` - Adherence to rules/guidelines
+- `creative` - Novel solution exploration
+- `methodical` - Systematic approach
+- `resilient` - Recovery from failures
+- `trustAligned` - Alignment with safety guidelines
+
+**Source Influence Profiles**:
+- High stability (0.9): docs.github.com, developer.mozilla.org
+- Medium stability (0.7): github.com, openai.com
+- Low stability (0.3-0.4): x.com, reddit.com
+
+**Alchemist Archetypes** (stability vs capability tradeoff):
+- **Sentinel** (0.9 stability) - Routine tasks, monitoring
+- **Artisan** (0.6 stability) - Balanced, general development
+- **Sage** (0.4 stability) - Complex problems, architecture
+- **Alchemist** (0.3 stability) - Innovation, prototyping
+- **Diplomat** (0.7 stability) - Orchestration, collaboration
+
+#### Intelligence API Endpoints
+
+```bash
+# Taxonomy
+GET  /api/v1/intelligence/taxonomy                    # Get all context types
+GET  /api/v1/intelligence/taxonomy/classify/:chittyId # Classify a context
+GET  /api/v1/intelligence/taxonomy/discovery          # User's discovery status
+GET  /api/v1/intelligence/taxonomy/collaborators/:id  # Find collaborators
+
+# Behavioral Analysis
+GET  /api/v1/intelligence/behavior/:chittyId          # Behavioral summary
+GET  /api/v1/intelligence/behavior/concerns           # Contexts with red flags
+POST /api/v1/intelligence/behavior/exposure           # Log source exposure
+POST /api/v1/intelligence/behavior/assess/:chittyId   # Assess traits
+
+# Alchemist Daemon
+GET  /api/v1/intelligence/alchemist/reference         # Capability dimensions & archetypes
+GET  /api/v1/intelligence/alchemist/capabilities/:id  # Assess context capabilities
+GET  /api/v1/intelligence/alchemist/observe           # Observe evolution (field mode)
+POST /api/v1/intelligence/alchemist/experiment        # Run experiment (lab mode)
+
+# Decisions & Operations
+GET  /api/v1/intelligence/decisions/:chittyId         # Full session decisions
+POST /api/v1/intelligence/coherence                   # Analyze context drift
+POST /api/v1/intelligence/supernova/analyze           # Analyze merge potential
+POST /api/v1/intelligence/supernova/execute           # Execute merge
+POST /api/v1/intelligence/fission/analyze             # Analyze split potential
+POST /api/v1/intelligence/fission/execute             # Execute split
+POST /api/v1/intelligence/derivative                  # Fork a context
+POST /api/v1/intelligence/suspension                  # Temporary blend
+POST /api/v1/intelligence/solution                    # Team of contexts
+POST /api/v1/intelligence/combination                 # Soft merge
+```
+
+#### Database Tables
+
+```sql
+-- Core (migration 009)
+context_entities          -- Context with ChittyID
+context_dna               -- Accumulated patterns, traits, competencies
+context_ledger            -- Immutable event chain
+context_session_bindings  -- Session-to-context bindings
+context_trust_log         -- Trust change audit trail
+
+-- Lifecycle (migration 010)
+context_collaborations    -- Parent-child delegation
+context_pairs             -- Complementary relationships
+context_lifecycle_events  -- Supernova, fission, etc.
+
+-- Behavioral (migration 011)
+context_exposure_log      -- Source interaction history
+context_behavioral_events -- Trait shifts, red flags, trends
+```
+
 ## Essential Commands
 
 ### Development

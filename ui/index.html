@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChittyID Context Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="description" content="Real-time observability dashboard for ChittyID synthetic entities - trust scoring, session tracking, team management" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root {
+        --bg-primary: #0a0a0f;
+        --bg-secondary: #12121a;
+        --bg-tertiary: #1a1a25;
+        --bg-card: #15151f;
+        --border-primary: #2a2a3a;
+        --border-accent: #4a4a6a;
+        --text-primary: #f0f0f5;
+        --text-secondary: #a0a0b5;
+        --text-muted: #606075;
+        --accent-primary: #6366f1;
+        --accent-secondary: #8b5cf6;
+        --accent-success: #22c55e;
+        --accent-warning: #f59e0b;
+        --accent-danger: #ef4444;
+        --accent-info: #06b6d4;
+        --trust-5: #22c55e;
+        --trust-4: #84cc16;
+        --trust-3: #facc15;
+        --trust-2: #f97316;
+        --trust-1: #ef4444;
+        --trust-0: #6b7280;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      #root { min-height: 100vh; }
+      .loading-screen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: var(--bg-primary);
+      }
+      .loading-pulse {
+        width: 48px;
+        height: 48px;
+        border: 3px solid var(--border-primary);
+        border-top-color: var(--accent-primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="loading-screen">
+        <div class="loading-pulse"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

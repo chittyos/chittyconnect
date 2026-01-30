@@ -23,6 +23,7 @@ import {
 import { ContextConsciousness } from "./intelligence/context-consciousness.js";
 import { MemoryCloude } from "./intelligence/memory-cloude.js";
 import { CognitiveCoordinator } from "./intelligence/cognitive-coordination.js";
+import { ContextResolver } from "./intelligence/context-resolver.js";
 import { MCPSessionDurableObject } from "./mcp/session/durable-object.js";
 
 const app = new Hono();
@@ -128,6 +129,9 @@ app.use("*", async (c, next) => {
     c.set("streaming", streamingManager);
   }
 
+  // Initialize ContextResolver for intelligent context matching
+  c.set("contextResolver", new ContextResolver(c.env));
+
   if (modules) {
     c.set("consciousness", modules.consciousness);
     c.set("memory", modules.memory);
@@ -153,6 +157,7 @@ app.get("/health", (c) => {
       contextConsciousness: !!c.get("consciousness"),
       memoryCloude: !!c.get("memory"),
       cognitiveCoordination: !!c.get("coordinator"),
+      contextResolver: !!c.get("contextResolver"),
     },
     endpoints: {
       api: "/api/*",
