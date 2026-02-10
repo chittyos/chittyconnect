@@ -261,3 +261,7 @@ enabled = true
 [build]
 command = ""
 cwd = "."
+
+# ChittyTrack observability
+[[tail_consumers]]
+service = "chittytrack"
