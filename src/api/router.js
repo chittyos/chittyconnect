@@ -9,6 +9,8 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { chittyidRoutes } from "./routes/chittyid.js";
 import { chittycasesRoutes } from "./routes/chittycases.js";
+import { chittydisputesRoutes } from "./routes/chittydisputes.js";
+import { chittytrackRoutes } from "./routes/chittytrack.js";
 import { chittyauthRoutes } from "./routes/chittyauth.js";
 import { chittyfinanceRoutes } from "./routes/chittyfinance.js";
 import { chittycontextualRoutes } from "./routes/chittycontextual.js";
@@ -74,6 +76,8 @@ api.get("/api/health", (c) => {
     endpoints: {
       chittyid: "/api/chittyid",
       chittycases: "/api/chittycases",
+      chittydisputes: "/api/chittydisputes",
+      chittytrack: "/api/chittytrack",
       chittyauth: "/api/chittyauth",
       chittyfinance: "/api/chittyfinance",
       chittycontextual: "/api/chittycontextual",
@@ -124,6 +128,8 @@ api.get("/openapi.json", async (c) => {
 // Route handlers
 api.route("/api/chittyid", chittyidRoutes);
 api.route("/api/chittycases", chittycasesRoutes);
+api.route("/api/chittydisputes", chittydisputesRoutes);
+api.route("/api/chittytrack", chittytrackRoutes);
 api.route("/api/chittyauth", chittyauthRoutes);
 api.route("/api/chittyfinance", chittyfinanceRoutes);
 api.route("/api/chittycontextual", chittycontextualRoutes);
