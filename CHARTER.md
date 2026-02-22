@@ -1,7 +1,8 @@
 # ChittyConnect Charter
 
 ## Classification
-- **Tier**: 2 (Core Infrastructure)
+- **Canonical URI**: `chittycanon://core/services/chittyconnect`
+- **Tier**: 2 (Platform)
 - **Organization**: CHITTYOS
 - **Domain**: connect.chitty.cc
 
