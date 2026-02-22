@@ -195,6 +195,9 @@ queue = "github-events"
 [env.production.ai]
 binding = "AI"
 
+[[env.production.tail_consumers]]
+service = "chittytrack"
+
 [env.production.vars]
 ENVIRONMENT = "production"
 CHITTYID_SERVICE_URL = "https://id.chitty.cc"
