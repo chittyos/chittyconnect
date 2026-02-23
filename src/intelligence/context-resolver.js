@@ -259,7 +259,10 @@ export class ContextResolver {
           'Authorization': `Bearer ${this.env.CHITTY_ID_TOKEN || ''}`,
         },
         body: JSON.stringify({
-          entity_type: 'CONTEXT',
+          // @canon: chittycanon://gov/governance#core-types
+          // Contexts are Person (P, Synthetic) — actors with agency, not Things
+          entity_type: 'P',
+          characterization: 'Synthetic',
           metadata: {
             project_path: projectPath,
             workspace,
@@ -278,11 +281,13 @@ export class ContextResolver {
     }
 
     // Fallback: generate local ChittyID format
+    // @canon: chittycanon://gov/governance#core-types
+    // Contexts are Person (P, Synthetic) — actors with agency, even in fallback
     const version = '03';
     const geo = '1';
     const locale = 'USA';
     const sequence = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
-    const type = 'T';
+    const type = 'P';
     const year = new Date().getFullYear().toString().slice(-2);
     const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
     const check = Math.floor(Math.random() * 100).toString().padStart(2, '0');

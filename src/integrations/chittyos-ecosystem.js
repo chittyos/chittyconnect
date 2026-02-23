@@ -59,8 +59,11 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyOS] New context detected, initializing...`);
 
     // 2a. Mint ChittyID for the context
+    // @canon: chittycanon://gov/governance#core-types
+    // Integration contexts are Person (P, Synthetic) — actors with agency
     const chittyid = await this.mintChittyID({
-      entity: "CONTEXT",
+      entity: "P",
+      characterization: "Synthetic",
       metadata: {
         name: contextName,
         type: "chittyconnect_integration",

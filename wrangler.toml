@@ -31,9 +31,11 @@ binding = "API_KEYS"
 id = "3a29a9de28c84b7e8b87070cbf006415"
 
 # OAuth 2.1 token storage (required by @cloudflare/workers-oauth-provider)
+# OAUTH_PROVIDER binding is auto-injected by @cloudflare/workers-oauth-provider at runtime.
+# It uses OAUTH_KV for token/client persistence.
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-id = "d8051882226b470ba10035b30447a8b7"
+id = "608583e8d1ad46469cbb7f3f91108a14"
 
 # RATE_LIMIT namespace removed - using in-memory rate limiting for free tier optimization
 # Saves 5,000 KV writes/day
@@ -91,7 +93,7 @@ id = "3a29a9de28c84b7e8b87070cbf006415"
 
 [[env.staging.kv_namespaces]]
 binding = "OAUTH_KV"
-id = "d8051882226b470ba10035b30447a8b7"
+id = "82e94bcbfe404d5a81b5956cfc026695"
 
 # RATE_LIMIT namespace removed for staging - using in-memory rate limiting
 
@@ -177,7 +179,7 @@ id = "cf6da7757caf4da5a8a365be2174f391"
 
 [[env.production.kv_namespaces]]
 binding = "OAUTH_KV"
-id = "788d2fce231d4819a11b46d5f4678b04"
+id = "054ff38c93854e7c87b3aa307a7759cc"
 
 # RATE_LIMIT namespace removed for production - using in-memory rate limiting
 

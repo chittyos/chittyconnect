@@ -88,7 +88,7 @@ async function ensureEcosystemInitialized(env) {
     const ecosystem = new ChittyOSEcosystem(env);
     ecosystem
       .initializeContext("chittyconnect", {
-        version: "1.0.0",
+        version: "2.0.2",
         type: "ai-integration-hub",
         capabilities: [
           "mcp",
@@ -152,7 +152,7 @@ app.get("/health", (c) => {
     brand: "itsChitty™",
     tagline:
       "The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™",
-    version: "1.0.0",
+    version: "2.0.2",
     timestamp: new Date().toISOString(),
     intelligence: {
       contextConsciousness: !!c.get("consciousness"),
@@ -526,9 +526,12 @@ app.get("/integrations/github/callback", async (c) => {
     const installation = await installResponse.json();
 
     // 3. Mint ChittyID for the installation
+    // @canon: chittycanon://gov/governance#core-types
+    // GitHub installations are Things (T, Digital) — objects without agency
     const ecosystem = c.get("ecosystem");
     const installChittyID = await ecosystem.mintChittyID({
-      entity: "CONTEXT",
+      entity: "T",
+      characterization: "Digital",
       metadata: {
         type: "github_installation",
         installationId: installation.id,

@@ -86,8 +86,9 @@ async function handleAuthorize(request, env) {
   }
 
   // Complete authorization
-  // TODO: Redirect to ChittyAuth login page for interactive user authentication.
-  // For now, auto-approve since Claude Cowork handles its own user auth.
+  // FIXME(canonical): Hardcoded userId violates per-actor identification.
+  // Must resolve to authenticated ChittyID (type P) via ChittyAuth.
+  // @canon: chittycanon://gov/governance#core-types
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
     userId: "chittyos-mcp-user",

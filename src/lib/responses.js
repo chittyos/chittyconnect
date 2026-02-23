@@ -41,7 +41,7 @@ export function contextualResponse(c, data, options = {}) {
         options.processingTime ||
         Date.now() - (c.get("startTime") || Date.now()),
       service: "chittyconnect",
-      version: "2.0.0",
+      version: "2.0.2",
     },
   };
 
@@ -75,9 +75,9 @@ export function errorResponse(c, error) {
   const errorMap = {
     INVALID_ENTITY_TYPE: {
       message:
-        "The entity type you provided is not valid. Please use one of: PEO, PLACE, PROP, EVNT, AUTH, INFO, FACT, CONTEXT, or ACTOR.",
+        "The entity type you provided is not valid. Please use one of the canonical types: P (Person), L (Location), T (Thing), E (Event), A (Authority). See chittycanon://gov/governance#core-types",
       recovery:
-        "Check the entity type and try again with a valid value from the list.",
+        "Check the entity type and try again with a valid canonical type code (P/L/T/E/A).",
       statusCode: 400,
     },
     RATE_LIMITED: {
