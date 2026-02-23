@@ -13,7 +13,7 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 23 tools across 8 categories:
+ * 31 tools across 11 categories:
  * - Identity (ChittyID)
  * - Cases (ChittyCases)
  * - Evidence (ChittyEvidence)
@@ -22,6 +22,9 @@ const mcpRoutes = new Hono();
  * - Credentials (1Password)
  * - Services (Ecosystem)
  * - Integrations (Third-party)
+ * - AI Search (ChittyEvidence)
+ * - Ledger (ChittyLedger)
+ * - Contextual (ChittyContextual)
  */
 const TOOLS = [
   // Identity Tools
@@ -426,6 +429,135 @@ const TOOLS = [
       required: ["source_service", "target_service"],
     },
   },
+
+  // ChittyLedger Tools
+  {
+    name: "chitty_ledger_stats",
+    description:
+      "Get dashboard statistics from ChittyLedger: total cases, evidence items, facts, contradictions, and verification rates.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_evidence",
+    description:
+      "Query evidence items from ChittyLedger. Filter by case ID. Returns evidence with blockchain status, trust tier, and chain of custody.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter evidence",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_ledger_facts",
+    description:
+      "Get atomic facts extracted from a specific evidence item. Includes confidence scores and source references.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID to get facts for",
+        },
+      },
+      required: ["evidence_id"],
+    },
+  },
+  {
+    name: "chitty_ledger_contradictions",
+    description:
+      "Get detected contradictions across evidence items. Shows conflicting facts, severity, and resolution status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter contradictions",
+        },
+      },
+    },
+  },
+
+  // ChittyContextual Tools
+  {
+    name: "chitty_contextual_timeline",
+    description:
+      "Get unified communication timeline from ChittyContextual. Aggregates iMessage, WhatsApp, Email, DocuSign, and OpenPhone into a chronological view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        party: {
+          type: "string",
+          description: "Filter by party name, email, or phone number",
+        },
+        start_date: { type: "string", description: "Start date (ISO 8601)" },
+        end_date: { type: "string", description: "End date (ISO 8601)" },
+        source: {
+          type: "string",
+          enum: ["imessage", "whatsapp", "email", "docusign", "openphone"],
+          description: "Filter by communication source",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_contextual_topics",
+    description:
+      "Get topic analysis from ChittyContextual. Returns AI-modeled topic clusters across all communication sources with entity relationships.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Topic or keyword to search for",
+        },
+      },
+    },
+  },
+
+  // Evidence AI Search Tools
+  {
+    name: "chitty_evidence_search",
+    description:
+      "AI-powered semantic search over legal evidence documents (RAG). Searches the evidence R2 bucket using vector embeddings and generates an AI answer with source citations. Use for questions about case documents, financial records, correspondence, court filings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "chitty_evidence_retrieve",
+    description:
+      "Retrieve matching evidence documents by semantic similarity (no AI generation). Returns ranked document chunks with scores. Use when you need raw document matches without an AI-generated summary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query",
+        },
+        max_num_results: {
+          type: "number",
+          description: "Maximum number of results (default: 10)",
+          default: 10,
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 /**
@@ -554,7 +686,145 @@ mcpRoutes.post("/tools/call", async (c) => {
       result = await response.json();
     }
 
-    // Evidence tools
+    // ChittyLedger tools — proxy to ledger.chitty.cc
+    else if (name === "chitty_ledger_stats") {
+      const response = await fetch("https://ledger.chitty.cc/api/dashboard/stats");
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    } else if (name === "chitty_ledger_evidence") {
+      const url = args.case_id
+        ? `https://ledger.chitty.cc/api/evidence?caseId=${args.case_id}`
+        : "https://ledger.chitty.cc/api/evidence";
+      const response = await fetch(url);
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    } else if (name === "chitty_ledger_facts") {
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/evidence/${args.evidence_id}/facts`,
+      );
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    } else if (name === "chitty_ledger_contradictions") {
+      const url = args.case_id
+        ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`
+        : "https://ledger.chitty.cc/api/contradictions";
+      const response = await fetch(url);
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    }
+
+    // ChittyContextual tools — proxy to contextual.chitty.cc
+    else if (name === "chitty_contextual_timeline") {
+      const params = new URLSearchParams();
+      if (args.party) params.set("party", args.party);
+      if (args.start_date) params.set("start", args.start_date);
+      if (args.end_date) params.set("end", args.end_date);
+      if (args.source) params.set("source", args.source);
+      const response = await fetch(
+        `https://contextual.chitty.cc/api/messages?${params.toString()}`,
+      );
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Contextual returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    } else if (name === "chitty_contextual_topics") {
+      const response = await fetch("https://contextual.chitty.cc/api/topics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: args.query }),
+      });
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Contextual returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    }
+
+    // Evidence AI Search tools — direct Cloudflare AI Search REST API
+    // Must come BEFORE the generic chitty_evidence_ handler
+    else if (name === "chitty_evidence_search") {
+      const accountId = c.env.CF_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121";
+      const aiSearchToken = c.env.AI_SEARCH_TOKEN;
+      if (!aiSearchToken) {
+        return c.json({
+          content: [{ type: "text", text: "AI Search not configured: AI_SEARCH_TOKEN secret not set." }],
+          isError: true,
+        });
+      }
+      // Use /search endpoint (fast retrieval) with messages format
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${aiSearchToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: args.query }],
+            max_num_results: 10,
+          }),
+        },
+      );
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = null; }
+      if (!data || !data.success) {
+        return c.json({
+          content: [{ type: "text", text: `AI Search error (${response.status}): ${(text || "").slice(0, 300)}` }],
+          isError: true,
+        });
+      }
+      const chunks = data.result?.chunks || [];
+      const formatted = chunks.slice(0, 5).map((d) => {
+        const fname = d.item?.key || d.filename || "unknown";
+        const score = (d.score || 0).toFixed(3);
+        const snippet = (d.text || "").slice(0, 200).replace(/\n/g, " ");
+        return `[${score}] ${fname}\n  ${snippet}`;
+      }).join("\n\n");
+      return c.json({
+        content: [{ type: "text", text: formatted || "No matching documents found." }],
+      });
+    } else if (name === "chitty_evidence_retrieve") {
+      const accountId = c.env.CF_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121";
+      const aiSearchToken = c.env.AI_SEARCH_TOKEN;
+      if (!aiSearchToken) {
+        return c.json({
+          content: [{ type: "text", text: "AI Search not configured: AI_SEARCH_TOKEN secret not set." }],
+          isError: true,
+        });
+      }
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${aiSearchToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: args.query }],
+            max_num_results: args.max_num_results || 10,
+          }),
+        },
+      );
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        return c.json({
+          content: [{ type: "text", text: `AI Search retrieve error (${response.status}): ${(text || "").slice(0, 300)}` }],
+          isError: true,
+        });
+      }
+    }
+
+    // Evidence CRUD tools (ingest/verify)
     else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
       const endpoint =
