@@ -300,7 +300,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = {
           fact_id: args.fact_id,
           format: "pdf",
-          download_url: `https://connect.chitty.cc/api/v1/exports/${r2Key}`,
+          download_url: `${baseUrl}/api/v1/exports/${r2Key}`,
           proof_id: factData.proof_id,
           verification_url: factData.verification_url,
         };

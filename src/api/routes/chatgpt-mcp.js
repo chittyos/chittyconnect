@@ -59,6 +59,8 @@ chatgptMcp.all("/", async (c) => {
   const url = new URL(c.req.url);
   const baseUrl = `${url.protocol}//${url.host}`;
 
+  let server;
+
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: () => crypto.randomUUID(),
     onsessioninitialized: (sid) => {
@@ -66,7 +68,7 @@ chatgptMcp.all("/", async (c) => {
     },
   });
 
-  const server = createChatGPTMcpServer(c.env, { baseUrl });
+  server = createChatGPTMcpServer(c.env, { baseUrl });
   await server.connect(transport);
 
   return transport.handleRequest(c.req.raw);

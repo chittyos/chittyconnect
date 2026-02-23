@@ -32,7 +32,7 @@ describe("createChatGPTMcpServer", () => {
     expect(server.connect).toBeInstanceOf(Function);
   });
 
-  it("registers all 31 tools", () => {
+  it("registers all 34 tools", () => {
     const server = createChatGPTMcpServer(mockEnv);
 
     // The server.tool() method is called once per tool definition.
