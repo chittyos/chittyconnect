@@ -25,6 +25,7 @@ import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { chatgptMcp } from "./routes/chatgpt-mcp.js";
+import { exportRoutes } from "./routes/exports.js";
 import contextRoutes from "./routes/context.js";
 import filesRoutes from "./routes/files.js";
 import tasksRoutes from "./routes/tasks.js";
@@ -152,5 +153,6 @@ api.route("/api/v1/context", contextResolution);
 api.route("/api/v1/intelligence", contextIntelligence);
 api.route("/mcp", mcpRoutes);
 api.route("/chatgpt/mcp", chatgptMcp);
+api.route("/api/v1/exports", exportRoutes);
 
 export { api };
