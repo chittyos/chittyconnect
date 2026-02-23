@@ -24,6 +24,7 @@ import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
+import { chatgptMcp } from "./routes/chatgpt-mcp.js";
 import contextRoutes from "./routes/context.js";
 import filesRoutes from "./routes/files.js";
 import tasksRoutes from "./routes/tasks.js";
@@ -50,8 +51,8 @@ api.use(
       "http://localhost:3000",
     ],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-ChittyOS-API-Key", "X-ChittyID"],
-    exposeHeaders: ["Content-Length", "X-Request-ID"],
+    allowHeaders: ["Content-Type", "Authorization", "X-ChittyOS-API-Key", "X-ChittyID", "Mcp-Session-Id", "Mcp-Protocol-Version"],
+    exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id"],
     maxAge: 86400,
     credentials: true,
   }),
@@ -94,6 +95,7 @@ api.get("/api/health", (c) => {
       contextResolution: "/api/v1/context",
       githubActions: "/api/github-actions",
       mcp: "/mcp",
+      chatgptMcp: "/chatgpt/mcp",
     },
   });
 });
@@ -149,5 +151,6 @@ api.route("/api/dashboard", dashboard);
 api.route("/api/v1/context", contextResolution);
 api.route("/api/v1/intelligence", contextIntelligence);
 api.route("/mcp", mcpRoutes);
+api.route("/chatgpt/mcp", chatgptMcp);
 
 export { api };
