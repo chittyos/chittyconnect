@@ -509,7 +509,7 @@ app.get("/integrations/github/callback", async (c) => {
         headers: {
           Authorization: `Bearer ${appJwt}`,
           Accept: "application/vnd.github+json",
-          "User-Agent": "ChittyConnect/1.0",
+          "User-Agent": "ChittyConnect/2.0.2",
         },
       },
     );

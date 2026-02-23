@@ -230,7 +230,7 @@ export class ChittyOSEcosystem {
           genesis: {
             service: "chittyconnect",
             timestamp: new Date().toISOString(),
-            version: "1.0.0",
+            genesisSchemaVersion: "1.0.0",
           },
         }),
       });
@@ -473,7 +473,7 @@ export class ChittyOSEcosystem {
       headers: {
         ...options.headers,
         "X-ChittyConnect-Origin": "chittyconnect",
-        "X-ChittyOS-Version": "1.0.0",
+        "X-ChittyOS-Version": "2.0.2",
       },
     });
   }
