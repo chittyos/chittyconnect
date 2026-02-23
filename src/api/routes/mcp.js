@@ -13,7 +13,7 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 31 tools across 11 categories:
+ * 33 tools across 12 categories:
  * - Identity (ChittyID)
  * - Cases (ChittyCases)
  * - Evidence (ChittyEvidence)
@@ -24,6 +24,7 @@ const mcpRoutes = new Hono();
  * - Integrations (Third-party)
  * - AI Search (ChittyEvidence)
  * - Ledger (ChittyLedger)
+ * - Fact Governance (ChittyLedger)
  * - Contextual (ChittyContextual)
  */
 const TOOLS = [
@@ -481,6 +482,91 @@ const TOOLS = [
           description: "Optional case ID to filter contradictions",
         },
       },
+    },
+  },
+
+  // Fact Governance Tools
+  {
+    name: "chitty_fact_mint",
+    description:
+      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → locked. Include the evidence source, confidence score, and category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID the fact is extracted from",
+        },
+        case_id: {
+          type: "string",
+          description: "Case ID the fact belongs to",
+        },
+        text: {
+          type: "string",
+          description:
+            "The atomic fact statement (single verifiable claim)",
+        },
+        confidence: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Confidence score 0.0-1.0 (default: 0.5)",
+        },
+        source_reference: {
+          type: "string",
+          description:
+            "Page number, paragraph, or location within the evidence document",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "financial",
+            "temporal",
+            "identity",
+            "property",
+            "legal",
+            "communication",
+            "other",
+          ],
+          description: "Fact category for classification",
+        },
+      },
+      required: ["evidence_id", "text"],
+    },
+  },
+  {
+    name: "chitty_fact_validate",
+    description:
+      "Validate a draft fact against corroborating evidence. Moves the fact from 'draft' to 'verified' status if validation passes. Requires the fact ID and validation method.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: {
+          type: "string",
+          description: "Fact ID to validate",
+        },
+        validation_method: {
+          type: "string",
+          enum: [
+            "cross_reference",
+            "document_match",
+            "witness_corroboration",
+            "expert_review",
+          ],
+          description: "Method used to validate the fact",
+        },
+        corroborating_evidence: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Array of evidence IDs that corroborate this fact",
+        },
+        notes: {
+          type: "string",
+          description: "Validation notes or reasoning",
+        },
+      },
+      required: ["fact_id", "validation_method"],
     },
   },
 

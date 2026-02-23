@@ -1,7 +1,7 @@
 /**
  * ChatGPT Developer Mode MCP Server Factory
  *
- * Creates an McpServer instance with all 31 ChittyConnect tools registered.
+ * Creates an McpServer instance with all 33 ChittyConnect tools registered.
  * Used with WebStandardStreamableHTTPServerTransport for ChatGPT integration.
  *
  * @module mcp/chatgpt-server
@@ -288,6 +288,32 @@ const TOOL_DEFS = [
       case_id: z.string().optional().describe("Optional case ID to filter contradictions"),
     },
     annotations: { readOnlyHint: true },
+  },
+
+  // ── Fact Governance ─────────────────────────────────────────────
+  {
+    name: "chitty_fact_mint",
+    description: "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → locked. Include the evidence source, confidence score, and category.",
+    schema: {
+      evidence_id: z.string().describe("Evidence item ID the fact is extracted from"),
+      case_id: z.string().optional().describe("Case ID the fact belongs to"),
+      text: z.string().describe("The atomic fact statement (single verifiable claim)"),
+      confidence: z.number().min(0).max(1).optional().describe("Confidence score 0.0-1.0 (default: 0.5)"),
+      source_reference: z.string().optional().describe("Page number, paragraph, or location within the evidence document"),
+      category: z.enum(["financial", "temporal", "identity", "property", "legal", "communication", "other"]).optional().describe("Fact category for classification"),
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: "chitty_fact_validate",
+    description: "Validate a draft fact against corroborating evidence. Moves the fact from 'draft' to 'verified' status if validation passes. Requires the fact ID and validation method (cross_reference, document_match, witness_corroboration, or expert_review).",
+    schema: {
+      fact_id: z.string().describe("Fact ID to validate"),
+      validation_method: z.enum(["cross_reference", "document_match", "witness_corroboration", "expert_review"]).describe("Method used to validate the fact"),
+      corroborating_evidence: z.array(z.string()).optional().describe("Array of evidence IDs that corroborate this fact"),
+      notes: z.string().optional().describe("Validation notes or reasoning"),
+    },
+    annotations: { readOnlyHint: false },
   },
 
   // ── ChittyContextual ──────────────────────────────────────────────

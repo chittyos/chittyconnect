@@ -107,6 +107,71 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       try { result = JSON.parse(text); } catch {
         result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
       }
+    } else if (name === "chitty_fact_mint") {
+      // Pre-flight: verify the cited evidence exists in ChittyLedger
+      const evidenceCheck = await fetch(
+        `https://ledger.chitty.cc/api/evidence/${args.evidence_id}`,
+      );
+      if (!evidenceCheck.ok) {
+        return {
+          content: [{
+            type: "text",
+            text: `Fact minting blocked: evidence_id "${args.evidence_id}" not found in ChittyLedger (${evidenceCheck.status}). Evidence must be ingested through the pipeline before facts can be minted from it.`,
+          }],
+          isError: true,
+        };
+      }
+      const evidenceRecord = await evidenceCheck.json().catch(() => null);
+      const evidenceHash = evidenceRecord?.file_hash || evidenceRecord?.thing?.file_hash || null;
+
+      const response = await fetch("https://ledger.chitty.cc/api/facts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          evidence_id: args.evidence_id,
+          case_id: args.case_id,
+          text: args.text,
+          confidence: args.confidence,
+          source_reference: args.source_reference,
+          category: args.category,
+          // Anchor fact to evidence integrity state at mint time
+          evidence_hash_at_mint: evidenceHash,
+        }),
+      });
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+    } else if (name === "chitty_fact_validate") {
+      // Pre-flight: verify all corroborating evidence IDs exist
+      if (args.corroborating_evidence?.length) {
+        for (const evId of args.corroborating_evidence) {
+          const check = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+          if (!check.ok) {
+            return {
+              content: [{
+                type: "text",
+                text: `Validation blocked: corroborating evidence "${evId}" not found in ChittyLedger (${check.status}). All cited evidence must exist in the pipeline.`,
+              }],
+              isError: true,
+            };
+          }
+        }
+      }
+
+      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validation_method: args.validation_method,
+          corroborating_evidence: args.corroborating_evidence,
+          notes: args.notes,
+        }),
+      });
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
     } else if (name === "chitty_ledger_contradictions") {
       const url = args.case_id
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`
