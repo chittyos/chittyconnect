@@ -127,6 +127,12 @@ queue = "github-events"
 binding = "PROOF_Q"
 queue = "documint-proofs"
 
+[[env.staging.queues.consumers]]
+queue = "documint-proofs"
+max_batch_size = 10
+max_retries = 5
+dead_letter_queue = "documint-proofs-dlq"
+
 [env.staging.ai]
 binding = "AI"
 
@@ -210,6 +216,12 @@ queue = "github-events"
 [[env.production.queues.producers]]
 binding = "PROOF_Q"
 queue = "documint-proofs"
+
+[[env.production.queues.consumers]]
+queue = "documint-proofs"
+max_batch_size = 10
+max_retries = 5
+dead_letter_queue = "documint-proofs-dlq"
 
 [env.production.ai]
 binding = "AI"

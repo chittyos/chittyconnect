@@ -197,14 +197,21 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
       }
 
-      // Enqueue async proof minting if seal succeeded
       if (response.ok && env.PROOF_Q) {
-        await env.PROOF_Q.send({
-          fact_id: args.fact_id,
-          fact_text: result.fact_text || result.text,
-          evidence_chain: result.evidence_chain || [],
-          signer_chitty_id: args.actor_chitty_id,
-        });
+        try {
+          await env.PROOF_Q.send({
+            fact_id: args.fact_id,
+            fact_text: result.fact_text || result.text,
+            evidence_chain: result.evidence_chain || [],
+            signer_chitty_id: args.actor_chitty_id,
+          });
+        } catch (queueErr) {
+          console.error(`[MCP] Proof queue send failed for fact ${args.fact_id} (seal succeeded):`, queueErr);
+          result.proof_queue_warning = "Seal succeeded but proof queue failed. Manual proof minting may be required.";
+        }
+      } else if (response.ok && !env.PROOF_Q) {
+        console.warn(`[MCP] PROOF_Q not configured. Fact ${args.fact_id} sealed without proof minting.`);
+        result.proof_queue_warning = "PROOF_Q binding not configured. Proof will not be minted.";
       }
 
     } else if (name === "chitty_fact_dispute") {
@@ -290,11 +297,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
 
         // Store in R2
+        if (!env.FILES) {
+          return {
+            content: [{ type: "text", text: "PDF export failed: R2 storage (FILES binding) is not configured." }],
+            isError: true,
+          };
+        }
         const r2Key = `exports/facts/${args.fact_id}/${Date.now()}.pdf`;
-        if (env.FILES) {
+        try {
           await env.FILES.put(r2Key, pdfResult.body, {
             httpMetadata: { contentType: "application/pdf" },
           });
+        } catch (r2Err) {
+          console.error(`[MCP] R2 put failed for ${r2Key}:`, r2Err);
+          return {
+            content: [{ type: "text", text: `PDF generated but storage failed: ${r2Err.message}` }],
+            isError: true,
+          };
         }
 
         result = {
@@ -350,7 +369,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Evidence AI Search tools ────────────────────────────────────
     else if (name === "chitty_evidence_search") {
-      const accountId = env.CF_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121";
+      const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
+      if (!accountId) {
+        return {
+          content: [{ type: "text", text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set." }],
+          isError: true,
+        };
+      }
       const aiSearchToken = env.AI_SEARCH_TOKEN;
       if (!aiSearchToken) {
         return {
@@ -386,7 +411,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         content: [{ type: "text", text: formatted || "No matching documents found." }],
       };
     } else if (name === "chitty_evidence_retrieve") {
-      const accountId = env.CF_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121";
+      const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
+      if (!accountId) {
+        return {
+          content: [{ type: "text", text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set." }],
+          isError: true,
+        };
+      }
       const aiSearchToken = env.AI_SEARCH_TOKEN;
       if (!aiSearchToken) {
         return {

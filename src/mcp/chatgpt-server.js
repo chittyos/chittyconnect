@@ -1,7 +1,7 @@
 /**
  * ChatGPT Developer Mode MCP Server Factory
  *
- * Creates an McpServer instance with all 36 ChittyConnect tools registered.
+ * Creates an McpServer instance with all 34 ChittyConnect tools registered.
  * Used with WebStandardStreamableHTTPServerTransport for ChatGPT integration.
  *
  * @module mcp/chatgpt-server
@@ -13,7 +13,7 @@ import { dispatchToolCall } from "./tool-dispatcher.js";
 
 /**
  * Tool definitions with Zod schemas and annotations.
- * readOnlyHint: true for read-only tools, false (default) for write tools.
+ * readOnlyHint: true for read-only tools, false for write tools.
  */
 const TOOL_DEFS = [
   // ── Identity ──────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ const TOOL_DEFS = [
   // ── Fact Governance ─────────────────────────────────────────────
   {
     name: "chitty_fact_mint",
-    description: "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → locked. Include the evidence source, confidence score, and category.",
+    description: "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → sealed. Include the evidence source, confidence score, and category.",
     schema: {
       evidence_id: z.string().describe("Evidence item ID the fact is extracted from"),
       case_id: z.string().optional().describe("Case ID the fact belongs to"),

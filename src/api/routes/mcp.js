@@ -13,7 +13,7 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 36 tools across 12 categories:
+ * 34 tools across 15 categories:
  * - Identity (ChittyID)
  * - Cases (ChittyCases)
  * - Evidence (ChittyEvidence)
@@ -489,7 +489,7 @@ const TOOLS = [
   {
     name: "chitty_fact_mint",
     description:
-      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → locked. Include the evidence source, confidence score, and category.",
+      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → sealed. Include the evidence source, confidence score, and category.",
     inputSchema: {
       type: "object",
       properties: {

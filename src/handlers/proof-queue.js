@@ -4,7 +4,7 @@
  *
  * Processes async proof minting jobs from the PROOF_Q queue.
  * On success: mints ChittyProof, patches result back to ChittyLedger.
- * On failure: retries the message (Cloudflare Queues handles backoff).
+ * On failure: retries the message via msg.retry() (max 5 retries, then routed to documint-proofs-dlq).
  *
  * @module handlers/proof-queue
  */
@@ -63,8 +63,12 @@ export async function proofQueueConsumer(batch, env) {
       msg.ack();
       console.log(`[ProofQueue] Proof minted for ${fact_id}: ${proofResult.proof_id}`);
     } catch (err) {
-      console.error(`[ProofQueue] Error processing ${msg.body?.fact_id}:`, err.message);
-      msg.retry();
+      console.error(`[ProofQueue] Error processing ${msg.body?.fact_id}:`, err);
+      try {
+        msg.retry();
+      } catch (retryErr) {
+        console.error(`[ProofQueue] Failed to retry message for ${msg.body?.fact_id}:`, retryErr);
+      }
     }
   }
 }
