@@ -13,11 +13,13 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 23 tools across 8 categories:
+ * 34 tools across 10 categories:
  * - Identity (ChittyID)
  * - Cases (ChittyCases)
  * - Evidence (ChittyEvidence)
  * - Finance (ChittyFinance)
+ * - Finance Gateway (agent.chitty.cc)
+ * - Ledger (ChittyLedger)
  * - Memory (MemoryCloude™)
  * - Credentials (1Password)
  * - Services (Ecosystem)
@@ -198,6 +200,195 @@ const TOOLS = [
         },
       },
       required: ["chitty_id"],
+    },
+  },
+
+  // Finance Gateway Tools (proxied via agent.chitty.cc)
+  {
+    name: "finance_entities",
+    description:
+      "List financial entities with their account mappings from Mercury and other connected banks.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "finance_balances",
+    description:
+      "Get current balances for a financial entity across all connected accounts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: {
+          type: "string",
+          description: "Entity identifier (e.g., 'nicholas', 'chittycorp')",
+        },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "finance_transactions",
+    description:
+      "Query transactions for an entity within a date range. Supports filtering by account and amount.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: {
+          type: "string",
+          format: "date",
+          description: "Start date (YYYY-MM-DD)",
+        },
+        end: {
+          type: "string",
+          format: "date",
+          description: "End date (YYYY-MM-DD)",
+        },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "finance_cash_flow",
+    description:
+      "Generate a cash flow summary for an entity over a date range, showing inflows, outflows, and net.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "finance_inter_entity",
+    description:
+      "Show inter-entity transfers between accounts (e.g., personal to LLC transfers).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+    },
+  },
+  {
+    name: "finance_detect_transfers",
+    description:
+      "Auto-detect potential inter-entity transfers using amount matching and date proximity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+        threshold_days: {
+          type: "number",
+          description: "Max days between matching transactions (default: 3)",
+        },
+      },
+    },
+  },
+  {
+    name: "finance_flow_of_funds",
+    description:
+      "Generate a source-and-use-of-funds report across all entities for a date range.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+    },
+  },
+  {
+    name: "finance_sync",
+    description:
+      "Trigger a Mercury bank sync to pull latest transactions into the finance database.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+
+  // Ledger Tools (ChittyLedger)
+  {
+    name: "ledger_record",
+    description:
+      "Record a new transaction entry in ChittyLedger with full chain-of-custody tracking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_type: {
+          type: "string",
+          description: "Ledger entity type (evidence, thing, case, etc.)",
+        },
+        entity_id: { type: "string", description: "UUID of the entity" },
+        action: {
+          type: "string",
+          description: "Action performed (create, update, transfer, verify)",
+        },
+        metadata: { type: "object", description: "Additional entry metadata" },
+      },
+      required: ["entity_type", "entity_id", "action"],
+    },
+  },
+  {
+    name: "ledger_query",
+    description:
+      "Query ledger history for a specific entity. Returns chronological chain of entries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_type: { type: "string" },
+        entity_id: { type: "string" },
+        limit: { type: "number", description: "Max entries to return" },
+      },
+    },
+  },
+  {
+    name: "ledger_verify",
+    description:
+      "Verify ledger integrity by checking hash chains and detecting tampering.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "ledger_export",
+    description:
+      "Export a ledger audit report for a date range in JSON format.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+        format: {
+          type: "string",
+          enum: ["json", "csv"],
+          description: "Export format (default: json)",
+        },
+      },
+    },
+  },
+  {
+    name: "ledger_chain_of_custody",
+    description:
+      "Retrieve the full chain of custody for a specific piece of evidence from the ledger.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "UUID of the evidence item",
+        },
+      },
+      required: ["evidence_id"],
     },
   },
 
@@ -586,6 +777,175 @@ mcpRoutes.post("/tools/call", async (c) => {
         },
         body: JSON.stringify(args),
       });
+      result = await response.json();
+    }
+
+    // Finance gateway tools (proxied via agent.chitty.cc)
+    else if (name.startsWith("finance_")) {
+      const AGENT_BASE = "https://agent.chitty.cc/api/finance";
+      const serviceToken = await getServiceToken(c.env, "chittyfinance");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {}),
+      };
+
+      const toolName = name.replace("finance_", "");
+      let url;
+      let method = "GET";
+
+      switch (toolName) {
+        case "entities":
+          url = `${AGENT_BASE}/entities`;
+          break;
+        case "balances":
+          url = `${AGENT_BASE}/balances?entity=${encodeURIComponent(args.entity || "")}`;
+          break;
+        case "transactions": {
+          const params = new URLSearchParams();
+          if (args.entity) params.set("entity", args.entity);
+          if (args.start) params.set("start", args.start);
+          if (args.end) params.set("end", args.end);
+          url = `${AGENT_BASE}/transactions?${params}`;
+          break;
+        }
+        case "cash_flow": {
+          const params = new URLSearchParams();
+          if (args.entity) params.set("entity", args.entity);
+          if (args.start) params.set("start", args.start);
+          if (args.end) params.set("end", args.end);
+          url = `${AGENT_BASE}/cash-flow?${params}`;
+          break;
+        }
+        case "inter_entity": {
+          const params = new URLSearchParams();
+          if (args.entity) params.set("entity", args.entity);
+          if (args.start) params.set("start", args.start);
+          if (args.end) params.set("end", args.end);
+          url = `${AGENT_BASE}/inter-entity?${params}`;
+          break;
+        }
+        case "detect_transfers":
+          url = `${AGENT_BASE}/detect-transfers`;
+          method = "POST";
+          break;
+        case "flow_of_funds": {
+          const params = new URLSearchParams();
+          if (args.start) params.set("start", args.start);
+          if (args.end) params.set("end", args.end);
+          url = `${AGENT_BASE}/flow-of-funds?${params}`;
+          break;
+        }
+        case "sync":
+          url = `${AGENT_BASE}/sync`;
+          method = "POST";
+          break;
+        default:
+          return c.json(
+            {
+              content: [
+                { type: "text", text: `Unknown finance tool: ${name}` },
+              ],
+              isError: true,
+            },
+            400,
+          );
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: method === "POST" ? JSON.stringify(args) : undefined,
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: `Finance API error (${response.status}): ${errorText}`,
+              },
+            ],
+            isError: true,
+          },
+          response.status,
+        );
+      }
+      result = await response.json();
+    }
+
+    // Ledger tools (ChittyLedger)
+    else if (name.startsWith("ledger_")) {
+      const LEDGER_BASE = "https://ledger.chitty.cc/api";
+      const serviceToken = await getServiceToken(c.env, "chittyledger");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {}),
+      };
+
+      const toolName = name.replace("ledger_", "");
+      let url;
+      let method = "GET";
+
+      switch (toolName) {
+        case "record":
+          url = `${LEDGER_BASE}/entries`;
+          method = "POST";
+          break;
+        case "query": {
+          const params = new URLSearchParams();
+          if (args.entity_type) params.set("entity_type", args.entity_type);
+          if (args.entity_id) params.set("entity_id", args.entity_id);
+          if (args.limit) params.set("limit", String(args.limit));
+          url = `${LEDGER_BASE}/entries?${params}`;
+          break;
+        }
+        case "verify":
+          url = `${LEDGER_BASE}/verify`;
+          break;
+        case "export": {
+          const params = new URLSearchParams();
+          if (args.start) params.set("start", args.start);
+          if (args.end) params.set("end", args.end);
+          if (args.format) params.set("format", args.format);
+          url = `${LEDGER_BASE}/export?${params}`;
+          break;
+        }
+        case "chain_of_custody":
+          url = `${LEDGER_BASE}/chain-of-custody?evidence_id=${encodeURIComponent(args.evidence_id || "")}`;
+          break;
+        default:
+          return c.json(
+            {
+              content: [
+                { type: "text", text: `Unknown ledger tool: ${name}` },
+              ],
+              isError: true,
+            },
+            400,
+          );
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: method === "POST" ? JSON.stringify(args) : undefined,
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return c.json(
+          {
+            content: [
+              {
+                type: "text",
+                text: `Ledger API error (${response.status}): ${errorText}`,
+              },
+            ],
+            isError: true,
+          },
+          response.status,
+        );
+      }
       result = await response.json();
     }
 
