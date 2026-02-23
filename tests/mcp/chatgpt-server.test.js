@@ -79,15 +79,15 @@ describe("createChatGPTMcpServer", () => {
       "chitty_contextual_topics",
       "chitty_fact_mint",
       "chitty_fact_validate",
+      "chitty_fact_seal",
+      "chitty_fact_dispute",
+      "chitty_fact_export",
       "chitty_evidence_search",
       "chitty_evidence_retrieve",
     ];
 
     it("includes all expected tool names", () => {
-      // Import the TOOL_DEFS indirectly by checking the module exports
-      // The factory function registers tools via server.tool() — we verify
-      // the dispatch is wired correctly for a sample of tools.
-      expect(expectedTools.length).toBe(31);
+      expect(expectedTools.length).toBe(34);
     });
   });
 });

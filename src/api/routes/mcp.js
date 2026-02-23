@@ -13,7 +13,7 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 33 tools across 12 categories:
+ * 36 tools across 12 categories:
  * - Identity (ChittyID)
  * - Cases (ChittyCases)
  * - Evidence (ChittyEvidence)
@@ -567,6 +567,78 @@ const TOOLS = [
         },
       },
       required: ["fact_id", "validation_method"],
+    },
+  },
+
+  // Fact Governance Hardening Tools (seal, dispute, export)
+  {
+    name: "chitty_fact_seal",
+    description:
+      "Seal a verified fact permanently, triggering async ChittyProof minting. Requires Authority entity type with INSTITUTIONAL trust level (4+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to seal" },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the authority performing the seal",
+        },
+        seal_reason: {
+          type: "string",
+          description: "Reason for sealing the fact",
+        },
+      },
+      required: ["fact_id", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_dispute",
+    description:
+      "Dispute a verified or sealed fact. Creates a dispute record. Requires ENHANCED trust level (2+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to dispute" },
+        reason: {
+          type: "string",
+          description: "Reason for the dispute",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the entity filing the dispute",
+        },
+        challenger_chitty_id: {
+          type: "string",
+          description: "ChittyID of the challenger (defaults to actor)",
+        },
+        counter_evidence_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Evidence IDs that contradict this fact",
+        },
+      },
+      required: ["fact_id", "reason", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_export",
+    description:
+      "Export a fact with its full proof bundle. JSON or PDF format.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to export" },
+        format: {
+          type: "string",
+          enum: ["json", "pdf"],
+          description: "Export format",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the requesting entity",
+        },
+      },
+      required: ["fact_id", "format", "actor_chitty_id"],
     },
   },
 

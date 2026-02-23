@@ -1,7 +1,7 @@
 /**
  * ChatGPT Developer Mode MCP Server Factory
  *
- * Creates an McpServer instance with all 33 ChittyConnect tools registered.
+ * Creates an McpServer instance with all 36 ChittyConnect tools registered.
  * Used with WebStandardStreamableHTTPServerTransport for ChatGPT integration.
  *
  * @module mcp/chatgpt-server
@@ -316,6 +316,40 @@ const TOOL_DEFS = [
     annotations: { readOnlyHint: false },
   },
 
+  // ── Fact Governance (Seal / Dispute / Export) ────────────────────
+  {
+    name: "chitty_fact_seal",
+    description: "Seal a verified fact permanently, triggering async ChittyProof minting. Requires Authority entity type with INSTITUTIONAL trust level (4+). Sealed facts are immutable and receive a ChittyProof 11-pillar proof bundle.",
+    schema: {
+      fact_id: z.string().describe("Fact ID to seal"),
+      actor_chitty_id: z.string().describe("ChittyID of the authority performing the seal"),
+      seal_reason: z.string().optional().describe("Reason for sealing the fact"),
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: "chitty_fact_dispute",
+    description: "Dispute a verified or sealed fact. Creates a dispute record linked to ChittyDisputes. Requires ENHANCED trust level (2+).",
+    schema: {
+      fact_id: z.string().describe("Fact ID to dispute"),
+      reason: z.string().describe("Reason for the dispute"),
+      actor_chitty_id: z.string().describe("ChittyID of the entity filing the dispute"),
+      challenger_chitty_id: z.string().optional().describe("ChittyID of the challenger (defaults to actor)"),
+      counter_evidence_ids: z.array(z.string()).optional().describe("Evidence IDs that contradict this fact"),
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: "chitty_fact_export",
+    description: "Export a fact with its full proof bundle. JSON format returns inline proof data. PDF format generates a court-ready document via ChittyProof PDX export stored in R2.",
+    schema: {
+      fact_id: z.string().describe("Fact ID to export"),
+      format: z.enum(["json", "pdf"]).describe("Export format: json (inline) or pdf (R2 download URL)"),
+      actor_chitty_id: z.string().describe("ChittyID of the requesting entity"),
+    },
+    annotations: { readOnlyHint: false },
+  },
+
   // ── ChittyContextual ──────────────────────────────────────────────
   {
     name: "chitty_contextual_timeline",
@@ -369,7 +403,7 @@ export function createChatGPTMcpServer(env, opts = {}) {
   const server = new McpServer(
     {
       name: "ChittyConnect",
-      version: "2.0.2",
+      version: "2.1.0",
     },
     {
       capabilities: {
