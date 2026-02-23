@@ -172,6 +172,147 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       try { result = JSON.parse(text); } catch {
         result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
       }
+    } else if (name === "chitty_fact_seal") {
+      // RBAC: Authority (A) with trust >= INSTITUTIONAL (4)
+      const { checkFactPermission, FACT_ACTIONS } = await import("../lib/fact-rbac.js");
+      const perm = await checkFactPermission(args.actor_chitty_id, FACT_ACTIONS.SEAL, env);
+      if (!perm.allowed) {
+        return {
+          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          isError: true,
+        };
+      }
+
+      // Seal the fact in ChittyLedger
+      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/seal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sealed_by: args.actor_chitty_id,
+          seal_reason: args.seal_reason,
+        }),
+      });
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+
+      // Enqueue async proof minting if seal succeeded
+      if (response.ok && env.PROOF_Q) {
+        await env.PROOF_Q.send({
+          fact_id: args.fact_id,
+          fact_text: result.fact_text || result.text,
+          evidence_chain: result.evidence_chain || [],
+          signer_chitty_id: args.actor_chitty_id,
+        });
+      }
+
+    } else if (name === "chitty_fact_dispute") {
+      // RBAC: Person (P) or Authority (A) with trust >= ENHANCED (2)
+      const { checkFactPermission: checkDisputePerm, FACT_ACTIONS: DA } = await import("../lib/fact-rbac.js");
+      const perm = await checkDisputePerm(args.actor_chitty_id, DA.DISPUTE, env);
+      if (!perm.allowed) {
+        return {
+          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          isError: true,
+        };
+      }
+
+      // Verify counter evidence exists (if provided)
+      if (args.counter_evidence_ids?.length) {
+        for (const evId of args.counter_evidence_ids) {
+          const check = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+          if (!check.ok) {
+            return {
+              content: [{
+                type: "text",
+                text: `Dispute blocked: counter evidence "${evId}" not found in ChittyLedger (${check.status}).`,
+              }],
+              isError: true,
+            };
+          }
+        }
+      }
+
+      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/dispute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: args.reason,
+          challenger_chitty_id: args.challenger_chitty_id || args.actor_chitty_id,
+          counter_evidence_ids: args.counter_evidence_ids,
+        }),
+      });
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      }
+
+    } else if (name === "chitty_fact_export") {
+      // RBAC: Any authenticated with trust >= BASIC (1)
+      const { checkFactPermission: checkExportPerm, FACT_ACTIONS: EA } = await import("../lib/fact-rbac.js");
+      const perm = await checkExportPerm(args.actor_chitty_id, EA.EXPORT, env);
+      if (!perm.allowed) {
+        return {
+          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          isError: true,
+        };
+      }
+
+      if (args.format === "pdf") {
+        // Fetch fact with proof data
+        const factResp = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/export`);
+        if (!factResp.ok) {
+          return {
+            content: [{ type: "text", text: `Export failed: fact ${args.fact_id} not found (${factResp.status})` }],
+            isError: true,
+          };
+        }
+        const factData = await factResp.json();
+
+        if (!factData.proof_id) {
+          return {
+            content: [{ type: "text", text: `PDF export requires a sealed fact with a minted proof. Current proof_status: ${factData.proof_status || "NONE"}` }],
+            isError: true,
+          };
+        }
+
+        // Generate PDF via ChittyProof and store in R2
+        const { ChittyProofClient } = await import("../lib/chittyproof-client.js");
+        const proofClient = new ChittyProofClient(env);
+        const pdfResult = await proofClient.exportPdf(factData.proof_id);
+
+        if (pdfResult.error) {
+          return {
+            content: [{ type: "text", text: `PDF generation failed: ${pdfResult.message}` }],
+            isError: true,
+          };
+        }
+
+        // Store in R2
+        const r2Key = `exports/facts/${args.fact_id}/${Date.now()}.pdf`;
+        if (env.FILES) {
+          await env.FILES.put(r2Key, pdfResult.body, {
+            httpMetadata: { contentType: "application/pdf" },
+          });
+        }
+
+        result = {
+          fact_id: args.fact_id,
+          format: "pdf",
+          download_url: `https://connect.chitty.cc/api/v1/exports/${r2Key}`,
+          proof_id: factData.proof_id,
+          verification_url: factData.verification_url,
+        };
+      } else {
+        // JSON export — fetch full fact with proof bundle
+        const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/export`);
+        const text = await response.text();
+        try { result = JSON.parse(text); } catch {
+          result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        }
+      }
+
     } else if (name === "chitty_ledger_contradictions") {
       const url = args.case_id
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`

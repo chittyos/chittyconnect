@@ -641,4 +641,120 @@ describe("dispatchToolCall", () => {
       expect(headers.Authorization).toBe("Bearer user-jwt-abc");
     });
   });
+
+  // ── Fact Governance (seal, dispute, export) ──────────────────────
+
+  describe("chitty_fact_seal", () => {
+    it("returns RBAC error when trust level insufficient", async () => {
+      // Mock trust resolver: low trust
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 2, entity_type: "P" }),
+      });
+
+      const envWithCache = {
+        ...mockEnv,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
+
+      const result = await dispatchToolCall(
+        "chitty_fact_seal",
+        { fact_id: "fact-1", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" },
+        envWithCache,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Permission denied");
+    });
+
+    it("seals fact and enqueues proof job on success", async () => {
+      // Mock trust resolver: Authority with INSTITUTIONAL trust
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 4, entity_type: "A" }),
+      });
+      // Mock ChittyLedger seal response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed", proof_status: "PENDING" }),
+      });
+
+      const mockProofQ = { send: vi.fn() };
+      const envWithQueue = {
+        ...mockEnv,
+        PROOF_Q: mockProofQ,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
+
+      const result = await dispatchToolCall(
+        "chitty_fact_seal",
+        { fact_id: "fact-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        envWithQueue,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockProofQ.send).toHaveBeenCalled();
+    });
+  });
+
+  describe("chitty_fact_dispute", () => {
+    it("creates dispute via ChittyLedger", async () => {
+      // Mock trust resolver
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 2, entity_type: "P" }),
+      });
+      // Mock ledger dispute response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ fact_id: "fact-1", status: "disputed", dispute_id: "d-1" }),
+      });
+
+      const envWithCache = {
+        ...mockEnv,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
+
+      const result = await dispatchToolCall(
+        "chitty_fact_dispute",
+        { fact_id: "fact-1", reason: "Contradicted by evidence ev-2", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" },
+        envWithCache,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(JSON.parse(result.content[0].text).dispute_id).toBe("d-1");
+    });
+  });
+
+  describe("chitty_fact_export", () => {
+    it("returns JSON proof bundle", async () => {
+      // Mock trust resolver
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 1, entity_type: "P" }),
+      });
+      // Mock ledger fact+proof response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ fact_id: "fact-1", proof_id: "proof-1", verification_url: "https://proof.chitty.cc/verify/proof-1" }),
+      });
+
+      const envWithCache = {
+        ...mockEnv,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
+
+      const result = await dispatchToolCall(
+        "chitty_fact_export",
+        { fact_id: "fact-1", format: "json", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" },
+        envWithCache,
+      );
+
+      expect(result.isError).toBeUndefined();
+    });
+  });
 });
