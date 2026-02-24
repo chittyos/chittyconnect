@@ -1,5 +1,5 @@
 /**
- * File routes: presign and commit endpoints (placeholders until R2 is configured).
+ * File routes: presign, upload, and commit endpoints for R2-backed storage.
  */
 
 import { Hono } from "hono";

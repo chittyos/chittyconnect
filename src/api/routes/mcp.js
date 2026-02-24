@@ -1006,23 +1006,32 @@ mcpRoutes.get("/resources/read", async (c) => {
       );
       content = await response.text();
     } else if (uri.startsWith("chitty://memory/session/")) {
-      const sessionId = uri.split("/").pop();
-      content = JSON.stringify(
+      // TODO: Wire to MCP Session Durable Object for real session memory retrieval
+      return c.json(
         {
-          session_id: sessionId,
-          message:
-            "Session memory retrieval from Durable Objects (placeholder)",
+          contents: [
+            {
+              uri,
+              mimeType: "text/plain",
+              text: "Session memory retrieval not yet implemented — requires Durable Object wiring",
+            },
+          ],
         },
-        null,
-        2,
+        501,
       );
     } else if (uri === "chitty://credentials/audit") {
-      content = JSON.stringify(
+      // TODO: Wire to credential audit log (ChittyChronicle or KV-based audit trail)
+      return c.json(
         {
-          message: "Credential audit log (placeholder)",
+          contents: [
+            {
+              uri,
+              mimeType: "text/plain",
+              text: "Credential audit log not yet implemented",
+            },
+          ],
         },
-        null,
-        2,
+        501,
       );
     } else {
       return c.json(
@@ -1069,21 +1078,15 @@ mcpRoutes.get("/resources/read", async (c) => {
  * Persist session data to MemoryCloude™
  */
 mcpRoutes.post("/session/persist", async (c) => {
-  const { sessionId, toolHistory, context, platform } = await c.req.json();
+  const { sessionId } = await c.req.json();
 
   try {
-    // This would interact with Durable Objects for session state
-    // For now, return success
+    // TODO: Wire to MCP Session Durable Object for real session persistence
     return c.json({
-      success: true,
+      success: false,
       sessionId,
-      persisted: {
-        toolHistory: toolHistory.length,
-        contextKeys: Object.keys(context).length,
-        platform,
-        timestamp: new Date().toISOString(),
-      },
-    });
+      error: "Session persistence not yet implemented — requires Durable Object wiring",
+    }, 501);
   } catch (error) {
     return c.json(
       {
@@ -1104,13 +1107,10 @@ mcpRoutes.post("/sampling/sample", async (c) => {
   await c.req.json();
 
   try {
-    // This would use Workers AI or proxy to OpenAI
-    // For now, return a placeholder
+    // TODO: Wire to Workers AI or proxy to OpenAI for real MCP sampling
     return c.json({
-      content: "Sampling support via Workers AI (placeholder)",
-      model: "@cf/meta/llama-3-8b-instruct",
-      stopReason: "end_turn",
-    });
+      error: "MCP sampling not yet implemented — requires Workers AI or OpenAI proxy wiring",
+    }, 501);
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
