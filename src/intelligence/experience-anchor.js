@@ -5,6 +5,8 @@
  * Enables cross-platform memory portability and dynamic trust evolution.
  *
  * @module intelligence/experience-anchor
+ * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/experience-anchor
+ * @canon chittycanon://gov/governance#core-types
  */
 
 export class ExperienceAnchor {
