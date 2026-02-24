@@ -74,18 +74,20 @@ describe('ExperienceAnchor', () => {
   });
 
   describe('generateLocalChittyId()', () => {
-    it('should generate valid ChittyID format', () => {
+    it('should generate valid canonical ChittyID format with type P', () => {
       const context = { platform: 'TEST' };
       const chittyId = anchor.generateLocalChittyId(context);
 
-      expect(chittyId).toMatch(/^AA-C-CTX-[A-Z0-9]{4}-I-\d{4}-3-[A-Z0-9]$/);
+      // Canonical format: VV-G-LLL-SSSS-P-YYMM-C-X
+      // @canon: chittycanon://gov/governance#core-types
+      expect(chittyId).toMatch(/^03-1-USA-[A-Z0-9]{4}-P-\d{4}-0-[A-Z0-9]$/);
     });
 
-    it('should use UNK for unknown platform', () => {
+    it('should use USA as location segment regardless of platform', () => {
       const context = {};
       const chittyId = anchor.generateLocalChittyId(context);
 
-      expect(chittyId).toContain('-CTX-');
+      expect(chittyId).toContain('-USA-');
     });
   });
 
