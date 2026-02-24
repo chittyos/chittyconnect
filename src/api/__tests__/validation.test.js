@@ -9,18 +9,15 @@ import { z } from "zod";
 
 /**
  * ChittyID Mint Request Schema
+ * @canon: chittycanon://gov/governance#core-types
  */
 const ChittyIDMintSchema = z.object({
   entity: z.enum([
-    "PEO",
-    "PLACE",
-    "PROP",
-    "EVNT",
-    "AUTH",
-    "INFO",
-    "FACT",
-    "CONTEXT",
-    "ACTOR",
+    "P", // Person (Natural / Synthetic / Legal)
+    "L", // Location (Context in space)
+    "T", // Thing (Object without agency)
+    "E", // Event (Occurrence in time)
+    "A", // Authority (Source of weight)
   ]),
   metadata: z.object({}).passthrough().optional(),
 });
@@ -49,7 +46,7 @@ describe("API Input Validation Schemas", () => {
   describe("ChittyID Mint Validation", () => {
     it("should validate valid ChittyID mint requests", () => {
       const valid = {
-        entity: "PEO",
+        entity: "P",
         metadata: { name: "Test Entity" },
       };
 
@@ -68,7 +65,7 @@ describe("API Input Validation Schemas", () => {
     });
 
     it("should allow omitting metadata", () => {
-      const valid = { entity: "PLACE" };
+      const valid = { entity: "L" };
       const result = ChittyIDMintSchema.safeParse(valid);
       expect(result.success).toBe(true);
     });
