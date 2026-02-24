@@ -5,6 +5,8 @@
  * and intelligent context recall for ChittyConnect.
  *
  * @module intelligence/memory-cloude
+ * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/memory-cloude
+ * @canon chittycanon://gov/governance#core-types
  */
 
 export class MemoryCloude {

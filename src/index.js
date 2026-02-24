@@ -632,7 +632,12 @@ export default {
    * Queue consumer for async event processing
    */
   async queue(batch, env) {
-    await queueConsumer(batch, env);
+    if (batch.queue === "documint-proofs") {
+      const { proofQueueConsumer } = await import("./handlers/proof-queue.js");
+      await proofQueueConsumer(batch, env);
+    } else {
+      await queueConsumer(batch, env);
+    }
   },
 
   /**

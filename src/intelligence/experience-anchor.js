@@ -5,6 +5,8 @@
  * Enables cross-platform memory portability and dynamic trust evolution.
  *
  * @module intelligence/experience-anchor
+ * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/experience-anchor
+ * @canon chittycanon://gov/governance#core-types
  */
 
 export class ExperienceAnchor {
@@ -195,7 +197,8 @@ export class ExperienceAnchor {
           "User-Agent": "ChittyConnect/1.0 (ExperienceAnchor)",
         },
         body: JSON.stringify({
-          entity_type: "context_identity",
+          entity_type: "P",
+          characterization: "Synthetic",
           classification: "internal",
           metadata: {
             platform: context.platform,
@@ -227,14 +230,14 @@ export class ExperienceAnchor {
   generateLocalChittyId(context) {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
-    const _platform = (context.platform || "UNK").substring(0, 3).toUpperCase();
 
-    // Format: AA-C-CTX-SSSS-I-YYMM-T-X (simplified)
+    // Canonical format: VV-G-LLL-SSSS-T-YYMM-C-X where T is P (Person/Synthetic)
+    // @canon: chittycanon://gov/governance#core-types
     const now = new Date();
     const yearMonth = `${now.getFullYear() % 100}${(now.getMonth() + 1).toString().padStart(2, "0")}`;
     const sequence = timestamp.substring(0, 4).toUpperCase();
 
-    return `AA-C-CTX-${sequence}-I-${yearMonth}-3-${random.substring(0, 1).toUpperCase()}`;
+    return `03-1-USA-${sequence}-P-${yearMonth}-0-${random.substring(0, 1).toUpperCase()}`;
   }
 
   /**

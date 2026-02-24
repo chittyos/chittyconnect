@@ -1,3 +1,15 @@
+---
+uri: chittycanon://docs/ops/policy/chittyconnect-charter
+namespace: chittycanon://docs/ops
+type: policy
+version: 1.0.0
+status: CERTIFIED
+registered_with: chittycanon://core/services/canon
+title: "ChittyConnect Charter"
+certifier: chittycanon://core/services/chittycert
+visibility: PUBLIC
+---
+
 # ChittyConnect Charter
 
 ## Classification
@@ -115,6 +127,21 @@ Cross-service awareness system providing:
 - Contextual analysis (legal, financial, relational)
 - Intelligent routing to optimal services
 - State persistence via MemoryCloude™
+
+### ChittyContext (Edge Cache Capability)
+
+ChittyContext is a local edge cache at `~/.claude/chittycontext/` that provides
+offline-resilient session state for Claude Code sessions. It is a **capability of
+ChittyConnect**, not a standalone service.
+
+**Responsibilities:**
+- Auto-resolve session context via MCP bridge on session start
+- Cache last-known state locally for offline resilience
+- Queue session metrics for async commit to ChittyConnect backend
+- Maintain project-scoped state files per entity
+
+**Not a standalone service:** ChittyContext has no charter, no deployment, no health
+endpoint. It is a client-side cache governed by ChittyConnect's ContextConsciousness™.
 
 ## Ownership
 

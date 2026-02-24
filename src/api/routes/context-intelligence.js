@@ -16,6 +16,7 @@
 
 import { Hono } from 'hono';
 import { ContextIntelligence } from '../../intelligence/context-intelligence.js';
+import { ContextResolver } from '../../intelligence/context-resolver.js';
 
 /**
  * Generate standard API response metadata
@@ -940,6 +941,258 @@ contextIntelligence.get('/taxonomy/collaborators/:chittyId', async (c) => {
   } catch (error) {
     console.error('[Intelligence] Find collaborators error:', error);
     return apiResponse(c, { success: false, error: { code: 'FIND_FAILED', message: error.message } }, 500);
+  }
+});
+
+// ============ CONTEXT TOOLS: MCP Backend Routes ============
+
+/**
+ * Resolve context from hints (MCP tool backend)
+ * POST /api/v1/intelligence/context/resolve
+ *
+ * Body: { project_path, platform, support_type, organization }
+ */
+contextIntelligence.post('/context/resolve', async (c) => {
+  try {
+    const { project_path, platform, support_type, organization } = await c.req.json();
+
+    if (!project_path && !organization) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'INSUFFICIENT_HINTS', message: 'At least project_path or organization required' }
+      }, 400);
+    }
+
+    const resolver = new ContextResolver(c.env);
+    const result = await resolver.resolveContext({
+      projectPath: project_path,
+      platform,
+      supportType: support_type,
+      organization,
+    });
+
+    if (result.action === 'error') {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'RESOLUTION_FAILED', message: result.error }
+      }, 404);
+    }
+
+    return apiResponse(c, { success: true, data: result });
+  } catch (error) {
+    console.error('[Intelligence] Context resolve error:', error);
+    return apiResponse(c, { success: false, error: { code: 'RESOLVE_FAILED', message: error.message } }, 500);
+  }
+});
+
+/**
+ * Restore context for a ChittyID (MCP tool backend)
+ * GET /api/v1/intelligence/context/:chittyId/restore
+ *
+ * Query: project (optional project slug)
+ */
+contextIntelligence.get('/context/:chittyId/restore', async (c) => {
+  try {
+    const chittyId = c.req.param('chittyId');
+    const project = c.req.query('project');
+
+    const resolver = new ContextResolver(c.env);
+    const resolution = await resolver.resolveContext({ explicitChittyId: chittyId });
+
+    const intel = new ContextIntelligence(c.env);
+    const profile = await intel.loadContextProfile(chittyId);
+
+    if (resolution.action === 'error' && !profile) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'CONTEXT_NOT_FOUND', message: `ChittyID ${chittyId} not found` }
+      }, 404);
+    }
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        resolution,
+        profile: profile ? intel.summarizeProfile(profile) : null,
+        trust: profile ? {
+          level: profile.trust_level,
+          score: profile.trust_score,
+          anomalyCount: profile.anomaly_count,
+        } : null,
+        dna: profile ? {
+          competencies: profile.competencies,
+          domains: profile.expertise_domains,
+          totalInteractions: profile.total_interactions,
+          successRate: profile.success_rate,
+        } : null,
+        project,
+      }
+    });
+  } catch (error) {
+    console.error('[Intelligence] Context restore error:', error);
+    return apiResponse(c, { success: false, error: { code: 'RESTORE_FAILED', message: error.message } }, 500);
+  }
+});
+
+/**
+ * Commit context session metrics (MCP tool backend)
+ * POST /api/v1/intelligence/context/commit
+ *
+ * Body: { session_id, chitty_id, project_slug, metrics, decisions }
+ */
+contextIntelligence.post('/context/commit', async (c) => {
+  try {
+    const { session_id, chitty_id, project_slug, metrics, decisions } = await c.req.json();
+
+    if (!session_id) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'MISSING_SESSION_ID', message: 'session_id is required' }
+      }, 400);
+    }
+
+    const resolver = new ContextResolver(c.env);
+    const result = await resolver.unbindSession(session_id, {
+      interactions: metrics?.interactions,
+      decisions: metrics?.decisions,
+      successRate: metrics?.success_rate,
+      competencies: metrics?.competencies,
+      domains: metrics?.domains,
+    });
+
+    if (!result) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'NO_ACTIVE_BINDING', message: `No active binding found for session ${session_id}` }
+      }, 404);
+    }
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        committed: true,
+        contextId: result.contextId,
+        chittyId: result.chittyId,
+        sessionId: session_id,
+        projectSlug: project_slug,
+        metricsAccumulated: true,
+      }
+    });
+  } catch (error) {
+    console.error('[Intelligence] Context commit error:', error);
+    return apiResponse(c, { success: false, error: { code: 'COMMIT_FAILED', message: error.message } }, 500);
+  }
+});
+
+/**
+ * Check context trust/DNA status (MCP tool backend)
+ * GET /api/v1/intelligence/context/:chittyId/check
+ */
+contextIntelligence.get('/context/:chittyId/check', async (c) => {
+  try {
+    const chittyId = c.req.param('chittyId');
+
+    const intel = new ContextIntelligence(c.env);
+    const profile = await intel.loadContextProfile(chittyId);
+
+    if (!profile) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'CONTEXT_NOT_FOUND', message: `Context ${chittyId} not found` }
+      }, 404);
+    }
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        chittyId,
+        trust: {
+          level: profile.trust_level,
+          score: profile.trust_score,
+          anomalyCount: profile.anomaly_count,
+          lastAnomalyAt: profile.last_anomaly_at,
+        },
+        dna: {
+          competencies: profile.competencies,
+          domains: profile.expertise_domains,
+          totalInteractions: profile.total_interactions,
+          totalDecisions: profile.total_decisions,
+          successRate: profile.success_rate,
+        },
+        status: profile.status,
+        supportType: profile.support_type,
+        projectPath: profile.project_path,
+      }
+    });
+  } catch (error) {
+    console.error('[Intelligence] Context check error:', error);
+    return apiResponse(c, { success: false, error: { code: 'CHECK_FAILED', message: error.message } }, 500);
+  }
+});
+
+/**
+ * Save context checkpoint (MCP tool backend)
+ * POST /api/v1/intelligence/context/checkpoint
+ *
+ * Body: { chitty_id, project_slug, name, state }
+ */
+contextIntelligence.post('/context/checkpoint', async (c) => {
+  try {
+    const { chitty_id, project_slug, name, state } = await c.req.json();
+
+    if (!chitty_id) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'MISSING_CHITTY_ID', message: 'chitty_id is required' }
+      }, 400);
+    }
+
+    if (!name) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'MISSING_NAME', message: 'Checkpoint name is required' }
+      }, 400);
+    }
+
+    // Use the resolver's logToLedger to store the checkpoint as a ledger entry
+    const resolver = new ContextResolver(c.env);
+    const context = await resolver.loadContextByChittyId(chitty_id);
+
+    if (!context) {
+      return apiResponse(c, {
+        success: false,
+        error: { code: 'CONTEXT_NOT_FOUND', message: `Context ${chitty_id} not found` }
+      }, 404);
+    }
+
+    const ledgerEntry = await resolver.logToLedger(
+      context.id,
+      chitty_id,
+      'checkpoint',
+      'checkpoint',
+      {
+        type: 'context_checkpoint',
+        name,
+        projectSlug: project_slug,
+        state: state || {},
+        checkpointedAt: Date.now(),
+      }
+    );
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        checkpointed: true,
+        chittyId: chitty_id,
+        projectSlug: project_slug,
+        name,
+        ledgerEntryId: ledgerEntry.entryId,
+        ledgerHash: ledgerEntry.hash,
+      }
+    });
+  } catch (error) {
+    console.error('[Intelligence] Context checkpoint error:', error);
+    return apiResponse(c, { success: false, error: { code: 'CHECKPOINT_FAILED', message: error.message } }, 500);
   }
 });
 

@@ -6,27 +6,26 @@
  */
 
 import { Hono } from "hono";
-import { getServiceToken } from "../../lib/credential-helper.js";
+import { dispatchToolCall } from "../../mcp/tool-dispatcher.js";
 
 const mcpRoutes = new Hono();
 
 /**
  * MCP Tools Registry
  *
- * 34 tools across 13 categories:
- * - Identity (ChittyID) — 2 tools
- * - Cases (ChittyCases) — 2 tools
- * - Evidence (ChittyEvidence) — 2 tools
- * - Finance Core (ChittyFinance) — 2 tools
- * - Finance Gateway (agent.chitty.cc) — 8 tools
- * - Ledger (ChittyLedger) — 5 tools
- * - Intelligence (ContextConsciousness™) — 1 tool
- * - Memory (MemoryCloude™) — 3 tools
- * - Credentials (1Password) — 2 tools
- * - Services (Ecosystem) — 2 tools
- * - Chronicle (ChittyChronicle) — 1 tool
- * - Integrations (Third-party) — 3 tools
- * - Sync (ChittySync) — 1 tool
+ * 34 tools across 15 categories:
+ * - Identity (ChittyID)
+ * - Cases (ChittyCases)
+ * - Evidence (ChittyEvidence)
+ * - Finance (ChittyFinance)
+ * - Memory (MemoryCloude™)
+ * - Credentials (1Password)
+ * - Services (Ecosystem)
+ * - Integrations (Third-party)
+ * - AI Search (ChittyEvidence)
+ * - Ledger (ChittyLedger)
+ * - Fact Governance (ChittyLedger)
+ * - Contextual (ChittyContextual)
  */
 const TOOLS = [
   // Identity Tools
@@ -636,6 +635,292 @@ const TOOLS = [
       required: ["source_service", "target_service"],
     },
   },
+
+  // ChittyLedger Tools
+  {
+    name: "chitty_ledger_stats",
+    description:
+      "Get dashboard statistics from ChittyLedger: total cases, evidence items, facts, contradictions, and verification rates.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_evidence",
+    description:
+      "Query evidence items from ChittyLedger. Filter by case ID. Returns evidence with blockchain status, trust tier, and chain of custody.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter evidence",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_ledger_facts",
+    description:
+      "Get atomic facts extracted from a specific evidence item. Includes confidence scores and source references.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID to get facts for",
+        },
+      },
+      required: ["evidence_id"],
+    },
+  },
+  {
+    name: "chitty_ledger_contradictions",
+    description:
+      "Get detected contradictions across evidence items. Shows conflicting facts, severity, and resolution status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter contradictions",
+        },
+      },
+    },
+  },
+
+  // Fact Governance Tools
+  {
+    name: "chitty_fact_mint",
+    description:
+      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → sealed. Include the evidence source, confidence score, and category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID the fact is extracted from",
+        },
+        case_id: {
+          type: "string",
+          description: "Case ID the fact belongs to",
+        },
+        text: {
+          type: "string",
+          description:
+            "The atomic fact statement (single verifiable claim)",
+        },
+        confidence: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Confidence score 0.0-1.0 (default: 0.5)",
+        },
+        source_reference: {
+          type: "string",
+          description:
+            "Page number, paragraph, or location within the evidence document",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "financial",
+            "temporal",
+            "identity",
+            "property",
+            "legal",
+            "communication",
+            "other",
+          ],
+          description: "Fact category for classification",
+        },
+      },
+      required: ["evidence_id", "text"],
+    },
+  },
+  {
+    name: "chitty_fact_validate",
+    description:
+      "Validate a draft fact against corroborating evidence. Moves the fact from 'draft' to 'verified' status if validation passes. Requires the fact ID and validation method.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: {
+          type: "string",
+          description: "Fact ID to validate",
+        },
+        validation_method: {
+          type: "string",
+          enum: [
+            "cross_reference",
+            "document_match",
+            "witness_corroboration",
+            "expert_review",
+          ],
+          description: "Method used to validate the fact",
+        },
+        corroborating_evidence: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Array of evidence IDs that corroborate this fact",
+        },
+        notes: {
+          type: "string",
+          description: "Validation notes or reasoning",
+        },
+      },
+      required: ["fact_id", "validation_method"],
+    },
+  },
+
+  // Fact Governance Hardening Tools (seal, dispute, export)
+  {
+    name: "chitty_fact_seal",
+    description:
+      "Seal a verified fact permanently, triggering async ChittyProof minting. Requires Authority entity type with INSTITUTIONAL trust level (4+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to seal" },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the authority performing the seal",
+        },
+        seal_reason: {
+          type: "string",
+          description: "Reason for sealing the fact",
+        },
+      },
+      required: ["fact_id", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_dispute",
+    description:
+      "Dispute a verified or sealed fact. Creates a dispute record. Requires ENHANCED trust level (2+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to dispute" },
+        reason: {
+          type: "string",
+          description: "Reason for the dispute",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the entity filing the dispute",
+        },
+        challenger_chitty_id: {
+          type: "string",
+          description: "ChittyID of the challenger (defaults to actor)",
+        },
+        counter_evidence_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Evidence IDs that contradict this fact",
+        },
+      },
+      required: ["fact_id", "reason", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_export",
+    description:
+      "Export a fact with its full proof bundle. JSON or PDF format.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to export" },
+        format: {
+          type: "string",
+          enum: ["json", "pdf"],
+          description: "Export format",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the requesting entity",
+        },
+      },
+      required: ["fact_id", "format", "actor_chitty_id"],
+    },
+  },
+
+  // ChittyContextual Tools
+  {
+    name: "chitty_contextual_timeline",
+    description:
+      "Get unified communication timeline from ChittyContextual. Aggregates iMessage, WhatsApp, Email, DocuSign, and OpenPhone into a chronological view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        party: {
+          type: "string",
+          description: "Filter by party name, email, or phone number",
+        },
+        start_date: { type: "string", description: "Start date (ISO 8601)" },
+        end_date: { type: "string", description: "End date (ISO 8601)" },
+        source: {
+          type: "string",
+          enum: ["imessage", "whatsapp", "email", "docusign", "openphone"],
+          description: "Filter by communication source",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_contextual_topics",
+    description:
+      "Get topic analysis from ChittyContextual. Returns AI-modeled topic clusters across all communication sources with entity relationships.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Topic or keyword to search for",
+        },
+      },
+    },
+  },
+
+  // Evidence AI Search Tools
+  {
+    name: "chitty_evidence_search",
+    description:
+      "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "chitty_evidence_retrieve",
+    description:
+      "Retrieve matching evidence documents by semantic similarity (no AI generation). Returns ranked document chunks with scores. Use when you need raw document matches without an AI-generated summary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query",
+        },
+        max_num_results: {
+          type: "number",
+          description: "Maximum number of results (default: 10)",
+          default: 10,
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 /**
@@ -652,502 +937,23 @@ mcpRoutes.get("/tools/list", async (c) => {
  */
 mcpRoutes.post("/tools/call", async (c) => {
   const { name, arguments: args, context } = await c.req.json();
+  const baseUrl = c.req.url.split("/mcp")[0];
+  const authToken = (c.req.header("Authorization") || "").replace(/^Bearer\s+/i, "");
 
-  // Route to appropriate service based on tool name
-  try {
-    let result;
+  const result = await dispatchToolCall(name, args, c.env, {
+    baseUrl,
+    authToken,
+    context,
+  });
 
-    // Identity tools
-    if (name === "chitty_id_mint") {
-      const serviceToken = await getServiceToken(c.env, "chittyid");
-      if (!serviceToken) {
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: "Authentication required: No service token available for ChittyID",
-              },
-            ],
-            isError: true,
-          },
-          401,
-        );
-      }
-      const response = await fetch(
-        "https://id.chitty.cc/api/v2/chittyid/mint",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            entity: args.entity_type,
-            characterization: args.characterization,
-            metadata: args.metadata,
-          }),
-        },
-      );
-      if (!response.ok) {
-        const errorText = await response.text();
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: `ChittyID error (${response.status}): ${errorText}`,
-              },
-            ],
-            isError: true,
-          },
-          response.status,
-        );
-      }
-      result = await response.json();
-    } else if (name === "chitty_id_validate") {
-      const serviceToken = await getServiceToken(c.env, "chittyid");
-      if (!serviceToken) {
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: "Authentication required: No service token available for ChittyID",
-              },
-            ],
-            isError: true,
-          },
-          401,
-        );
-      }
-      const response = await fetch(
-        `https://id.chitty.cc/api/v2/chittyid/validate/${args.chitty_id}`,
-        {
-          headers: { Authorization: `Bearer ${serviceToken}` },
-        },
-      );
-      if (!response.ok) {
-        const errorText = await response.text();
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: `ChittyID validation error (${response.status}): ${errorText}`,
-              },
-            ],
-            isError: true,
-          },
-          response.status,
-        );
-      }
-      result = await response.json();
-    }
-
-    // Case tools - delegate to local routes
-    else if (name.startsWith("chitty_case_")) {
-      const action = name.replace("chitty_case_", "");
-      const endpoint =
-        action === "create"
-          ? "/api/chittycases/create"
-          : `/api/chittycases/${args.case_id}`;
-      const method = action === "create" ? "POST" : "GET";
-
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
-        method,
-        headers: {
-          Authorization: c.req.header("Authorization"),
-          "Content-Type": "application/json",
-        },
-        body: action === "create" ? JSON.stringify(args) : undefined,
-      });
-      result = await response.json();
-    }
-
-    // Evidence tools
-    else if (name.startsWith("chitty_evidence_")) {
-      const action = name.replace("chitty_evidence_", "");
-      const endpoint =
-        action === "ingest"
-          ? "/api/chittyevidence/ingest"
-          : `/api/chittyevidence/${args.evidence_id}`;
-
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
-        method: action === "ingest" ? "POST" : "GET",
-        headers: {
-          Authorization: c.req.header("Authorization"),
-          "Content-Type": "application/json",
-        },
-        body: action === "ingest" ? JSON.stringify(args) : undefined,
-      });
-      result = await response.json();
-    }
-
-    // Finance core tools (connect_bank, analyze — delegate to local routes)
-    else if (
-      name === "chitty_finance_connect_bank" ||
-      name === "chitty_finance_analyze"
-    ) {
-      const action = name.replace("chitty_finance_", "");
-      const endpoint = `/api/chittyfinance/${action}`;
-
-      const response = await fetch(`${c.req.url.split("/mcp")[0]}${endpoint}`, {
-        method: "POST",
-        headers: {
-          Authorization: c.req.header("Authorization"),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(args),
-      });
-      result = await response.json();
-    }
-
-    // Finance gateway tools (proxied via agent.chitty.cc)
-    else if (name.startsWith("chitty_finance_")) {
-      const AGENT_BASE = "https://agent.chitty.cc/api/finance";
-      const serviceToken = await getServiceToken(c.env, "chittyfinance");
-      const headers = {
-        "Content-Type": "application/json",
-        ...(serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {}),
-      };
-
-      const toolName = name.replace("chitty_finance_", "");
-      let url;
-      let method = "GET";
-
-      switch (toolName) {
-        case "entities":
-          url = `${AGENT_BASE}/entities`;
-          break;
-        case "balances":
-          url = `${AGENT_BASE}/balances?entity=${encodeURIComponent(args.entity || "")}`;
-          break;
-        case "transactions": {
-          const params = new URLSearchParams();
-          if (args.entity) params.set("entity", args.entity);
-          if (args.start) params.set("start", args.start);
-          if (args.end) params.set("end", args.end);
-          url = `${AGENT_BASE}/transactions?${params}`;
-          break;
-        }
-        case "cash_flow": {
-          const params = new URLSearchParams();
-          if (args.entity) params.set("entity", args.entity);
-          if (args.start) params.set("start", args.start);
-          if (args.end) params.set("end", args.end);
-          url = `${AGENT_BASE}/cash-flow?${params}`;
-          break;
-        }
-        case "inter_entity": {
-          const params = new URLSearchParams();
-          if (args.entity) params.set("entity", args.entity);
-          if (args.start) params.set("start", args.start);
-          if (args.end) params.set("end", args.end);
-          url = `${AGENT_BASE}/inter-entity?${params}`;
-          break;
-        }
-        case "detect_transfers":
-          url = `${AGENT_BASE}/detect-transfers`;
-          method = "POST";
-          break;
-        case "flow_of_funds": {
-          const params = new URLSearchParams();
-          if (args.start) params.set("start", args.start);
-          if (args.end) params.set("end", args.end);
-          url = `${AGENT_BASE}/flow-of-funds?${params}`;
-          break;
-        }
-        case "sync":
-          url = `${AGENT_BASE}/sync`;
-          method = "POST";
-          break;
-        default:
-          return c.json(
-            {
-              content: [
-                { type: "text", text: `Unknown finance tool: ${name}` },
-              ],
-              isError: true,
-            },
-            400,
-          );
-      }
-
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: method === "POST" ? JSON.stringify(args) : undefined,
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: `Finance API error (${response.status}): ${errorText}`,
-              },
-            ],
-            isError: true,
-          },
-          response.status,
-        );
-      }
-      result = await response.json();
-    }
-
-    // Ledger tools (ChittyLedger)
-    else if (name.startsWith("chitty_ledger_")) {
-      const LEDGER_BASE = "https://ledger.chitty.cc";
-      const serviceToken = await getServiceToken(c.env, "chittyledger");
-      const headers = {
-        "Content-Type": "application/json",
-        ...(serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {}),
-      };
-
-      const toolName = name.replace("chitty_ledger_", "");
-      let url;
-      let method = "GET";
-      let body;
-
-      switch (toolName) {
-        case "record":
-          url = `${LEDGER_BASE}/entries`;
-          method = "POST";
-          // ChittyLedger uses camelCase: entityType, entityId, actorType
-          body = JSON.stringify({
-            entityType: args.record_type,
-            entityId: args.entity_id || null,
-            action: args.action,
-            actor: args.actor || null,
-            actorType: args.actor_type || "user",
-            metadata: args.metadata || null,
-          });
-          break;
-        case "query": {
-          // ChittyLedger uses camelCase query params
-          const params = new URLSearchParams();
-          if (args.record_type) params.set("entityType", args.record_type);
-          if (args.entity_id) params.set("entityId", args.entity_id);
-          if (args.actor) params.set("actor", args.actor);
-          if (args.status) params.set("status", args.status);
-          if (args.limit) params.set("limit", String(args.limit));
-          url = `${LEDGER_BASE}/entries?${params}`;
-          break;
-        }
-        case "verify":
-          url = `${LEDGER_BASE}/verify`;
-          break;
-        case "statistics":
-          url = `${LEDGER_BASE}/statistics`;
-          break;
-        case "chain_of_custody":
-          url = `${LEDGER_BASE}/custody/${encodeURIComponent(args.entity_id || "")}`;
-          break;
-        default:
-          return c.json(
-            {
-              content: [
-                { type: "text", text: `Unknown ledger tool: ${name}` },
-              ],
-              isError: true,
-            },
-            400,
-          );
-      }
-
-      const response = await fetch(url, {
-        method,
-        headers,
-        body,
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return c.json(
-          {
-            content: [
-              {
-                type: "text",
-                text: `Ledger API error (${response.status}): ${errorText}`,
-              },
-            ],
-            isError: true,
-          },
-          response.status,
-        );
-      }
-      result = await response.json();
-    }
-
-    // Intelligence tools
-    else if (name === "chitty_intelligence_analyze") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/intelligence/analyze`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    }
-
-    // Memory tools (MemoryCloude™)
-    else if (name.startsWith("chitty_memory_")) {
-      // These would integrate with session Durable Objects
-      // For now, return placeholder
-      result = {
-        success: true,
-        message: `Memory operation ${name} executed`,
-        data: { session_id: context?.sessionId || "unknown" },
-      };
-    }
-
-    // Credential tools
-    else if (name.startsWith("chitty_credential_")) {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/credentials/${name.replace("chitty_credential_", "")}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    }
-
-    // Service health tools
-    else if (
-      name.startsWith("chitty_services_") ||
-      name === "chitty_ecosystem_awareness"
-    ) {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/services/status`,
-        {
-          headers: { Authorization: c.req.header("Authorization") },
-        },
-      );
-      result = await response.json();
-    }
-
-    // Chronicle tools
-    else if (name === "chitty_chronicle_log") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/chittychronicle/log`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    }
-
-    // Third-party integration tools
-    else if (name === "chitty_notion_query") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/thirdparty/notion/query`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    } else if (name === "chitty_openai_chat") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/thirdparty/openai/chat`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    } else if (name === "chitty_neon_query") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/thirdparty/neon/query`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    }
-
-    // Sync tools
-    else if (name === "chitty_sync_data") {
-      const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/chittysync/sync`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: c.req.header("Authorization"),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-        },
-      );
-      result = await response.json();
-    } else {
-      return c.json(
-        {
-          content: [
-            {
-              type: "text",
-              text: `Unknown tool: ${name}`,
-            },
-          ],
-          isError: true,
-        },
-        400,
-      );
-    }
-
-    // Format response for MCP
-    return c.json({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    });
-  } catch (error) {
-    console.error(`[MCP] Tool execution error for ${name}:`, error);
-    return c.json(
-      {
-        content: [
-          {
-            type: "text",
-            text: `Error executing ${name}: ${error.message}`,
-          },
-        ],
-        isError: true,
-      },
-      500,
-    );
+  if (result.isError) {
+    const msg = result.content?.[0]?.text || "";
+    const status = msg.includes("Unknown tool") ? 400
+      : msg.includes("Permission denied") ? 403
+      : 500;
+    return c.json(result, status);
   }
+  return c.json(result);
 });
 
 /**

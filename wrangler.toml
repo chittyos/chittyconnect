@@ -8,7 +8,7 @@
 
 name = "chittyconnect"
 main = "src/index.js"
-compatibility_date = "2024-10-01"
+compatibility_date = "2026-02-23"
 compatibility_flags = ["nodejs_compat"]
 account_id = "0bc21e3a5a9de1a4cc843be9c3e98121"
 
@@ -75,6 +75,17 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 binding = "EVENT_Q"
 queue = "github-events"
 
+# Queue for async proof minting (ChittyProof integration)
+[[queues.producers]]
+binding = "PROOF_Q"
+queue = "documint-proofs"
+
+[[queues.consumers]]
+queue = "documint-proofs"
+max_batch_size = 10
+max_retries = 5
+dead_letter_queue = "documint-proofs-dlq"
+
 # Environment variables for development
 [env.staging]
 name = "chittyconnect"
@@ -122,6 +133,16 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 [[env.staging.queues.producers]]
 binding = "EVENT_Q"
 queue = "github-events"
+
+[[env.staging.queues.producers]]
+binding = "PROOF_Q"
+queue = "documint-proofs"
+
+[[env.staging.queues.consumers]]
+queue = "documint-proofs"
+max_batch_size = 10
+max_retries = 5
+dead_letter_queue = "documint-proofs-dlq"
 
 [env.staging.ai]
 binding = "AI"
@@ -209,6 +230,16 @@ database_id = "29473911-4c5b-47d8-a3e7-d1be2370edf6"
 binding = "EVENT_Q"
 queue = "github-events"
 
+[[env.production.queues.producers]]
+binding = "PROOF_Q"
+queue = "documint-proofs"
+
+[[env.production.queues.consumers]]
+queue = "documint-proofs"
+max_batch_size = 10
+max_retries = 5
+dead_letter_queue = "documint-proofs-dlq"
+
 [env.production.ai]
 binding = "AI"
 
@@ -246,6 +277,8 @@ CREDENTIAL_FAILOVER_ENABLED = "true"
 # - CHITTY_CHRONICLE_TOKEN
 # - CHITTY_CONTEXTUAL_TOKEN
 # - CHITTY_REGISTRY_TOKEN
+# - CHITTY_PROOF_TOKEN (service token for proof.chitty.cc)
+# - CHITTY_TRUST_TOKEN (service token for trust.chitty.cc)
 #
 # Third-Party Integrations:
 # - NOTION_TOKEN
