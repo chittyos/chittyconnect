@@ -1,3 +1,18 @@
+---
+uri: chittycanon://docs/tech/architecture/context-anchor-model
+namespace: chittycanon://docs/tech
+type: architecture
+version: 1.0.0
+status: DRAFT
+registered_with: chittycanon://core/services/canon
+title: "Context Anchor Model"
+author: "ChittyOS Foundation"
+created: 2026-02-09T00:00:00Z
+modified: 2026-02-23T00:00:00Z
+visibility: INTERNAL
+tags: [context, chittyid, identity, experience]
+---
+
 # Context Anchor Model: ChittyID as Identity for Experience Accumulation
 
 ## Overview
