@@ -1,18 +1,187 @@
 /**
  * ChittyCanon Integration Tests
  *
- * Tests ChittyConnect integration with ChittyCanon for canonical type validation
+ * Tests ChittyConnect integration with ChittyCanon for canonical type validation.
+ * Uses mocked fetch to avoid live HTTP calls to the ChittyCanon service.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { ChittyCanonClient } from "../chittycanon-client.js";
+
+// --- Fixtures ---
+
+const VALID_VALUES = {
+  workflowStatus: [
+    "PENDING",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "BLOCKED",
+    "FAILED",
+    "CANCELLED",
+    "QUEUED",
+  ],
+  healthStatus: ["HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN", "STARTING"],
+  serviceCategory: [
+    "CORE_INFRASTRUCTURE",
+    "SECURITY_VERIFICATION",
+    "BLOCKCHAIN_INFRASTRUCTURE",
+    "AI_INTELLIGENCE",
+    "DOCUMENT_EVIDENCE",
+    "BUSINESS_OPERATIONS",
+    "FOUNDATION_GOVERNANCE",
+  ],
+  currencyCode: ["USD", "EUR", "GBP", "USDC", "BTC", "ETH"],
+  paymentRail: ["MERCURY_ACH", "CIRCLE_USDC", "STRIPE_ISSUING"],
+  systemRole: ["OWNER", "ADMIN", "STAFF", "MEMBER", "USER", "GUEST"],
+  caseType: ["EVICTION", "CIVIL", "CRIMINAL", "FAMILY"],
+};
+
+const CATEGORY_FIXTURES = {
+  "workflow-statuses": {
+    PENDING: { value: "pending" },
+    IN_PROGRESS: { value: "in_progress" },
+    COMPLETED: { value: "completed" },
+    BLOCKED: { value: "blocked" },
+    FAILED: { value: "failed" },
+    CANCELLED: { value: "cancelled" },
+    QUEUED: { value: "queued" },
+  },
+  "health-statuses": {
+    HEALTHY: { level: 4 },
+    DEGRADED: { level: 3 },
+    UNHEALTHY: { level: 2 },
+    UNKNOWN: { level: 1 },
+    STARTING: { level: 0 },
+  },
+  "service-categories": {
+    CORE_INFRASTRUCTURE: { label: "Core Infrastructure" },
+    SECURITY_VERIFICATION: { label: "Security & Verification" },
+    BLOCKCHAIN_INFRASTRUCTURE: { label: "Blockchain Infrastructure" },
+    AI_INTELLIGENCE: { label: "AI & Intelligence" },
+    DOCUMENT_EVIDENCE: { label: "Document & Evidence" },
+    BUSINESS_OPERATIONS: { label: "Business Operations" },
+    FOUNDATION_GOVERNANCE: { label: "Foundation Governance" },
+  },
+  "currency-codes": {
+    USD: { symbol: "$", decimals: 2 },
+    EUR: { symbol: "€", decimals: 2 },
+    GBP: { symbol: "£", decimals: 2 },
+    USDC: { symbol: "$", decimals: 2 },
+    BTC: { symbol: "₿", decimals: 8 },
+    ETH: { symbol: "Ξ", decimals: 18 },
+  },
+  "payment-rails": {
+    MERCURY_ACH: { provider: "Mercury" },
+    CIRCLE_USDC: { provider: "Circle" },
+    STRIPE_ISSUING: { provider: "Stripe" },
+  },
+  "case-types": {
+    EVICTION: { label: "Eviction" },
+    CIVIL: { label: "Civil" },
+    CRIMINAL: { label: "Criminal" },
+    FAMILY: { label: "Family" },
+  },
+  "case-statuses": {
+    DRAFT: { order: 0 },
+    FILED: { order: 1 },
+    ACTIVE: { order: 2 },
+    CLOSED: { order: 3 },
+  },
+  "party-roles": {
+    PLAINTIFF: { label: "Plaintiff" },
+    DEFENDANT: { label: "Defendant" },
+    WITNESS: { label: "Witness" },
+  },
+  "system-roles": {
+    OWNER: { level: 5, permissions: ["*"] },
+    ADMIN: { level: 4, permissions: ["manage_users", "manage_settings"] },
+    STAFF: { level: 3, permissions: ["manage_content"] },
+    MEMBER: { level: 2, permissions: ["read", "write"] },
+    USER: { level: 1, permissions: ["read"] },
+    GUEST: { level: 0, permissions: ["read_public"] },
+  },
+};
+
+// --- Mock fetch ---
+
+const BASE_URL = "https://chittycanon-production.ccorp.workers.dev";
+
+function createMockResponse(body, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+const mockFetch = vi.fn(async (url, options) => {
+  const urlStr = typeof url === "string" ? url : url.toString();
+
+  // Reject requests to unknown hosts (simulates network error)
+  if (!urlStr.startsWith(BASE_URL)) {
+    throw new TypeError("fetch failed");
+  }
+
+  // POST /canon/validate
+  if (urlStr === `${BASE_URL}/canon/validate` && options?.method === "POST") {
+    const body = JSON.parse(options.body);
+    const validList = VALID_VALUES[body.type];
+    const valid = validList ? validList.includes(body.value) : false;
+    return createMockResponse({ valid });
+  }
+
+  // GET /canon/search?q=...&category=...
+  if (urlStr.startsWith(`${BASE_URL}/canon/search`)) {
+    const parsed = new URL(urlStr);
+    const q = parsed.searchParams.get("q") || "";
+    const category = parsed.searchParams.get("category");
+    const results = [];
+
+    const sources = category
+      ? { [category]: CATEGORY_FIXTURES[category] }
+      : CATEGORY_FIXTURES;
+
+    for (const [cat, data] of Object.entries(sources)) {
+      if (!data) continue;
+      for (const key of Object.keys(data)) {
+        if (key.toLowerCase().includes(q.toLowerCase())) {
+          results.push({ category: cat, key, ...data[key] });
+        }
+      }
+    }
+    return createMockResponse({ results });
+  }
+
+  // GET /canon/{category}
+  const categoryMatch = urlStr.match(
+    new RegExp(`^${BASE_URL.replace(/\./g, "\\.")}/canon/(.+)$`),
+  );
+  if (categoryMatch) {
+    const category = categoryMatch[1];
+    const data = CATEGORY_FIXTURES[category];
+    if (data) {
+      return createMockResponse({ data });
+    }
+    return createMockResponse({ error: "Not found" }, 404);
+  }
+
+  return createMockResponse({ error: "Not found" }, 404);
+});
+
+// --- Tests ---
 
 describe("ChittyCanonClient", () => {
   let client;
 
   beforeEach(() => {
+    mockFetch.mockClear();
+    vi.stubGlobal("fetch", mockFetch);
     client = new ChittyCanonClient();
-    client.clearCache(); // Clear cache before each test
+    client.clearCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe("Workflow Status Validation", () => {
@@ -163,18 +332,12 @@ describe("ChittyCanonClient", () => {
 
   describe("Caching", () => {
     it("should cache fetched canonical definitions", async () => {
-      // First fetch
-      const start1 = Date.now();
       await client.getWorkflowStatuses();
-      const time1 = Date.now() - start1;
+      expect(mockFetch).toHaveBeenCalledTimes(1);
 
-      // Second fetch (should be from cache)
-      const start2 = Date.now();
+      // Second call should hit cache, not fetch
       await client.getWorkflowStatuses();
-      const time2 = Date.now() - start2;
-
-      // Cached request should be significantly faster
-      expect(time2).toBeLessThan(time1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it("should clear cache when requested", async () => {
