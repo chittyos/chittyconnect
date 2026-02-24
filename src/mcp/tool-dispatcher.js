@@ -303,7 +303,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             isError: true,
           };
         }
-        const r2Key = `exports/facts/${args.fact_id}/${Date.now()}.pdf`;
+        const exportPath = `facts/${args.fact_id}/${Date.now()}.pdf`;
+        const r2Key = `exports/${exportPath}`;
         try {
           await env.FILES.put(r2Key, pdfResult.body, {
             httpMetadata: { contentType: "application/pdf" },
@@ -319,7 +320,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = {
           fact_id: args.fact_id,
           format: "pdf",
-          download_url: `${baseUrl}/api/v1/exports/${r2Key}`,
+          download_url: `${baseUrl}/api/v1/exports/${exportPath}`,
           proof_id: factData.proof_id,
           verification_url: factData.verification_url,
         };
