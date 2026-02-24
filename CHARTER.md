@@ -6,7 +6,7 @@ version: 1.0.0
 status: CERTIFIED
 registered_with: chittycanon://core/services/canon
 title: "ChittyConnect Charter"
-certifier: chittycanon://core/services/chittycert
+certifier: chittycanon://core/services/chittycertify
 visibility: PUBLIC
 ---
 
