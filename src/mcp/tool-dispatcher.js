@@ -478,13 +478,93 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       result = await response.json();
     }
 
-    // ── Memory tools (MemoryCloude) ─────────────────────────────────
-    else if (name.startsWith("memory_")) {
-      result = {
-        success: true,
-        message: `Memory operation ${name} executed`,
-        data: { session_id: context?.sessionId || "unknown" },
-      };
+    // ── Context tools ─────────────────────────────────────────────────
+    else if (name === "context_resolve") {
+      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/resolve`, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_path: args.project_path,
+          platform: args.platform || "claude_code",
+          support_type: args.support_type || "development",
+          organization: args.organization,
+        }),
+      });
+      result = await response.json();
+    }
+
+    else if (name === "context_restore") {
+      const params = new URLSearchParams();
+      if (args.project_slug) params.set("project", args.project_slug);
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/${encodeURIComponent(args.chitty_id)}/restore?${params}`,
+        { headers: authHeader },
+      );
+      result = await response.json();
+    }
+
+    else if (name === "context_commit") {
+      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/commit`, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: args.session_id,
+          chitty_id: args.chitty_id,
+          project_slug: args.project_slug,
+          metrics: args.metrics,
+          decisions: args.decisions,
+        }),
+      });
+      result = await response.json();
+    }
+
+    else if (name === "context_check") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/${encodeURIComponent(args.chitty_id)}/check`,
+        { headers: authHeader },
+      );
+      result = await response.json();
+    }
+
+    else if (name === "context_checkpoint") {
+      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/checkpoint`, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chitty_id: args.chitty_id,
+          project_slug: args.project_slug,
+          name: args.name,
+          state: args.state,
+        }),
+      });
+      result = await response.json();
+    }
+
+    // ── Memory tools (MemoryCloude, enhanced with chitty_id) ─────────
+    else if (name === "memory_persist") {
+      const response = await fetch(`${baseUrl}/api/v1/memory/persist`, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: args.content,
+          chitty_id: args.chitty_id,
+          session_id: args.session_id,
+          tags: args.tags,
+        }),
+      });
+      result = await response.json();
+    }
+
+    else if (name === "memory_recall") {
+      const params = new URLSearchParams();
+      if (args.query) params.set("query", args.query);
+      if (args.chitty_id) params.set("chitty_id", args.chitty_id);
+      if (args.limit) params.set("limit", String(args.limit));
+      const response = await fetch(
+        `${baseUrl}/api/v1/memory/recall?${params}`,
+        { headers: authHeader },
+      );
+      result = await response.json();
     }
 
     // ── Credential tools ────────────────────────────────────────────
