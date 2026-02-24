@@ -13,7 +13,15 @@ import { getServiceToken } from "../../lib/credential-helper.js";
 const chittyidRoutes = new Hono();
 
 // Legacy entity mapping for backward compatibility
+// @canon: chittycanon://gov/governance#core-types
 const LEGACY_ENTITY_MAP = {
+  // Canonical type codes (P/L/T/E/A)
+  P: EntityType.PERSON,
+  L: EntityType.PLACE,
+  T: EntityType.THING,
+  E: EntityType.EVENT,
+  A: EntityType.AUTHORITY,
+  // Legacy codes (backward compatibility)
   PEO: EntityType.PERSON,
   PLACE: EntityType.PLACE,
   PROP: EntityType.THING,
@@ -21,8 +29,8 @@ const LEGACY_ENTITY_MAP = {
   AUTH: EntityType.AUTHORITY,
   INFO: EntityType.THING,
   FACT: EntityType.THING,
-  CONTEXT: EntityType.THING,
-  ACTOR: EntityType.PERSON
+  CONTEXT: EntityType.PERSON, // Contexts are actors with agency (Person, Synthetic)
+  ACTOR: EntityType.PERSON,
 };
 
 /**

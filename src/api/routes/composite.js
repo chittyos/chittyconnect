@@ -124,7 +124,10 @@ compositeRoutes.post(
           Authorization: `Bearer ${chittyIdToken}`,
         },
         body: JSON.stringify({
-          entity: "CONTEXT",
+          // @canon: chittycanon://gov/governance#core-types
+          // Cases are Events (E) — occurrences in time
+          entity: "E",
+          characterization: "Case",
           metadata: {
             title: input.caseDetails.title,
             type: input.caseDetails.type,
@@ -157,7 +160,10 @@ compositeRoutes.post(
               Authorization: `Bearer ${chittyIdToken}`,
             },
             body: JSON.stringify({
-              entity: party.type === "organization" ? "AUTH" : "PEO",
+              // @canon: chittycanon://gov/governance#core-types
+              // Organizations are Person (P, Legal); individuals are Person (P, Natural)
+              entity: "P",
+              characterization: party.type === "organization" ? "Legal" : "Natural",
               metadata: {
                 name: party.name,
                 role: party.role,
@@ -248,7 +254,10 @@ compositeRoutes.post(
                   Authorization: `Bearer ${chittyIdToken}`,
                 },
                 body: JSON.stringify({
-                  entity: "INFO",
+                  // @canon: chittycanon://gov/governance#core-types
+                  // Evidence items are Things (T, Digital) — objects without agency
+                  entity: "T",
+                  characterization: "Digital",
                   metadata: {
                     type: evidence.type,
                     description: evidence.description,

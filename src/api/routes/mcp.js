@@ -32,14 +32,21 @@ const TOOLS = [
   {
     name: "chitty_id_mint",
     description:
-      "Mint a new ChittyID for a person, trust, organization, case, or location. Returns cryptographically secure DID with drand beacon randomness.",
+      "Mint a new ChittyID for any canonical entity type: Person (P), Location (L), Thing (T), Event (E), or Authority (A). Returns cryptographically secure DID with drand beacon randomness.",
     inputSchema: {
       type: "object",
       properties: {
+        // @canon: chittycanon://gov/governance#core-types
         entity_type: {
           type: "string",
-          enum: ["PERSON", "TRUST", "ORGANIZATION", "CASE", "LOCATION"],
-          description: "Type of entity for ChittyID generation",
+          enum: ["P", "L", "T", "E", "A"],
+          description:
+            "Canonical entity type code. P=Person, L=Location, T=Thing, E=Event, A=Authority. See chittycanon://gov/governance#core-types",
+        },
+        characterization: {
+          type: "string",
+          description:
+            "Characterization within entity type (e.g., Natural/Synthetic/Legal for Person, Digital/Physical for Thing)",
         },
         metadata: {
           type: "object",
@@ -63,7 +70,8 @@ const TOOLS = [
       properties: {
         chitty_id: {
           type: "string",
-          description: "ChittyID to validate (format: VV-G-LLL-SSSS-T-YM-C-X)",
+          description:
+            "ChittyID to validate (format: VV-G-LLL-SSSS-T-YM-C-X per chittycanon://docs/tech/spec/chittyid-format)",
         },
       },
       required: ["chitty_id"],
@@ -205,6 +213,203 @@ const TOOLS = [
     },
   },
 
+  // Finance Gateway Tools (proxied via agent.chitty.cc)
+  {
+    name: "chitty_finance_entities",
+    description:
+      "List financial entities with their account mappings from Mercury and other connected banks.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_finance_balances",
+    description:
+      "Get current balances for a financial entity across all connected accounts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: {
+          type: "string",
+          description: "Entity identifier (e.g., 'nicholas', 'chittycorp')",
+        },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "chitty_finance_transactions",
+    description:
+      "Query transactions for an entity within a date range. Supports filtering by account and amount.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: {
+          type: "string",
+          format: "date",
+          description: "Start date (YYYY-MM-DD)",
+        },
+        end: {
+          type: "string",
+          format: "date",
+          description: "End date (YYYY-MM-DD)",
+        },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "chitty_finance_cash_flow",
+    description:
+      "Generate a cash flow summary for an entity over a date range, showing inflows, outflows, and net.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+      required: ["entity"],
+    },
+  },
+  {
+    name: "chitty_finance_inter_entity",
+    description:
+      "Show inter-entity transfers between accounts (e.g., personal to LLC transfers).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entity identifier" },
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+    },
+  },
+  {
+    name: "chitty_finance_detect_transfers",
+    description:
+      "Auto-detect potential inter-entity transfers using amount matching and date proximity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+        threshold_days: {
+          type: "number",
+          description: "Max days between matching transactions (default: 3)",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_finance_flow_of_funds",
+    description:
+      "Generate a source-and-use-of-funds report across all entities for a date range.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start: { type: "string", format: "date" },
+        end: { type: "string", format: "date" },
+      },
+    },
+  },
+  {
+    name: "chitty_finance_sync",
+    description:
+      "Trigger a Mercury bank sync to pull latest transactions into the finance database.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+
+  // Ledger Tools (ChittyLedger)
+  {
+    name: "chitty_ledger_record",
+    description:
+      "Record a new transaction entry in ChittyLedger with full chain-of-custody tracking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        // @canon: chittycanon://gov/governance#core-types — record_type is distinct from canonical entity types P/L/T/E/A
+        record_type: {
+          type: "string",
+          enum: ["transaction", "evidence", "custody", "audit"],
+          description:
+            "Ledger record classification (distinct from canonical entity types P/L/T/E/A). Maps to ChittyLedger entityType.",
+        },
+        entity_id: { type: "string", description: "UUID of the entity" },
+        action: {
+          type: "string",
+          description: "Action performed (create, update, transfer, verify)",
+        },
+        actor: { type: "string", description: "Who performed the action" },
+        actor_type: {
+          type: "string",
+          enum: ["user", "service", "system"],
+          description: "Type of actor (default: user)",
+        },
+        metadata: { type: "object", description: "Additional entry metadata" },
+      },
+      required: ["record_type", "action"],
+    },
+  },
+  {
+    name: "chitty_ledger_query",
+    description:
+      "Query ledger history for a specific entity. Returns chronological chain of entries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        record_type: {
+          type: "string",
+          enum: ["transaction", "evidence", "custody", "audit"],
+          description:
+            "Ledger record classification (maps to ChittyLedger entityType)",
+        },
+        entity_id: { type: "string", description: "Entity ID to filter by" },
+        actor: { type: "string", description: "Filter by actor" },
+        status: { type: "string", enum: ["pending", "confirmed", "rejected"], description: "Filter by status" },
+        limit: { type: "number", description: "Max entries to return (default: 100)" },
+      },
+    },
+  },
+  {
+    name: "chitty_ledger_verify",
+    description:
+      "Verify ledger integrity by checking hash chains and detecting tampering.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_statistics",
+    description:
+      "Get ledger statistics: total entries, unique entities, unique actors, latest sequence, and date range.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_chain_of_custody",
+    description:
+      "Retrieve the full chain of custody for a specific entity from the ledger.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_id: {
+          type: "string",
+          description: "UUID of the entity to get custody chain for",
+        },
+      },
+      required: ["entity_id"],
+    },
+  },
+
   // Intelligence Tools
   {
     name: "chitty_intelligence_analyze",
@@ -233,7 +438,7 @@ const TOOLS = [
 
   // Memory Tools (MemoryCloude™)
   {
-    name: "memory_persist_interaction",
+    name: "chitty_memory_persist",
     description:
       "Explicitly persist an interaction to MemoryCloude™ for long-term recall (90 days).",
     inputSchema: {
@@ -257,7 +462,7 @@ const TOOLS = [
     },
   },
   {
-    name: "memory_recall_context",
+    name: "chitty_memory_recall",
     description:
       "Recall relevant context from MemoryCloude™ based on semantic search.",
     inputSchema: {
@@ -274,7 +479,7 @@ const TOOLS = [
     },
   },
   {
-    name: "memory_get_session_summary",
+    name: "chitty_memory_session_summary",
     description:
       "Get a summary of the current session including entities, decisions, and tool usage.",
     inputSchema: {
@@ -756,6 +961,8 @@ mcpRoutes.post("/tools/call", async (c) => {
  * List available MCP resources
  */
 mcpRoutes.get("/resources/list", async (c) => {
+  // NOTE: These are MCP transport resource URIs, distinct from chittycanon:// canonical identifiers.
+  // chitty:// is used here as the MCP resource scheme; chittycanon:// is for governed document identifiers.
   return c.json({
     resources: [
       {

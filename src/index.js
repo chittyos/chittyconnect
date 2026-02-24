@@ -25,6 +25,7 @@ import { MemoryCloude } from "./intelligence/memory-cloude.js";
 import { CognitiveCoordinator } from "./intelligence/cognitive-coordination.js";
 import { ContextResolver } from "./intelligence/context-resolver.js";
 import { MCPSessionDurableObject } from "./mcp/session/durable-object.js";
+import { createOAuthProvider } from "./middleware/oauth-provider.js";
 
 const app = new Hono();
 
@@ -87,7 +88,7 @@ async function ensureEcosystemInitialized(env) {
     const ecosystem = new ChittyOSEcosystem(env);
     ecosystem
       .initializeContext("chittyconnect", {
-        version: "1.0.0",
+        version: "2.0.2",
         type: "ai-integration-hub",
         capabilities: [
           "mcp",
@@ -151,7 +152,7 @@ app.get("/health", (c) => {
     brand: "itsChitty™",
     tagline:
       "The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™",
-    version: "1.0.0",
+    version: "2.0.2",
     timestamp: new Date().toISOString(),
     intelligence: {
       contextConsciousness: !!c.get("consciousness"),
@@ -508,7 +509,7 @@ app.get("/integrations/github/callback", async (c) => {
         headers: {
           Authorization: `Bearer ${appJwt}`,
           Accept: "application/vnd.github+json",
-          "User-Agent": "ChittyConnect/1.0",
+          "User-Agent": "ChittyConnect/2.0.2",
         },
       },
     );
@@ -525,9 +526,12 @@ app.get("/integrations/github/callback", async (c) => {
     const installation = await installResponse.json();
 
     // 3. Mint ChittyID for the installation
+    // @canon: chittycanon://gov/governance#core-types
+    // GitHub installations are Things (T, Digital) — objects without agency
     const ecosystem = c.get("ecosystem");
     const installChittyID = await ecosystem.mintChittyID({
-      entity: "CONTEXT",
+      entity: "T",
+      characterization: "Digital",
       metadata: {
         type: "github_installation",
         installationId: installation.id,
@@ -606,10 +610,22 @@ app.get("/integrations/github/callback", async (c) => {
 
 /**
  * Export worker
+ *
+ * OAuthProvider wraps the Hono app to add OAuth 2.1 + PKCE for MCP clients
+ * (Claude Desktop Cowork). Only mcp.chitty.cc/mcp requires OAuth;
+ * connect.chitty.cc/mcp/* continues using API key auth (backward compatible).
+ *
+ * OAuth endpoints served automatically:
+ *   /.well-known/oauth-authorization-server — RFC 8414 discovery
+ *   /authorize — Authorization endpoint (delegates to ChittyAuth)
+ *   /token — Token exchange
+ *   /register — Dynamic client registration
  */
+const oauthProvider = createOAuthProvider(app);
+
 export default {
   async fetch(request, env, ctx) {
-    return app.fetch(request, env, ctx);
+    return oauthProvider.fetch(request, env, ctx);
   },
 
   /**
@@ -621,6 +637,29 @@ export default {
       await proofQueueConsumer(batch, env);
     } else {
       await queueConsumer(batch, env);
+    }
+  },
+
+  /**
+   * Scheduled handler for cron triggers
+   * Runs hourly (0 * * * *) for 1Password event sync to ChittyChronicle
+   */
+  async scheduled(event, env, ctx) {
+    console.log(`[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`);
+    try {
+      const response = await fetch("https://chronicle.chitty.cc/api/sync/1password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(env.CHITTY_CHRONICLE_TOKEN
+            ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+            : {}),
+        },
+        body: JSON.stringify({ source: "chittyconnect-cron", timestamp: new Date().toISOString() }),
+      });
+      console.log(`[Scheduled] 1Password sync: ${response.status}`);
+    } catch (err) {
+      console.error(`[Scheduled] 1Password sync failed:`, err.message);
     }
   },
 };

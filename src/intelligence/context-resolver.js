@@ -279,6 +279,8 @@ export class ContextResolver {
     }
 
     // Fallback: generate local ChittyID format
+    // @canon: chittycanon://gov/governance#core-types
+    // Contexts are Person (P, Synthetic) — actors with agency, even in fallback
     const version = '03';
     const geo = '1';
     const locale = 'USA';
