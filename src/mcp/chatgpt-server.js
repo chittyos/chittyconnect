@@ -374,7 +374,7 @@ const TOOL_DEFS = [
   // ── Evidence AI Search ────────────────────────────────────────────
   {
     name: "chitty_evidence_search",
-    description: "AI-powered semantic search over legal evidence documents (RAG). Searches the evidence R2 bucket using vector embeddings and generates an AI answer with source citations. Use for questions about case documents, financial records, correspondence, court filings.",
+    description: "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
     schema: {
       query: z.string().describe("Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')"),
     },

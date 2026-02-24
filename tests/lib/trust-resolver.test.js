@@ -60,10 +60,10 @@ describe("resolveTrustLevel", () => {
     );
   });
 
-  it("returns BASIC trust level on fetch failure", async () => {
+  it("returns ANONYMOUS trust level on fetch failure (fail-closed)", async () => {
     mockEnv.CREDENTIAL_CACHE.get.mockResolvedValue(null);
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
     const result = await resolveTrustLevel("bad-id", mockEnv);
-    expect(result).toEqual({ trust_level: 1, entity_type: "P" });
+    expect(result).toEqual({ trust_level: 0, entity_type: "P" });
   });
 });

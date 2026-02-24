@@ -19,6 +19,9 @@ export class ChittyProofClient {
    * @param {string} [opts.baseUrl]
    */
   constructor(env, opts = {}) {
+    if (!env.CHITTY_PROOF_TOKEN) {
+      throw new Error("[ChittyProofClient] CHITTY_PROOF_TOKEN secret is not configured");
+    }
     this.#token = env.CHITTY_PROOF_TOKEN;
     this.#baseUrl = opts.baseUrl || DEFAULT_BASE_URL;
   }

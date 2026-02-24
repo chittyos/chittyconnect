@@ -22,7 +22,12 @@ export async function proofQueueConsumer(batch, env) {
 
   for (const msg of batch.messages) {
     try {
-      const { fact_id, fact_text, evidence_chain, signer_chitty_id } = msg.body;
+      const { fact_id, fact_text, evidence_chain, signer_chitty_id } = msg.body || {};
+      if (!fact_id) {
+        console.error("[ProofQueue] Malformed message: missing fact_id", JSON.stringify(msg.body).slice(0, 200));
+        msg.ack(); // Don't retry permanently malformed messages
+        continue;
+      }
 
       // 1. Mint proof via ChittyProof
       const proofResult = await client.mintProof({
@@ -43,7 +48,11 @@ export async function proofQueueConsumer(batch, env) {
         `https://ledger.chitty.cc/api/facts/${fact_id}/proof`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${env.CHITTY_PROOF_TOKEN}`,
+            "X-Source-Service": "chittyconnect",
+          },
           body: JSON.stringify({
             proof_id: proofResult.proof_id,
             blockchain_record_id: proofResult.chain_anchor_id,

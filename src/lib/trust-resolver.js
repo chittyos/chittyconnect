@@ -30,18 +30,31 @@ export async function resolveTrustLevel(chittyId, env) {
   const cacheKey = `trust:${chittyId}`;
 
   // Check cache
+  // Fail-closed fallback: ANONYMOUS trust grants no governance permissions
+  const FALLBACK = { trust_level: TRUST_LEVELS.ANONYMOUS, entity_type: "P" };
+
+  if (!env.CREDENTIAL_CACHE) {
+    console.error(`[TrustResolver] CREDENTIAL_CACHE binding missing for ${chittyId}`);
+    return FALLBACK;
+  }
+
   const cached = await env.CREDENTIAL_CACHE.get(cacheKey);
   if (cached) {
     try {
       return JSON.parse(cached);
-    } catch {
-      // Corrupted cache entry — fall through to fetch
+    } catch (parseErr) {
+      console.warn(`[TrustResolver] Corrupted cache for ${cacheKey}, ignoring:`, parseErr.message);
     }
   }
 
   // Fetch from ChittyTrust
   try {
     const token = env.CHITTY_TRUST_TOKEN;
+    if (!token) {
+      console.error("[TrustResolver] CHITTY_TRUST_TOKEN secret not configured");
+      return FALLBACK;
+    }
+
     const resp = await fetch(
       `https://trust.chitty.cc/api/v1/trust/${chittyId}`,
       {
@@ -53,12 +66,13 @@ export async function resolveTrustLevel(chittyId, env) {
     );
 
     if (!resp.ok) {
-      return { trust_level: TRUST_LEVELS.BASIC, entity_type: "P" };
+      console.error(`[TrustResolver] ChittyTrust returned ${resp.status} for ${chittyId}`);
+      return FALLBACK;
     }
 
     const data = await resp.json();
     const result = {
-      trust_level: data.trust_level ?? TRUST_LEVELS.BASIC,
+      trust_level: data.trust_level ?? TRUST_LEVELS.ANONYMOUS,
       entity_type: data.entity_type ?? "P",
     };
 
@@ -68,7 +82,8 @@ export async function resolveTrustLevel(chittyId, env) {
     });
 
     return result;
-  } catch {
-    return { trust_level: TRUST_LEVELS.BASIC, entity_type: "P" };
+  } catch (err) {
+    console.error(`[TrustResolver] Failed to resolve trust for ${chittyId}:`, err.message);
+    return FALLBACK;
   }
 }

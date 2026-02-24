@@ -119,6 +119,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_case_create", () => {
     it("creates a case via baseUrl proxy", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         json: async () => ({ case_id: "case-123", status: "created" }),
       });
 
@@ -141,6 +142,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_case_get", () => {
     it("retrieves a case by ID", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         json: async () => ({ case_id: "case-123", case_type: "civil" }),
       });
 
@@ -165,6 +167,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_ledger_stats", () => {
     it("fetches dashboard stats", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ total_cases: 5, total_evidence: 42 }),
       });
@@ -176,22 +179,24 @@ describe("dispatchToolCall", () => {
       expect(mockFetch).toHaveBeenCalledWith("https://ledger.chitty.cc/api/dashboard/stats");
     });
 
-    it("handles non-JSON response gracefully", async () => {
+    it("handles non-OK response with error", async () => {
       mockFetch.mockResolvedValue({
+        ok: false,
         status: 502,
         text: async () => "<html>Bad Gateway</html>",
       });
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
 
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.error).toContain("Ledger returned (502)");
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger error (502)");
     });
   });
 
   describe("chitty_ledger_evidence", () => {
     it("fetches all evidence without filter", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ evidence: [] }),
       });
@@ -203,6 +208,7 @@ describe("dispatchToolCall", () => {
 
     it("filters evidence by case_id", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ evidence: [{ id: "e1" }] }),
       });
@@ -222,6 +228,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_ledger_facts", () => {
     it("fetches facts for an evidence item", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ facts: [{ text: "Amount was $500k" }] }),
       });
@@ -241,6 +248,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_ledger_contradictions", () => {
     it("fetches contradictions with optional case filter", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ contradictions: [] }),
       });
@@ -448,6 +456,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_contextual_timeline", () => {
     it("fetches timeline with query params", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ messages: [] }),
       });
@@ -468,6 +477,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_contextual_topics", () => {
     it("sends topic query via POST", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         status: 200,
         text: async () => JSON.stringify({ topics: ["rent", "deposit"] }),
       });
@@ -583,6 +593,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_services_status", () => {
     it("fetches service status", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         json: async () => ({ services: { chittyid: "healthy" } }),
       });
 
@@ -627,6 +638,7 @@ describe("dispatchToolCall", () => {
   describe("auth token forwarding", () => {
     it("includes Authorization header when authToken provided", async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
         json: async () => ({ success: true }),
       });
 

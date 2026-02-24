@@ -1,13 +1,26 @@
 /**
  * Shared MCP Tool Dispatcher
  *
- * Extracted tool dispatch logic that can be called from both the
- * REST /mcp/tools/call endpoint and the ChatGPT MCP protocol server.
+ * Extracted tool dispatch logic shared by the REST /mcp/tools/call endpoint,
+ * the ChatGPT MCP protocol server, and the standalone mcp-server.js (stdio).
  *
  * @module mcp/tool-dispatcher
  */
 
 import { getServiceToken } from "../lib/credential-helper.js";
+
+/**
+ * Parse a fetch response, returning an MCP error result for non-OK responses.
+ * Returns null on success (caller should parse the response body).
+ */
+async function checkFetchError(response, toolLabel) {
+  if (response.ok) return null;
+  const body = await response.text().catch(() => "No response body");
+  return {
+    content: [{ type: "text", text: `${toolLabel} error (${response.status}): ${body.slice(0, 300)}` }],
+    isError: true,
+  };
+}
 
 /**
  * Dispatch a tool call and return an MCP-formatted result.
@@ -82,30 +95,41 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: action === "create" ? JSON.stringify(args) : undefined,
       });
+      const fetchErr = await checkFetchError(response, "ChittyCases");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
       const response = await fetch("https://ledger.chitty.cc/api/dashboard/stats");
+      if (!response.ok) {
+        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+      }
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_ledger_evidence") {
       const url = args.case_id
         ? `https://ledger.chitty.cc/api/evidence?caseId=${args.case_id}`
         : "https://ledger.chitty.cc/api/evidence";
       const response = await fetch(url);
+      if (!response.ok) {
+        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+      }
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_ledger_facts") {
       const response = await fetch(`https://ledger.chitty.cc/api/evidence/${args.evidence_id}/facts`);
+      if (!response.ok) {
+        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+      }
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_fact_mint") {
       // Pre-flight: verify the cited evidence exists in ChittyLedger
@@ -173,6 +197,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_fact_seal") {
+      if (!args.actor_chitty_id) {
+        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+      }
       // RBAC: Authority (A) with trust >= INSTITUTIONAL (4)
       const { checkFactPermission, FACT_ACTIONS } = await import("../lib/fact-rbac.js");
       const perm = await checkFactPermission(args.actor_chitty_id, FACT_ACTIONS.SEAL, env);
@@ -215,6 +242,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
 
     } else if (name === "chitty_fact_dispute") {
+      if (!args.actor_chitty_id) {
+        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+      }
       // RBAC: Person (P) or Authority (A) with trust >= ENHANCED (2)
       const { checkFactPermission: checkDisputePerm, FACT_ACTIONS: DA } = await import("../lib/fact-rbac.js");
       const perm = await checkDisputePerm(args.actor_chitty_id, DA.DISPUTE, env);
@@ -256,6 +286,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
 
     } else if (name === "chitty_fact_export") {
+      if (!args.actor_chitty_id) {
+        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+      }
       // RBAC: Any authenticated with trust >= BASIC (1)
       const { checkFactPermission: checkExportPerm, FACT_ACTIONS: EA } = await import("../lib/fact-rbac.js");
       const perm = await checkExportPerm(args.actor_chitty_id, EA.EXPORT, env);
@@ -338,9 +371,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`
         : "https://ledger.chitty.cc/api/contradictions";
       const response = await fetch(url);
+      if (!response.ok) {
+        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+      }
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     }
 
@@ -352,9 +388,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.end_date) params.set("end", args.end_date);
       if (args.source) params.set("source", args.source);
       const response = await fetch(`https://contextual.chitty.cc/api/messages?${params.toString()}`);
+      const fetchErr = await checkFetchError(response, "ChittyContextual");
+      if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Contextual returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_contextual_topics") {
       const response = await fetch("https://contextual.chitty.cc/api/topics", {
@@ -362,9 +400,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: args.query }),
       });
+      const fetchErr = await checkFetchError(response, "ChittyContextual");
+      if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Contextual returned (${response.status}): ${text.slice(0, 200)}` };
+        result = { error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
       }
     }
 
@@ -454,6 +494,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: action === "ingest" ? JSON.stringify(args) : undefined,
       });
+      const fetchErr = await checkFetchError(response, "ChittyEvidence");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -465,6 +507,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -475,6 +519,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "Intelligence");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -490,6 +536,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           organization: args.organization,
         }),
       });
+      const fetchErr = await checkFetchError(response, "ContextResolve");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -500,6 +548,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `${baseUrl}/api/v1/intelligence/context/${encodeURIComponent(args.chitty_id)}/restore?${params}`,
         { headers: authHeader },
       );
+      const fetchErr = await checkFetchError(response, "ContextRestore");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -515,6 +565,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           decisions: args.decisions,
         }),
       });
+      const fetchErr = await checkFetchError(response, "ContextCommit");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -523,6 +575,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `${baseUrl}/api/v1/intelligence/context/${encodeURIComponent(args.chitty_id)}/check`,
         { headers: authHeader },
       );
+      const fetchErr = await checkFetchError(response, "ContextCheck");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -537,33 +591,50 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           state: args.state,
         }),
       });
+      const fetchErr = await checkFetchError(response, "ContextCheckpoint");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
-    // ── Memory tools (MemoryCloude, enhanced with chitty_id) ─────────
-    else if (name === "memory_persist") {
+    // ── Memory tools (MemoryCloude) ──────────────────────────────────
+    else if (name === "memory_persist_interaction" || name === "memory_persist") {
       const response = await fetch(`${baseUrl}/api/v1/memory/persist`, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: args.content,
+          content: args.content || args.interaction,
           chitty_id: args.chitty_id,
           session_id: args.session_id,
           tags: args.tags,
         }),
       });
+      const fetchErr = await checkFetchError(response, "MemoryPersist");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
-    else if (name === "memory_recall") {
+    else if (name === "memory_recall_context" || name === "memory_recall") {
       const params = new URLSearchParams();
       if (args.query) params.set("query", args.query);
       if (args.chitty_id) params.set("chitty_id", args.chitty_id);
+      if (args.session_id) params.set("session_id", args.session_id);
       if (args.limit) params.set("limit", String(args.limit));
       const response = await fetch(
         `${baseUrl}/api/v1/memory/recall?${params}`,
         { headers: authHeader },
       );
+      const fetchErr = await checkFetchError(response, "MemoryRecall");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    }
+
+    else if (name === "memory_get_session_summary") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/memory/session/${encodeURIComponent(args.session_id)}/summary`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "MemorySessionSummary");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -577,6 +648,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           body: JSON.stringify(args),
         },
       );
+      const fetchErr = await checkFetchError(response, "Credentials");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -585,6 +658,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const response = await fetch(`${baseUrl}/api/services/status`, {
         headers: authHeader,
       });
+      const fetchErr = await checkFetchError(response, "ServiceHealth");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -595,6 +670,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "ChittyChronicle");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -605,6 +682,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "Notion");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_openai_chat") {
       const response = await fetch(`${baseUrl}/api/thirdparty/openai/chat`, {
@@ -612,6 +691,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "OpenAI");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_neon_query") {
       const response = await fetch(`${baseUrl}/api/thirdparty/neon/query`, {
@@ -619,6 +700,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "Neon");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
@@ -629,6 +712,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
+      const fetchErr = await checkFetchError(response, "ChittySync");
+      if (fetchErr) return fetchErr;
       result = await response.json();
     }
 

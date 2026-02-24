@@ -683,7 +683,7 @@ const TOOLS = [
   {
     name: "chitty_evidence_search",
     description:
-      "AI-powered semantic search over legal evidence documents (RAG). Searches the evidence R2 bucket using vector embeddings and generates an AI answer with source citations. Use for questions about case documents, financial records, correspondence, court filings.",
+      "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
     inputSchema: {
       type: "object",
       properties: {
@@ -742,7 +742,11 @@ mcpRoutes.post("/tools/call", async (c) => {
   });
 
   if (result.isError) {
-    return c.json(result, result.content?.[0]?.text?.includes("Unknown tool") ? 400 : 500);
+    const msg = result.content?.[0]?.text || "";
+    const status = msg.includes("Unknown tool") ? 400
+      : msg.includes("Permission denied") ? 403
+      : 500;
+    return c.json(result, status);
   }
   return c.json(result);
 });

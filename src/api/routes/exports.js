@@ -28,7 +28,7 @@ exportRoutes.get("/:key{.+}", async (c) => {
       headers: {
         "Content-Type": obj.httpMetadata?.contentType || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": obj.size,
+        "Content-Length": String(obj.size),
       },
     });
   } catch (err) {
