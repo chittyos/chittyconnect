@@ -151,6 +151,31 @@ endpoint. It is a client-side cache governed by ChittyConnect's ContextConscious
 | Technical Lead | @chittyos-infrastructure |
 | Security Contact | security@chitty.cc |
 
+## Three Aspects (TY VY RY)
+
+Source: `chittycanon://gov/governance#three-aspects`
+
+| Aspect | Abbrev | Question | ChittyConnect Answer |
+|--------|--------|----------|--------------------|
+| **Identity** | TY | What IS it? | AI-intelligent spine — the universal connector enabling GPTs, Claude, and third-party integrations to interact with the ChittyOS ecosystem |
+| **Connectivity** | VY | How does it ACT? | Three interfaces: REST API (Custom GPT Actions), MCP Server (Claude), GitHub App (webhooks); proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness™ cross-session state |
+| **Authority** | RY | Where does it SIT? | Tier 2 Platform — integration hub, not source of truth; delegates identity to ChittyID, auth to ChittyAuth, registration to ChittyRegister |
+
+## Document Triad
+
+This charter is part of a synchronized documentation triad. Changes to shared fields must propagate.
+
+| Field | Canonical Source | Also In |
+|-------|-----------------|---------|
+| Canonical URI | CHARTER.md (Classification) | CHITTY.md (blockquote) |
+| Tier | CHARTER.md (Classification) | CHITTY.md (blockquote) |
+| Domain | CHARTER.md (Classification) | CHITTY.md (blockquote), CLAUDE.md (header) |
+| Endpoints | CHARTER.md (API Contract) | CHITTY.md (Endpoints table), CLAUDE.md (API section) |
+| Dependencies | CHARTER.md (Dependencies) | CHITTY.md (Dependencies table), CLAUDE.md (Architecture) |
+| Certification badge | CHITTY.md (Certification) | CHARTER.md frontmatter `status` |
+
+**Related docs**: [CHITTY.md](CHITTY.md) (badge/one-pager) | [CLAUDE.md](CLAUDE.md) (developer guide)
+
 ## Compliance
 
 - [ ] Service registered in ChittyRegistry
@@ -161,4 +186,4 @@ endpoint. It is a client-side cache governed by ChittyConnect's ContextConscious
 - [ ] GitHub App webhook verified
 
 ---
-*Charter Version: 1.0.0 | Last Updated: 2026-01-12*
+*Charter Version: 1.0.0 | Last Updated: 2026-02-23*
