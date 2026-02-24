@@ -23,8 +23,9 @@
  * Mint a ChittyID via the canonical ChittyID service
  * Falls back to validated local generation only if service is unavailable
  *
+ * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/context-intelligence
  * @param {Object} env - Worker environment with service URLs
- * @param {string} entityType - Type code: T=standard, S=supernova, F=fission, D=derivative, X=suspension
+ * @param {string} entityType - Canonical type code: P (Person). Lifecycle provenance (supernova, fission, derivative, suspension) is metadata, not entity type.
  * @param {Object} metadata - Additional minting metadata
  * @returns {Promise<string>} - Minted ChittyID
  */
@@ -45,6 +46,7 @@ async function mintChittyId(env, entityType, metadata = {}) {
         organization: metadata.organization,
         metadata: {
           source: 'context-intelligence',
+          lifecycle: metadata.lifecycle,
           operation: metadata.operation,
           source_contexts: metadata.sourceContexts,
         },
@@ -122,7 +124,7 @@ export class ContextIntelligence {
 
   async loadContextProfile(chittyId) {
     const result = await this.db.prepare(`
-      SELECT ce.*, cd.patterns, cd.traits, cd.preferences, cd.competencies,
+      SELECT ce.*, cd.patterns, cd.traits, cd.competencies,
              cd.expertise_domains, cd.total_interactions, cd.total_decisions,
              cd.success_rate, cd.anomaly_count, cd.last_anomaly_at
       FROM context_entities ce
@@ -132,11 +134,14 @@ export class ContextIntelligence {
 
     if (!result) return null;
 
+    // Destructure out preferences — it is not part of the context profile.
+    // Preferences are user-level, not context DNA.
+    const { preferences: _unused, ...rest } = result;
+
     return {
-      ...result,
+      ...rest,
       patterns: JSON.parse(result.patterns || '[]'),
       traits: JSON.parse(result.traits || '[]'),
-      preferences: JSON.parse(result.preferences || '[]'),
       competencies: JSON.parse(result.competencies || '[]'),
       expertise_domains: JSON.parse(result.expertise_domains || '[]'),
       current_sessions: JSON.parse(result.current_sessions || '[]'),
@@ -404,7 +409,8 @@ export class ContextIntelligence {
 
     // Create merged context with canonical ChittyID
     const mergedId = crypto.randomUUID();
-    const mergedChittyId = await mintChittyId(this.env, 'S', {
+    const mergedChittyId = await mintChittyId(this.env, 'P', {
+      lifecycle: 'supernova',
       operation: 'supernova',
       supportType: ctx1.support_type,
       projectPath: ctx1.project_path,
@@ -488,7 +494,8 @@ export class ContextIntelligence {
 
     for (const split of splitConfig.splits) {
       const newId = crypto.randomUUID();
-      const newChittyId = await mintChittyId(this.env, 'F', {
+      const newChittyId = await mintChittyId(this.env, 'P', {
+        lifecycle: 'fission',
         operation: 'fission',
         supportType: split.supportType || ctx.support_type,
         projectPath: ctx.project_path,
@@ -529,7 +536,8 @@ export class ContextIntelligence {
     const { label, projectPath, supportType, inheritCompetencies = true, inheritDomains = true } = derivativeConfig;
 
     const derivativeId = crypto.randomUUID();
-    const derivativeChittyId = await mintChittyId(this.env, 'D', {
+    const derivativeChittyId = await mintChittyId(this.env, 'P', {
+      lifecycle: 'derivative',
       operation: 'derivative',
       supportType: supportType || source.support_type,
       projectPath: projectPath || source.project_path,
@@ -601,7 +609,8 @@ export class ContextIntelligence {
 
     // Create suspension (temporary blend) with canonical ChittyID
     const suspensionId = crypto.randomUUID();
-    const suspensionChittyId = await mintChittyId(this.env, 'X', {
+    const suspensionChittyId = await mintChittyId(this.env, 'P', {
+      lifecycle: 'suspension',
       operation: 'suspension',
       supportType: contexts[0].support_type,
       projectPath: contexts[0].project_path,
