@@ -190,6 +190,9 @@ wrangler secret put GOOGLE_CALENDAR_CLIENT_SECRET
 wrangler secret put GITHUB_APP_ID
 wrangler secret put GITHUB_PRIVATE_KEY
 wrangler secret put GITHUB_WEBHOOK_SECRET
+wrangler secret put CHITTY_PROOF_TOKEN       # Service token for proof.chitty.cc
+wrangler secret put CHITTY_TRUST_TOKEN       # Service token for trust.chitty.cc
+wrangler secret put AI_SEARCH_TOKEN          # Token for Cloudflare AI vector search
 wrangler secret list  # Verify all secrets
 ```
 
@@ -253,6 +256,9 @@ X-Hub-Signature-256: {signature}
 - **ChittyVerify** - Evidence verification
 - **ChittyEvidence** (evidence.chitty.cc) - Evidence management (v2.0 with ChittyLedger integration)
 - **ChittyLedger** - Universal ledger with things/evidence/cases tables
+- **ChittyProof** (proof.chitty.cc) - Proof minting and blockchain anchoring
+- **ChittyTrust** (trust.chitty.cc) - Trust level resolution
+- **ChittyContextual** (contextual.chitty.cc) - Timeline and topic analysis
 
 ### Authentication
 All API endpoints require ChittyAuth tokens:
