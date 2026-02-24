@@ -465,7 +465,8 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     try {
       const stored = await this.env.RATE_LIMIT.get("routing:optimization");
       return stored ? JSON.parse(stored) : {};
-    } catch {
+    } catch (error) {
+      console.error("[ContextConsciousness] Failed to load routing optimization:", error);
       return {};
     }
   }
