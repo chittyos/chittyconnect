@@ -879,14 +879,12 @@ export class EnhancedCredentialProvisioner {
    *
    * @private
    */
-  async createScopedServiceToken(parentToken, scopes, _context) {
-    // This would call ChittyAuth to create a derivative token
-    // For now, return a mock implementation
-    return {
-      value: `scoped_${parentToken}_${Date.now()}`,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      scopes,
-    };
+  async createScopedServiceToken(_parentToken, scopes, _context) {
+    // TODO: Call ChittyAuth to create a derivative scoped token
+    throw new Error(
+      `Scoped token creation not yet implemented (requested scopes: ${scopes.join(', ')}). ` +
+      'Requires ChittyAuth derivative token API.'
+    );
   }
 
   /**
@@ -900,12 +898,11 @@ export class EnhancedCredentialProvisioner {
     _repository,
     _permissions,
   ) {
-    // This would use GitHub App API to create installation token
-    // For now, return a mock implementation
-    return {
-      token: `ghs_${Date.now()}_mock`,
-      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
-    };
+    // TODO: Use GitHub App API (POST /app/installations/{id}/access_tokens) to create installation token
+    throw new Error(
+      'GitHub installation token creation not yet implemented. ' +
+      'Requires GITHUB_APP_ID and GITHUB_PRIVATE_KEY secrets.'
+    );
   }
 
   /**

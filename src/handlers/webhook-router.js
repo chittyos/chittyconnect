@@ -3,6 +3,8 @@
  * Routes incoming webhooks to appropriate agents after logging to ChittyChronicle
  */
 
+import { verifyWebhookSignature as verifyGitHubSignature } from "../auth/webhook.js";
+
 // Agent webhook endpoints
 const AGENTS = {
   notion: "https://notion-ops.chitty.cc/webhook",
@@ -140,20 +142,21 @@ export async function validateWebhookSignature(source, request, env) {
   const secret = env[`${source.toUpperCase()}_WEBHOOK_SECRET`];
   if (!secret) {
     return {
-      valid: true,
+      valid: false,
       signed: true,
       verified: false,
       reason: "no_secret_configured",
     };
   }
 
-  // Implement signature verification based on source
-  // GitHub uses HMAC-SHA256, Stripe uses similar, etc.
-  // For now, return unverified
+  // Use HMAC-SHA256 verification (same algorithm used by GitHub, Stripe, etc.)
+  const body = await request.clone().arrayBuffer();
+  const isValid = await verifyGitHubSignature(body, signature, secret);
+
   return {
-    valid: true,
+    valid: isValid,
     signed: true,
-    verified: false,
-    reason: "verification_not_implemented",
+    verified: isValid,
+    reason: isValid ? "signature_verified" : "signature_mismatch",
   };
 }
