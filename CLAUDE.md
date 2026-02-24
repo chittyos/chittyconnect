@@ -237,6 +237,12 @@ Available via Model Context Protocol:
 - `chitty_finance_connect_bank` - Connect banking
 - Additional tools for ChittyChronicle, ChittySync, etc.
 
+**Not Yet Implemented (returns 501):**
+- `chitty://memory/session/{id}` resource — requires Durable Object wiring
+- `chitty://credentials/audit` resource — requires ChittyChronicle/KV audit trail
+- `POST /mcp/session/persist` — requires Durable Object wiring
+- `POST /mcp/sampling/sample` — requires Workers AI or OpenAI proxy
+
 ### GitHub Webhooks
 
 ```bash
