@@ -75,10 +75,12 @@ discoveryRoutes.get("/chitty.json", async (c) => {
 
       capabilities: {
         mcp: {
-          protocol_version: "2024-11-05",
-          tools_count: 21,
+          protocol_version: "2025-06-18",
+          tools_count: 52,
           supports_streaming: true,
           session_management: true,
+          oauth_discovery:
+            "https://mcp.chitty.cc/.well-known/oauth-authorization-server",
         },
         api: {
           openapi_spec: "https://connect.chitty.cc/openapi.json",

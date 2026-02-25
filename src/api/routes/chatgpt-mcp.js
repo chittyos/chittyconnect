@@ -77,20 +77,32 @@ chatgptMcp.use("*", async (c, next) => {
     );
   }
 
-  if (c.env.API_KEYS) {
-    const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
-    if (!keyData || JSON.parse(keyData).status !== "active") {
-      return c.json(
-        {
-          jsonrpc: "2.0",
-          error: { code: -32000, message: "Invalid API key" },
-          id: null,
-        },
-        403,
-      );
-    }
+  if (!c.env.API_KEYS) {
+    console.error("[ChatGPT-MCP] API_KEYS KV binding missing — failing closed");
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Service misconfigured" },
+        id: null,
+      },
+      500,
+    );
   }
 
+  const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
+  if (!keyData || JSON.parse(keyData).status !== "active") {
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Invalid API key" },
+        id: null,
+      },
+      403,
+    );
+  }
+
+  // Store validated API key for downstream use
+  c.set("authToken", apiKey);
   await next();
 });
 
@@ -128,7 +140,10 @@ chatgptMcp.all("/", async (c) => {
       },
     });
 
-    server = createChatGPTMcpServer(c.env, { baseUrl });
+    server = createChatGPTMcpServer(c.env, {
+      baseUrl,
+      authToken: c.get("authToken"),
+    });
     await server.connect(transport);
 
     return transport.handleRequest(c.req.raw);

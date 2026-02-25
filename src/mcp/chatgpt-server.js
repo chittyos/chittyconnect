@@ -18,6 +18,7 @@ import { MCP_TOOL_DEFS } from "./tool-registry.js";
  * @param {object} env - Cloudflare Worker environment bindings
  * @param {object} [opts]
  * @param {string} [opts.baseUrl] - Base URL for local API calls
+ * @param {string} [opts.authToken] - Auth token to pass through to tool dispatcher
  * @returns {McpServer}
  */
 export function createChatGPTMcpServer(env, opts = {}) {
@@ -42,7 +43,10 @@ export function createChatGPTMcpServer(env, opts = {}) {
       def.schema,
       def.annotations,
       async (args) => {
-        return await dispatchToolCall(def.name, args, env, { baseUrl });
+        return await dispatchToolCall(def.name, args, env, {
+          baseUrl,
+          authToken: opts.authToken,
+        });
       },
     );
   }
