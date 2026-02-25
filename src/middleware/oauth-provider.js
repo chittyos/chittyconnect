@@ -153,7 +153,8 @@ function createMcpJsonRpcHandler(honoApp) {
       let body;
       try {
         body = await request.json();
-      } catch {
+      } catch (err) {
+        console.warn(`[MCP JSON-RPC] Body parse failed: ${err.message}`);
         return jsonRpcError(null, -32700, "Parse error");
       }
 
@@ -207,6 +208,7 @@ function createMcpJsonRpcHandler(honoApp) {
  * client disconnects.
  */
 function handleSseStream(sessionId) {
+  console.log(`[MCP SSE] Stream opened: ${sessionId}`);
   const encoder = new TextEncoder();
   let interval;
   const stream = new ReadableStream({
@@ -217,7 +219,8 @@ function handleSseStream(sessionId) {
       interval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": heartbeat\n\n"));
-        } catch {
+        } catch (err) {
+          console.log(`[MCP SSE] Heartbeat stopped for session ${sessionId}: ${err.message}`);
           clearInterval(interval);
         }
       }, 30_000);
@@ -273,7 +276,12 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
       case "tools/list": {
         const internalReq = new Request(
           `${new URL(request.url).origin}/mcp/tools/list`,
-          { headers: { "Content-Type": "application/json" } },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: request.headers.get("Authorization") || "",
+            },
+          },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         const data = await resp.json();
@@ -285,7 +293,10 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           `${new URL(request.url).origin}/mcp/tools/call`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: request.headers.get("Authorization") || "",
+            },
             body: JSON.stringify({
               name: params?.name,
               arguments: params?.arguments || {},
@@ -293,14 +304,25 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
-        const data = await resp.json();
+        let data;
+        try {
+          data = await resp.json();
+        } catch {
+          console.error(`[MCP JSON-RPC] tools/call response not JSON (${resp.status})`);
+          return jsonRpcError(id, -32603, `Internal error: tools/call returned non-JSON (${resp.status})`);
+        }
         return jsonRpcResponse(id, data);
       }
 
       case "resources/list": {
         const internalReq = new Request(
           `${new URL(request.url).origin}/mcp/resources/list`,
-          { headers: { "Content-Type": "application/json" } },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: request.headers.get("Authorization") || "",
+            },
+          },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         const data = await resp.json();
@@ -311,7 +333,12 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         const uri = params?.uri || "";
         const internalReq = new Request(
           `${new URL(request.url).origin}/mcp/resources/read?uri=${encodeURIComponent(uri)}`,
-          { headers: { "Content-Type": "application/json" } },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: request.headers.get("Authorization") || "",
+            },
+          },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         const data = await resp.json();

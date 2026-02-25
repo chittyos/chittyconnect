@@ -389,7 +389,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       });
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      result = await response.json();
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      }
     } else if (name === "chitty_ledger_query") {
       const params = new URLSearchParams();
       if (args.record_type) params.set("type", args.record_type);
@@ -400,22 +403,40 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const response = await fetch(`https://ledger.chitty.cc/api/ledger?${params}`);
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      result = await response.json();
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      }
     } else if (name === "chitty_ledger_verify") {
       const response = await fetch("https://ledger.chitty.cc/api/ledger/verify");
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      result = await response.json();
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      }
     } else if (name === "chitty_ledger_statistics") {
       const response = await fetch("https://ledger.chitty.cc/api/ledger/statistics");
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      result = await response.json();
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      }
     } else if (name === "chitty_ledger_chain_of_custody") {
-      const response = await fetch(`https://ledger.chitty.cc/api/ledger/${args.entity_id}/custody`);
+      if (!args.entity_id) {
+        return {
+          content: [{ type: "text", text: "Missing required parameter: entity_id" }],
+          isError: true,
+        };
+      }
+      const response = await fetch(`https://ledger.chitty.cc/api/ledger/${encodeURIComponent(args.entity_id)}/custody`);
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      result = await response.json();
+      const text = await response.text();
+      try { result = JSON.parse(text); } catch {
+        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      }
     }
 
     // ── ChittyContextual tools ──────────────────────────────────────
