@@ -101,7 +101,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         };
       }
       const response = await fetch(
-        `https://id.chitty.cc/api/v2/chittyid/validate/${args.chitty_id}`,
+        `https://id.chitty.cc/api/v2/chittyid/validate/${encodeURIComponent(args.chitty_id)}`,
         { headers: { Authorization: `Bearer ${serviceToken}` } },
       );
       if (!response.ok) {
@@ -125,7 +125,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const endpoint =
         action === "create"
           ? "/api/chittycases/create"
-          : `/api/chittycases/${args.case_id}`;
+          : `/api/chittycases/${encodeURIComponent(args.case_id)}`;
       const method = action === "create" ? "POST" : "GET";
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method,
@@ -166,7 +166,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
     } else if (name === "chitty_ledger_evidence") {
       const url = args.case_id
-        ? `https://ledger.chitty.cc/api/evidence?caseId=${args.case_id}`
+        ? `https://ledger.chitty.cc/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/evidence";
       const response = await fetch(url);
       if (!response.ok) {
@@ -193,7 +193,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
     } else if (name === "chitty_ledger_facts") {
       const response = await fetch(
-        `https://ledger.chitty.cc/api/evidence/${args.evidence_id}/facts`,
+        `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
       );
       if (!response.ok) {
         return {
@@ -220,7 +220,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     } else if (name === "chitty_fact_mint") {
       // Pre-flight: verify the cited evidence exists in ChittyLedger
       const evidenceCheck = await fetch(
-        `https://ledger.chitty.cc/api/evidence/${args.evidence_id}`,
+        `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}`,
       );
       if (!evidenceCheck.ok) {
         return {
@@ -265,7 +265,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
             const resp = await fetch(
-              `https://ledger.chitty.cc/api/evidence/${evId}`,
+              `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(evId)}`,
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -285,7 +285,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
 
       const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${args.fact_id}/validate`,
+        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/validate`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -335,7 +335,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
       // Seal the fact in ChittyLedger
       const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${args.fact_id}/seal`,
+        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/seal`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -411,7 +411,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         const checks = await Promise.all(
           args.counter_evidence_ids.map(async (evId) => {
             const resp = await fetch(
-              `https://ledger.chitty.cc/api/evidence/${evId}`,
+              `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(evId)}`,
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -431,7 +431,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
 
       const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${args.fact_id}/dispute`,
+        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/dispute`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -479,7 +479,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.format === "pdf") {
         // Fetch fact with proof data
         const factResp = await fetch(
-          `https://ledger.chitty.cc/api/facts/${args.fact_id}/export`,
+          `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/export`,
         );
         if (!factResp.ok) {
           return {
@@ -565,7 +565,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       } else {
         // JSON export — fetch full fact with proof bundle
         const response = await fetch(
-          `https://ledger.chitty.cc/api/facts/${args.fact_id}/export`,
+          `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/export`,
         );
         const text = await response.text();
         try {
@@ -578,7 +578,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
     } else if (name === "chitty_ledger_contradictions") {
       const url = args.case_id
-        ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`
+        ? `https://ledger.chitty.cc/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/contradictions";
       const response = await fetch(url);
       if (!response.ok) {
@@ -896,7 +896,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const endpoint =
         action === "ingest"
           ? "/api/chittyevidence/ingest"
-          : `/api/chittyevidence/${args.evidence_id}`;
+          : `/api/chittyevidence/${encodeURIComponent(args.evidence_id)}`;
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method: action === "ingest" ? "POST" : "GET",
         headers: { ...authHeader, "Content-Type": "application/json" },

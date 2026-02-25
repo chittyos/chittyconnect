@@ -90,7 +90,15 @@ chatgptMcp.use("*", async (c, next) => {
   }
 
   const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
-  if (!keyData || JSON.parse(keyData).status !== "active") {
+  let keyActive = false;
+  if (keyData) {
+    try {
+      keyActive = JSON.parse(keyData).status === "active";
+    } catch {
+      console.error("[ChatGPT-MCP] Malformed key data in KV for provided key");
+    }
+  }
+  if (!keyActive) {
     return c.json(
       {
         jsonrpc: "2.0",
