@@ -287,56 +287,40 @@ export class ContextResolver {
    * Mint ChittyID from service
    */
   async mintChittyId({ projectPath, workspace, supportType, organization }) {
-    try {
-      const response = await fetch(
-        `${this.env.CHITTYID_SERVICE_URL || "https://id.chitty.cc"}/api/v1/mint`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN || ""}`,
-          },
-          body: JSON.stringify({
-            entity_type: "P", // @canon: chittycanon://gov/governance#core-types
-            characterization: "Synthetic", // AI/Claude contexts are synthetic Persons
-            metadata: {
-              project_path: projectPath,
-              workspace,
-              support_type: supportType,
-              organization,
-            },
-          }),
+    const response = await fetch(
+      `${this.env.CHITTYID_SERVICE_URL || "https://id.chitty.cc"}/api/v1/mint`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN || ""}`,
         },
-      );
+        body: JSON.stringify({
+          entity_type: "P", // @canon: chittycanon://gov/governance#core-types
+          characterization: "Synthetic", // AI/Claude contexts are synthetic Persons
+          metadata: {
+            project_path: projectPath,
+            workspace,
+            support_type: supportType,
+            organization,
+          },
+        }),
+      },
+    );
 
-      if (response.ok) {
-        const data = await response.json();
-        return data.chitty_id || data.id;
-      }
-    } catch (error) {
-      console.warn(
-        "[ContextResolver] ChittyID mint failed, generating locally:",
-        error.message,
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `ChittyID mint failed (${response.status}): ${body.slice(0, 200)}`,
       );
     }
 
-    // Fallback: generate local ChittyID format
-    // @canon: chittycanon://gov/governance#core-types
-    // Contexts are Person (P, Synthetic) — actors with agency, even in fallback
-    const version = "03";
-    const geo = "1";
-    const locale = "USA";
-    const sequence = Math.floor(Math.random() * 9999)
-      .toString()
-      .padStart(4, "0");
-    const type = "P"; // @canon: chittycanon://gov/governance#core-types — context is Person, not Thing
-    const year = new Date().getFullYear().toString().slice(-2);
-    const month = (new Date().getMonth() + 1).toString().padStart(2, "0");
-    const check = Math.floor(Math.random() * 100)
-      .toString()
-      .padStart(2, "0");
-
-    return `${version}-${geo}-${locale}-${sequence}-${type}-${year}${month}-0-${check}`;
+    const data = await response.json();
+    const chittyId = data.chitty_id || data.id;
+    if (!chittyId) {
+      throw new Error("ChittyID service returned no ID");
+    }
+    return chittyId;
   }
 
   /**

@@ -83,8 +83,8 @@ describe("ContextResolver", () => {
       expect(capturedBody.characterization).toBe("Synthetic");
     });
 
-    it('should use type "P" (Person) in fallback local ID generation, not "T" (Thing)', async () => {
-      // Make fetch fail so fallback is used
+    it("should throw when ChittyID service is unavailable — no local fallback", async () => {
+      // Make fetch fail — local ID generation is forbidden
       vi.stubGlobal(
         "fetch",
         vi.fn(async () => {
@@ -92,19 +92,14 @@ describe("ContextResolver", () => {
         }),
       );
 
-      const chittyId = await resolver.mintChittyId({
-        projectPath: "/test/project",
-        workspace: "dev",
-        supportType: "development",
-        organization: "test-org",
-      });
-
-      // ChittyID format: VV-G-LLL-SSSS-T-YYMM-C-XX
-      // The type position (5th segment) must be 'P', not 'T'
-      const segments = chittyId.split("-");
-      // segments: ['03', '1', 'USA', 'SSSS', 'P', 'YYMM', '0', 'XX']
-      expect(segments[4]).toBe("P");
-      expect(segments[4]).not.toBe("T");
+      await expect(
+        resolver.mintChittyId({
+          projectPath: "/test/project",
+          workspace: "dev",
+          supportType: "development",
+          organization: "test-org",
+        }),
+      ).rejects.toThrow("Service unavailable");
     });
   });
 });
