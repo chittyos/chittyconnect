@@ -161,7 +161,13 @@ const MCP_TOOLS = [
               chitty_id: { type: "string" },
               role: {
                 type: "string",
-                enum: ["plaintiff", "defendant", "witness", "attorney", "judge"],
+                enum: [
+                  "plaintiff",
+                  "defendant",
+                  "witness",
+                  "attorney",
+                  "judge",
+                ],
               },
             },
           },
@@ -500,7 +506,8 @@ const MCP_TOOLS = [
         record_type: {
           type: "string",
           enum: ["transaction", "evidence", "custody", "audit"],
-          description: "Ledger record classification (maps to ChittyLedger entityType)",
+          description:
+            "Ledger record classification (maps to ChittyLedger entityType)",
         },
         entity_id: { type: "string", description: "Entity ID to filter by" },
         actor: { type: "string", description: "Filter by actor" },
@@ -610,8 +617,16 @@ const MCP_TOOLS = [
       type: "object",
       properties: {
         entity: { type: "string", description: "Entity identifier" },
-        start: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
-        end: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
+        start: {
+          type: "string",
+          format: "date",
+          description: "Start date (YYYY-MM-DD)",
+        },
+        end: {
+          type: "string",
+          format: "date",
+          description: "End date (YYYY-MM-DD)",
+        },
       },
       required: ["entity"],
     },
@@ -710,9 +725,18 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project_path: { type: "string", description: "Path to the project directory" },
-        platform: { type: "string", description: "Platform identifier (e.g., claude_code, chatgpt)" },
-        support_type: { type: "string", description: "Support type (e.g., development, operations)" },
+        project_path: {
+          type: "string",
+          description: "Path to the project directory",
+        },
+        platform: {
+          type: "string",
+          description: "Platform identifier (e.g., claude_code, chatgpt)",
+        },
+        support_type: {
+          type: "string",
+          description: "Support type (e.g., development, operations)",
+        },
         organization: { type: "string", description: "Organization name" },
       },
       required: ["project_path"],
@@ -725,8 +749,14 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        chitty_id: { type: "string", description: "ChittyID of the context entity" },
-        project_slug: { type: "string", description: "Project slug to filter by" },
+        chitty_id: {
+          type: "string",
+          description: "ChittyID of the context entity",
+        },
+        project_slug: {
+          type: "string",
+          description: "Project slug to filter by",
+        },
       },
       required: ["chitty_id"],
     },
@@ -739,10 +769,16 @@ const MCP_TOOLS = [
       type: "object",
       properties: {
         session_id: { type: "string", description: "Current session ID" },
-        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        chitty_id: {
+          type: "string",
+          description: "ChittyID of the context entity",
+        },
         project_slug: { type: "string", description: "Project slug" },
         metrics: { type: "object", description: "Session metrics to commit" },
-        decisions: { type: "array", description: "Decisions made during session" },
+        decisions: {
+          type: "array",
+          description: "Decisions made during session",
+        },
       },
       required: ["session_id", "chitty_id"],
     },
@@ -754,7 +790,10 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        chitty_id: {
+          type: "string",
+          description: "ChittyID of the context entity",
+        },
       },
       required: ["chitty_id"],
     },
@@ -766,7 +805,10 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        chitty_id: {
+          type: "string",
+          description: "ChittyID of the context entity",
+        },
         project_slug: { type: "string", description: "Project slug" },
         name: { type: "string", description: "Checkpoint name" },
         state: { type: "object", description: "State snapshot to save" },

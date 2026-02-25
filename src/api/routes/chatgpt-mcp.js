@@ -21,9 +21,11 @@ const chatgptMcp = new Hono();
 const sessions = new Map();
 
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_SESSIONS = 100;
 
 /**
  * Evict sessions that have been idle longer than SESSION_TTL_MS.
+ * Also enforces hard cap of MAX_SESSIONS by evicting oldest.
  * Called lazily on each request — lightweight O(n) scan.
  */
 function evictStaleSessions() {
@@ -31,12 +33,86 @@ function evictStaleSessions() {
   for (const [sid, entry] of sessions) {
     if (now - entry.lastAccess > SESSION_TTL_MS) {
       entry.transport.close().catch((err) => {
-        console.warn(`[ChatGPT-MCP] Failed to close session ${sid}:`, err.message);
+        console.warn(
+          `[ChatGPT-MCP] Failed to close session ${sid}:`,
+          err.message,
+        );
       });
       sessions.delete(sid);
     }
   }
+  // Hard cap: evict oldest if over limit
+  if (sessions.size > MAX_SESSIONS) {
+    const oldest = [...sessions.entries()].sort(
+      (a, b) => a[1].lastAccess - b[1].lastAccess,
+    );
+    while (sessions.size > MAX_SESSIONS) {
+      const [sid, entry] = oldest.shift();
+      entry.transport.close().catch(() => {});
+      sessions.delete(sid);
+    }
+  }
 }
+
+/**
+ * API key authentication middleware.
+ * Validates X-ChittyOS-API-Key or Authorization Bearer token against KV store.
+ */
+chatgptMcp.use("*", async (c, next) => {
+  // Allow CORS preflight
+  if (c.req.method === "OPTIONS") return next();
+
+  const apiKey =
+    c.req.header("X-ChittyOS-API-Key") ||
+    c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
+
+  if (!apiKey) {
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Authentication required" },
+        id: null,
+      },
+      401,
+    );
+  }
+
+  if (!c.env.API_KEYS) {
+    console.error("[ChatGPT-MCP] API_KEYS KV binding missing — failing closed");
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Service misconfigured" },
+        id: null,
+      },
+      500,
+    );
+  }
+
+  const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
+  let keyActive = false;
+  if (keyData) {
+    try {
+      keyActive = JSON.parse(keyData).status === "active";
+    } catch {
+      console.error("[ChatGPT-MCP] Malformed key data in KV for provided key");
+    }
+  }
+  if (!keyActive) {
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Invalid API key" },
+        id: null,
+      },
+      403,
+    );
+  }
+
+  // Store validated API key for downstream use
+  c.set("authToken", apiKey);
+  await next();
+});
 
 /**
  * Handle all HTTP methods on /chatgpt/mcp.
@@ -72,14 +148,21 @@ chatgptMcp.all("/", async (c) => {
       },
     });
 
-    server = createChatGPTMcpServer(c.env, { baseUrl });
+    server = createChatGPTMcpServer(c.env, {
+      baseUrl,
+      authToken: c.get("authToken"),
+    });
     await server.connect(transport);
 
     return transport.handleRequest(c.req.raw);
   } catch (err) {
     console.error("[ChatGPT-MCP] Request handling error:", err);
     return c.json(
-      { jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null },
+      {
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal error" },
+        id: null,
+      },
       500,
     );
   }

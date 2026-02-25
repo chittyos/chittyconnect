@@ -26,7 +26,7 @@ jobs:
 
       - name: Fetch ChittyConnect ephemeral credentials
         id: chitty
-        uses: uses: ./.github/actions/chitty-creds-action
+        uses: ./.github/actions/chitty-creds-action
         with:
           api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
           purpose: github-actions-ci

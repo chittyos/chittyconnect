@@ -265,14 +265,17 @@ thirdpartyRoutes.patch("/notion/page/update", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      'integrations/notion/api_key',
-      'NOTION_TOKEN'
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
     );
 
     if (!notionToken) {
-      return c.json({
-        error: "Notion API key not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "Notion API key not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
@@ -304,7 +307,10 @@ thirdpartyRoutes.patch("/notion/page/update", async (c) => {
 thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
   try {
     const { owner, repo } = c.req.param();
-    const path = c.req.path.replace(`/api/thirdparty/github/repos/${owner}/${repo}/contents/`, '');
+    const path = c.req.path.replace(
+      `/api/thirdparty/github/repos/${owner}/${repo}/contents/`,
+      "",
+    );
     const body = await c.req.json();
 
     if (!body.content) {
@@ -314,15 +320,19 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
     // Get GitHub token from 1Password with fallback
     const githubToken = await getCredential(
       c.env,
-      'integrations/github/token',
-      'GITHUB_TOKEN'
+      "integrations/github/token",
+      "GITHUB_TOKEN",
     );
 
     if (!githubToken) {
-      return c.json({
-        error: "GitHub token not configured",
-        details: "Neither 1Password Connect nor environment variable available"
-      }, 503);
+      return c.json(
+        {
+          error: "GitHub token not configured",
+          details:
+            "Neither 1Password Connect nor environment variable available",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -333,10 +343,10 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
           Authorization: `Bearer ${githubToken}`,
           Accept: "application/vnd.github.v3+json",
           "Content-Type": "application/json",
-          "User-Agent": "ChittyConnect/1.0"
+          "User-Agent": "ChittyConnect/1.0",
         },
         body: JSON.stringify(body),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -358,19 +368,25 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
 thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
   try {
     const { owner, repo } = c.req.param();
-    const path = c.req.path.replace(`/api/thirdparty/github/repos/${owner}/${repo}/contents/`, '');
+    const path = c.req.path.replace(
+      `/api/thirdparty/github/repos/${owner}/${repo}/contents/`,
+      "",
+    );
 
     // Get GitHub token from 1Password with fallback
     const githubToken = await getCredential(
       c.env,
-      'integrations/github/token',
-      'GITHUB_TOKEN'
+      "integrations/github/token",
+      "GITHUB_TOKEN",
     );
 
     if (!githubToken) {
-      return c.json({
-        error: "GitHub token not configured"
-      }, 503);
+      return c.json(
+        {
+          error: "GitHub token not configured",
+        },
+        503,
+      );
     }
 
     const response = await fetch(
@@ -379,9 +395,9 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
         headers: {
           Authorization: `Bearer ${githubToken}`,
           Accept: "application/vnd.github.v3+json",
-          "User-Agent": "ChittyConnect/1.0"
+          "User-Agent": "ChittyConnect/1.0",
         },
-      }
+      },
     );
 
     if (!response.ok) {

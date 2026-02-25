@@ -53,16 +53,16 @@ chittyidRoutes.post("/mint", async (c) => {
     const entityType = LEGACY_ENTITY_MAP[entity] || entity.toLowerCase();
 
     // Get service token for authenticated minting
-    const serviceToken = await getServiceToken(c.env, 'chittyid');
+    const serviceToken = await getServiceToken(c.env, "chittyid");
 
     const client = new ChittyIDClient({
-      token: serviceToken
+      token: serviceToken,
     });
 
     const result = await client.mint(entityType, {
       region: metadata.region,
       jurisdiction: metadata.jurisdiction,
-      trust: metadata.trust
+      trust: metadata.trust,
     });
 
     return c.json(result);
@@ -107,7 +107,7 @@ chittyidRoutes.get("/parse/:id", async (c) => {
     return c.json({
       success: true,
       chittyId: id,
-      components
+      components,
     });
   } catch (error) {
     return c.json({ error: error.message }, 500);

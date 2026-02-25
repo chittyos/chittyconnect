@@ -22,9 +22,13 @@ export async function proofQueueConsumer(batch, env) {
 
   for (const msg of batch.messages) {
     try {
-      const { fact_id, fact_text, evidence_chain, signer_chitty_id } = msg.body || {};
+      const { fact_id, fact_text, evidence_chain, signer_chitty_id } =
+        msg.body || {};
       if (!fact_id) {
-        console.error("[ProofQueue] Malformed message: missing fact_id", JSON.stringify(msg.body).slice(0, 200));
+        console.error(
+          "[ProofQueue] Malformed message: missing fact_id",
+          JSON.stringify(msg.body).slice(0, 200),
+        );
         msg.ack(); // Don't retry permanently malformed messages
         continue;
       }
@@ -38,7 +42,10 @@ export async function proofQueueConsumer(batch, env) {
       });
 
       if (proofResult.error) {
-        console.error(`[ProofQueue] Mint failed for ${fact_id}:`, proofResult.message);
+        console.error(
+          `[ProofQueue] Mint failed for ${fact_id}:`,
+          proofResult.message,
+        );
         msg.retry();
         continue;
       }
@@ -64,19 +71,26 @@ export async function proofQueueConsumer(batch, env) {
       );
 
       if (!patchResp.ok) {
-        console.error(`[ProofQueue] Ledger patch failed for ${fact_id}: ${patchResp.status}`);
+        console.error(
+          `[ProofQueue] Ledger patch failed for ${fact_id}: ${patchResp.status}`,
+        );
         msg.retry();
         continue;
       }
 
       msg.ack();
-      console.log(`[ProofQueue] Proof minted for ${fact_id}: ${proofResult.proof_id}`);
+      console.log(
+        `[ProofQueue] Proof minted for ${fact_id}: ${proofResult.proof_id}`,
+      );
     } catch (err) {
       console.error(`[ProofQueue] Error processing ${msg.body?.fact_id}:`, err);
       try {
         msg.retry();
       } catch (retryErr) {
-        console.error(`[ProofQueue] Failed to retry message for ${msg.body?.fact_id}:`, retryErr);
+        console.error(
+          `[ProofQueue] Failed to retry message for ${msg.body?.fact_id}:`,
+          retryErr,
+        );
       }
     }
   }

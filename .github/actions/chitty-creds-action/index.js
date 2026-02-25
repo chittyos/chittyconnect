@@ -1,13 +1,17 @@
 import { writeFileSync } from "fs";
 
-// Use Node core undici fetch to avoid external deps
-const { fetch } = await import('node:undici');
-
+// Node 20+ has global fetch built-in (no import needed)
 async function run() {
   try {
     const apiKey = process.env["INPUT_API_KEY"];
     if (!apiKey) {
-      throw new Error("INPUT_API_KEY is missing. Did you pass 'api_key:' in the workflow?");
+      console.log("⚠️ INPUT_API_KEY not set — outputting empty tokens (secret may not be configured)");
+      const outputPath = process.env.GITHUB_OUTPUT;
+      if (outputPath) {
+        writeFileSync(outputPath, "github_token=\n", { flag: "a" });
+        writeFileSync(outputPath, "npm_token=\n", { flag: "a" });
+      }
+      return;
     }
 
     const res = await fetch("https://connect.chitty.cc/credentials/deploy", {

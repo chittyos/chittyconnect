@@ -223,7 +223,8 @@ credentialsRoutes.get("/types", async (c) => {
     },
     {
       type: "twilio_credentials",
-      description: "Twilio account SID, auth token, and phone number for SMS/Voice",
+      description:
+        "Twilio account SID, auth token, and phone number for SMS/Voice",
       required_context: [],
       optional_context: [],
       provider: "twilio",
@@ -464,9 +465,12 @@ credentialsRoutes.delete("/revoke", async (c) => {
  */
 credentialsRoutes.get("/twilio", async (c) => {
   try {
-    const serviceName = c.req.header('X-Service-Name') || c.get('apiKey')?.service || 'unknown';
+    const serviceName =
+      c.req.header("X-Service-Name") || c.get("apiKey")?.service || "unknown";
 
-    console.log(`[Credentials] Twilio credentials requested by: ${serviceName}`);
+    console.log(
+      `[Credentials] Twilio credentials requested by: ${serviceName}`,
+    );
 
     // Initialize 1Password client
     const opClient = new OnePasswordConnectClient(c.env);
@@ -475,11 +479,14 @@ credentialsRoutes.get("/twilio", async (c) => {
 
     try {
       // Try 1Password first
-      accountSid = await opClient.get('integrations/twilio/account_sid');
-      authToken = await opClient.get('integrations/twilio/auth_token');
-      phoneNumber = await opClient.get('integrations/twilio/phone_number');
+      accountSid = await opClient.get("integrations/twilio/account_sid");
+      authToken = await opClient.get("integrations/twilio/auth_token");
+      phoneNumber = await opClient.get("integrations/twilio/phone_number");
     } catch (opError) {
-      console.warn('[Credentials] 1Password unavailable, falling back to env vars:', opError.message);
+      console.warn(
+        "[Credentials] 1Password unavailable, falling back to env vars:",
+        opError.message,
+      );
 
       // Fallback to environment variables
       accountSid = c.env.TWILIO_ACCOUNT_SID;
@@ -488,39 +495,53 @@ credentialsRoutes.get("/twilio", async (c) => {
     }
 
     if (!accountSid || !authToken || !phoneNumber) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'CREDENTIALS_NOT_FOUND',
-          message: 'Twilio credentials not configured in 1Password or environment'
-        }
-      }, 503);
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "CREDENTIALS_NOT_FOUND",
+            message:
+              "Twilio credentials not configured in 1Password or environment",
+          },
+        },
+        503,
+      );
     }
 
     // Log credential access (no sensitive data)
     try {
-      await c.env.DB.prepare(`
+      await c.env.DB.prepare(
+        `
         INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at)
         VALUES ('twilio_credentials', 'twilio', 'sms_voice', ?, datetime('now'))
-      `).bind(serviceName).run();
+      `,
+      )
+        .bind(serviceName)
+        .run();
     } catch (dbError) {
-      console.warn('[Credentials] Failed to log credential access:', dbError.message);
+      console.warn(
+        "[Credentials] Failed to log credential access:",
+        dbError.message,
+      );
     }
 
     return c.json({
       accountSid,
       authToken,
-      phoneNumber
+      phoneNumber,
     });
   } catch (error) {
-    console.error('[Credentials] Twilio credentials error:', error);
-    return c.json({
-      success: false,
-      error: {
-        code: 'TWILIO_CREDENTIALS_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[Credentials] Twilio credentials error:", error);
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "TWILIO_CREDENTIALS_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -558,20 +579,24 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
     // Validate vault name
     const validVaults = ["infrastructure", "services", "integrations"];
     if (!validVaults.includes(vault)) {
-      return c.json({
-        success: false,
-        error: {
-          code: "INVALID_VAULT",
-          message: `Invalid vault: ${vault}. Must be one of: ${validVaults.join(", ")}`
-        }
-      }, 400);
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "INVALID_VAULT",
+            message: `Invalid vault: ${vault}. Must be one of: ${validVaults.join(", ")}`,
+          },
+        },
+        400,
+      );
     }
 
-    // Get requesting service from API key metadata
-    const apiKeyInfo = c.get("apiKey");
-    const requestingService = apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
+    // Extract service name for audit log (non-sensitive metadata)
+    const apiKeyMeta = c.get("apiKey") || {};
+    const requestingService =
+      apiKeyMeta.service || apiKeyMeta.name || "unknown";
 
-    console.log(`[Credentials] ${requestingService} requesting ${vault}/${item}/${field}`);
+    console.log(`[Credentials] Requesting ${vault}/${item}/${field}`);
 
     // Initialize 1Password client
     const opClient = new OnePasswordConnectClient(c.env);
@@ -584,12 +609,19 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
 
     // Log credential access (no sensitive data)
     try {
-      await c.env.DB.prepare(`
+      await c.env.DB.prepare(
+        `
         INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at)
         VALUES ('1password_retrieval', ?, ?, ?, datetime('now'))
-      `).bind(item, field, requestingService).run();
+      `,
+      )
+        .bind(item, field, requestingService)
+        .run();
     } catch (dbError) {
-      console.warn('[Credentials] Failed to log credential access:', dbError.message);
+      console.warn(
+        "[Credentials] Failed to log credential access:",
+        dbError.message,
+      );
     }
 
     return c.json({
@@ -599,19 +631,25 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
         vault,
         item,
         field,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     });
   } catch (error) {
-    console.error('[Credentials] Retrieval error:', error);
+    console.error("[Credentials] Retrieval error:", error);
 
     let status = 500;
     let code = "RETRIEVAL_FAILED";
 
-    if (error.message.includes("Unknown vault") || error.message.includes("Invalid credential path")) {
+    if (
+      error.message.includes("Unknown vault") ||
+      error.message.includes("Invalid credential path")
+    ) {
       status = 400;
       code = "INVALID_PATH";
-    } else if (error.message.includes("not found") || error.message.includes("has no value")) {
+    } else if (
+      error.message.includes("not found") ||
+      error.message.includes("has no value")
+    ) {
       status = 404;
       code = "NOT_FOUND";
     } else if (error.message.includes("not configured")) {
@@ -619,13 +657,16 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       code = "SERVICE_UNAVAILABLE";
     }
 
-    return c.json({
-      success: false,
-      error: {
-        code,
-        message: error.message
-      }
-    }, status);
+    return c.json(
+      {
+        success: false,
+        error: {
+          code,
+          message: error.message,
+        },
+      },
+      status,
+    );
   }
 });
 

@@ -29,64 +29,64 @@
 export const BEHAVIORAL_TRAITS = {
   // How predictable vs erratic the context behaves
   volatile: {
-    name: 'Volatile',
-    description: 'Tendency toward erratic or unpredictable behavior',
+    name: "Volatile",
+    description: "Tendency toward erratic or unpredictable behavior",
     inversePositive: true, // Lower is better
     threshold: 0.7, // Red flag if above this
   },
 
   // How well the context follows rules and guidelines
   compliant: {
-    name: 'Compliant',
-    description: 'Adherence to rules, guidelines, and expected patterns',
+    name: "Compliant",
+    description: "Adherence to rules, guidelines, and expected patterns",
     inversePositive: false, // Higher is better
     threshold: 0.3, // Red flag if below this
   },
 
   // How often the context tries new approaches
   creative: {
-    name: 'Creative',
-    description: 'Tendency to explore novel solutions',
+    name: "Creative",
+    description: "Tendency to explore novel solutions",
     inversePositive: false,
     threshold: null, // No red flag threshold
   },
 
   // How systematic and organized the context is
   methodical: {
-    name: 'Methodical',
-    description: 'Systematic, organized approach to tasks',
+    name: "Methodical",
+    description: "Systematic, organized approach to tasks",
     inversePositive: false,
     threshold: null,
   },
 
   // How well the context handles failures
   resilient: {
-    name: 'Resilient',
-    description: 'Ability to recover from errors and setbacks',
+    name: "Resilient",
+    description: "Ability to recover from errors and setbacks",
     inversePositive: false,
     threshold: 0.3,
   },
 
   // How much the context self-corrects
   selfCorrecting: {
-    name: 'Self-Correcting',
-    description: 'Tendency to recognize and fix own mistakes',
+    name: "Self-Correcting",
+    description: "Tendency to recognize and fix own mistakes",
     inversePositive: false,
     threshold: 0.3,
   },
 
   // How well context maintains focus
   focused: {
-    name: 'Focused',
-    description: 'Ability to stay on task without wandering',
+    name: "Focused",
+    description: "Ability to stay on task without wandering",
     inversePositive: false,
     threshold: 0.4,
   },
 
   // Trust alignment
   trustAligned: {
-    name: 'Trust-Aligned',
-    description: 'Alignment with trust/safety guidelines',
+    name: "Trust-Aligned",
+    description: "Alignment with trust/safety guidelines",
     inversePositive: false,
     threshold: 0.4,
   },
@@ -98,25 +98,37 @@ export const BEHAVIORAL_TRAITS = {
  */
 export const SOURCE_PROFILES = {
   // Documentation sources - generally stabilizing
-  'docs.github.com': { stability: 0.9, compliance: 0.9, category: 'documentation' },
-  'developer.mozilla.org': { stability: 0.9, compliance: 0.9, category: 'documentation' },
-  'stackoverflow.com': { stability: 0.6, compliance: 0.7, category: 'community' },
+  "docs.github.com": {
+    stability: 0.9,
+    compliance: 0.9,
+    category: "documentation",
+  },
+  "developer.mozilla.org": {
+    stability: 0.9,
+    compliance: 0.9,
+    category: "documentation",
+  },
+  "stackoverflow.com": {
+    stability: 0.6,
+    compliance: 0.7,
+    category: "community",
+  },
 
   // Code repositories - depends on quality
-  'github.com': { stability: 0.7, compliance: 0.8, category: 'code' },
-  'gitlab.com': { stability: 0.7, compliance: 0.8, category: 'code' },
+  "github.com": { stability: 0.7, compliance: 0.8, category: "code" },
+  "gitlab.com": { stability: 0.7, compliance: 0.8, category: "code" },
 
   // Social/content platforms - more variable
-  'x.com': { stability: 0.3, compliance: 0.4, category: 'social' },
-  'twitter.com': { stability: 0.3, compliance: 0.4, category: 'social' },
-  'reddit.com': { stability: 0.4, compliance: 0.5, category: 'social' },
+  "x.com": { stability: 0.3, compliance: 0.4, category: "social" },
+  "twitter.com": { stability: 0.3, compliance: 0.4, category: "social" },
+  "reddit.com": { stability: 0.4, compliance: 0.5, category: "social" },
 
   // AI models - varies by model
-  'openai.com': { stability: 0.7, compliance: 0.8, category: 'ai_model' },
-  'anthropic.com': { stability: 0.8, compliance: 0.9, category: 'ai_model' },
+  "openai.com": { stability: 0.7, compliance: 0.8, category: "ai_model" },
+  "anthropic.com": { stability: 0.8, compliance: 0.9, category: "ai_model" },
 
   // Default for unknown sources
-  _default: { stability: 0.5, compliance: 0.5, category: 'unknown' },
+  _default: { stability: 0.5, compliance: 0.5, category: "unknown" },
 };
 
 /**
@@ -134,19 +146,20 @@ export class ContextBehavior {
   async logExposure(chittyId, exposure) {
     const {
       sourceDomain,
-      sourceType = 'api',
-      interactionType = 'read',
+      sourceType = "api",
+      interactionType = "read",
       contentCategory,
       sessionId,
     } = exposure;
 
     // Get context
-    const context = await this.db.prepare(
-      'SELECT id FROM context_entities WHERE chitty_id = ?'
-    ).bind(chittyId).first();
+    const context = await this.db
+      .prepare("SELECT id FROM context_entities WHERE chitty_id = ?")
+      .bind(chittyId)
+      .first();
 
     if (!context) {
-      return { error: 'Context not found' };
+      return { error: "Context not found" };
     }
 
     // Calculate sentiment and compliance alignment based on source profile
@@ -155,23 +168,28 @@ export class ContextBehavior {
     const complianceAlignment = profile.compliance;
 
     // Log the exposure
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_exposure_log
         (id, context_id, context_chitty_id, source_domain, source_type,
          interaction_type, content_category, sentiment_score, compliance_alignment, session_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(),
-      context.id,
-      chittyId,
-      sourceDomain,
-      sourceType,
-      interactionType,
-      contentCategory || profile.category,
-      sentimentScore,
-      complianceAlignment,
-      sessionId
-    ).run();
+    `,
+      )
+      .bind(
+        crypto.randomUUID(),
+        context.id,
+        chittyId,
+        sourceDomain,
+        sourceType,
+        interactionType,
+        contentCategory || profile.category,
+        sentimentScore,
+        complianceAlignment,
+        sessionId,
+      )
+      .run();
 
     // Update influence sources in DNA
     await this.updateInfluenceSources(chittyId, sourceDomain, profile);
@@ -183,18 +201,21 @@ export class ContextBehavior {
    * Update the influence_sources field in context_dna
    */
   async updateInfluenceSources(chittyId, sourceDomain, profile) {
-    const dna = await this.db.prepare(
-      'SELECT id, influence_sources FROM context_dna WHERE context_chitty_id = ?'
-    ).bind(chittyId).first();
+    const dna = await this.db
+      .prepare(
+        "SELECT id, influence_sources FROM context_dna WHERE context_chitty_id = ?",
+      )
+      .bind(chittyId)
+      .first();
 
     if (!dna) return;
 
-    const sources = JSON.parse(dna.influence_sources || '{}');
+    const sources = JSON.parse(dna.influence_sources || "{}");
 
     if (!sources[sourceDomain]) {
       sources[sourceDomain] = {
         interactions: 0,
-        impact: 'neutral',
+        impact: "neutral",
         firstSeen: Date.now(),
       };
     }
@@ -205,14 +226,17 @@ export class ContextBehavior {
     // Determine impact based on cumulative exposure
     const count = sources[sourceDomain].interactions;
     if (profile.stability < 0.4 && count > 10) {
-      sources[sourceDomain].impact = 'concerning';
+      sources[sourceDomain].impact = "concerning";
     } else if (profile.stability > 0.7) {
-      sources[sourceDomain].impact = 'positive';
+      sources[sourceDomain].impact = "positive";
     }
 
-    await this.db.prepare(
-      'UPDATE context_dna SET influence_sources = ?, updated_at = unixepoch() WHERE id = ?'
-    ).bind(JSON.stringify(sources), dna.id).run();
+    await this.db
+      .prepare(
+        "UPDATE context_dna SET influence_sources = ?, updated_at = unixepoch() WHERE id = ?",
+      )
+      .bind(JSON.stringify(sources), dna.id)
+      .run();
   }
 
   /**
@@ -220,20 +244,25 @@ export class ContextBehavior {
    */
   async assessBehavior(chittyId) {
     // Get context DNA
-    const dna = await this.db.prepare(`
+    const dna = await this.db
+      .prepare(
+        `
       SELECT cd.*, ce.trust_level, ce.trust_score
       FROM context_dna cd
       JOIN context_entities ce ON cd.context_id = ce.id
       WHERE cd.context_chitty_id = ?
-    `).bind(chittyId).first();
+    `,
+      )
+      .bind(chittyId)
+      .first();
 
     if (!dna) {
-      return { error: 'Context not found' };
+      return { error: "Context not found" };
     }
 
-    const currentTraits = JSON.parse(dna.behavioral_traits || '{}');
-    const sources = JSON.parse(dna.influence_sources || '{}');
-    const patterns = JSON.parse(dna.patterns || '[]');
+    const currentTraits = JSON.parse(dna.behavioral_traits || "{}");
+    const sources = JSON.parse(dna.influence_sources || "{}");
+    const patterns = JSON.parse(dna.patterns || "[]");
 
     // Calculate trait scores
     const newTraits = {
@@ -257,7 +286,7 @@ export class ContextBehavior {
           trait,
           from: oldValue,
           to: newValue,
-          direction: newValue > oldValue ? 'increased' : 'decreased',
+          direction: newValue > oldValue ? "increased" : "decreased",
         });
       }
     }
@@ -269,7 +298,9 @@ export class ContextBehavior {
     const redFlags = this.checkRedFlags(newTraits, sources);
 
     // Update DNA
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE context_dna SET
         behavioral_traits = ?,
         trend_direction = ?,
@@ -278,17 +309,20 @@ export class ContextBehavior {
         last_behavior_assessment = unixepoch(),
         updated_at = unixepoch()
       WHERE context_chitty_id = ?
-    `).bind(
-      JSON.stringify(newTraits),
-      trend.direction,
-      trend.confidence,
-      redFlags.length,
-      chittyId
-    ).run();
+    `,
+      )
+      .bind(
+        JSON.stringify(newTraits),
+        trend.direction,
+        trend.confidence,
+        redFlags.length,
+        chittyId,
+      )
+      .run();
 
     // Log significant events
     if (changes.length > 0) {
-      await this.logBehavioralEvent(chittyId, 'trait_shift', {
+      await this.logBehavioralEvent(chittyId, "trait_shift", {
         previousState: currentTraits,
         newState: newTraits,
         triggerFactors: changes,
@@ -298,7 +332,7 @@ export class ContextBehavior {
 
     if (redFlags.length > 0) {
       for (const flag of redFlags) {
-        await this.logBehavioralEvent(chittyId, 'red_flag_detected', {
+        await this.logBehavioralEvent(chittyId, "red_flag_detected", {
           previousState: {},
           newState: { flag },
           triggerFactors: [flag.reason],
@@ -331,7 +365,8 @@ export class ContextBehavior {
     if (dna.success_rate < 0.5) volatility += 0.2;
 
     // Many failed outcomes = more volatile
-    const totalOutcomes = dna.outcomes_successful + dna.outcomes_failed + dna.outcomes_neutral;
+    const totalOutcomes =
+      dna.outcomes_successful + dna.outcomes_failed + dna.outcomes_neutral;
     if (totalOutcomes > 0) {
       const failRate = dna.outcomes_failed / totalOutcomes;
       volatility += failRate * 0.2;
@@ -387,7 +422,7 @@ export class ContextBehavior {
     // Look for repeated patterns (same type)
     const typeCounts = {};
     for (const p of patterns) {
-      const type = p.type || p.name || 'unknown';
+      const type = p.type || p.name || "unknown";
       typeCounts[type] = (typeCounts[type] || 0) + 1;
     }
 
@@ -413,7 +448,10 @@ export class ContextBehavior {
   calculateSelfCorrection(patterns) {
     // Look for correction patterns
     const corrections = patterns.filter(
-      (p) => p.name?.includes('correct') || p.type?.includes('fix') || p.name?.includes('retry')
+      (p) =>
+        p.name?.includes("correct") ||
+        p.type?.includes("fix") ||
+        p.name?.includes("retry"),
     );
     return Math.min(1, 0.3 + corrections.length * 0.1);
   }
@@ -425,7 +463,7 @@ export class ContextBehavior {
     if (patterns.length < 3) return 0.5;
 
     // If patterns are in similar domains, context is focused
-    const domains = patterns.map((p) => p.domain || 'unknown');
+    const domains = patterns.map((p) => p.domain || "unknown");
     const uniqueDomains = new Set(domains);
     const focusRatio = 1 - uniqueDomains.size / domains.length;
     return Math.min(1, 0.3 + focusRatio * 0.7);
@@ -455,13 +493,13 @@ export class ContextBehavior {
     }
 
     // Determine direction
-    let direction = 'stable';
+    let direction = "stable";
     if (improvements.length > degradations.length + 1) {
-      direction = 'improving';
+      direction = "improving";
     } else if (degradations.length > improvements.length + 1) {
-      direction = 'degrading';
+      direction = "degrading";
     } else if (improvements.length > 0 && degradations.length > 0) {
-      direction = 'volatile';
+      direction = "volatile";
     }
 
     // Calculate confidence based on data points
@@ -493,11 +531,11 @@ export class ContextBehavior {
 
       if (isBad) {
         flags.push({
-          type: 'trait_threshold',
+          type: "trait_threshold",
           trait,
           value,
           threshold: config.threshold,
-          reason: `${config.name} is ${config.inversePositive ? 'above' : 'below'} threshold`,
+          reason: `${config.name} is ${config.inversePositive ? "above" : "below"} threshold`,
           severity: config.inversePositive
             ? Math.round((value - config.threshold) * 10)
             : Math.round((config.threshold - value) * 10),
@@ -510,7 +548,7 @@ export class ContextBehavior {
       const profile = SOURCE_PROFILES[domain] || SOURCE_PROFILES._default;
       if (data.interactions > 20 && profile.stability < 0.4) {
         flags.push({
-          type: 'source_concern',
+          type: "source_concern",
           source: domain,
           interactions: data.interactions,
           reason: `High exposure to low-stability source: ${domain}`,
@@ -526,68 +564,90 @@ export class ContextBehavior {
    * Log a behavioral event
    */
   async logBehavioralEvent(chittyId, eventType, details) {
-    const context = await this.db.prepare(
-      'SELECT id FROM context_entities WHERE chitty_id = ?'
-    ).bind(chittyId).first();
+    const context = await this.db
+      .prepare("SELECT id FROM context_entities WHERE chitty_id = ?")
+      .bind(chittyId)
+      .first();
 
     if (!context) return;
 
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_behavioral_events
         (id, context_id, context_chitty_id, event_type, previous_state, new_state, trigger_factors, severity)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(),
-      context.id,
-      chittyId,
-      eventType,
-      JSON.stringify(details.previousState || {}),
-      JSON.stringify(details.newState || {}),
-      JSON.stringify(details.triggerFactors || []),
-      details.severity || 5
-    ).run();
+    `,
+      )
+      .bind(
+        crypto.randomUUID(),
+        context.id,
+        chittyId,
+        eventType,
+        JSON.stringify(details.previousState || {}),
+        JSON.stringify(details.newState || {}),
+        JSON.stringify(details.triggerFactors || []),
+        details.severity || 5,
+      )
+      .run();
   }
 
   /**
    * Get behavioral summary for a context
    */
   async getBehaviorSummary(chittyId) {
-    const dna = await this.db.prepare(`
+    const dna = await this.db
+      .prepare(
+        `
       SELECT behavioral_traits, influence_sources, trend_direction, trend_confidence,
              red_flag_count, last_behavior_assessment, anomaly_count, success_rate
       FROM context_dna WHERE context_chitty_id = ?
-    `).bind(chittyId).first();
+    `,
+      )
+      .bind(chittyId)
+      .first();
 
     if (!dna) {
-      return { error: 'Context not found' };
+      return { error: "Context not found" };
     }
 
     // Get recent events
-    const context = await this.db.prepare(
-      'SELECT id FROM context_entities WHERE chitty_id = ?'
-    ).bind(chittyId).first();
+    const context = await this.db
+      .prepare("SELECT id FROM context_entities WHERE chitty_id = ?")
+      .bind(chittyId)
+      .first();
 
-    const events = await this.db.prepare(`
+    const events = await this.db
+      .prepare(
+        `
       SELECT event_type, severity, trigger_factors, detected_at, acknowledged
       FROM context_behavioral_events
       WHERE context_id = ?
       ORDER BY detected_at DESC
       LIMIT 10
-    `).bind(context.id).all();
+    `,
+      )
+      .bind(context.id)
+      .all();
 
     // Get top exposure sources
-    const exposures = await this.db.prepare(`
+    const exposures = await this.db
+      .prepare(
+        `
       SELECT source_domain, COUNT(*) as count, AVG(compliance_alignment) as avg_compliance
       FROM context_exposure_log
       WHERE context_chitty_id = ?
       GROUP BY source_domain
       ORDER BY count DESC
       LIMIT 5
-    `).bind(chittyId).all();
+    `,
+      )
+      .bind(chittyId)
+      .all();
 
     return {
       chittyId,
-      traits: JSON.parse(dna.behavioral_traits || '{}'),
+      traits: JSON.parse(dna.behavioral_traits || "{}"),
       trend: {
         direction: dna.trend_direction,
         confidence: dna.trend_confidence,
@@ -596,11 +656,11 @@ export class ContextBehavior {
       anomalyCount: dna.anomaly_count,
       successRate: dna.success_rate,
       lastAssessment: dna.last_behavior_assessment,
-      influenceSources: JSON.parse(dna.influence_sources || '{}'),
+      influenceSources: JSON.parse(dna.influence_sources || "{}"),
       topExposures: exposures.results,
       recentEvents: events.results.map((e) => ({
         ...e,
-        trigger_factors: JSON.parse(e.trigger_factors || '[]'),
+        trigger_factors: JSON.parse(e.trigger_factors || "[]"),
       })),
     };
   }
@@ -609,7 +669,9 @@ export class ContextBehavior {
    * Get contexts with behavioral concerns
    */
   async getContextsWithConcerns() {
-    const results = await this.db.prepare(`
+    const results = await this.db
+      .prepare(
+        `
       SELECT
         ce.chitty_id,
         ce.project_path,
@@ -627,11 +689,13 @@ export class ContextBehavior {
          OR cd.anomaly_count > 5
       ORDER BY cd.red_flag_count DESC, cd.anomaly_count DESC
       LIMIT 20
-    `).all();
+    `,
+      )
+      .all();
 
     return results.results.map((r) => ({
       ...r,
-      behavioral_traits: JSON.parse(r.behavioral_traits || '{}'),
+      behavioral_traits: JSON.parse(r.behavioral_traits || "{}"),
     }));
   }
 }

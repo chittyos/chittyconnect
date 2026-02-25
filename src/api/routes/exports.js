@@ -23,10 +23,14 @@ exportRoutes.get("/:key{.+}", async (c) => {
       return c.json({ error: "Export not found" }, 404);
     }
 
-    const filename = key.split("/").pop().replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filename = key
+      .split("/")
+      .pop()
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
     return new Response(obj.body, {
       headers: {
-        "Content-Type": obj.httpMetadata?.contentType || "application/octet-stream",
+        "Content-Type":
+          obj.httpMetadata?.contentType || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(obj.size),
       },

@@ -307,7 +307,9 @@ export class OnePasswordConnectClient {
     // Import key material (only once)
     if (!this.cachedKeyMaterial) {
       if (!this.env.ENCRYPTION_KEY) {
-        throw new Error("ENCRYPTION_KEY secret is not configured — cannot encrypt/decrypt credential cache");
+        throw new Error(
+          "ENCRYPTION_KEY secret is not configured — cannot encrypt/decrypt credential cache",
+        );
       }
       this.cachedKeyMaterial = await crypto.subtle.importKey(
         "raw",

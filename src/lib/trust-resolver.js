@@ -34,7 +34,9 @@ export async function resolveTrustLevel(chittyId, env) {
   const FALLBACK = { trust_level: TRUST_LEVELS.ANONYMOUS, entity_type: "P" };
 
   if (!env.CREDENTIAL_CACHE) {
-    console.error(`[TrustResolver] CREDENTIAL_CACHE binding missing for ${chittyId}`);
+    console.error(
+      `[TrustResolver] CREDENTIAL_CACHE binding missing for ${chittyId}`,
+    );
     return FALLBACK;
   }
 
@@ -43,7 +45,10 @@ export async function resolveTrustLevel(chittyId, env) {
     try {
       return JSON.parse(cached);
     } catch (parseErr) {
-      console.warn(`[TrustResolver] Corrupted cache for ${cacheKey}, ignoring:`, parseErr.message);
+      console.warn(
+        `[TrustResolver] Corrupted cache for ${cacheKey}, ignoring:`,
+        parseErr.message,
+      );
     }
   }
 
@@ -66,7 +71,9 @@ export async function resolveTrustLevel(chittyId, env) {
     );
 
     if (!resp.ok) {
-      console.error(`[TrustResolver] ChittyTrust returned ${resp.status} for ${chittyId}`);
+      console.error(
+        `[TrustResolver] ChittyTrust returned ${resp.status} for ${chittyId}`,
+      );
       return FALLBACK;
     }
 
@@ -83,7 +90,10 @@ export async function resolveTrustLevel(chittyId, env) {
 
     return result;
   } catch (err) {
-    console.error(`[TrustResolver] Failed to resolve trust for ${chittyId}:`, err.message);
+    console.error(
+      `[TrustResolver] Failed to resolve trust for ${chittyId}:`,
+      err.message,
+    );
     return FALLBACK;
   }
 }

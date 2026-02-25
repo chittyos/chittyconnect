@@ -27,11 +27,23 @@ export function validateChittyIDFormat(chittyid) {
   // @canon: chittycanon://gov/governance#core-types
   const validEntities = [
     // Canonical type codes
-    "P", "L", "T", "E", "A",
+    "P",
+    "L",
+    "T",
+    "E",
+    "A",
     // Legacy codes (backward compatibility)
-    "PEO", "PLACE", "PROP", "EVNT", "AUTH",
-    "INFO", "FACT", "CONTEXT", "ACTOR",
-    "DOC", "SERVICE",
+    "PEO",
+    "PLACE",
+    "PROP",
+    "EVNT",
+    "AUTH",
+    "INFO",
+    "FACT",
+    "CONTEXT",
+    "ACTOR",
+    "DOC",
+    "SERVICE",
   ];
 
   if (!validEntities.includes(entity)) {

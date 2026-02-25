@@ -34,7 +34,7 @@ chittydisputesRoutes.post("/create", async (c) => {
           error: "Invalid dispute type",
           validTypes,
         },
-        400
+        400,
       );
     }
 
@@ -47,7 +47,7 @@ chittydisputesRoutes.post("/create", async (c) => {
           details:
             "Neither 1Password Connect nor environment variable available",
         },
-        503
+        503,
       );
     }
 
@@ -68,7 +68,7 @@ chittydisputesRoutes.post("/create", async (c) => {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `ChittyDisputes service error: ${response.status} - ${errorText}`
+        `ChittyDisputes service error: ${response.status} - ${errorText}`,
       );
     }
 
@@ -94,7 +94,7 @@ chittydisputesRoutes.get("/:disputeId", async (c) => {
         {
           error: "ChittyDisputes service token not configured",
         },
-        503
+        503,
       );
     }
 
@@ -104,13 +104,13 @@ chittydisputesRoutes.get("/:disputeId", async (c) => {
         headers: {
           Authorization: `Bearer ${serviceToken}`,
         },
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `ChittyDisputes service error: ${response.status} - ${errorText}`
+        `ChittyDisputes service error: ${response.status} - ${errorText}`,
       );
     }
 
@@ -138,7 +138,7 @@ chittydisputesRoutes.get("/", async (c) => {
         {
           error: "ChittyDisputes service token not configured",
         },
-        503
+        503,
       );
     }
 
@@ -159,7 +159,7 @@ chittydisputesRoutes.get("/", async (c) => {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `ChittyDisputes service error: ${response.status} - ${errorText}`
+        `ChittyDisputes service error: ${response.status} - ${errorText}`,
       );
     }
 
@@ -186,7 +186,7 @@ chittydisputesRoutes.patch("/:disputeId", async (c) => {
         {
           error: "ChittyDisputes service token not configured",
         },
-        503
+        503,
       );
     }
 
@@ -199,13 +199,13 @@ chittydisputesRoutes.patch("/:disputeId", async (c) => {
           Authorization: `Bearer ${serviceToken}`,
         },
         body: JSON.stringify(updates),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `ChittyDisputes service error: ${response.status} - ${errorText}`
+        `ChittyDisputes service error: ${response.status} - ${errorText}`,
       );
     }
 
@@ -232,7 +232,7 @@ chittydisputesRoutes.post("/:disputeId/events", async (c) => {
         {
           error: "ChittyDisputes service token not configured",
         },
-        503
+        503,
       );
     }
 
@@ -245,13 +245,13 @@ chittydisputesRoutes.post("/:disputeId/events", async (c) => {
           Authorization: `Bearer ${serviceToken}`,
         },
         body: JSON.stringify(eventData),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `ChittyDisputes service error: ${response.status} - ${errorText}`
+        `ChittyDisputes service error: ${response.status} - ${errorText}`,
       );
     }
 

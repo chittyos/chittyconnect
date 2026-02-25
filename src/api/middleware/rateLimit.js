@@ -22,25 +22,25 @@ export const RATE_LIMITS = {
   high: {
     rpm: 60,
     windowMs: 60000,
-    description: 'Standard read operations',
+    description: "Standard read operations",
   },
   // Medium-frequency write endpoints
   medium: {
     rpm: 30,
     windowMs: 60000,
-    description: 'Write operations',
+    description: "Write operations",
   },
   // Low-frequency sensitive operations
   low: {
     rpm: 10,
     windowMs: 60000,
-    description: 'Sensitive operations (supernova, fission)',
+    description: "Sensitive operations (supernova, fission)",
   },
   // Very strict for expensive operations
   strict: {
     rpm: 5,
     windowMs: 60000,
-    description: 'Expensive operations (experiments)',
+    description: "Expensive operations (experiments)",
   },
 };
 
@@ -49,36 +49,36 @@ export const RATE_LIMITS = {
  */
 export const ENDPOINT_LIMITS = {
   // Context Intelligence - Read operations (high frequency)
-  'GET:/api/v1/intelligence/decisions/:chittyId': 'high',
-  'GET:/api/v1/intelligence/alchemy/:chittyId': 'high',
-  'GET:/api/v1/intelligence/autonomy/:chittyId': 'high',
-  'GET:/api/v1/intelligence/pairs/:chittyId': 'high',
-  'GET:/api/v1/intelligence/behavior/:chittyId': 'high',
-  'GET:/api/v1/intelligence/taxonomy': 'high',
-  'GET:/api/v1/intelligence/alchemist/reference': 'high',
+  "GET:/api/v1/intelligence/decisions/:chittyId": "high",
+  "GET:/api/v1/intelligence/alchemy/:chittyId": "high",
+  "GET:/api/v1/intelligence/autonomy/:chittyId": "high",
+  "GET:/api/v1/intelligence/pairs/:chittyId": "high",
+  "GET:/api/v1/intelligence/behavior/:chittyId": "high",
+  "GET:/api/v1/intelligence/taxonomy": "high",
+  "GET:/api/v1/intelligence/alchemist/reference": "high",
 
   // Context Intelligence - Analyze operations (medium frequency)
-  'POST:/api/v1/intelligence/coherence': 'medium',
-  'POST:/api/v1/intelligence/collaborators/find': 'medium',
-  'POST:/api/v1/intelligence/supernova/analyze': 'medium',
-  'POST:/api/v1/intelligence/fission/analyze': 'medium',
-  'POST:/api/v1/intelligence/alchemy/suggest': 'medium',
-  'GET:/api/v1/intelligence/alchemist/capabilities/:chittyId': 'medium',
-  'POST:/api/v1/intelligence/behavior/assess/:chittyId': 'medium',
+  "POST:/api/v1/intelligence/coherence": "medium",
+  "POST:/api/v1/intelligence/collaborators/find": "medium",
+  "POST:/api/v1/intelligence/supernova/analyze": "medium",
+  "POST:/api/v1/intelligence/fission/analyze": "medium",
+  "POST:/api/v1/intelligence/alchemy/suggest": "medium",
+  "GET:/api/v1/intelligence/alchemist/capabilities/:chittyId": "medium",
+  "POST:/api/v1/intelligence/behavior/assess/:chittyId": "medium",
 
   // Context Intelligence - Execute operations (low frequency)
-  'POST:/api/v1/intelligence/supernova/execute': 'low',
-  'POST:/api/v1/intelligence/fission/execute': 'low',
-  'POST:/api/v1/intelligence/derivative': 'low',
-  'POST:/api/v1/intelligence/suspension': 'low',
-  'POST:/api/v1/intelligence/solution': 'low',
-  'POST:/api/v1/intelligence/combination': 'low',
-  'POST:/api/v1/intelligence/collaborations': 'low',
-  'POST:/api/v1/intelligence/pairs': 'low',
+  "POST:/api/v1/intelligence/supernova/execute": "low",
+  "POST:/api/v1/intelligence/fission/execute": "low",
+  "POST:/api/v1/intelligence/derivative": "low",
+  "POST:/api/v1/intelligence/suspension": "low",
+  "POST:/api/v1/intelligence/solution": "low",
+  "POST:/api/v1/intelligence/combination": "low",
+  "POST:/api/v1/intelligence/collaborations": "low",
+  "POST:/api/v1/intelligence/pairs": "low",
 
   // Very expensive operations
-  'POST:/api/v1/intelligence/alchemist/experiment': 'strict',
-  'GET:/api/v1/intelligence/alchemist/observe': 'strict',
+  "POST:/api/v1/intelligence/alchemist/experiment": "strict",
+  "GET:/api/v1/intelligence/alchemist/observe": "strict",
 };
 
 /**
@@ -124,11 +124,11 @@ function getRateLimitTier(method, path) {
 
   // Try pattern matching for parameterized routes
   for (const [pattern, tier] of Object.entries(ENDPOINT_LIMITS)) {
-    const [patternMethod, patternPath] = pattern.split(':');
+    const [patternMethod, patternPath] = pattern.split(":");
     if (patternMethod !== method) continue;
 
     // Convert pattern to regex (replace :param with wildcard)
-    const regexPattern = patternPath.replace(/:[^/]+/g, '[^/]+');
+    const regexPattern = patternPath.replace(/:[^/]+/g, "[^/]+");
     const regex = new RegExp(`^${regexPattern}$`);
 
     if (regex.test(path)) {
@@ -148,7 +148,7 @@ function getRateLimitTier(method, path) {
  * @returns {Function} Hono middleware
  */
 export function rateLimit(options = {}) {
-  const { tier = 'high', keyGenerator } = options;
+  const { tier = "high", keyGenerator } = options;
 
   return async (c, next) => {
     // Lazy cleanup of expired entries
@@ -157,9 +157,10 @@ export function rateLimit(options = {}) {
     const config = RATE_LIMITS[tier] || RATE_LIMITS.high;
 
     // Generate rate limit key
-    const clientIp = c.req.header('CF-Connecting-IP') ||
-                     c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
-                     'unknown';
+    const clientIp =
+      c.req.header("CF-Connecting-IP") ||
+      c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ||
+      "unknown";
     const path = c.req.path;
     const key = keyGenerator ? keyGenerator(c) : `${clientIp}:${path}`;
 
@@ -180,34 +181,48 @@ export function rateLimit(options = {}) {
     data.count++;
 
     if (data.count > config.rpm) {
-      const retryAfter = Math.ceil((config.windowMs - (now - data.windowStart)) / 1000);
+      const retryAfter = Math.ceil(
+        (config.windowMs - (now - data.windowStart)) / 1000,
+      );
 
-      c.header('X-RateLimit-Limit', config.rpm.toString());
-      c.header('X-RateLimit-Remaining', '0');
-      c.header('X-RateLimit-Reset', Math.ceil((data.windowStart + config.windowMs) / 1000).toString());
-      c.header('Retry-After', retryAfter.toString());
+      c.header("X-RateLimit-Limit", config.rpm.toString());
+      c.header("X-RateLimit-Remaining", "0");
+      c.header(
+        "X-RateLimit-Reset",
+        Math.ceil((data.windowStart + config.windowMs) / 1000).toString(),
+      );
+      c.header("Retry-After", retryAfter.toString());
 
-      return c.json({
-        success: false,
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
-          tier,
-          limit: config.rpm,
-          windowMs: config.windowMs,
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "RATE_LIMIT_EXCEEDED",
+            message: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+            tier,
+            limit: config.rpm,
+            windowMs: config.windowMs,
+          },
+          _meta: {
+            requestId: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            service: "chittyconnect",
+          },
         },
-        _meta: {
-          requestId: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          service: 'chittyconnect',
-        },
-      }, 429);
+        429,
+      );
     }
 
     // Set rate limit headers
-    c.header('X-RateLimit-Limit', config.rpm.toString());
-    c.header('X-RateLimit-Remaining', Math.max(0, config.rpm - data.count).toString());
-    c.header('X-RateLimit-Reset', Math.ceil((data.windowStart + config.windowMs) / 1000).toString());
+    c.header("X-RateLimit-Limit", config.rpm.toString());
+    c.header(
+      "X-RateLimit-Remaining",
+      Math.max(0, config.rpm - data.count).toString(),
+    );
+    c.header(
+      "X-RateLimit-Reset",
+      Math.ceil((data.windowStart + config.windowMs) / 1000).toString(),
+    );
 
     await next();
   };
@@ -227,9 +242,10 @@ export function autoRateLimit() {
 
     if (tier) {
       const config = RATE_LIMITS[tier];
-      const clientIp = c.req.header('CF-Connecting-IP') ||
-                       c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
-                       'unknown';
+      const clientIp =
+        c.req.header("CF-Connecting-IP") ||
+        c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ||
+        "unknown";
       const key = `${clientIp}:${method}:${path}`;
 
       const now = Date.now();
@@ -247,34 +263,48 @@ export function autoRateLimit() {
       data.count++;
 
       if (data.count > config.rpm) {
-        const retryAfter = Math.ceil((config.windowMs - (now - data.windowStart)) / 1000);
+        const retryAfter = Math.ceil(
+          (config.windowMs - (now - data.windowStart)) / 1000,
+        );
 
-        c.header('X-RateLimit-Limit', config.rpm.toString());
-        c.header('X-RateLimit-Remaining', '0');
-        c.header('X-RateLimit-Reset', Math.ceil((data.windowStart + config.windowMs) / 1000).toString());
-        c.header('Retry-After', retryAfter.toString());
+        c.header("X-RateLimit-Limit", config.rpm.toString());
+        c.header("X-RateLimit-Remaining", "0");
+        c.header(
+          "X-RateLimit-Reset",
+          Math.ceil((data.windowStart + config.windowMs) / 1000).toString(),
+        );
+        c.header("Retry-After", retryAfter.toString());
 
-        return c.json({
-          success: false,
-          error: {
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
-            tier,
-            limit: config.rpm,
-            windowMs: config.windowMs,
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: "RATE_LIMIT_EXCEEDED",
+              message: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+              tier,
+              limit: config.rpm,
+              windowMs: config.windowMs,
+            },
+            _meta: {
+              requestId: crypto.randomUUID(),
+              timestamp: new Date().toISOString(),
+              service: "chittyconnect",
+            },
           },
-          _meta: {
-            requestId: crypto.randomUUID(),
-            timestamp: new Date().toISOString(),
-            service: 'chittyconnect',
-          },
-        }, 429);
+          429,
+        );
       }
 
-      c.header('X-RateLimit-Limit', config.rpm.toString());
-      c.header('X-RateLimit-Remaining', Math.max(0, config.rpm - data.count).toString());
-      c.header('X-RateLimit-Reset', Math.ceil((data.windowStart + config.windowMs) / 1000).toString());
-      c.header('X-RateLimit-Tier', tier);
+      c.header("X-RateLimit-Limit", config.rpm.toString());
+      c.header(
+        "X-RateLimit-Remaining",
+        Math.max(0, config.rpm - data.count).toString(),
+      );
+      c.header(
+        "X-RateLimit-Reset",
+        Math.ceil((data.windowStart + config.windowMs) / 1000).toString(),
+      );
+      c.header("X-RateLimit-Tier", tier);
     }
 
     await next();
