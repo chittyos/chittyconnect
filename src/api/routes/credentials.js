@@ -591,15 +591,12 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       );
     }
 
-    // Get requesting service identifier (non-sensitive metadata only)
-    const apiKeyMeta = c.get("apiKey");
-    const requestingService = String(
-      apiKeyMeta?.service || apiKeyMeta?.name || "unknown",
-    );
+    // Extract service name for audit log (non-sensitive metadata)
+    const apiKeyMeta = c.get("apiKey") || {};
+    const requestingService =
+      apiKeyMeta.service || apiKeyMeta.name || "unknown";
 
-    console.log(
-      `[Credentials] ${requestingService} requesting ${vault}/${item}/${field}`,
-    );
+    console.log(`[Credentials] Requesting ${vault}/${item}/${field}`);
 
     // Initialize 1Password client
     const opClient = new OnePasswordConnectClient(c.env);
