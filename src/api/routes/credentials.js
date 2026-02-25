@@ -591,10 +591,11 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       );
     }
 
-    // Get requesting service from API key metadata
-    const apiKeyInfo = c.get("apiKey");
-    const requestingService =
-      apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
+    // Get requesting service identifier (non-sensitive metadata only)
+    const apiKeyMeta = c.get("apiKey");
+    const requestingService = String(
+      apiKeyMeta?.service || apiKeyMeta?.name || "unknown",
+    );
 
     console.log(
       `[Credentials] ${requestingService} requesting ${vault}/${item}/${field}`,
