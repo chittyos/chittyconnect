@@ -136,7 +136,10 @@ function createMcpJsonRpcHandler(honoApp) {
       if (request.method === "GET") {
         const accept = request.headers.get("Accept") || "";
         if (!accept.includes("text/event-stream")) {
-          return new Response("Not Acceptable: requires Accept: text/event-stream", { status: 406 });
+          return new Response(
+            "Not Acceptable: requires Accept: text/event-stream",
+            { status: 406 },
+          );
         }
         return handleSseStream(sessionId);
       }
@@ -156,7 +159,11 @@ function createMcpJsonRpcHandler(honoApp) {
       } catch (err) {
         console.warn(`[MCP JSON-RPC] Body parse failed: ${err.message}`);
         return withSession(
-          JSON.stringify({ jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }),
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32700, message: "Parse error" },
+            id: null,
+          }),
           { status: 400, headers: { "Content-Type": "application/json" } },
         );
       }
@@ -178,7 +185,14 @@ function createMcpJsonRpcHandler(honoApp) {
             try {
               return await r.json();
             } catch {
-              return { jsonrpc: "2.0", error: { code: -32603, message: "Internal error: malformed response" }, id: null };
+              return {
+                jsonrpc: "2.0",
+                error: {
+                  code: -32603,
+                  message: "Internal error: malformed response",
+                },
+                id: null,
+              };
             }
           }),
         );
@@ -229,7 +243,9 @@ function handleSseStream(sessionId) {
         try {
           controller.enqueue(encoder.encode(": heartbeat\n\n"));
         } catch (err) {
-          console.log(`[MCP SSE] Heartbeat stopped for session ${sessionId}: ${err.message}`);
+          console.log(
+            `[MCP SSE] Heartbeat stopped for session ${sessionId}: ${err.message}`,
+          );
           clearInterval(interval);
         }
       }, 30_000);
@@ -297,8 +313,14 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         try {
           data = await resp.json();
         } catch {
-          console.error(`[MCP JSON-RPC] tools/list response not JSON (${resp.status})`);
-          return jsonRpcError(id, -32603, `Internal error: tools/list returned non-JSON (${resp.status})`);
+          console.error(
+            `[MCP JSON-RPC] tools/list response not JSON (${resp.status})`,
+          );
+          return jsonRpcError(
+            id,
+            -32603,
+            `Internal error: tools/list returned non-JSON (${resp.status})`,
+          );
         }
         return jsonRpcResponse(id, data);
       }
@@ -323,8 +345,14 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         try {
           data = await resp.json();
         } catch {
-          console.error(`[MCP JSON-RPC] tools/call response not JSON (${resp.status})`);
-          return jsonRpcError(id, -32603, `Internal error: tools/call returned non-JSON (${resp.status})`);
+          console.error(
+            `[MCP JSON-RPC] tools/call response not JSON (${resp.status})`,
+          );
+          return jsonRpcError(
+            id,
+            -32603,
+            `Internal error: tools/call returned non-JSON (${resp.status})`,
+          );
         }
         return jsonRpcResponse(id, data);
       }
@@ -344,8 +372,14 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         try {
           data = await resp.json();
         } catch {
-          console.error(`[MCP JSON-RPC] resources/list response not JSON (${resp.status})`);
-          return jsonRpcError(id, -32603, `Internal error: resources/list returned non-JSON (${resp.status})`);
+          console.error(
+            `[MCP JSON-RPC] resources/list response not JSON (${resp.status})`,
+          );
+          return jsonRpcError(
+            id,
+            -32603,
+            `Internal error: resources/list returned non-JSON (${resp.status})`,
+          );
         }
         return jsonRpcResponse(id, data);
       }
@@ -366,8 +400,14 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         try {
           data = await resp.json();
         } catch {
-          console.error(`[MCP JSON-RPC] resources/read response not JSON (${resp.status})`);
-          return jsonRpcError(id, -32603, `Internal error: resources/read returned non-JSON (${resp.status})`);
+          console.error(
+            `[MCP JSON-RPC] resources/read response not JSON (${resp.status})`,
+          );
+          return jsonRpcError(
+            id,
+            -32603,
+            `Internal error: resources/read returned non-JSON (${resp.status})`,
+          );
         }
         return jsonRpcResponse(id, data);
       }

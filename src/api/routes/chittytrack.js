@@ -30,7 +30,10 @@ async function proxyGet(c, path) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    return c.json({ error: `ChittyTrack: ${response.status} - ${errorText}` }, response.status);
+    return c.json(
+      { error: `ChittyTrack: ${response.status} - ${errorText}` },
+      response.status,
+    );
   }
 
   return c.json(await response.json());

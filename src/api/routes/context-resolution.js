@@ -16,8 +16,8 @@
  * @see chittycanon://docs/tech/architecture/context-anchor-model
  */
 
-import { Hono } from 'hono';
-import { ContextResolver } from '../../intelligence/context-resolver.js';
+import { Hono } from "hono";
+import { ContextResolver } from "../../intelligence/context-resolver.js";
 
 /**
  * Generate standard response metadata
@@ -27,8 +27,8 @@ function generateResponseMetadata() {
   return {
     requestId: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
-    service: 'chittyconnect',
-    version: '1.0.0',
+    service: "chittyconnect",
+    version: "1.0.0",
   };
 }
 
@@ -40,10 +40,13 @@ function generateResponseMetadata() {
  * @returns {Response} JSON response
  */
 function apiResponse(c, data, status = 200) {
-  return c.json({
-    ...data,
-    _meta: generateResponseMetadata(),
-  }, status);
+  return c.json(
+    {
+      ...data,
+      _meta: generateResponseMetadata(),
+    },
+    status,
+  );
 }
 
 export const contextResolution = new Hono();
@@ -63,32 +66,41 @@ export const contextResolution = new Hono();
  *
  * Returns resolution result with action and context/pendingContext
  */
-contextResolution.post('/resolve', async (c) => {
+contextResolution.post("/resolve", async (c) => {
   try {
     const hints = await c.req.json();
 
     if (!hints.projectPath && !hints.workspace && !hints.explicitChittyId) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'INSUFFICIENT_HINTS',
-          message: 'At least projectPath, workspace, or explicitChittyId required'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "INSUFFICIENT_HINTS",
+            message:
+              "At least projectPath, workspace, or explicitChittyId required",
+          },
+        },
+        400,
+      );
     }
 
     const resolver = new ContextResolver(c.env);
     const resolution = await resolver.resolveContext(hints);
 
     // If error (e.g., explicit ChittyID not found)
-    if (resolution.action === 'error') {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'RESOLUTION_FAILED',
-          message: resolution.error
-        }
-      }, 404);
+    if (resolution.action === "error") {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "RESOLUTION_FAILED",
+            message: resolution.error,
+          },
+        },
+        404,
+      );
     }
 
     // Return resolution for client to display and confirm
@@ -101,19 +113,24 @@ contextResolution.post('/resolve', async (c) => {
         confidence: resolution.confidence || null,
         reason: resolution.reason,
         anchors: resolution.anchors,
-        anchorHash: resolution.anchorHash?.slice(0, 16) + '...',
-        requiresConfirmation: resolution.action === 'create_new' || resolution.confidence < 0.9
-      }
+        anchorHash: resolution.anchorHash?.slice(0, 16) + "...",
+        requiresConfirmation:
+          resolution.action === "create_new" || resolution.confidence < 0.9,
+      },
     });
   } catch (error) {
-    console.error('[ContextResolution] Resolve error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'RESOLVE_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Resolve error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "RESOLVE_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -136,43 +153,56 @@ contextResolution.post('/resolve', async (c) => {
  *   }
  * }
  */
-contextResolution.post('/bind', async (c) => {
+contextResolution.post("/bind", async (c) => {
   try {
     const {
       action,
       sessionId,
-      platform = 'unknown',
+      platform = "unknown",
       contextId,
       chittyId,
-      pendingContext
+      pendingContext,
     } = await c.req.json();
 
     if (!sessionId) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'MISSING_SESSION_ID',
-          message: 'sessionId is required'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_SESSION_ID",
+            message: "sessionId is required",
+          },
+        },
+        400,
+      );
     }
 
     const resolver = new ContextResolver(c.env);
     let boundContext;
 
-    if (action === 'bind_existing') {
+    if (action === "bind_existing") {
       if (!contextId || !chittyId) {
-        return apiResponse(c, {
-          success: false,
-          error: {
-            code: 'MISSING_CONTEXT',
-            message: 'contextId and chittyId required for bind_existing'
-          }
-        }, 400);
+        return apiResponse(
+          c,
+          {
+            success: false,
+            error: {
+              code: "MISSING_CONTEXT",
+              message: "contextId and chittyId required for bind_existing",
+            },
+          },
+          400,
+        );
       }
 
       // Bind session to existing context
-      const binding = await resolver.bindSession(contextId, chittyId, sessionId, platform);
+      const binding = await resolver.bindSession(
+        contextId,
+        chittyId,
+        sessionId,
+        platform,
+      );
       boundContext = await resolver.loadContextByChittyId(chittyId);
 
       return apiResponse(c, {
@@ -181,19 +211,22 @@ contextResolution.post('/bind', async (c) => {
           bound: true,
           binding,
           context: boundContext,
-          message: `Session bound to existing context: ${chittyId}`
-        }
+          message: `Session bound to existing context: ${chittyId}`,
+        },
       });
-
-    } else if (action === 'create_new') {
+    } else if (action === "create_new") {
       if (!pendingContext) {
-        return apiResponse(c, {
-          success: false,
-          error: {
-            code: 'MISSING_PENDING_CONTEXT',
-            message: 'pendingContext required for create_new'
-          }
-        }, 400);
+        return apiResponse(
+          c,
+          {
+            success: false,
+            error: {
+              code: "MISSING_PENDING_CONTEXT",
+              message: "pendingContext required for create_new",
+            },
+          },
+          400,
+        );
       }
 
       // Create new context
@@ -204,7 +237,7 @@ contextResolution.post('/bind', async (c) => {
         boundContext.id,
         boundContext.chitty_id,
         sessionId,
-        platform
+        platform,
       );
 
       return apiResponse(c, {
@@ -214,28 +247,35 @@ contextResolution.post('/bind', async (c) => {
           created: true,
           binding,
           context: boundContext,
-          message: `New context created and bound: ${boundContext.chitty_id}`
-        }
+          message: `New context created and bound: ${boundContext.chitty_id}`,
+        },
       });
-
     } else {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'INVALID_ACTION',
-          message: 'action must be "bind_existing" or "create_new"'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "INVALID_ACTION",
+            message: 'action must be "bind_existing" or "create_new"',
+          },
+        },
+        400,
+      );
     }
   } catch (error) {
-    console.error('[ContextResolution] Bind error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'BIND_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Bind error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "BIND_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -254,31 +294,39 @@ contextResolution.post('/bind', async (c) => {
  *   }
  * }
  */
-contextResolution.post('/unbind', async (c) => {
+contextResolution.post("/unbind", async (c) => {
   try {
     const { sessionId, metrics = {} } = await c.req.json();
 
     if (!sessionId) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'MISSING_SESSION_ID',
-          message: 'sessionId is required'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_SESSION_ID",
+            message: "sessionId is required",
+          },
+        },
+        400,
+      );
     }
 
     const resolver = new ContextResolver(c.env);
     const result = await resolver.unbindSession(sessionId, metrics);
 
     if (!result) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'NO_ACTIVE_BINDING',
-          message: `No active binding found for session ${sessionId}`
-        }
-      }, 404);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "NO_ACTIVE_BINDING",
+            message: `No active binding found for session ${sessionId}`,
+          },
+        },
+        404,
+      );
     }
 
     return apiResponse(c, {
@@ -288,18 +336,22 @@ contextResolution.post('/unbind', async (c) => {
         contextId: result.contextId,
         chittyId: result.chittyId,
         metricsAccumulated: true,
-        message: 'Session unbound and metrics accumulated to DNA'
-      }
+        message: "Session unbound and metrics accumulated to DNA",
+      },
     });
   } catch (error) {
-    console.error('[ContextResolution] Unbind error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'UNBIND_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Unbind error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "UNBIND_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -307,35 +359,43 @@ contextResolution.post('/unbind', async (c) => {
  * Get context summary for statusline display
  * GET /api/v1/context/summary/:chittyId
  */
-contextResolution.get('/summary/:chittyId', async (c) => {
+contextResolution.get("/summary/:chittyId", async (c) => {
   try {
-    const chittyId = c.req.param('chittyId');
+    const chittyId = c.req.param("chittyId");
     const resolver = new ContextResolver(c.env);
     const summary = await resolver.getContextSummary(chittyId);
 
     if (!summary) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'CONTEXT_NOT_FOUND',
-          message: `Context not found for ChittyID: ${chittyId}`
-        }
-      }, 404);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "CONTEXT_NOT_FOUND",
+            message: `Context not found for ChittyID: ${chittyId}`,
+          },
+        },
+        404,
+      );
     }
 
     return apiResponse(c, {
       success: true,
-      data: summary
+      data: summary,
     });
   } catch (error) {
-    console.error('[ContextResolution] Summary error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'SUMMARY_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Summary error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "SUMMARY_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -343,22 +403,27 @@ contextResolution.get('/summary/:chittyId', async (c) => {
  * Get current session's bound context
  * GET /api/v1/context/current?sessionId=...
  */
-contextResolution.get('/current', async (c) => {
+contextResolution.get("/current", async (c) => {
   try {
-    const sessionId = c.req.query('sessionId');
+    const sessionId = c.req.query("sessionId");
 
     if (!sessionId) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'MISSING_SESSION_ID',
-          message: 'sessionId query parameter is required'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_SESSION_ID",
+            message: "sessionId query parameter is required",
+          },
+        },
+        400,
+      );
     }
 
     // Look up active binding for this session
-    const binding = await c.env.DB.prepare(`
+    const binding = await c.env.DB.prepare(
+      `
       SELECT csb.*, ce.chitty_id, ce.project_path, ce.workspace, ce.support_type,
              ce.trust_score, ce.trust_level, ce.status as context_status,
              cd.success_rate, cd.total_interactions, cd.competencies, cd.expertise_domains
@@ -366,15 +431,18 @@ contextResolution.get('/current', async (c) => {
       JOIN context_entities ce ON csb.context_id = ce.id
       LEFT JOIN context_dna cd ON ce.id = cd.context_id
       WHERE csb.session_id = ? AND csb.unbound_at IS NULL
-    `).bind(sessionId).first();
+    `,
+    )
+      .bind(sessionId)
+      .first();
 
     if (!binding) {
       return apiResponse(c, {
         success: true,
         data: {
           bound: false,
-          message: 'No active context binding for this session'
-        }
+          message: "No active context binding for this session",
+        },
       });
     }
 
@@ -394,22 +462,26 @@ contextResolution.get('/current', async (c) => {
           status: binding.context_status,
           successRate: binding.success_rate,
           totalInteractions: binding.total_interactions,
-          competencies: JSON.parse(binding.competencies || '[]'),
-          expertiseDomains: JSON.parse(binding.expertise_domains || '[]')
+          competencies: JSON.parse(binding.competencies || "[]"),
+          expertiseDomains: JSON.parse(binding.expertise_domains || "[]"),
         },
         boundAt: binding.bound_at,
-        platform: binding.platform
-      }
+        platform: binding.platform,
+      },
     });
   } catch (error) {
-    console.error('[ContextResolution] Current error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'CURRENT_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Current error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "CURRENT_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -417,13 +489,13 @@ contextResolution.get('/current', async (c) => {
  * Search for contexts by criteria (for team building, etc.)
  * GET /api/v1/context/search?supportType=...&minTrust=...&competency=...
  */
-contextResolution.get('/search', async (c) => {
+contextResolution.get("/search", async (c) => {
   try {
-    const supportType = c.req.query('supportType');
-    const minTrust = parseInt(c.req.query('minTrust') || '0', 10);
-    const competency = c.req.query('competency');
-    const domain = c.req.query('domain');
-    const limit = Math.min(parseInt(c.req.query('limit') || '20', 10), 100);
+    const supportType = c.req.query("supportType");
+    const minTrust = parseInt(c.req.query("minTrust") || "0", 10);
+    const competency = c.req.query("competency");
+    const domain = c.req.query("domain");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20", 10), 100);
 
     let query = `
       SELECT ce.*, cd.competencies, cd.expertise_domains, cd.success_rate, cd.total_interactions
@@ -446,43 +518,53 @@ contextResolution.get('/search', async (c) => {
     query += ` ORDER BY ce.trust_score DESC, cd.total_interactions DESC LIMIT ?`;
     params.push(limit);
 
-    const results = await c.env.DB.prepare(query).bind(...params).all();
+    const results = await c.env.DB.prepare(query)
+      .bind(...params)
+      .all();
 
     // Post-filter for competency/domain (JSON filtering in SQLite is limited)
-    let contexts = results.results.map(r => ({
+    let contexts = results.results.map((r) => ({
       ...r,
-      competencies: JSON.parse(r.competencies || '[]'),
-      expertiseDomains: JSON.parse(r.expertise_domains || '[]')
+      competencies: JSON.parse(r.competencies || "[]"),
+      expertiseDomains: JSON.parse(r.expertise_domains || "[]"),
     }));
 
     if (competency) {
-      contexts = contexts.filter(ctx =>
-        ctx.competencies.some(c =>
-          (typeof c === 'string' ? c : c.name).toLowerCase().includes(competency.toLowerCase())
-        )
+      contexts = contexts.filter((ctx) =>
+        ctx.competencies.some((c) =>
+          (typeof c === "string" ? c : c.name)
+            .toLowerCase()
+            .includes(competency.toLowerCase()),
+        ),
       );
     }
 
     if (domain) {
-      contexts = contexts.filter(ctx =>
-        ctx.expertiseDomains.some(d => d.toLowerCase().includes(domain.toLowerCase()))
+      contexts = contexts.filter((ctx) =>
+        ctx.expertiseDomains.some((d) =>
+          d.toLowerCase().includes(domain.toLowerCase()),
+        ),
       );
     }
 
     return apiResponse(c, {
       success: true,
       data: contexts,
-      total: contexts.length
+      total: contexts.length,
     });
   } catch (error) {
-    console.error('[ContextResolution] Search error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'SEARCH_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Search error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "SEARCH_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -498,24 +580,28 @@ contextResolution.get('/search', async (c) => {
  *   platform?: string
  * }
  */
-contextResolution.post('/switch', async (c) => {
+contextResolution.post("/switch", async (c) => {
   try {
     const {
       sessionId,
       fromChittyId,
       toChittyId,
       metrics = {},
-      platform = 'unknown'
+      platform = "unknown",
     } = await c.req.json();
 
     if (!sessionId || !fromChittyId || !toChittyId) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'MISSING_PARAMS',
-          message: 'sessionId, fromChittyId, and toChittyId required'
-        }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "sessionId, fromChittyId, and toChittyId required",
+          },
+        },
+        400,
+      );
     }
 
     const resolver = new ContextResolver(c.env);
@@ -525,20 +611,26 @@ contextResolution.post('/switch', async (c) => {
 
     if (!unbindResult) {
       // Session wasn't bound - that's ok, just proceed to bind
-      console.warn(`[ContextSwitch] No active binding for session ${sessionId}, proceeding to bind`);
+      console.warn(
+        `[ContextSwitch] No active binding for session ${sessionId}, proceeding to bind`,
+      );
     }
 
     // 2. Load target context
     const targetContext = await resolver.loadContextByChittyId(toChittyId);
 
     if (!targetContext) {
-      return apiResponse(c, {
-        success: false,
-        error: {
-          code: 'TARGET_NOT_FOUND',
-          message: `Target context ${toChittyId} not found`
-        }
-      }, 404);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "TARGET_NOT_FOUND",
+            message: `Target context ${toChittyId} not found`,
+          },
+        },
+        404,
+      );
     }
 
     // 3. Bind to target context
@@ -546,17 +638,23 @@ contextResolution.post('/switch', async (c) => {
       targetContext.id,
       toChittyId,
       sessionId,
-      platform
+      platform,
     );
 
     // 4. Log switch event to ledger
-    await resolver.logToLedger(targetContext.id, toChittyId, sessionId, 'transaction', {
-      type: 'context_switch',
-      fromContext: fromChittyId,
-      toContext: toChittyId,
-      reason: 'user_initiated_switch',
-      switchedAt: Date.now(),
-    });
+    await resolver.logToLedger(
+      targetContext.id,
+      toChittyId,
+      sessionId,
+      "transaction",
+      {
+        type: "context_switch",
+        fromContext: fromChittyId,
+        toContext: toChittyId,
+        reason: "user_initiated_switch",
+        switchedAt: Date.now(),
+      },
+    );
 
     return apiResponse(c, {
       success: true,
@@ -572,18 +670,22 @@ contextResolution.post('/switch', async (c) => {
           supportType: targetContext.support_type,
           trustLevel: targetContext.trust_level,
         },
-        message: `Switched from ${fromChittyId} to ${toChittyId}`
-      }
+        message: `Switched from ${fromChittyId} to ${toChittyId}`,
+      },
     });
   } catch (error) {
-    console.error('[ContextResolution] Switch error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: {
-        code: 'SWITCH_FAILED',
-        message: error.message
-      }
-    }, 500);
+    console.error("[ContextResolution] Switch error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "SWITCH_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
   }
 });
 
@@ -597,48 +699,71 @@ contextResolution.post('/switch', async (c) => {
  *   newCompetencies?: string[]
  * }
  */
-contextResolution.post('/expand', async (c) => {
+contextResolution.post("/expand", async (c) => {
   try {
-    const { chittyId, newDomains = [], newCompetencies = [] } = await c.req.json();
+    const {
+      chittyId,
+      newDomains = [],
+      newCompetencies = [],
+    } = await c.req.json();
 
     if (!chittyId) {
-      return apiResponse(c, {
-        success: false,
-        error: { code: 'MISSING_CHITTY_ID', message: 'chittyId required' }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: { code: "MISSING_CHITTY_ID", message: "chittyId required" },
+        },
+        400,
+      );
     }
 
     if (newDomains.length === 0 && newCompetencies.length === 0) {
-      return apiResponse(c, {
-        success: false,
-        error: { code: 'NOTHING_TO_EXPAND', message: 'Provide newDomains or newCompetencies' }
-      }, 400);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "NOTHING_TO_EXPAND",
+            message: "Provide newDomains or newCompetencies",
+          },
+        },
+        400,
+      );
     }
 
     // Get current DNA
-    const dna = await c.env.DB.prepare(`
+    const dna = await c.env.DB.prepare(
+      `
       SELECT cd.*, ce.chitty_id
       FROM context_dna cd
       JOIN context_entities ce ON cd.context_id = ce.id
       WHERE ce.chitty_id = ?
-    `).bind(chittyId).first();
+    `,
+    )
+      .bind(chittyId)
+      .first();
 
     if (!dna) {
-      return apiResponse(c, {
-        success: false,
-        error: { code: 'CONTEXT_NOT_FOUND', message: 'Context not found' }
-      }, 404);
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: { code: "CONTEXT_NOT_FOUND", message: "Context not found" },
+        },
+        404,
+      );
     }
 
     // Merge domains
-    const currentDomains = JSON.parse(dna.expertise_domains || '[]');
+    const currentDomains = JSON.parse(dna.expertise_domains || "[]");
     const mergedDomains = [...new Set([...currentDomains, ...newDomains])];
 
     // Merge competencies
-    const currentCompetencies = JSON.parse(dna.competencies || '[]');
+    const currentCompetencies = JSON.parse(dna.competencies || "[]");
     const compMap = new Map();
     for (const comp of currentCompetencies) {
-      const name = typeof comp === 'string' ? comp : comp.name;
+      const name = typeof comp === "string" ? comp : comp.name;
       compMap.set(name, comp);
     }
     for (const comp of newCompetencies) {
@@ -649,25 +774,35 @@ contextResolution.post('/expand', async (c) => {
     const mergedCompetencies = Array.from(compMap.values());
 
     // Update DNA
-    await c.env.DB.prepare(`
+    await c.env.DB.prepare(
+      `
       UPDATE context_dna
       SET expertise_domains = ?, competencies = ?, updated_at = unixepoch()
       WHERE context_chitty_id = ?
-    `).bind(
-      JSON.stringify(mergedDomains),
-      JSON.stringify(mergedCompetencies),
-      chittyId
-    ).run();
+    `,
+    )
+      .bind(
+        JSON.stringify(mergedDomains),
+        JSON.stringify(mergedCompetencies),
+        chittyId,
+      )
+      .run();
 
     // Log expansion to ledger
     const resolver = new ContextResolver(c.env);
     const context = await resolver.loadContextByChittyId(chittyId);
-    await resolver.logToLedger(context.id, chittyId, 'expansion', 'transaction', {
-      type: 'context_expanded',
-      addedDomains: newDomains,
-      addedCompetencies: newCompetencies,
-      expandedAt: Date.now(),
-    });
+    await resolver.logToLedger(
+      context.id,
+      chittyId,
+      "expansion",
+      "transaction",
+      {
+        type: "context_expanded",
+        addedDomains: newDomains,
+        addedCompetencies: newCompetencies,
+        expandedAt: Date.now(),
+      },
+    );
 
     return apiResponse(c, {
       success: true,
@@ -675,19 +810,25 @@ contextResolution.post('/expand', async (c) => {
         expanded: true,
         chittyId,
         domains: mergedDomains,
-        competencies: mergedCompetencies.map(comp => typeof comp === 'string' ? comp : comp.name),
+        competencies: mergedCompetencies.map((comp) =>
+          typeof comp === "string" ? comp : comp.name,
+        ),
         added: {
           domains: newDomains,
           competencies: newCompetencies,
-        }
-      }
+        },
+      },
     });
   } catch (error) {
-    console.error('[ContextResolution] Expand error:', error);
-    return apiResponse(c, {
-      success: false,
-      error: { code: 'EXPAND_FAILED', message: error.message }
-    }, 500);
+    console.error("[ContextResolution] Expand error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: { code: "EXPAND_FAILED", message: error.message },
+      },
+      500,
+    );
   }
 });
 

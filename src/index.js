@@ -645,18 +645,26 @@ export default {
    * Runs hourly (0 * * * *) for 1Password event sync to ChittyChronicle
    */
   async scheduled(event, env, ctx) {
-    console.log(`[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`);
+    console.log(
+      `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
+    );
     try {
-      const response = await fetch("https://chronicle.chitty.cc/api/sync/1password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(env.CHITTY_CHRONICLE_TOKEN
-            ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-            : {}),
+      const response = await fetch(
+        "https://chronicle.chitty.cc/api/sync/1password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(env.CHITTY_CHRONICLE_TOKEN
+              ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify({
+            source: "chittyconnect-cron",
+            timestamp: new Date().toISOString(),
+          }),
         },
-        body: JSON.stringify({ source: "chittyconnect-cron", timestamp: new Date().toISOString() }),
-      });
+      );
       console.log(`[Scheduled] 1Password sync: ${response.status}`);
     } catch (err) {
       console.error(`[Scheduled] 1Password sync failed:`, err.message);

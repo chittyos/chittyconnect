@@ -20,7 +20,9 @@ export class ChittyProofClient {
    */
   constructor(env, opts = {}) {
     if (!env.CHITTY_PROOF_TOKEN) {
-      throw new Error("[ChittyProofClient] CHITTY_PROOF_TOKEN secret is not configured");
+      throw new Error(
+        "[ChittyProofClient] CHITTY_PROOF_TOKEN secret is not configured",
+      );
     }
     this.#token = env.CHITTY_PROOF_TOKEN;
     this.#baseUrl = opts.baseUrl || DEFAULT_BASE_URL;
@@ -70,11 +72,14 @@ export class ChittyProofClient {
    */
   async exportPdf(proofId) {
     try {
-      const resp = await fetch(`${this.#baseUrl}/api/v1/proofs/${proofId}/export`, {
-        method: "POST",
-        headers: this.#headers(),
-        body: JSON.stringify({ format: "pdx" }),
-      });
+      const resp = await fetch(
+        `${this.#baseUrl}/api/v1/proofs/${proofId}/export`,
+        {
+          method: "POST",
+          headers: this.#headers(),
+          body: JSON.stringify({ format: "pdx" }),
+        },
+      );
 
       if (!resp.ok) {
         const message = await resp.text().catch(() => "Unknown error");

@@ -17,7 +17,12 @@ async function checkFetchError(response, toolLabel) {
   if (response.ok) return null;
   const body = await response.text().catch(() => "No response body");
   return {
-    content: [{ type: "text", text: `${toolLabel} error (${response.status}): ${body.slice(0, 300)}` }],
+    content: [
+      {
+        type: "text",
+        text: `${toolLabel} error (${response.status}): ${body.slice(0, 300)}`,
+      },
+    ],
     isError: true,
   };
 }
@@ -46,19 +51,38 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const serviceToken = await getServiceToken(env, "chittyid");
       if (!serviceToken) {
         return {
-          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
+          content: [
+            {
+              type: "text",
+              text: "Authentication required: No service token available for ChittyID",
+            },
+          ],
           isError: true,
         };
       }
-      const response = await fetch("https://id.chitty.cc/api/v2/chittyid/mint", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${serviceToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ entity: args.entity_type, metadata: args.metadata }),
-      });
+      const response = await fetch(
+        "https://id.chitty.cc/api/v2/chittyid/mint",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            entity: args.entity_type,
+            metadata: args.metadata,
+          }),
+        },
+      );
       if (!response.ok) {
         const errorText = await response.text();
         return {
-          content: [{ type: "text", text: `ChittyID error (${response.status}): ${errorText}` }],
+          content: [
+            {
+              type: "text",
+              text: `ChittyID error (${response.status}): ${errorText}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -67,7 +91,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const serviceToken = await getServiceToken(env, "chittyid");
       if (!serviceToken) {
         return {
-          content: [{ type: "text", text: "Authentication required: No service token available for ChittyID" }],
+          content: [
+            {
+              type: "text",
+              text: "Authentication required: No service token available for ChittyID",
+            },
+          ],
           isError: true,
         };
       }
@@ -78,7 +107,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (!response.ok) {
         const errorText = await response.text();
         return {
-          content: [{ type: "text", text: `ChittyID validation error (${response.status}): ${errorText}` }],
+          content: [
+            {
+              type: "text",
+              text: `ChittyID validation error (${response.status}): ${errorText}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -88,7 +122,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     // ── Case tools ──────────────────────────────────────────────────
     else if (name.startsWith("chitty_case_")) {
       const action = name.replace("chitty_case_", "");
-      const endpoint = action === "create" ? "/api/chittycases/create" : `/api/chittycases/${args.case_id}`;
+      const endpoint =
+        action === "create"
+          ? "/api/chittycases/create"
+          : `/api/chittycases/${args.case_id}`;
       const method = action === "create" ? "POST" : "GET";
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method,
@@ -102,13 +139,30 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-      const response = await fetch("https://ledger.chitty.cc/api/dashboard/stats");
+      const response = await fetch(
+        "https://ledger.chitty.cc/api/dashboard/stats",
+      );
       if (!response.ok) {
-        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
+                0,
+                300,
+              ),
+            },
+          ],
+          isError: true,
+        };
       }
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_ledger_evidence") {
       const url = args.case_id
@@ -116,20 +170,52 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         : "https://ledger.chitty.cc/api/evidence";
       const response = await fetch(url);
       if (!response.ok) {
-        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
+                0,
+                300,
+              ),
+            },
+          ],
+          isError: true,
+        };
       }
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_ledger_facts") {
-      const response = await fetch(`https://ledger.chitty.cc/api/evidence/${args.evidence_id}/facts`);
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/evidence/${args.evidence_id}/facts`,
+      );
       if (!response.ok) {
-        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
+                0,
+                300,
+              ),
+            },
+          ],
+          isError: true,
+        };
       }
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_fact_mint") {
       // Pre-flight: verify the cited evidence exists in ChittyLedger
@@ -138,15 +224,18 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       if (!evidenceCheck.ok) {
         return {
-          content: [{
-            type: "text",
-            text: `Fact minting blocked: evidence_id "${args.evidence_id}" not found in ChittyLedger (${evidenceCheck.status}). Evidence must be ingested through the pipeline before facts can be minted from it.`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `Fact minting blocked: evidence_id "${args.evidence_id}" not found in ChittyLedger (${evidenceCheck.status}). Evidence must be ingested through the pipeline before facts can be minted from it.`,
+            },
+          ],
           isError: true,
         };
       }
       const evidenceRecord = await evidenceCheck.json().catch(() => null);
-      const evidenceHash = evidenceRecord?.file_hash || evidenceRecord?.thing?.file_hash || null;
+      const evidenceHash =
+        evidenceRecord?.file_hash || evidenceRecord?.thing?.file_hash || null;
 
       const response = await fetch("https://ledger.chitty.cc/api/facts", {
         method: "POST",
@@ -163,69 +252,106 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }),
       });
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_fact_validate") {
       // Pre-flight: verify all corroborating evidence IDs exist (parallel)
       if (args.corroborating_evidence?.length) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
-            const resp = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+            const resp = await fetch(
+              `https://ledger.chitty.cc/api/evidence/${evId}`,
+            );
             return { evId, ok: resp.ok, status: resp.status };
           }),
         );
         const failed = checks.find((c) => !c.ok);
         if (failed) {
           return {
-            content: [{
-              type: "text",
-              text: `Validation blocked: corroborating evidence "${failed.evId}" not found in ChittyLedger (${failed.status}). All cited evidence must exist in the pipeline.`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `Validation blocked: corroborating evidence "${failed.evId}" not found in ChittyLedger (${failed.status}). All cited evidence must exist in the pipeline.`,
+              },
+            ],
             isError: true,
           };
         }
       }
 
-      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/validate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          validation_method: args.validation_method,
-          corroborating_evidence: args.corroborating_evidence,
-          notes: args.notes,
-        }),
-      });
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/facts/${args.fact_id}/validate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            validation_method: args.validation_method,
+            corroborating_evidence: args.corroborating_evidence,
+            notes: args.notes,
+          }),
+        },
+      );
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_fact_seal") {
       if (!args.actor_chitty_id) {
-        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Missing required parameter: actor_chitty_id",
+            },
+          ],
+          isError: true,
+        };
       }
       // RBAC: Authority (A) with trust >= INSTITUTIONAL (4)
-      const { checkFactPermission, FACT_ACTIONS } = await import("../lib/fact-rbac.js");
-      const perm = await checkFactPermission(args.actor_chitty_id, FACT_ACTIONS.SEAL, env);
+      const { checkFactPermission, FACT_ACTIONS } =
+        await import("../lib/fact-rbac.js");
+      const perm = await checkFactPermission(
+        args.actor_chitty_id,
+        FACT_ACTIONS.SEAL,
+        env,
+      );
       if (!perm.allowed) {
         return {
-          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          content: [
+            { type: "text", text: `Permission denied: ${perm.reason}` },
+          ],
           isError: true,
         };
       }
 
       // Seal the fact in ChittyLedger
-      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/seal`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sealed_by: args.actor_chitty_id,
-          seal_reason: args.seal_reason,
-        }),
-      });
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/facts/${args.fact_id}/seal`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sealed_by: args.actor_chitty_id,
+            seal_reason: args.seal_reason,
+          }),
+        },
+      );
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
 
       if (response.ok && env.PROOF_Q) {
@@ -237,24 +363,45 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             signer_chitty_id: args.actor_chitty_id,
           });
         } catch (queueErr) {
-          console.error(`[MCP] Proof queue send failed for fact ${args.fact_id} (seal succeeded):`, queueErr);
-          result.proof_queue_warning = "Seal succeeded but proof queue failed. Manual proof minting may be required.";
+          console.error(
+            `[MCP] Proof queue send failed for fact ${args.fact_id} (seal succeeded):`,
+            queueErr,
+          );
+          result.proof_queue_warning =
+            "Seal succeeded but proof queue failed. Manual proof minting may be required.";
         }
       } else if (response.ok && !env.PROOF_Q) {
-        console.warn(`[MCP] PROOF_Q not configured. Fact ${args.fact_id} sealed without proof minting.`);
-        result.proof_queue_warning = "PROOF_Q binding not configured. Proof will not be minted.";
+        console.warn(
+          `[MCP] PROOF_Q not configured. Fact ${args.fact_id} sealed without proof minting.`,
+        );
+        result.proof_queue_warning =
+          "PROOF_Q binding not configured. Proof will not be minted.";
       }
-
     } else if (name === "chitty_fact_dispute") {
       if (!args.actor_chitty_id) {
-        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Missing required parameter: actor_chitty_id",
+            },
+          ],
+          isError: true,
+        };
       }
       // RBAC: Person (P) or Authority (A) with trust >= ENHANCED (2)
-      const { checkFactPermission: checkDisputePerm, FACT_ACTIONS: DA } = await import("../lib/fact-rbac.js");
-      const perm = await checkDisputePerm(args.actor_chitty_id, DA.DISPUTE, env);
+      const { checkFactPermission: checkDisputePerm, FACT_ACTIONS: DA } =
+        await import("../lib/fact-rbac.js");
+      const perm = await checkDisputePerm(
+        args.actor_chitty_id,
+        DA.DISPUTE,
+        env,
+      );
       if (!perm.allowed) {
         return {
-          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          content: [
+            { type: "text", text: `Permission denied: ${perm.reason}` },
+          ],
           isError: true,
         };
       }
@@ -263,56 +410,85 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.counter_evidence_ids?.length) {
         const checks = await Promise.all(
           args.counter_evidence_ids.map(async (evId) => {
-            const resp = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+            const resp = await fetch(
+              `https://ledger.chitty.cc/api/evidence/${evId}`,
+            );
             return { evId, ok: resp.ok, status: resp.status };
           }),
         );
         const failed = checks.find((c) => !c.ok);
         if (failed) {
           return {
-            content: [{
-              type: "text",
-              text: `Dispute blocked: counter evidence "${failed.evId}" not found in ChittyLedger (${failed.status}).`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `Dispute blocked: counter evidence "${failed.evId}" not found in ChittyLedger (${failed.status}).`,
+              },
+            ],
             isError: true,
           };
         }
       }
 
-      const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/dispute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reason: args.reason,
-          challenger_chitty_id: args.challenger_chitty_id || args.actor_chitty_id,
-          counter_evidence_ids: args.counter_evidence_ids,
-        }),
-      });
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/facts/${args.fact_id}/dispute`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reason: args.reason,
+            challenger_chitty_id:
+              args.challenger_chitty_id || args.actor_chitty_id,
+            counter_evidence_ids: args.counter_evidence_ids,
+          }),
+        },
+      );
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
-
     } else if (name === "chitty_fact_export") {
       if (!args.actor_chitty_id) {
-        return { content: [{ type: "text", text: "Missing required parameter: actor_chitty_id" }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Missing required parameter: actor_chitty_id",
+            },
+          ],
+          isError: true,
+        };
       }
       // RBAC: Any authenticated with trust >= BASIC (1)
-      const { checkFactPermission: checkExportPerm, FACT_ACTIONS: EA } = await import("../lib/fact-rbac.js");
+      const { checkFactPermission: checkExportPerm, FACT_ACTIONS: EA } =
+        await import("../lib/fact-rbac.js");
       const perm = await checkExportPerm(args.actor_chitty_id, EA.EXPORT, env);
       if (!perm.allowed) {
         return {
-          content: [{ type: "text", text: `Permission denied: ${perm.reason}` }],
+          content: [
+            { type: "text", text: `Permission denied: ${perm.reason}` },
+          ],
           isError: true,
         };
       }
 
       if (args.format === "pdf") {
         // Fetch fact with proof data
-        const factResp = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/export`);
+        const factResp = await fetch(
+          `https://ledger.chitty.cc/api/facts/${args.fact_id}/export`,
+        );
         if (!factResp.ok) {
           return {
-            content: [{ type: "text", text: `Export failed: fact ${args.fact_id} not found (${factResp.status})` }],
+            content: [
+              {
+                type: "text",
+                text: `Export failed: fact ${args.fact_id} not found (${factResp.status})`,
+              },
+            ],
             isError: true,
           };
         }
@@ -320,19 +496,30 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
         if (!factData.proof_id) {
           return {
-            content: [{ type: "text", text: `PDF export requires a sealed fact with a minted proof. Current proof_status: ${factData.proof_status || "NONE"}` }],
+            content: [
+              {
+                type: "text",
+                text: `PDF export requires a sealed fact with a minted proof. Current proof_status: ${factData.proof_status || "NONE"}`,
+              },
+            ],
             isError: true,
           };
         }
 
         // Generate PDF via ChittyProof and store in R2
-        const { ChittyProofClient } = await import("../lib/chittyproof-client.js");
+        const { ChittyProofClient } =
+          await import("../lib/chittyproof-client.js");
         const proofClient = new ChittyProofClient(env);
         const pdfResult = await proofClient.exportPdf(factData.proof_id);
 
         if (pdfResult.error) {
           return {
-            content: [{ type: "text", text: `PDF generation failed: ${pdfResult.message}` }],
+            content: [
+              {
+                type: "text",
+                text: `PDF generation failed: ${pdfResult.message}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -340,7 +527,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         // Store in R2
         if (!env.FILES) {
           return {
-            content: [{ type: "text", text: "PDF export failed: R2 storage (FILES binding) is not configured." }],
+            content: [
+              {
+                type: "text",
+                text: "PDF export failed: R2 storage (FILES binding) is not configured.",
+              },
+            ],
             isError: true,
           };
         }
@@ -353,7 +545,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         } catch (r2Err) {
           console.error(`[MCP] R2 put failed for ${r2Key}:`, r2Err);
           return {
-            content: [{ type: "text", text: `PDF generated but storage failed: ${r2Err.message}` }],
+            content: [
+              {
+                type: "text",
+                text: `PDF generated but storage failed: ${r2Err.message}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -367,24 +564,44 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         };
       } else {
         // JSON export — fetch full fact with proof bundle
-        const response = await fetch(`https://ledger.chitty.cc/api/facts/${args.fact_id}/export`);
+        const response = await fetch(
+          `https://ledger.chitty.cc/api/facts/${args.fact_id}/export`,
+        );
         const text = await response.text();
-        try { result = JSON.parse(text); } catch {
-          result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
+        try {
+          result = JSON.parse(text);
+        } catch {
+          result = {
+            error: `Ledger returned (${response.status}): ${text.slice(0, 200)}`,
+          };
         }
       }
-
     } else if (name === "chitty_ledger_contradictions") {
       const url = args.case_id
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${args.case_id}`
         : "https://ledger.chitty.cc/api/contradictions";
       const response = await fetch(url);
       if (!response.ok) {
-        return { content: [{ type: "text", text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(0, 300) }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
+                0,
+                300,
+              ),
+            },
+          ],
+          isError: true,
+        };
       }
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     }
 
@@ -398,8 +615,18 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
       }
     } else if (name === "chitty_ledger_query") {
       const params = new URLSearchParams();
@@ -408,42 +635,92 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.actor) params.set("actor", args.actor);
       if (args.status) params.set("status", args.status);
       if (args.limit) params.set("limit", String(args.limit));
-      const response = await fetch(`https://ledger.chitty.cc/api/ledger?${params}`);
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/ledger?${params}`,
+      );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
       }
     } else if (name === "chitty_ledger_verify") {
-      const response = await fetch("https://ledger.chitty.cc/api/ledger/verify");
+      const response = await fetch(
+        "https://ledger.chitty.cc/api/ledger/verify",
+      );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
       }
     } else if (name === "chitty_ledger_statistics") {
-      const response = await fetch("https://ledger.chitty.cc/api/ledger/statistics");
+      const response = await fetch(
+        "https://ledger.chitty.cc/api/ledger/statistics",
+      );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
       }
     } else if (name === "chitty_ledger_chain_of_custody") {
       if (!args.entity_id) {
         return {
-          content: [{ type: "text", text: "Missing required parameter: entity_id" }],
+          content: [
+            { type: "text", text: "Missing required parameter: entity_id" },
+          ],
           isError: true,
         };
       }
-      const response = await fetch(`https://ledger.chitty.cc/api/ledger/${encodeURIComponent(args.entity_id)}/custody`);
+      const response = await fetch(
+        `https://ledger.chitty.cc/api/ledger/${encodeURIComponent(args.entity_id)}/custody`,
+      );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
       }
     }
 
@@ -454,12 +731,18 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.start_date) params.set("start", args.start_date);
       if (args.end_date) params.set("end", args.end_date);
       if (args.source) params.set("source", args.source);
-      const response = await fetch(`https://contextual.chitty.cc/api/messages?${params.toString()}`);
+      const response = await fetch(
+        `https://contextual.chitty.cc/api/messages?${params.toString()}`,
+      );
       const fetchErr = await checkFetchError(response, "ChittyContextual");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     } else if (name === "chitty_contextual_topics") {
       const response = await fetch("https://contextual.chitty.cc/api/topics", {
@@ -470,8 +753,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ChittyContextual");
       if (fetchErr) return fetchErr;
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
-        result = { error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = {
+          error: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+        };
       }
     }
 
@@ -480,14 +767,24 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
       if (!accountId) {
         return {
-          content: [{ type: "text", text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set." }],
+          content: [
+            {
+              type: "text",
+              text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set.",
+            },
+          ],
           isError: true,
         };
       }
       const aiSearchToken = env.AI_SEARCH_TOKEN;
       if (!aiSearchToken) {
         return {
-          content: [{ type: "text", text: "AI Search not configured: AI_SEARCH_TOKEN secret not set." }],
+          content: [
+            {
+              type: "text",
+              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
+            },
+          ],
           isError: true,
         };
       }
@@ -495,41 +792,71 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${aiSearchToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: args.query }], max_num_results: 10 }),
+          headers: {
+            Authorization: `Bearer ${aiSearchToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: args.query }],
+            max_num_results: 10,
+          }),
         },
       );
       const text = await response.text();
       let data;
-      try { data = JSON.parse(text); } catch { data = null; }
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
       if (!data || !data.success) {
         return {
-          content: [{ type: "text", text: `AI Search error (${response.status}): ${(text || "").slice(0, 300)}` }],
+          content: [
+            {
+              type: "text",
+              text: `AI Search error (${response.status}): ${(text || "").slice(0, 300)}`,
+            },
+          ],
           isError: true,
         };
       }
       const chunks = data.result?.chunks || [];
-      const formatted = chunks.slice(0, 5).map((d) => {
-        const fname = d.item?.key || d.filename || "unknown";
-        const score = (d.score || 0).toFixed(3);
-        const snippet = (d.text || "").slice(0, 200).replace(/\n/g, " ");
-        return `[${score}] ${fname}\n  ${snippet}`;
-      }).join("\n\n");
+      const formatted = chunks
+        .slice(0, 5)
+        .map((d) => {
+          const fname = d.item?.key || d.filename || "unknown";
+          const score = (d.score || 0).toFixed(3);
+          const snippet = (d.text || "").slice(0, 200).replace(/\n/g, " ");
+          return `[${score}] ${fname}\n  ${snippet}`;
+        })
+        .join("\n\n");
       return {
-        content: [{ type: "text", text: formatted || "No matching documents found." }],
+        content: [
+          { type: "text", text: formatted || "No matching documents found." },
+        ],
       };
     } else if (name === "chitty_evidence_retrieve") {
       const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
       if (!accountId) {
         return {
-          content: [{ type: "text", text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set." }],
+          content: [
+            {
+              type: "text",
+              text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set.",
+            },
+          ],
           isError: true,
         };
       }
       const aiSearchToken = env.AI_SEARCH_TOKEN;
       if (!aiSearchToken) {
         return {
-          content: [{ type: "text", text: "AI Search not configured: AI_SEARCH_TOKEN secret not set." }],
+          content: [
+            {
+              type: "text",
+              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
+            },
+          ],
           isError: true,
         };
       }
@@ -537,14 +864,27 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${aiSearchToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: args.query }], max_num_results: args.max_num_results || 10 }),
+          headers: {
+            Authorization: `Bearer ${aiSearchToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: args.query }],
+            max_num_results: args.max_num_results || 10,
+          }),
         },
       );
       const text = await response.text();
-      try { result = JSON.parse(text); } catch {
+      try {
+        result = JSON.parse(text);
+      } catch {
         return {
-          content: [{ type: "text", text: `AI Search retrieve error (${response.status}): ${(text || "").slice(0, 300)}` }],
+          content: [
+            {
+              type: "text",
+              text: `AI Search retrieve error (${response.status}): ${(text || "").slice(0, 300)}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -553,9 +893,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     // ── Evidence CRUD tools (ingest/verify) ─────────────────────────
     else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
-      const endpoint = action === "ingest"
-        ? "/api/chittyevidence/ingest"
-        : `/api/chittyevidence/${args.evidence_id}`;
+      const endpoint =
+        action === "ingest"
+          ? "/api/chittyevidence/ingest"
+          : `/api/chittyevidence/${args.evidence_id}`;
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method: action === "ingest" ? "POST" : "GET",
         headers: { ...authHeader, "Content-Type": "application/json" },
@@ -617,11 +958,14 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_detect_transfers") {
-      const response = await fetch("https://finance.chitty.cc/api/transfers/detect", {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify(args),
-      });
+      const response = await fetch(
+        "https://finance.chitty.cc/api/transfers/detect",
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify(args),
+        },
+      );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
@@ -637,10 +981,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-      const response = await fetch("https://finance.chitty.cc/api/sync/mercury", {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-      });
+      const response = await fetch(
+        "https://finance.chitty.cc/api/sync/mercury",
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+        },
+      );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
@@ -671,22 +1018,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Context tools ─────────────────────────────────────────────────
     else if (name === "context_resolve") {
-      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/resolve`, {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_path: args.project_path,
-          platform: args.platform || "claude_code",
-          support_type: args.support_type || "development",
-          organization: args.organization,
-        }),
-      });
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/resolve`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_path: args.project_path,
+            platform: args.platform || "claude_code",
+            support_type: args.support_type || "development",
+            organization: args.organization,
+          }),
+        },
+      );
       const fetchErr = await checkFetchError(response, "ContextResolve");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "context_restore") {
+    } else if (name === "context_restore") {
       const params = new URLSearchParams();
       if (args.project_slug) params.set("project", args.project_slug);
       const response = await fetch(
@@ -696,26 +1044,25 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ContextRestore");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "context_commit") {
-      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/commit`, {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: args.session_id,
-          chitty_id: args.chitty_id,
-          project_slug: args.project_slug,
-          metrics: args.metrics,
-          decisions: args.decisions,
-        }),
-      });
+    } else if (name === "context_commit") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/commit`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: args.session_id,
+            chitty_id: args.chitty_id,
+            project_slug: args.project_slug,
+            metrics: args.metrics,
+            decisions: args.decisions,
+          }),
+        },
+      );
       const fetchErr = await checkFetchError(response, "ContextCommit");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "context_check") {
+    } else if (name === "context_check") {
       const response = await fetch(
         `${baseUrl}/api/v1/intelligence/context/${encodeURIComponent(args.chitty_id)}/check`,
         { headers: authHeader },
@@ -723,26 +1070,31 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ContextCheck");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "context_checkpoint") {
-      const response = await fetch(`${baseUrl}/api/v1/intelligence/context/checkpoint`, {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chitty_id: args.chitty_id,
-          project_slug: args.project_slug,
-          name: args.name,
-          state: args.state,
-        }),
-      });
+    } else if (name === "context_checkpoint") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/checkpoint`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chitty_id: args.chitty_id,
+            project_slug: args.project_slug,
+            name: args.name,
+            state: args.state,
+          }),
+        },
+      );
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
       if (fetchErr) return fetchErr;
       result = await response.json();
     }
 
     // ── Memory tools (MemoryCloude) ──────────────────────────────────
-    else if (name === "chitty_memory_persist" || name === "memory_persist_interaction" || name === "memory_persist") {
+    else if (
+      name === "chitty_memory_persist" ||
+      name === "memory_persist_interaction" ||
+      name === "memory_persist"
+    ) {
       const response = await fetch(`${baseUrl}/api/v1/memory/persist`, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
@@ -756,9 +1108,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "MemoryPersist");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "chitty_memory_recall" || name === "memory_recall_context" || name === "memory_recall") {
+    } else if (
+      name === "chitty_memory_recall" ||
+      name === "memory_recall_context" ||
+      name === "memory_recall"
+    ) {
       const params = new URLSearchParams();
       if (args.query) params.set("query", args.query);
       if (args.chitty_id) params.set("chitty_id", args.chitty_id);
@@ -771,9 +1125,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "MemoryRecall");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    }
-
-    else if (name === "chitty_memory_session_summary" || name === "memory_get_session_summary") {
+    } else if (
+      name === "chitty_memory_session_summary" ||
+      name === "memory_get_session_summary"
+    ) {
       const response = await fetch(
         `${baseUrl}/api/v1/memory/session/${encodeURIComponent(args.session_id)}/summary`,
         { headers: authHeader },
@@ -799,7 +1154,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Service health tools ────────────────────────────────────────
-    else if (name.startsWith("chitty_services_") || name === "chitty_ecosystem_awareness") {
+    else if (
+      name.startsWith("chitty_services_") ||
+      name === "chitty_ecosystem_awareness"
+    ) {
       const response = await fetch(`${baseUrl}/api/services/status`, {
         headers: authHeader,
       });
@@ -877,7 +1235,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
   } catch (error) {
     console.error(`[MCP] Tool execution error for ${name}:`, error);
     return {
-      content: [{ type: "text", text: `Error executing ${name}: ${error.message}` }],
+      content: [
+        { type: "text", text: `Error executing ${name}: ${error.message}` },
+      ],
       isError: true,
     };
   }

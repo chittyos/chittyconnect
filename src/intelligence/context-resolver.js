@@ -38,10 +38,10 @@ export class ContextResolver {
     const {
       projectPath,
       workspace,
-      supportType = 'development',
+      supportType = "development",
       organization,
       sessionId,
-      platform = 'unknown',
+      platform = "unknown",
       explicitChittyId,
     } = hints;
 
@@ -50,21 +50,26 @@ export class ContextResolver {
       const context = await this.loadContextByChittyId(explicitChittyId);
       if (context) {
         return {
-          action: 'bind_existing',
+          action: "bind_existing",
           context,
           confidence: 1.0,
-          reason: 'Explicit ChittyID provided',
+          reason: "Explicit ChittyID provided",
         };
       }
       // Explicit ID not found - this is an error condition
       return {
-        action: 'error',
+        action: "error",
         error: `ChittyID ${explicitChittyId} not found`,
       };
     }
 
     // Build anchor hash from static identifiers
-    const anchors = this.buildAnchors({ projectPath, workspace, supportType, organization });
+    const anchors = this.buildAnchors({
+      projectPath,
+      workspace,
+      supportType,
+      organization,
+    });
     const anchorHash = await this.hashAnchors(anchors);
 
     // Look for existing context with matching anchor hash
@@ -73,7 +78,7 @@ export class ContextResolver {
     if (existingContext) {
       // Found existing context - return for binding confirmation
       return {
-        action: 'bind_existing',
+        action: "bind_existing",
         context: existingContext,
         confidence: this.calculateMatchConfidence(existingContext, hints),
         reason: `Matched by anchor hash: ${anchorHash.slice(0, 16)}...`,
@@ -84,7 +89,7 @@ export class ContextResolver {
 
     // No existing context - prepare new one (pending confirmation)
     return {
-      action: 'create_new',
+      action: "create_new",
       pendingContext: {
         projectPath,
         workspace,
@@ -92,7 +97,7 @@ export class ContextResolver {
         organization,
         anchorHash,
       },
-      reason: 'No existing context matches these anchors',
+      reason: "No existing context matches these anchors",
       anchors,
       anchorHash,
       requiresConfirmation: true,
@@ -104,10 +109,10 @@ export class ContextResolver {
    */
   buildAnchors({ projectPath, workspace, supportType, organization }) {
     return {
-      projectPath: projectPath || '',
-      workspace: workspace || '',
-      supportType: supportType || 'development',
-      organization: organization || '',
+      projectPath: projectPath || "",
+      workspace: workspace || "",
+      supportType: supportType || "development",
+      organization: organization || "",
     };
   }
 
@@ -115,38 +120,47 @@ export class ContextResolver {
    * Hash anchors to create unique context identifier
    */
   async hashAnchors(anchors) {
-    const canonical = JSON.stringify([
-      anchors.projectPath,
-      anchors.workspace,
-      anchors.supportType,
-      anchors.organization,
-    ].filter(Boolean).sort());
+    const canonical = JSON.stringify(
+      [
+        anchors.projectPath,
+        anchors.workspace,
+        anchors.supportType,
+        anchors.organization,
+      ]
+        .filter(Boolean)
+        .sort(),
+    );
 
     const encoder = new TextEncoder();
     const data = encoder.encode(canonical);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   /**
    * Find existing context by anchor hash
    */
   async findContextByHash(anchorHash) {
-    const result = await this.db.prepare(`
+    const result = await this.db
+      .prepare(
+        `
       SELECT ce.*, cd.competencies, cd.expertise_domains, cd.success_rate, cd.total_interactions
       FROM context_entities ce
       LEFT JOIN context_dna cd ON ce.id = cd.context_id
       WHERE ce.context_hash = ? AND ce.status IN ('active', 'dormant')
-    `).bind(anchorHash).first();
+    `,
+      )
+      .bind(anchorHash)
+      .first();
 
     if (!result) return null;
 
     return {
       ...result,
-      competencies: JSON.parse(result.competencies || '[]'),
-      expertise_domains: JSON.parse(result.expertise_domains || '[]'),
-      current_sessions: JSON.parse(result.current_sessions || '[]'),
+      competencies: JSON.parse(result.competencies || "[]"),
+      expertise_domains: JSON.parse(result.expertise_domains || "[]"),
+      current_sessions: JSON.parse(result.current_sessions || "[]"),
     };
   }
 
@@ -154,20 +168,25 @@ export class ContextResolver {
    * Load context by ChittyID
    */
   async loadContextByChittyId(chittyId) {
-    const result = await this.db.prepare(`
+    const result = await this.db
+      .prepare(
+        `
       SELECT ce.*, cd.competencies, cd.expertise_domains, cd.success_rate, cd.total_interactions
       FROM context_entities ce
       LEFT JOIN context_dna cd ON ce.id = cd.context_id
       WHERE ce.chitty_id = ? AND ce.status IN ('active', 'dormant')
-    `).bind(chittyId).first();
+    `,
+      )
+      .bind(chittyId)
+      .first();
 
     if (!result) return null;
 
     return {
       ...result,
-      competencies: JSON.parse(result.competencies || '[]'),
-      expertise_domains: JSON.parse(result.expertise_domains || '[]'),
-      current_sessions: JSON.parse(result.current_sessions || '[]'),
+      competencies: JSON.parse(result.competencies || "[]"),
+      expertise_domains: JSON.parse(result.expertise_domains || "[]"),
+      current_sessions: JSON.parse(result.current_sessions || "[]"),
     };
   }
 
@@ -187,7 +206,8 @@ export class ContextResolver {
     if (context.trust_level >= 4) confidence += 0.1;
 
     // Boost for recent activity
-    const daysSinceActivity = (Date.now() / 1000 - context.last_activity) / 86400;
+    const daysSinceActivity =
+      (Date.now() / 1000 - context.last_activity) / 86400;
     if (daysSinceActivity < 7) confidence += 0.1;
 
     return Math.min(confidence, 1.0);
@@ -196,7 +216,13 @@ export class ContextResolver {
   /**
    * Create new context entity - ONLY after user confirmation
    */
-  async createContext({ projectPath, workspace, supportType, organization, anchorHash }) {
+  async createContext({
+    projectPath,
+    workspace,
+    supportType,
+    organization,
+    anchorHash,
+  }) {
     const contextId = crypto.randomUUID();
 
     // Mint ChittyID from ChittyID service
@@ -208,39 +234,49 @@ export class ContextResolver {
     });
 
     // Create context entity
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_entities (
         id, chitty_id, context_hash, project_path, workspace, support_type, organization,
         signature, issuer, trust_score, trust_level, total_sessions, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      contextId,
-      chittyId,
-      anchorHash,
-      projectPath,
-      workspace || null,
-      supportType,
-      organization || null,
-      'pending-signature', // Will be signed by ChittyID service
-      'chittyid',
-      50.0, // Default starting trust
-      3,    // Default trust level
-      0,    // No sessions yet
-      'active'
-    ).run();
+    `,
+      )
+      .bind(
+        contextId,
+        chittyId,
+        anchorHash,
+        projectPath,
+        workspace || null,
+        supportType,
+        organization || null,
+        "pending-signature", // Will be signed by ChittyID service
+        "chittyid",
+        50.0, // Default starting trust
+        3, // Default trust level
+        0, // No sessions yet
+        "active",
+      )
+      .run();
 
     // Initialize DNA record
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_dna (
         id, context_id, context_chitty_id,
         patterns, traits, preferences, competencies, expertise_domains,
         total_interactions, total_decisions, success_rate
       ) VALUES (?, ?, ?, '[]', '[]', '[]', '[]', '[]', 0, 0, 0.0)
-    `).bind(crypto.randomUUID(), contextId, chittyId).run();
+    `,
+      )
+      .bind(crypto.randomUUID(), contextId, chittyId)
+      .run();
 
     // Log creation to ledger
-    await this.logToLedger(contextId, chittyId, 'system', 'transaction', {
-      type: 'context_created',
+    await this.logToLedger(contextId, chittyId, "system", "transaction", {
+      type: "context_created",
       anchors: { projectPath, workspace, supportType, organization },
     });
 
@@ -252,43 +288,53 @@ export class ContextResolver {
    */
   async mintChittyId({ projectPath, workspace, supportType, organization }) {
     try {
-      const response = await fetch(`${this.env.CHITTYID_SERVICE_URL || 'https://id.chitty.cc'}/api/v1/mint`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.env.CHITTY_ID_TOKEN || ''}`,
-        },
-        body: JSON.stringify({
-          entity_type: 'P', // @canon: chittycanon://gov/governance#core-types
-          characterization: 'Synthetic', // AI/Claude contexts are synthetic Persons
-          metadata: {
-            project_path: projectPath,
-            workspace,
-            support_type: supportType,
-            organization,
+      const response = await fetch(
+        `${this.env.CHITTYID_SERVICE_URL || "https://id.chitty.cc"}/api/v1/mint`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN || ""}`,
           },
-        }),
-      });
+          body: JSON.stringify({
+            entity_type: "P", // @canon: chittycanon://gov/governance#core-types
+            characterization: "Synthetic", // AI/Claude contexts are synthetic Persons
+            metadata: {
+              project_path: projectPath,
+              workspace,
+              support_type: supportType,
+              organization,
+            },
+          }),
+        },
+      );
 
       if (response.ok) {
         const data = await response.json();
         return data.chitty_id || data.id;
       }
     } catch (error) {
-      console.warn('[ContextResolver] ChittyID mint failed, generating locally:', error.message);
+      console.warn(
+        "[ContextResolver] ChittyID mint failed, generating locally:",
+        error.message,
+      );
     }
 
     // Fallback: generate local ChittyID format
     // @canon: chittycanon://gov/governance#core-types
     // Contexts are Person (P, Synthetic) — actors with agency, even in fallback
-    const version = '03';
-    const geo = '1';
-    const locale = 'USA';
-    const sequence = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
-    const type = 'P'; // @canon: chittycanon://gov/governance#core-types — context is Person, not Thing
+    const version = "03";
+    const geo = "1";
+    const locale = "USA";
+    const sequence = Math.floor(Math.random() * 9999)
+      .toString()
+      .padStart(4, "0");
+    const type = "P"; // @canon: chittycanon://gov/governance#core-types — context is Person, not Thing
     const year = new Date().getFullYear().toString().slice(-2);
-    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    const check = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    const month = (new Date().getMonth() + 1).toString().padStart(2, "0");
+    const check = Math.floor(Math.random() * 100)
+      .toString()
+      .padStart(2, "0");
 
     return `${version}-${geo}-${locale}-${sequence}-${type}-${year}${month}-0-${check}`;
   }
@@ -296,38 +342,53 @@ export class ContextResolver {
   /**
    * Bind session to context - called after user confirmation
    */
-  async bindSession(contextId, chittyId, sessionId, platform = 'unknown') {
+  async bindSession(contextId, chittyId, sessionId, platform = "unknown") {
     const bindingId = crypto.randomUUID();
 
     // Create session binding
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_session_bindings (
         id, session_id, context_id, context_chitty_id, context_hash, platform
       )
       SELECT ?, ?, ?, ?, context_hash, ?
       FROM context_entities WHERE id = ?
-    `).bind(bindingId, sessionId, contextId, chittyId, platform, contextId).run();
+    `,
+      )
+      .bind(bindingId, sessionId, contextId, chittyId, platform, contextId)
+      .run();
 
     // Update context's session tracking
-    const context = await this.db.prepare(`
+    const context = await this.db
+      .prepare(
+        `
       SELECT current_sessions, total_sessions FROM context_entities WHERE id = ?
-    `).bind(contextId).first();
+    `,
+      )
+      .bind(contextId)
+      .first();
 
-    const currentSessions = JSON.parse(context.current_sessions || '[]');
+    const currentSessions = JSON.parse(context.current_sessions || "[]");
     currentSessions.push(sessionId);
 
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE context_entities
       SET current_sessions = ?,
           total_sessions = total_sessions + 1,
           last_activity = unixepoch(),
           status = 'active'
       WHERE id = ?
-    `).bind(JSON.stringify(currentSessions), contextId).run();
+    `,
+      )
+      .bind(JSON.stringify(currentSessions), contextId)
+      .run();
 
     // Log session start to ledger
-    await this.logToLedger(contextId, chittyId, sessionId, 'transaction', {
-      type: 'session_start',
+    await this.logToLedger(contextId, chittyId, sessionId, "transaction", {
+      type: "session_start",
       platform,
       bound_at: Date.now(),
     });
@@ -340,17 +401,26 @@ export class ContextResolver {
    */
   async unbindSession(sessionId, metrics = {}) {
     // Get binding info
-    const binding = await this.db.prepare(`
+    const binding = await this.db
+      .prepare(
+        `
       SELECT * FROM context_session_bindings WHERE session_id = ? AND unbound_at IS NULL
-    `).bind(sessionId).first();
+    `,
+      )
+      .bind(sessionId)
+      .first();
 
     if (!binding) {
-      console.warn(`[ContextResolver] No active binding found for session ${sessionId}`);
+      console.warn(
+        `[ContextResolver] No active binding found for session ${sessionId}`,
+      );
       return null;
     }
 
     // Update binding with metrics
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE context_session_bindings
       SET unbound_at = unixepoch(),
           unbind_reason = 'session_complete',
@@ -358,51 +428,85 @@ export class ContextResolver {
           decisions_count = ?,
           session_success_rate = ?
       WHERE id = ?
-    `).bind(
-      metrics.interactions || 0,
-      metrics.decisions || 0,
-      metrics.successRate || null,
-      binding.id
-    ).run();
+    `,
+      )
+      .bind(
+        metrics.interactions || 0,
+        metrics.decisions || 0,
+        metrics.successRate || null,
+        binding.id,
+      )
+      .run();
 
     // Remove from context's current sessions
-    const context = await this.db.prepare(`
+    const context = await this.db
+      .prepare(
+        `
       SELECT current_sessions FROM context_entities WHERE id = ?
-    `).bind(binding.context_id).first();
+    `,
+      )
+      .bind(binding.context_id)
+      .first();
 
-    const currentSessions = JSON.parse(context.current_sessions || '[]')
-      .filter(s => s !== sessionId);
+    const currentSessions = JSON.parse(context.current_sessions || "[]").filter(
+      (s) => s !== sessionId,
+    );
 
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE context_entities
       SET current_sessions = ?,
           last_activity = unixepoch()
       WHERE id = ?
-    `).bind(JSON.stringify(currentSessions), binding.context_id).run();
+    `,
+      )
+      .bind(JSON.stringify(currentSessions), binding.context_id)
+      .run();
 
     // Roll up metrics to DNA
     await this.accumulateToDNA(binding.context_id, metrics);
 
     // Log session end to ledger
-    await this.logToLedger(binding.context_id, binding.context_chitty_id, sessionId, 'transaction', {
-      type: 'session_end',
-      duration: Date.now() - binding.bound_at * 1000,
-      metrics,
-    });
+    await this.logToLedger(
+      binding.context_id,
+      binding.context_chitty_id,
+      sessionId,
+      "transaction",
+      {
+        type: "session_end",
+        duration: Date.now() - binding.bound_at * 1000,
+        metrics,
+      },
+    );
 
-    return { contextId: binding.context_id, chittyId: binding.context_chitty_id };
+    return {
+      contextId: binding.context_id,
+      chittyId: binding.context_chitty_id,
+    };
   }
 
   /**
    * Accumulate session metrics to context DNA
    */
   async accumulateToDNA(contextId, metrics) {
-    const { interactions = 0, decisions = 0, successRate, competencies = [], domains = [] } = metrics;
+    const {
+      interactions = 0,
+      decisions = 0,
+      successRate,
+      competencies = [],
+      domains = [],
+    } = metrics;
 
     // Get current DNA
-    const dna = await this.db.prepare(`
+    const dna = await this.db
+      .prepare(
+        `
       SELECT * FROM context_dna WHERE context_id = ?
-    `).bind(contextId).first();
+    `,
+      )
+      .bind(contextId)
+      .first();
 
     if (!dna) return;
 
@@ -418,15 +522,20 @@ export class ContextResolver {
     }
 
     // Merge competencies
-    const existingCompetencies = JSON.parse(dna.competencies || '[]');
-    const mergedCompetencies = this.mergeCompetencies(existingCompetencies, competencies);
+    const existingCompetencies = JSON.parse(dna.competencies || "[]");
+    const mergedCompetencies = this.mergeCompetencies(
+      existingCompetencies,
+      competencies,
+    );
 
     // Merge expertise domains
-    const existingDomains = JSON.parse(dna.expertise_domains || '[]');
+    const existingDomains = JSON.parse(dna.expertise_domains || "[]");
     const mergedDomains = [...new Set([...existingDomains, ...domains])];
 
     // Update DNA
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE context_dna
       SET total_interactions = ?,
           total_decisions = ?,
@@ -435,14 +544,17 @@ export class ContextResolver {
           expertise_domains = ?,
           updated_at = unixepoch()
       WHERE context_id = ?
-    `).bind(
-      totalInteractions,
-      totalDecisions,
-      newSuccessRate,
-      JSON.stringify(mergedCompetencies),
-      JSON.stringify(mergedDomains),
-      contextId
-    ).run();
+    `,
+      )
+      .bind(
+        totalInteractions,
+        totalDecisions,
+        newSuccessRate,
+        JSON.stringify(mergedCompetencies),
+        JSON.stringify(mergedDomains),
+        contextId,
+      )
+      .run();
   }
 
   /**
@@ -453,15 +565,15 @@ export class ContextResolver {
 
     // Add existing
     for (const comp of existing) {
-      const name = typeof comp === 'string' ? comp : comp.name;
-      const level = typeof comp === 'string' ? 1 : (comp.level || 1);
+      const name = typeof comp === "string" ? comp : comp.name;
+      const level = typeof comp === "string" ? 1 : comp.level || 1;
       map.set(name, { name, level, count: 1 });
     }
 
     // Merge new
     for (const comp of newCompetencies) {
-      const name = typeof comp === 'string' ? comp : comp.name;
-      const level = typeof comp === 'string' ? 1 : (comp.level || 1);
+      const name = typeof comp === "string" ? comp : comp.name;
+      const level = typeof comp === "string" ? 1 : comp.level || 1;
 
       if (map.has(name)) {
         const existing = map.get(name);
@@ -480,32 +592,49 @@ export class ContextResolver {
    */
   async logToLedger(contextId, chittyId, sessionId, eventType, payload) {
     // Get previous entry for chaining
-    const previous = await this.db.prepare(`
+    const previous = await this.db
+      .prepare(
+        `
       SELECT hash FROM context_ledger
       WHERE context_id = ?
       ORDER BY timestamp DESC
       LIMIT 1
-    `).bind(contextId).first();
+    `,
+      )
+      .bind(contextId)
+      .first();
 
     const entryId = crypto.randomUUID();
-    const entryData = { entryId, contextId, sessionId, eventType, payload, timestamp: Date.now() };
+    const entryData = {
+      entryId,
+      contextId,
+      sessionId,
+      eventType,
+      payload,
+      timestamp: Date.now(),
+    };
     const entryHash = await this.hashContent(entryData);
 
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       INSERT INTO context_ledger (
         id, context_id, context_chitty_id, session_id,
         event_type, payload, hash, previous_hash
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      entryId,
-      contextId,
-      chittyId,
-      sessionId,
-      eventType,
-      JSON.stringify(payload),
-      entryHash,
-      previous?.hash || 'genesis'
-    ).run();
+    `,
+      )
+      .bind(
+        entryId,
+        contextId,
+        chittyId,
+        sessionId,
+        eventType,
+        JSON.stringify(payload),
+        entryHash,
+        previous?.hash || "genesis",
+      )
+      .run();
 
     return { entryId, hash: entryHash };
   }
@@ -516,9 +645,9 @@ export class ContextResolver {
   async hashContent(content) {
     const encoder = new TextEncoder();
     const data = encoder.encode(JSON.stringify(content));
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   /**
@@ -535,9 +664,11 @@ export class ContextResolver {
       supportType: context.support_type,
       activeSessions: context.current_sessions?.length || 0,
       totalInteractions: context.total_interactions || 0,
-      successRate: context.success_rate ? Math.round(context.success_rate * 100) : null,
+      successRate: context.success_rate
+        ? Math.round(context.success_rate * 100)
+        : null,
       status: context.status,
-      projectName: context.project_path?.split('/').pop(),
+      projectName: context.project_path?.split("/").pop(),
     };
   }
 }

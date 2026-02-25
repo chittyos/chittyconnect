@@ -29,7 +29,10 @@ mcpRoutes.get("/tools/list", async (c) => {
 mcpRoutes.post("/tools/call", async (c) => {
   const { name, arguments: args, context } = await c.req.json();
   const baseUrl = c.req.url.split("/mcp")[0];
-  const authToken = (c.req.header("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const authToken = (c.req.header("Authorization") || "").replace(
+    /^Bearer\s+/i,
+    "",
+  );
 
   const result = await dispatchToolCall(name, args, c.env, {
     baseUrl,
@@ -39,9 +42,11 @@ mcpRoutes.post("/tools/call", async (c) => {
 
   if (result.isError) {
     const msg = result.content?.[0]?.text || "";
-    const status = msg.includes("Unknown tool") ? 400
-      : msg.includes("Permission denied") ? 403
-      : 500;
+    const status = msg.includes("Unknown tool")
+      ? 400
+      : msg.includes("Permission denied")
+        ? 403
+        : 500;
     return c.json(result, status);
   }
   return c.json(result);
@@ -184,11 +189,15 @@ mcpRoutes.post("/session/persist", async (c) => {
 
   try {
     // TODO: Wire to MCP Session Durable Object for real session persistence
-    return c.json({
-      success: false,
-      sessionId,
-      error: "Session persistence not yet implemented — requires Durable Object wiring",
-    }, 501);
+    return c.json(
+      {
+        success: false,
+        sessionId,
+        error:
+          "Session persistence not yet implemented — requires Durable Object wiring",
+      },
+      501,
+    );
   } catch (error) {
     return c.json(
       {
@@ -210,9 +219,13 @@ mcpRoutes.post("/sampling/sample", async (c) => {
 
   try {
     // TODO: Wire to Workers AI or proxy to OpenAI for real MCP sampling
-    return c.json({
-      error: "MCP sampling not yet implemented — requires Workers AI or OpenAI proxy wiring",
-    }, 501);
+    return c.json(
+      {
+        error:
+          "MCP sampling not yet implemented — requires Workers AI or OpenAI proxy wiring",
+      },
+      501,
+    );
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }

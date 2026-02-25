@@ -20,17 +20,17 @@ import { resolveTrustLevel, TRUST_LEVELS } from "./trust-resolver.js";
 export const FACT_ACTIONS = {
   SEAL: {
     name: "seal",
-    entity_types: ["A"],       // Authority only
+    entity_types: ["A"], // Authority only
     min_trust: TRUST_LEVELS.INSTITUTIONAL,
   },
   DISPUTE: {
     name: "dispute",
-    entity_types: ["P", "A"],  // Person or Authority
+    entity_types: ["P", "A"], // Person or Authority
     min_trust: TRUST_LEVELS.ENHANCED,
   },
   EXPORT: {
     name: "export",
-    entity_types: null,        // Any authenticated entity
+    entity_types: null, // Any authenticated entity
     min_trust: TRUST_LEVELS.BASIC,
   },
 };

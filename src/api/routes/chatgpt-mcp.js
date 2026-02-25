@@ -33,7 +33,10 @@ function evictStaleSessions() {
   for (const [sid, entry] of sessions) {
     if (now - entry.lastAccess > SESSION_TTL_MS) {
       entry.transport.close().catch((err) => {
-        console.warn(`[ChatGPT-MCP] Failed to close session ${sid}:`, err.message);
+        console.warn(
+          `[ChatGPT-MCP] Failed to close session ${sid}:`,
+          err.message,
+        );
       });
       sessions.delete(sid);
     }
@@ -132,7 +135,11 @@ chatgptMcp.all("/", async (c) => {
   } catch (err) {
     console.error("[ChatGPT-MCP] Request handling error:", err);
     return c.json(
-      { jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null },
+      {
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal error" },
+        id: null,
+      },
       500,
     );
   }

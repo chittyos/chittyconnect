@@ -163,7 +163,8 @@ compositeRoutes.post(
               // @canon: chittycanon://gov/governance#core-types
               // Organizations are Person (P, Legal); individuals are Person (P, Natural)
               entity: "P",
-              characterization: party.type === "organization" ? "Legal" : "Natural",
+              characterization:
+                party.type === "organization" ? "Legal" : "Natural",
               metadata: {
                 name: party.name,
                 role: party.role,

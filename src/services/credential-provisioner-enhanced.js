@@ -106,59 +106,59 @@ export class EnhancedCredentialProvisioner {
         requiresContext: ["database", "readonly"],
       },
       neon_api_key: {
-        type: 'integration_api_key',
-        platform: 'neon',
+        type: "integration_api_key",
+        platform: "neon",
         ttl: null,
-        requiresContext: ['purpose'],
-        onePasswordPath: 'integrations/neon/api_key',
-        envVar: 'NEON_API_KEY',
-        description: 'Neon API key for MCP server and database management'
+        requiresContext: ["purpose"],
+        onePasswordPath: "integrations/neon/api_key",
+        envVar: "NEON_API_KEY",
+        description: "Neon API key for MCP server and database management",
       },
       openai_api_key: {
-        type: 'integration_api_key',
-        platform: 'openai',
+        type: "integration_api_key",
+        platform: "openai",
         ttl: null,
-        requiresContext: ['purpose'],
-        onePasswordPath: 'integrations/openai/api_key',
-        envVar: 'OPENAI_API_KEY',
-        description: 'OpenAI API key for GPT models'
+        requiresContext: ["purpose"],
+        onePasswordPath: "integrations/openai/api_key",
+        envVar: "OPENAI_API_KEY",
+        description: "OpenAI API key for GPT models",
       },
       anthropic_api_key: {
-        type: 'integration_api_key',
-        platform: 'anthropic',
+        type: "integration_api_key",
+        platform: "anthropic",
         ttl: null,
-        requiresContext: ['purpose'],
-        onePasswordPath: 'integrations/anthropic/api_key',
-        envVar: 'ANTHROPIC_API_KEY',
-        description: 'Anthropic API key for Claude models'
+        requiresContext: ["purpose"],
+        onePasswordPath: "integrations/anthropic/api_key",
+        envVar: "ANTHROPIC_API_KEY",
+        description: "Anthropic API key for Claude models",
       },
       notion_api_key: {
-        type: 'integration_api_key',
-        platform: 'notion',
+        type: "integration_api_key",
+        platform: "notion",
         ttl: null,
-        requiresContext: ['purpose'],
-        onePasswordPath: 'integrations/notion/api_key',
-        envVar: 'NOTION_TOKEN',
-        description: 'Notion integration token for workspace access'
+        requiresContext: ["purpose"],
+        onePasswordPath: "integrations/notion/api_key",
+        envVar: "NOTION_TOKEN",
+        description: "Notion integration token for workspace access",
       },
       github_api_key: {
-        type: 'integration_api_key',
-        platform: 'github',
+        type: "integration_api_key",
+        platform: "github",
         ttl: null,
-        requiresContext: ['purpose'],
-        onePasswordPath: 'integrations/github/personal_access_token',
-        envVar: 'GITHUB_TOKEN',
-        description: 'GitHub personal access token'
+        requiresContext: ["purpose"],
+        onePasswordPath: "integrations/github/personal_access_token",
+        envVar: "GITHUB_TOKEN",
+        description: "GitHub personal access token",
       },
       stripe_api_key: {
-        type: 'integration_api_key',
-        platform: 'stripe',
+        type: "integration_api_key",
+        platform: "stripe",
         ttl: null,
-        requiresContext: ['purpose', 'mode'],
-        onePasswordPath: 'integrations/stripe/api_key',
-        envVar: 'STRIPE_API_KEY',
-        description: 'Stripe API key for payment processing'
-      }
+        requiresContext: ["purpose", "mode"],
+        onePasswordPath: "integrations/stripe/api_key",
+        envVar: "STRIPE_API_KEY",
+        description: "Stripe API key for payment processing",
+      },
     };
   }
 
@@ -210,8 +210,13 @@ export class EnhancedCredentialProvisioner {
       default: {
         // Check if it's an integration API key type
         const typeConfig = this.credentialTypes[type];
-        if (typeConfig?.type === 'integration_api_key') {
-          return await this.provisionIntegrationApiKey(type, typeConfig, context, requestingService);
+        if (typeConfig?.type === "integration_api_key") {
+          return await this.provisionIntegrationApiKey(
+            type,
+            typeConfig,
+            context,
+            requestingService,
+          );
         }
         throw new Error(`Unknown credential type: ${type}`);
       }
@@ -778,32 +783,46 @@ export class EnhancedCredentialProvisioner {
    * @param {string} requestingService - Service requesting the credential
    * @returns {Promise<object>} Provisioned API key with usage instructions
    */
-  async provisionIntegrationApiKey(type, typeConfig, context, requestingService) {
+  async provisionIntegrationApiKey(
+    type,
+    typeConfig,
+    context,
+    requestingService,
+  ) {
     const { platform, onePasswordPath, envVar, description } = typeConfig;
-    const { purpose = 'general' } = context;
+    const { purpose = "general" } = context;
 
-    console.log(`[EnhancedCredentialProvisioner] Provisioning ${platform} API key via dynamic handler`);
+    console.log(
+      `[EnhancedCredentialProvisioner] Provisioning ${platform} API key via dynamic handler`,
+    );
 
     // Retrieve API key from 1Password using configured path
     const apiKey = await this.onePassword.get(onePasswordPath, {
       service: requestingService,
       purpose,
-      environment: context.environment || 'production'
+      environment: context.environment || "production",
     });
 
     if (!apiKey) {
-      throw new Error(`Failed to retrieve ${platform} API key from 1Password (path: ${onePasswordPath})`);
+      throw new Error(
+        `Failed to retrieve ${platform} API key from 1Password (path: ${onePasswordPath})`,
+      );
     }
 
     await this.logProvisionEvent({
       type,
       platform,
       purpose,
-      requestingService
+      requestingService,
     });
 
     // Build platform-specific usage instructions
-    const usageInstructions = this.buildProviderUsageInstructions(platform, envVar, apiKey, context);
+    const usageInstructions = this.buildProviderUsageInstructions(
+      platform,
+      envVar,
+      apiKey,
+      context,
+    );
 
     return {
       success: true,
@@ -812,15 +831,15 @@ export class EnhancedCredentialProvisioner {
         value: apiKey,
         platform,
         purpose,
-        provider: platform
+        provider: platform,
       },
       usage_instructions: usageInstructions,
       metadata: {
-        provisioned_by: 'ChittyConnect Dynamic',
+        provisioned_by: "ChittyConnect Dynamic",
         description,
         onePasswordPath,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     };
   }
 
@@ -838,40 +857,42 @@ export class EnhancedCredentialProvisioner {
     const base = {
       environment_variable: envVar,
       wrangler_command: `wrangler secret put ${envVar}`,
-      github_secret_command: `gh secret set ${envVar}`
+      github_secret_command: `gh secret set ${envVar}`,
     };
 
     // Platform-specific instructions
     const platformInstructions = {
       neon: {
         mcp_command: `claude mcp add neon -- npx -y @neondatabase/mcp-server-neon start "${apiKey}"`,
-        note: 'Use with Neon MCP server or direct Neon API access for database management.'
+        note: "Use with Neon MCP server or direct Neon API access for database management.",
       },
       openai: {
-        note: 'Use with OpenAI SDK or direct API calls. Monitor usage to control costs.',
-        sdk_example: `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: process.env.${envVar} });`
+        note: "Use with OpenAI SDK or direct API calls. Monitor usage to control costs.",
+        sdk_example: `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: process.env.${envVar} });`,
       },
       anthropic: {
-        note: 'Use with Anthropic SDK or direct API calls for Claude models.',
-        sdk_example: `import Anthropic from '@anthropic-ai/sdk'; const client = new Anthropic({ apiKey: process.env.${envVar} });`
+        note: "Use with Anthropic SDK or direct API calls for Claude models.",
+        sdk_example: `import Anthropic from '@anthropic-ai/sdk'; const client = new Anthropic({ apiKey: process.env.${envVar} });`,
       },
       notion: {
-        note: 'Use with Notion SDK or MCP server for workspace access.',
-        mcp_command: `claude mcp add notion -- npx -y @notionhq/client`
+        note: "Use with Notion SDK or MCP server for workspace access.",
+        mcp_command: `claude mcp add notion -- npx -y @notionhq/client`,
       },
       github: {
-        note: 'Use with GitHub CLI, Octokit SDK, or direct API calls.',
-        cli_command: `gh auth login --with-token <<< "${apiKey}"`
+        note: "Use with GitHub CLI, Octokit SDK, or direct API calls.",
+        cli_command: `gh auth login --with-token <<< "${apiKey}"`,
       },
       stripe: {
-        note: `Use with Stripe SDK. Mode: ${context.mode || 'test'}`,
-        sdk_example: `import Stripe from 'stripe'; const stripe = new Stripe(process.env.${envVar});`
-      }
+        note: `Use with Stripe SDK. Mode: ${context.mode || "test"}`,
+        sdk_example: `import Stripe from 'stripe'; const stripe = new Stripe(process.env.${envVar});`,
+      },
     };
 
     return {
       ...base,
-      ...(platformInstructions[platform] || { note: `API key for ${platform}` })
+      ...(platformInstructions[platform] || {
+        note: `API key for ${platform}`,
+      }),
     };
   }
 
@@ -883,8 +904,8 @@ export class EnhancedCredentialProvisioner {
   async createScopedServiceToken(_parentToken, scopes, _context) {
     // TODO: Call ChittyAuth to create a derivative scoped token
     throw new Error(
-      `Scoped token creation not yet implemented (requested scopes: ${scopes.join(', ')}). ` +
-      'Requires ChittyAuth derivative token API.'
+      `Scoped token creation not yet implemented (requested scopes: ${scopes.join(", ")}). ` +
+        "Requires ChittyAuth derivative token API.",
     );
   }
 
@@ -901,8 +922,8 @@ export class EnhancedCredentialProvisioner {
   ) {
     // TODO: Use GitHub App API (POST /app/installations/{id}/access_tokens) to create installation token
     throw new Error(
-      'GitHub installation token creation not yet implemented. ' +
-      'Requires GITHUB_APP_ID and GITHUB_PRIVATE_KEY secrets.'
+      "GitHub installation token creation not yet implemented. " +
+        "Requires GITHUB_APP_ID and GITHUB_PRIVATE_KEY secrets.",
     );
   }
 
