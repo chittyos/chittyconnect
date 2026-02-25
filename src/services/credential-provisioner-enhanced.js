@@ -207,13 +207,14 @@ export class EnhancedCredentialProvisioner {
       case "neon_database_connection":
         return await this.provisionNeonConnection(context, requestingService);
 
-      default:
+      default: {
         // Check if it's an integration API key type
         const typeConfig = this.credentialTypes[type];
         if (typeConfig?.type === 'integration_api_key') {
           return await this.provisionIntegrationApiKey(type, typeConfig, context, requestingService);
         }
         throw new Error(`Unknown credential type: ${type}`);
+      }
     }
   }
 

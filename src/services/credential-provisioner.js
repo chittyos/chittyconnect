@@ -17,12 +17,12 @@
 export class CredentialProvisioner {
   constructor(env) {
     this.env = env;
+    // 1Password references are injected at deploy time via `op run`.
+    // Env vars: CLOUDFLARE_MAKE_API_KEY, CLOUDFLARE_ACCOUNT_ID
     this.onePasswordRefs = {
       cloudflare: {
-        makeApiKey:
-          "op://Private/gxyne23yqngvk2nzjwl62uakx4/m4unvf5sbz3rm7ny2ys5siy5om/make_api_key",
-        accountId:
-          "op://Private/gxyne23yqngvk2nzjwl62uakx4/ChittyCorp LLC/account_id",
+        makeApiKey: "CLOUDFLARE_MAKE_API_KEY",
+        accountId: "CLOUDFLARE_ACCOUNT_ID",
       },
     };
 

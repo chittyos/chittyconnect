@@ -22,6 +22,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import fetch from 'node-fetch';
+import { MCP_TOOLS } from './src/mcp/tool-registry.js';
 
 // Configuration from environment
 const config = {
@@ -116,28 +117,10 @@ async function callChittyConnect(endpoint, method = 'GET', body = null) {
   }
 }
 
-// Tool registration
+// Tool registration — uses unified tool registry (no network call needed)
 server.setRequestHandler('tools/list', async () => {
   debug('Listing tools');
-
-  try {
-    const response = await callChittyConnect('/mcp/tools/list');
-    return response;
-  } catch (error) {
-    console.error('[ChittyConnect MCP] Failed to list tools:', error);
-    return {
-      tools: [
-        {
-          name: 'chittyconnect_status',
-          description: 'Check ChittyConnect connection status',
-          inputSchema: {
-            type: 'object',
-            properties: {}
-          }
-        }
-      ]
-    };
-  }
+  return { tools: MCP_TOOLS };
 });
 
 // Tool execution
