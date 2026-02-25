@@ -167,19 +167,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = { error: `Ledger returned (${response.status}): ${text.slice(0, 200)}` };
       }
     } else if (name === "chitty_fact_validate") {
-      // Pre-flight: verify all corroborating evidence IDs exist
+      // Pre-flight: verify all corroborating evidence IDs exist (parallel)
       if (args.corroborating_evidence?.length) {
-        for (const evId of args.corroborating_evidence) {
-          const check = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
-          if (!check.ok) {
-            return {
-              content: [{
-                type: "text",
-                text: `Validation blocked: corroborating evidence "${evId}" not found in ChittyLedger (${check.status}). All cited evidence must exist in the pipeline.`,
-              }],
-              isError: true,
-            };
-          }
+        const checks = await Promise.all(
+          args.corroborating_evidence.map(async (evId) => {
+            const resp = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+            return { evId, ok: resp.ok, status: resp.status };
+          }),
+        );
+        const failed = checks.find((c) => !c.ok);
+        if (failed) {
+          return {
+            content: [{
+              type: "text",
+              text: `Validation blocked: corroborating evidence "${failed.evId}" not found in ChittyLedger (${failed.status}). All cited evidence must exist in the pipeline.`,
+            }],
+            isError: true,
+          };
         }
       }
 
@@ -255,19 +259,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         };
       }
 
-      // Verify counter evidence exists (if provided)
+      // Verify counter evidence exists (parallel)
       if (args.counter_evidence_ids?.length) {
-        for (const evId of args.counter_evidence_ids) {
-          const check = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
-          if (!check.ok) {
-            return {
-              content: [{
-                type: "text",
-                text: `Dispute blocked: counter evidence "${evId}" not found in ChittyLedger (${check.status}).`,
-              }],
-              isError: true,
-            };
-          }
+        const checks = await Promise.all(
+          args.counter_evidence_ids.map(async (evId) => {
+            const resp = await fetch(`https://ledger.chitty.cc/api/evidence/${evId}`);
+            return { evId, ok: resp.ok, status: resp.status };
+          }),
+        );
+        const failed = checks.find((c) => !c.ok);
+        if (failed) {
+          return {
+            content: [{
+              type: "text",
+              text: `Dispute blocked: counter evidence "${failed.evId}" not found in ChittyLedger (${failed.status}).`,
+            }],
+            isError: true,
+          };
         }
       }
 
@@ -391,7 +399,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
       }
     } else if (name === "chitty_ledger_query") {
       const params = new URLSearchParams();
@@ -405,7 +413,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
       }
     } else if (name === "chitty_ledger_verify") {
       const response = await fetch("https://ledger.chitty.cc/api/ledger/verify");
@@ -413,7 +421,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
       }
     } else if (name === "chitty_ledger_statistics") {
       const response = await fetch("https://ledger.chitty.cc/api/ledger/statistics");
@@ -421,7 +429,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
       }
     } else if (name === "chitty_ledger_chain_of_custody") {
       if (!args.entity_id) {
@@ -435,7 +443,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       const text = await response.text();
       try { result = JSON.parse(text); } catch {
-        result = { error: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` };
+        return { content: [{ type: "text", text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}` }], isError: true };
       }
     }
 
@@ -559,7 +567,85 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Finance tools ───────────────────────────────────────────────
-    else if (name.startsWith("chitty_finance_")) {
+    else if (name === "chitty_finance_entities") {
+      const response = await fetch("https://finance.chitty.cc/api/entities", {
+        headers: authHeader,
+      });
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_balances") {
+      const response = await fetch(
+        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/balances`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_transactions") {
+      const params = new URLSearchParams();
+      if (args.start) params.set("start", args.start);
+      if (args.end) params.set("end", args.end);
+      const response = await fetch(
+        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_cash_flow") {
+      const params = new URLSearchParams();
+      if (args.start) params.set("start", args.start);
+      if (args.end) params.set("end", args.end);
+      const response = await fetch(
+        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_inter_entity") {
+      const params = new URLSearchParams();
+      if (args.entity) params.set("entity", args.entity);
+      if (args.start) params.set("start", args.start);
+      if (args.end) params.set("end", args.end);
+      const response = await fetch(
+        `https://finance.chitty.cc/api/transfers/inter-entity?${params}`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_detect_transfers") {
+      const response = await fetch("https://finance.chitty.cc/api/transfers/detect", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_flow_of_funds") {
+      const params = new URLSearchParams();
+      if (args.start) params.set("start", args.start);
+      if (args.end) params.set("end", args.end);
+      const response = await fetch(
+        `https://finance.chitty.cc/api/reports/flow-of-funds?${params}`,
+        { headers: authHeader },
+      );
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_finance_sync") {
+      const response = await fetch("https://finance.chitty.cc/api/sync/mercury", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+      });
+      const fetchErr = await checkFetchError(response, "ChittyFinance");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name.startsWith("chitty_finance_")) {
+      // Generic fallback for connect_bank and analyze
       const action = name.replace("chitty_finance_", "");
       const response = await fetch(`${baseUrl}/api/chittyfinance/${action}`, {
         method: "POST",
@@ -786,7 +872,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // Format result for MCP
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(result) }],
     };
   } catch (error) {
     console.error(`[MCP] Tool execution error for ${name}:`, error);

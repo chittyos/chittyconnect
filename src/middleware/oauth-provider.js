@@ -174,7 +174,13 @@ function createMcpJsonRpcHandler(honoApp) {
         }
         // Extract JSON bodies from Response objects before serializing
         const bodies = await Promise.all(
-          responses.map((r) => r.json()),
+          responses.map(async (r) => {
+            try {
+              return await r.json();
+            } catch {
+              return { jsonrpc: "2.0", error: { code: -32603, message: "Internal error: malformed response" }, id: null };
+            }
+          }),
         );
         return withSession(JSON.stringify(bodies), {
           headers: { "Content-Type": "application/json" },
