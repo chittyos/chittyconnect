@@ -1,8 +1,6 @@
 import { writeFileSync } from "fs";
 
-// Use Node core undici fetch to avoid external deps
-const { fetch } = await import('node:undici');
-
+// Node 20+ has global fetch built-in (no import needed)
 async function run() {
   try {
     const apiKey = process.env["INPUT_API_KEY"];
