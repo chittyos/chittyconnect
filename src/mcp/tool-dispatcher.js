@@ -48,20 +48,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Identity tools ──────────────────────────────────────────────
     if (name === "chitty_id_mint") {
-      const serviceToken = await getServiceToken(env, "chittyid");
+      const serviceToken =
+        env.CHITTYMINT_SECRET ||
+        (await getServiceToken(env, "chittymint")) ||
+        (await getServiceToken(env, "chittyid"));
       if (!serviceToken) {
         return {
           content: [
             {
               type: "text",
-              text: "Authentication required: No service token available for ChittyID",
+              text: "Authentication required: No service token available for ChittyMint",
             },
           ],
           isError: true,
         };
       }
       const response = await fetch(
-        "https://id.chitty.cc/api/v2/chittyid/mint",
+        "https://mint.chitty.cc/api/mint",
         {
           method: "POST",
           headers: {
@@ -69,7 +72,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            entity: args.entity_type,
+            entity_type: args.entity_type,
             metadata: args.metadata,
           }),
         },

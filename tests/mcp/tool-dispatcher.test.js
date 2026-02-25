@@ -41,7 +41,7 @@ describe("dispatchToolCall", () => {
       expect(result.content[0].text).toContain("Authentication required");
     });
 
-    it("calls ChittyID service and returns result", async () => {
+    it("calls ChittyMint service and returns result", async () => {
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: true,
@@ -58,7 +58,7 @@ describe("dispatchToolCall", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.chitty_id).toBe("01-P-USA-1234-P-2601-A-X");
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://id.chitty.cc/api/v2/chittyid/mint",
+        "https://mint.chitty.cc/api/mint",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({ Authorization: "Bearer svc-token-123" }),
