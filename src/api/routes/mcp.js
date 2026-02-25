@@ -13,22 +13,21 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 34 tools across 15 categories:
- * - Identity (ChittyID)
- * - Cases (ChittyCases)
- * - Evidence (ChittyEvidence)
- * - Finance (ChittyFinance)
- * - Memory (MemoryCloude™)
- * - Credentials (1Password)
- * - Services (Ecosystem)
- * - Integrations (Third-party)
- * - AI Search (ChittyEvidence)
- * - Ledger (ChittyLedger)
- * - Fact Governance (ChittyLedger)
- * - Contextual (ChittyContextual)
+ * 53 tools across 10 domains:
+ *
+ *  1. Identity        (2)  — ChittyID mint/validate
+ *  2. Cases           (2)  — Legal case lifecycle
+ *  3. Evidence        (4)  — Ingestion, verification, AI search
+ *  4. Fact Governance (5)  — Mint → validate → seal → dispute → export
+ *  5. Ledger          (9)  — Chain-of-custody + dashboard analytics
+ *  6. Finance        (10)  — Mercury banking, cash flow, transfers
+ *  7. Intelligence    (8)  — ContextConsciousness™ + context lifecycle
+ *  8. Memory          (3)  — MemoryCloude™ persist/recall/summary
+ *  9. Platform        (6)  — Credentials, ecosystem health, chronicle, sync
+ * 10. Integrations    (4)  — Notion, OpenAI, Neon, contextual comms
  */
 const TOOLS = [
-  // Identity Tools
+  // ── 1. Identity ───────────────────────────────────────────
   {
     name: "chitty_id_mint",
     description:
@@ -78,7 +77,7 @@ const TOOLS = [
     },
   },
 
-  // Case Management Tools
+  // ── 2. Cases ────────────────────────────────────────────
   {
     name: "chitty_case_create",
     description:
@@ -132,7 +131,7 @@ const TOOLS = [
     },
   },
 
-  // Evidence Tools
+  // ── 3. Evidence ─────────────────────────────────────────
   {
     name: "chitty_evidence_ingest",
     description:
@@ -174,8 +173,338 @@ const TOOLS = [
       required: ["evidence_id"],
     },
   },
+  {
+    name: "chitty_evidence_search",
+    description:
+      "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "chitty_evidence_retrieve",
+    description:
+      "Retrieve matching evidence documents by semantic similarity (no AI generation). Returns ranked document chunks with scores. Use when you need raw document matches without an AI-generated summary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query",
+        },
+        max_num_results: {
+          type: "number",
+          description: "Maximum number of results (default: 10)",
+          default: 10,
+        },
+      },
+      required: ["query"],
+    },
+  },
 
-  // Finance Tools
+  // ── 4. Fact Governance ──────────────────────────────────
+  {
+    name: "chitty_fact_mint",
+    description:
+      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → sealed. Include the evidence source, confidence score, and category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID the fact is extracted from",
+        },
+        case_id: {
+          type: "string",
+          description: "Case ID the fact belongs to",
+        },
+        text: {
+          type: "string",
+          description:
+            "The atomic fact statement (single verifiable claim)",
+        },
+        confidence: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Confidence score 0.0-1.0 (default: 0.5)",
+        },
+        source_reference: {
+          type: "string",
+          description:
+            "Page number, paragraph, or location within the evidence document",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "financial",
+            "temporal",
+            "identity",
+            "property",
+            "legal",
+            "communication",
+            "other",
+          ],
+          description: "Fact category for classification",
+        },
+      },
+      required: ["evidence_id", "text"],
+    },
+  },
+  {
+    name: "chitty_fact_validate",
+    description:
+      "Validate a draft fact against corroborating evidence. Moves the fact from 'draft' to 'verified' status if validation passes. Requires the fact ID and validation method.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: {
+          type: "string",
+          description: "Fact ID to validate",
+        },
+        validation_method: {
+          type: "string",
+          enum: [
+            "cross_reference",
+            "document_match",
+            "witness_corroboration",
+            "expert_review",
+          ],
+          description: "Method used to validate the fact",
+        },
+        corroborating_evidence: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Array of evidence IDs that corroborate this fact",
+        },
+        notes: {
+          type: "string",
+          description: "Validation notes or reasoning",
+        },
+      },
+      required: ["fact_id", "validation_method"],
+    },
+  },
+  {
+    name: "chitty_fact_seal",
+    description:
+      "Seal a verified fact permanently, triggering async ChittyProof minting. Requires Authority entity type with INSTITUTIONAL trust level (4+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to seal" },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the authority performing the seal",
+        },
+        seal_reason: {
+          type: "string",
+          description: "Reason for sealing the fact",
+        },
+      },
+      required: ["fact_id", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_dispute",
+    description:
+      "Dispute a verified or sealed fact. Creates a dispute record. Requires ENHANCED trust level (2+).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to dispute" },
+        reason: {
+          type: "string",
+          description: "Reason for the dispute",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the entity filing the dispute",
+        },
+        challenger_chitty_id: {
+          type: "string",
+          description: "ChittyID of the challenger (defaults to actor)",
+        },
+        counter_evidence_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Evidence IDs that contradict this fact",
+        },
+      },
+      required: ["fact_id", "reason", "actor_chitty_id"],
+    },
+  },
+  {
+    name: "chitty_fact_export",
+    description:
+      "Export a fact with its full proof bundle. JSON or PDF format.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "Fact ID to export" },
+        format: {
+          type: "string",
+          enum: ["json", "pdf"],
+          description: "Export format",
+        },
+        actor_chitty_id: {
+          type: "string",
+          description: "ChittyID of the requesting entity",
+        },
+      },
+      required: ["fact_id", "format", "actor_chitty_id"],
+    },
+  },
+
+  // ── 5. Ledger ───────────────────────────────────────────
+  // Dashboard analytics (via ledger.chitty.cc)
+  {
+    name: "chitty_ledger_stats",
+    description:
+      "Get dashboard statistics from ChittyLedger: total cases, evidence items, facts, contradictions, and verification rates.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_evidence",
+    description:
+      "Query evidence items from ChittyLedger. Filter by case ID. Returns evidence with blockchain status, trust tier, and chain of custody.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter evidence",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_ledger_facts",
+    description:
+      "Get atomic facts extracted from a specific evidence item. Includes confidence scores and source references.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence_id: {
+          type: "string",
+          description: "Evidence item ID to get facts for",
+        },
+      },
+      required: ["evidence_id"],
+    },
+  },
+  {
+    name: "chitty_ledger_contradictions",
+    description:
+      "Get detected contradictions across evidence items. Shows conflicting facts, severity, and resolution status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "string",
+          description: "Optional case ID to filter contradictions",
+        },
+      },
+    },
+  },
+  // Chain-of-custody ledger operations
+  {
+    name: "chitty_ledger_record",
+    description:
+      "Record a new transaction entry in ChittyLedger with full chain-of-custody tracking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        // @canon: chittycanon://gov/governance#core-types — record_type is distinct from canonical entity types P/L/T/E/A
+        record_type: {
+          type: "string",
+          enum: ["transaction", "evidence", "custody", "audit"],
+          description:
+            "Ledger record classification (distinct from canonical entity types P/L/T/E/A). Maps to ChittyLedger entityType.",
+        },
+        entity_id: { type: "string", description: "UUID of the entity" },
+        action: {
+          type: "string",
+          description: "Action performed (create, update, transfer, verify)",
+        },
+        actor: { type: "string", description: "Who performed the action" },
+        actor_type: {
+          type: "string",
+          enum: ["user", "service", "system"],
+          description: "Type of actor (default: user)",
+        },
+        metadata: { type: "object", description: "Additional entry metadata" },
+      },
+      required: ["record_type", "action"],
+    },
+  },
+  {
+    name: "chitty_ledger_query",
+    description:
+      "Query ledger history for a specific entity. Returns chronological chain of entries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        record_type: {
+          type: "string",
+          enum: ["transaction", "evidence", "custody", "audit"],
+          description:
+            "Ledger record classification (maps to ChittyLedger entityType)",
+        },
+        entity_id: { type: "string", description: "Entity ID to filter by" },
+        actor: { type: "string", description: "Filter by actor" },
+        status: { type: "string", enum: ["pending", "confirmed", "rejected"], description: "Filter by status" },
+        limit: { type: "number", description: "Max entries to return (default: 100)" },
+      },
+    },
+  },
+  {
+    name: "chitty_ledger_verify",
+    description:
+      "Verify ledger integrity by checking hash chains and detecting tampering.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_statistics",
+    description:
+      "Get ledger statistics: total entries, unique entities, unique actors, latest sequence, and date range.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "chitty_ledger_chain_of_custody",
+    description:
+      "Retrieve the full chain of custody for a specific entity from the ledger.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_id: {
+          type: "string",
+          description: "UUID of the entity to get custody chain for",
+        },
+      },
+      required: ["entity_id"],
+    },
+  },
+
+  // ── 6. Finance ──────────────────────────────────────────
   {
     name: "chitty_finance_connect_bank",
     description:
@@ -212,8 +541,6 @@ const TOOLS = [
       required: ["chitty_id"],
     },
   },
-
-  // Finance Gateway Tools (proxied via agent.chitty.cc)
   {
     name: "chitty_finance_entities",
     description:
@@ -325,92 +652,7 @@ const TOOLS = [
     },
   },
 
-  // Ledger Tools (ChittyLedger)
-  {
-    name: "chitty_ledger_record",
-    description:
-      "Record a new transaction entry in ChittyLedger with full chain-of-custody tracking.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        // @canon: chittycanon://gov/governance#core-types — record_type is distinct from canonical entity types P/L/T/E/A
-        record_type: {
-          type: "string",
-          enum: ["transaction", "evidence", "custody", "audit"],
-          description:
-            "Ledger record classification (distinct from canonical entity types P/L/T/E/A). Maps to ChittyLedger entityType.",
-        },
-        entity_id: { type: "string", description: "UUID of the entity" },
-        action: {
-          type: "string",
-          description: "Action performed (create, update, transfer, verify)",
-        },
-        actor: { type: "string", description: "Who performed the action" },
-        actor_type: {
-          type: "string",
-          enum: ["user", "service", "system"],
-          description: "Type of actor (default: user)",
-        },
-        metadata: { type: "object", description: "Additional entry metadata" },
-      },
-      required: ["record_type", "action"],
-    },
-  },
-  {
-    name: "chitty_ledger_query",
-    description:
-      "Query ledger history for a specific entity. Returns chronological chain of entries.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        record_type: {
-          type: "string",
-          enum: ["transaction", "evidence", "custody", "audit"],
-          description:
-            "Ledger record classification (maps to ChittyLedger entityType)",
-        },
-        entity_id: { type: "string", description: "Entity ID to filter by" },
-        actor: { type: "string", description: "Filter by actor" },
-        status: { type: "string", enum: ["pending", "confirmed", "rejected"], description: "Filter by status" },
-        limit: { type: "number", description: "Max entries to return (default: 100)" },
-      },
-    },
-  },
-  {
-    name: "chitty_ledger_verify",
-    description:
-      "Verify ledger integrity by checking hash chains and detecting tampering.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "chitty_ledger_statistics",
-    description:
-      "Get ledger statistics: total entries, unique entities, unique actors, latest sequence, and date range.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "chitty_ledger_chain_of_custody",
-    description:
-      "Retrieve the full chain of custody for a specific entity from the ledger.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        entity_id: {
-          type: "string",
-          description: "UUID of the entity to get custody chain for",
-        },
-      },
-      required: ["entity_id"],
-    },
-  },
-
-  // Intelligence Tools
+  // ── 7. Intelligence & Context ───────────────────────────
   {
     name: "chitty_intelligence_analyze",
     description:
@@ -435,8 +677,114 @@ const TOOLS = [
       required: ["content"],
     },
   },
+  {
+    name: "context_resolve",
+    description:
+      "Resolve a session to its context entity. Matches project path, platform, and support type to an existing or new context.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_path: { type: "string", description: "Path to the project directory" },
+        platform: { type: "string", description: "Platform identifier (e.g., claude_code, chatgpt)" },
+        support_type: { type: "string", description: "Support type (e.g., development, operations)" },
+        organization: { type: "string", description: "Organization name" },
+      },
+      required: ["project_path"],
+    },
+  },
+  {
+    name: "context_restore",
+    description:
+      "Restore a previous context session for a ChittyID. Returns accumulated DNA, decisions, and project state.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        project_slug: { type: "string", description: "Project slug to filter by" },
+      },
+      required: ["chitty_id"],
+    },
+  },
+  {
+    name: "context_commit",
+    description:
+      "Commit session context (metrics, decisions) to the context ledger for a ChittyID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Current session ID" },
+        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        project_slug: { type: "string", description: "Project slug" },
+        metrics: { type: "object", description: "Session metrics to commit" },
+        decisions: { type: "array", description: "Decisions made during session" },
+      },
+      required: ["session_id", "chitty_id"],
+    },
+  },
+  {
+    name: "context_check",
+    description:
+      "Check the current state and health of a context entity by ChittyID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+      },
+      required: ["chitty_id"],
+    },
+  },
+  {
+    name: "context_checkpoint",
+    description:
+      "Create a named checkpoint for a context entity's state. Allows restoring to this point later.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chitty_id: { type: "string", description: "ChittyID of the context entity" },
+        project_slug: { type: "string", description: "Project slug" },
+        name: { type: "string", description: "Checkpoint name" },
+        state: { type: "object", description: "State snapshot to save" },
+      },
+      required: ["chitty_id", "name"],
+    },
+  },
+  {
+    name: "chitty_contextual_timeline",
+    description:
+      "Get unified communication timeline from ChittyContextual. Aggregates iMessage, WhatsApp, Email, DocuSign, and OpenPhone into a chronological view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        party: {
+          type: "string",
+          description: "Filter by party name, email, or phone number",
+        },
+        start_date: { type: "string", description: "Start date (ISO 8601)" },
+        end_date: { type: "string", description: "End date (ISO 8601)" },
+        source: {
+          type: "string",
+          enum: ["imessage", "whatsapp", "email", "docusign", "openphone"],
+          description: "Filter by communication source",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_contextual_topics",
+    description:
+      "Get topic analysis from ChittyContextual. Returns AI-modeled topic clusters across all communication sources with entity relationships.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Topic or keyword to search for",
+        },
+      },
+    },
+  },
 
-  // Memory Tools (MemoryCloude™)
+  // ── 8. Memory (MemoryCloude™) ───────────────────────────
   {
     name: "chitty_memory_persist",
     description:
@@ -491,7 +839,7 @@ const TOOLS = [
     },
   },
 
-  // Credential Tools
+  // ── 9. Platform ─────────────────────────────────────────
   {
     name: "chitty_credential_retrieve",
     description:
@@ -532,8 +880,6 @@ const TOOLS = [
       },
     },
   },
-
-  // Service Health Tools
   {
     name: "chitty_services_status",
     description: "Check health status of all ChittyOS ecosystem services.",
@@ -560,8 +906,6 @@ const TOOLS = [
       },
     },
   },
-
-  // Chronicle/Audit Tools
   {
     name: "chitty_chronicle_log",
     description:
@@ -577,8 +921,21 @@ const TOOLS = [
       required: ["event_type", "description"],
     },
   },
+  {
+    name: "chitty_sync_data",
+    description: "Synchronize data across ChittyOS services for consistency.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        source_service: { type: "string" },
+        target_service: { type: "string" },
+        entity_ids: { type: "array" },
+      },
+      required: ["source_service", "target_service"],
+    },
+  },
 
-  // Third-Party Integration Tools
+  // ── 10. Integrations ────────────────────────────────────
   {
     name: "chitty_notion_query",
     description:
@@ -618,307 +975,6 @@ const TOOLS = [
         params: { type: "array" },
       },
       required: ["sql"],
-    },
-  },
-
-  // Sync Tools
-  {
-    name: "chitty_sync_data",
-    description: "Synchronize data across ChittyOS services for consistency.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        source_service: { type: "string" },
-        target_service: { type: "string" },
-        entity_ids: { type: "array" },
-      },
-      required: ["source_service", "target_service"],
-    },
-  },
-
-  // ChittyLedger Tools
-  {
-    name: "chitty_ledger_stats",
-    description:
-      "Get dashboard statistics from ChittyLedger: total cases, evidence items, facts, contradictions, and verification rates.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "chitty_ledger_evidence",
-    description:
-      "Query evidence items from ChittyLedger. Filter by case ID. Returns evidence with blockchain status, trust tier, and chain of custody.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        case_id: {
-          type: "string",
-          description: "Optional case ID to filter evidence",
-        },
-      },
-    },
-  },
-  {
-    name: "chitty_ledger_facts",
-    description:
-      "Get atomic facts extracted from a specific evidence item. Includes confidence scores and source references.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        evidence_id: {
-          type: "string",
-          description: "Evidence item ID to get facts for",
-        },
-      },
-      required: ["evidence_id"],
-    },
-  },
-  {
-    name: "chitty_ledger_contradictions",
-    description:
-      "Get detected contradictions across evidence items. Shows conflicting facts, severity, and resolution status.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        case_id: {
-          type: "string",
-          description: "Optional case ID to filter contradictions",
-        },
-      },
-    },
-  },
-
-  // Fact Governance Tools
-  {
-    name: "chitty_fact_mint",
-    description:
-      "Mint a new atomic fact from evidence. Creates a fact record in ChittyLedger with 'draft' status. Facts follow a lifecycle: draft → verified → sealed. Include the evidence source, confidence score, and category.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        evidence_id: {
-          type: "string",
-          description: "Evidence item ID the fact is extracted from",
-        },
-        case_id: {
-          type: "string",
-          description: "Case ID the fact belongs to",
-        },
-        text: {
-          type: "string",
-          description:
-            "The atomic fact statement (single verifiable claim)",
-        },
-        confidence: {
-          type: "number",
-          minimum: 0,
-          maximum: 1,
-          description: "Confidence score 0.0-1.0 (default: 0.5)",
-        },
-        source_reference: {
-          type: "string",
-          description:
-            "Page number, paragraph, or location within the evidence document",
-        },
-        category: {
-          type: "string",
-          enum: [
-            "financial",
-            "temporal",
-            "identity",
-            "property",
-            "legal",
-            "communication",
-            "other",
-          ],
-          description: "Fact category for classification",
-        },
-      },
-      required: ["evidence_id", "text"],
-    },
-  },
-  {
-    name: "chitty_fact_validate",
-    description:
-      "Validate a draft fact against corroborating evidence. Moves the fact from 'draft' to 'verified' status if validation passes. Requires the fact ID and validation method.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact_id: {
-          type: "string",
-          description: "Fact ID to validate",
-        },
-        validation_method: {
-          type: "string",
-          enum: [
-            "cross_reference",
-            "document_match",
-            "witness_corroboration",
-            "expert_review",
-          ],
-          description: "Method used to validate the fact",
-        },
-        corroborating_evidence: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of evidence IDs that corroborate this fact",
-        },
-        notes: {
-          type: "string",
-          description: "Validation notes or reasoning",
-        },
-      },
-      required: ["fact_id", "validation_method"],
-    },
-  },
-
-  // Fact Governance Hardening Tools (seal, dispute, export)
-  {
-    name: "chitty_fact_seal",
-    description:
-      "Seal a verified fact permanently, triggering async ChittyProof minting. Requires Authority entity type with INSTITUTIONAL trust level (4+).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact_id: { type: "string", description: "Fact ID to seal" },
-        actor_chitty_id: {
-          type: "string",
-          description: "ChittyID of the authority performing the seal",
-        },
-        seal_reason: {
-          type: "string",
-          description: "Reason for sealing the fact",
-        },
-      },
-      required: ["fact_id", "actor_chitty_id"],
-    },
-  },
-  {
-    name: "chitty_fact_dispute",
-    description:
-      "Dispute a verified or sealed fact. Creates a dispute record. Requires ENHANCED trust level (2+).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact_id: { type: "string", description: "Fact ID to dispute" },
-        reason: {
-          type: "string",
-          description: "Reason for the dispute",
-        },
-        actor_chitty_id: {
-          type: "string",
-          description: "ChittyID of the entity filing the dispute",
-        },
-        challenger_chitty_id: {
-          type: "string",
-          description: "ChittyID of the challenger (defaults to actor)",
-        },
-        counter_evidence_ids: {
-          type: "array",
-          items: { type: "string" },
-          description: "Evidence IDs that contradict this fact",
-        },
-      },
-      required: ["fact_id", "reason", "actor_chitty_id"],
-    },
-  },
-  {
-    name: "chitty_fact_export",
-    description:
-      "Export a fact with its full proof bundle. JSON or PDF format.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact_id: { type: "string", description: "Fact ID to export" },
-        format: {
-          type: "string",
-          enum: ["json", "pdf"],
-          description: "Export format",
-        },
-        actor_chitty_id: {
-          type: "string",
-          description: "ChittyID of the requesting entity",
-        },
-      },
-      required: ["fact_id", "format", "actor_chitty_id"],
-    },
-  },
-
-  // ChittyContextual Tools
-  {
-    name: "chitty_contextual_timeline",
-    description:
-      "Get unified communication timeline from ChittyContextual. Aggregates iMessage, WhatsApp, Email, DocuSign, and OpenPhone into a chronological view.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        party: {
-          type: "string",
-          description: "Filter by party name, email, or phone number",
-        },
-        start_date: { type: "string", description: "Start date (ISO 8601)" },
-        end_date: { type: "string", description: "End date (ISO 8601)" },
-        source: {
-          type: "string",
-          enum: ["imessage", "whatsapp", "email", "docusign", "openphone"],
-          description: "Filter by communication source",
-        },
-      },
-    },
-  },
-  {
-    name: "chitty_contextual_topics",
-    description:
-      "Get topic analysis from ChittyContextual. Returns AI-modeled topic clusters across all communication sources with entity relationships.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Topic or keyword to search for",
-        },
-      },
-    },
-  },
-
-  // Evidence AI Search Tools
-  {
-    name: "chitty_evidence_search",
-    description:
-      "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description:
-            "Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')",
-        },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "chitty_evidence_retrieve",
-    description:
-      "Retrieve matching evidence documents by semantic similarity (no AI generation). Returns ranked document chunks with scores. Use when you need raw document matches without an AI-generated summary.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Natural language search query",
-        },
-        max_num_results: {
-          type: "number",
-          description: "Maximum number of results (default: 10)",
-          default: 10,
-        },
-      },
-      required: ["query"],
     },
   },
 ];

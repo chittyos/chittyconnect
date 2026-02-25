@@ -207,7 +207,7 @@ export class ChittyIDClient {
       year: yearMonth.substring(0, 2),
       month: yearMonth.substring(2, 4),
       trustLevelName: ['Anonymous', 'Basic', 'Enhanced', 'Professional', 'Institutional', 'Official'][parseInt(trustLevel)] || 'Unknown',
-      entityTypeName: { P: 'Person', L: 'Place', T: 'Thing', E: 'Event', A: 'Authority' }[entityType] || 'Unknown'
+      entityTypeName: { P: 'Person', L: 'Location', T: 'Thing', E: 'Event', A: 'Authority' }[entityType] || 'Unknown'
     };
   }
 }

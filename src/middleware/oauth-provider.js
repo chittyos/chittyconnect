@@ -1,12 +1,15 @@
 /**
  * OAuth 2.1 Provider for MCP endpoints
  *
- * Provides OAuth 2.1 with PKCE for Claude Desktop Cowork and other
+ * Provides OAuth 2.1 with PKCE for Claude Desktop/Code and other
  * MCP clients that require OAuth authentication.
  *
  * Uses @cloudflare/workers-oauth-provider with ChittyAuth as upstream IdP.
  * Only protects mcp.chitty.cc/mcp — connect.chitty.cc/mcp/* continues
  * using API key auth via the Hono router (backward compatible).
+ *
+ * @canonical-uri chittycanon://core/services/chittyconnect/middleware/oauth-provider
+ * @see chittycanon://docs/tech/spec/mcp-transport
  */
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
@@ -107,23 +110,32 @@ async function handleAuthorize(request, env) {
 }
 
 /**
- * MCP JSON-RPC protocol handler
+ * MCP Streamable HTTP transport handler
  *
- * Implements the MCP Streamable HTTP transport (JSON-RPC 2.0 over POST).
+ * Implements the MCP Streamable HTTP transport (2025-03-26):
+ * - POST /mcp → JSON-RPC 2.0 request/response
+ * - GET  /mcp → SSE stream for server-initiated notifications
+ * - DELETE /mcp → Session termination
+ *
  * Delegates tool listing/calling to the existing Hono MCP REST endpoints.
  */
 function createMcpJsonRpcHandler(honoApp) {
   return {
     async fetch(request, env, ctx) {
-      // Only POST is supported for MCP Streamable HTTP
+      // Resolve or generate session ID
+      const sessionId =
+        request.headers.get("Mcp-Session-Id") || crypto.randomUUID();
+
       if (request.method === "GET") {
-        // SSE endpoint for server-initiated messages (not yet implemented)
-        return new Response("SSE not implemented for MCP", { status: 501 });
+        return handleSseStream(sessionId);
       }
 
       if (request.method === "DELETE") {
-        // Session termination
-        return new Response(null, { status: 204 });
+        console.log(`[MCP] Session terminated: ${sessionId}`);
+        return new Response(null, {
+          status: 204,
+          headers: { "Mcp-Session-Id": sessionId },
+        });
       }
 
       if (request.method !== "POST") {
@@ -144,11 +156,18 @@ function createMcpJsonRpcHandler(honoApp) {
             handleJsonRpcRequest(req, request, honoApp, env, ctx),
           ),
         );
-        // Filter out notifications (no id = no response)
         const responses = results.filter(Boolean);
-        if (responses.length === 0) return new Response(null, { status: 204 });
+        if (responses.length === 0) {
+          return new Response(null, {
+            status: 204,
+            headers: { "Mcp-Session-Id": sessionId },
+          });
+        }
         return new Response(JSON.stringify(responses), {
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Mcp-Session-Id": sessionId,
+          },
         });
       }
 
@@ -159,10 +178,62 @@ function createMcpJsonRpcHandler(honoApp) {
         env,
         ctx,
       );
-      if (!result) return new Response(null, { status: 204 });
-      return result;
+      if (!result) {
+        return new Response(null, {
+          status: 204,
+          headers: { "Mcp-Session-Id": sessionId },
+        });
+      }
+
+      // Clone response to inject session header
+      const original = result instanceof Response ? result : new Response(null);
+      const headers = new Headers(original.headers);
+      headers.set("Mcp-Session-Id", sessionId);
+      return new Response(original.body, {
+        status: original.status,
+        headers,
+      });
     },
   };
+}
+
+/**
+ * SSE stream for server-initiated MCP notifications (GET /mcp)
+ *
+ * Opens a text/event-stream connection. Sends a keepalive comment
+ * immediately so clients confirm the connection is live, then holds
+ * the stream open with periodic heartbeats (every 30 s) until the
+ * client disconnects.
+ */
+function handleSseStream(sessionId) {
+  const encoder = new TextEncoder();
+  let interval;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(": connected\n\n"));
+
+      // Periodic heartbeat to keep the connection alive
+      interval = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": heartbeat\n\n"));
+        } catch {
+          clearInterval(interval);
+        }
+      }, 30_000);
+    },
+    cancel() {
+      clearInterval(interval);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Mcp-Session-Id": sessionId,
+    },
+  });
 }
 
 async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {

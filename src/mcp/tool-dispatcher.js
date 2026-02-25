@@ -380,6 +380,44 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
     }
 
+    // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
+    else if (name === "chitty_ledger_record") {
+      const response = await fetch("https://ledger.chitty.cc/api/ledger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_ledger_query") {
+      const params = new URLSearchParams();
+      if (args.record_type) params.set("type", args.record_type);
+      if (args.entity_id) params.set("entity_id", args.entity_id);
+      if (args.actor) params.set("actor", args.actor);
+      if (args.status) params.set("status", args.status);
+      if (args.limit) params.set("limit", String(args.limit));
+      const response = await fetch(`https://ledger.chitty.cc/api/ledger?${params}`);
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_ledger_verify") {
+      const response = await fetch("https://ledger.chitty.cc/api/ledger/verify");
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_ledger_statistics") {
+      const response = await fetch("https://ledger.chitty.cc/api/ledger/statistics");
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "chitty_ledger_chain_of_custody") {
+      const response = await fetch(`https://ledger.chitty.cc/api/ledger/${args.entity_id}/custody`);
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    }
+
     // ── ChittyContextual tools ──────────────────────────────────────
     else if (name === "chitty_contextual_timeline") {
       const params = new URLSearchParams();
@@ -597,7 +635,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Memory tools (MemoryCloude) ──────────────────────────────────
-    else if (name === "memory_persist_interaction" || name === "memory_persist") {
+    else if (name === "chitty_memory_persist" || name === "memory_persist_interaction" || name === "memory_persist") {
       const response = await fetch(`${baseUrl}/api/v1/memory/persist`, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
@@ -613,7 +651,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       result = await response.json();
     }
 
-    else if (name === "memory_recall_context" || name === "memory_recall") {
+    else if (name === "chitty_memory_recall" || name === "memory_recall_context" || name === "memory_recall") {
       const params = new URLSearchParams();
       if (args.query) params.set("query", args.query);
       if (args.chitty_id) params.set("chitty_id", args.chitty_id);
@@ -628,7 +666,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       result = await response.json();
     }
 
-    else if (name === "memory_get_session_summary") {
+    else if (name === "chitty_memory_session_summary" || name === "memory_get_session_summary") {
       const response = await fetch(
         `${baseUrl}/api/v1/memory/session/${encodeURIComponent(args.session_id)}/summary`,
         { headers: authHeader },
