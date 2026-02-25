@@ -155,7 +155,10 @@ function createMcpJsonRpcHandler(honoApp) {
         body = await request.json();
       } catch (err) {
         console.warn(`[MCP JSON-RPC] Body parse failed: ${err.message}`);
-        return jsonRpcError(null, -32700, "Parse error");
+        return withSession(
+          JSON.stringify({ jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
       }
 
       // Handle batch requests
@@ -255,7 +258,7 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
     switch (method) {
       case "initialize":
         return jsonRpcResponse(id, {
-          protocolVersion: "2025-03-26",
+          protocolVersion: "2025-06-18",
           capabilities: {
             tools: { listChanged: false },
             resources: { subscribe: false, listChanged: false },
@@ -284,7 +287,13 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
-        const data = await resp.json();
+        let data;
+        try {
+          data = await resp.json();
+        } catch {
+          console.error(`[MCP JSON-RPC] tools/list response not JSON (${resp.status})`);
+          return jsonRpcError(id, -32603, `Internal error: tools/list returned non-JSON (${resp.status})`);
+        }
         return jsonRpcResponse(id, data);
       }
 
@@ -325,7 +334,13 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
-        const data = await resp.json();
+        let data;
+        try {
+          data = await resp.json();
+        } catch {
+          console.error(`[MCP JSON-RPC] resources/list response not JSON (${resp.status})`);
+          return jsonRpcError(id, -32603, `Internal error: resources/list returned non-JSON (${resp.status})`);
+        }
         return jsonRpcResponse(id, data);
       }
 
@@ -341,7 +356,13 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
-        const data = await resp.json();
+        let data;
+        try {
+          data = await resp.json();
+        } catch {
+          console.error(`[MCP JSON-RPC] resources/read response not JSON (${resp.status})`);
+          return jsonRpcError(id, -32603, `Internal error: resources/read returned non-JSON (${resp.status})`);
+        }
         return jsonRpcResponse(id, data);
       }
 
