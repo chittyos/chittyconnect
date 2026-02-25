@@ -23,10 +23,9 @@ jobs:
     steps:
       - name: Fetch ChittyConnect ephemeral credentials
         id: chitty
-        uses: chittyos/chittyconnect-action@v1
-        with:
-          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
-          purpose: github-actions
+        run: |
+          # TODO: Replace with chittyos/chittyconnect-action@v1 once the action is published
+          echo "npm_token=" >> "$GITHUB_OUTPUT"
 
   validate:
     needs: chitty-creds

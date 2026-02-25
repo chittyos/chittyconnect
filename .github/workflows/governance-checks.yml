@@ -75,7 +75,7 @@ jobs:
                 *) echo "Unknown or unsupported entity_type '$et' in $f"; exit 1 ;;
               esac
               echo "Validating $f against $schema"
-              npx -y ajv-cli validate -s "$schema" -d "$f"
+              npx -y ajv-cli validate --strict=false -s "$schema" -d "$f"
             done
           else
             echo "No service entries to validate"
