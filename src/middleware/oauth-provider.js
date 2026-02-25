@@ -126,16 +126,24 @@ function createMcpJsonRpcHandler(honoApp) {
       const sessionId =
         request.headers.get("Mcp-Session-Id") || crypto.randomUUID();
 
+      /** Attach the session header to every outgoing response. */
+      function withSession(body, init = {}) {
+        const headers = new Headers(init.headers);
+        headers.set("Mcp-Session-Id", sessionId);
+        return new Response(body, { ...init, headers });
+      }
+
       if (request.method === "GET") {
+        const accept = request.headers.get("Accept") || "";
+        if (!accept.includes("text/event-stream")) {
+          return new Response("Not Acceptable: requires Accept: text/event-stream", { status: 406 });
+        }
         return handleSseStream(sessionId);
       }
 
       if (request.method === "DELETE") {
         console.log(`[MCP] Session terminated: ${sessionId}`);
-        return new Response(null, {
-          status: 204,
-          headers: { "Mcp-Session-Id": sessionId },
-        });
+        return withSession(null, { status: 204 });
       }
 
       if (request.method !== "POST") {
@@ -158,16 +166,14 @@ function createMcpJsonRpcHandler(honoApp) {
         );
         const responses = results.filter(Boolean);
         if (responses.length === 0) {
-          return new Response(null, {
-            status: 204,
-            headers: { "Mcp-Session-Id": sessionId },
-          });
+          return withSession(null, { status: 204 });
         }
-        return new Response(JSON.stringify(responses), {
-          headers: {
-            "Content-Type": "application/json",
-            "Mcp-Session-Id": sessionId,
-          },
+        // Extract JSON bodies from Response objects before serializing
+        const bodies = await Promise.all(
+          responses.map((r) => r.json()),
+        );
+        return withSession(JSON.stringify(bodies), {
+          headers: { "Content-Type": "application/json" },
         });
       }
 
@@ -179,19 +185,14 @@ function createMcpJsonRpcHandler(honoApp) {
         ctx,
       );
       if (!result) {
-        return new Response(null, {
-          status: 204,
-          headers: { "Mcp-Session-Id": sessionId },
-        });
+        return withSession(null, { status: 204 });
       }
 
-      // Clone response to inject session header
+      // Inject session header into the JSON-RPC response
       const original = result instanceof Response ? result : new Response(null);
-      const headers = new Headers(original.headers);
-      headers.set("Mcp-Session-Id", sessionId);
-      return new Response(original.body, {
+      return withSession(original.body, {
         status: original.status,
-        headers,
+        headers: original.headers,
       });
     },
   };

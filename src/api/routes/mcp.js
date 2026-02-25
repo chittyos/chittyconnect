@@ -13,7 +13,7 @@ const mcpRoutes = new Hono();
 /**
  * MCP Tools Registry
  *
- * 53 tools across 10 domains:
+ * 52 tools across 10 domains:
  *
  *  1. Identity        (2)  — ChittyID mint/validate
  *  2. Cases           (2)  — Legal case lifecycle
@@ -24,7 +24,7 @@ const mcpRoutes = new Hono();
  *  7. Intelligence    (8)  — ContextConsciousness™ + context lifecycle
  *  8. Memory          (3)  — MemoryCloude™ persist/recall/summary
  *  9. Platform        (6)  — Credentials, ecosystem health, chronicle, sync
- * 10. Integrations    (4)  — Notion, OpenAI, Neon, contextual comms
+ * 10. Integrations    (3)  — Notion, OpenAI, Neon
  */
 const TOOLS = [
   // ── 1. Identity ───────────────────────────────────────────
