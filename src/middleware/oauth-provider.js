@@ -265,7 +265,8 @@ function handleSseStream(sessionId) {
   });
 }
 
-async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
+/** @visibleForTesting */
+export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
   const { jsonrpc, method, params, id } = body;
 
   // Notifications have no id — no response expected
@@ -309,6 +310,10 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
+        if (!resp.ok) {
+          console.error(`[MCP JSON-RPC] tools/list proxy returned ${resp.status}`);
+          return jsonRpcError(id, -32603, `Internal proxy error: tools/list (${resp.status})`);
+        }
         let data;
         try {
           data = await resp.json();
@@ -341,6 +346,10 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
+        if (!resp.ok) {
+          console.error(`[MCP JSON-RPC] tools/call proxy returned ${resp.status}`);
+          return jsonRpcError(id, -32603, `Internal proxy error: tools/call (${resp.status})`);
+        }
         let data;
         try {
           data = await resp.json();
@@ -368,6 +377,10 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
+        if (!resp.ok) {
+          console.error(`[MCP JSON-RPC] resources/list proxy returned ${resp.status}`);
+          return jsonRpcError(id, -32603, `Internal proxy error: resources/list (${resp.status})`);
+        }
         let data;
         try {
           data = await resp.json();
@@ -396,6 +409,10 @@ async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
           },
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
+        if (!resp.ok) {
+          console.error(`[MCP JSON-RPC] resources/read proxy returned ${resp.status}`);
+          return jsonRpcError(id, -32603, `Internal proxy error: resources/read (${resp.status})`);
+        }
         let data;
         try {
           data = await resp.json();
