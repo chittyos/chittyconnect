@@ -165,6 +165,10 @@ describe("dispatchToolCall", () => {
   // ── ChittyLedger tools ─────────────────────────────────────────
 
   describe("chitty_ledger_stats", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("fetches dashboard stats", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -176,7 +180,10 @@ describe("dispatchToolCall", () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.total_cases).toBe(5);
-      expect(mockFetch).toHaveBeenCalledWith("https://ledger.chitty.cc/api/dashboard/stats");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ledger.chitty.cc/api/dashboard/stats",
+        { headers: { Authorization: "Bearer svc-token-123" } },
+      );
     });
 
     it("handles non-OK response with error", async () => {
@@ -194,6 +201,10 @@ describe("dispatchToolCall", () => {
   });
 
   describe("chitty_ledger_evidence", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("fetches all evidence without filter", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -203,7 +214,10 @@ describe("dispatchToolCall", () => {
 
       await dispatchToolCall("chitty_ledger_evidence", {}, mockEnv);
 
-      expect(mockFetch).toHaveBeenCalledWith("https://ledger.chitty.cc/api/evidence");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ledger.chitty.cc/api/evidence",
+        { headers: { Authorization: "Bearer svc-token-123" } },
+      );
     });
 
     it("filters evidence by case_id", async () => {
@@ -221,11 +235,16 @@ describe("dispatchToolCall", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/evidence?caseId=case-abc",
+        { headers: { Authorization: "Bearer svc-token-123" } },
       );
     });
   });
 
   describe("chitty_ledger_facts", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("fetches facts for an evidence item", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -241,11 +260,16 @@ describe("dispatchToolCall", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/evidence/ev-123/facts",
+        { headers: { Authorization: "Bearer svc-token-123" } },
       );
     });
   });
 
   describe("chitty_ledger_contradictions", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("fetches contradictions with optional case filter", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -257,6 +281,7 @@ describe("dispatchToolCall", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/contradictions?caseId=c-1",
+        { headers: { Authorization: "Bearer svc-token-123" } },
       );
     });
   });
@@ -264,6 +289,10 @@ describe("dispatchToolCall", () => {
   // ── Fact Governance tools ────────────────────────────────────────
 
   describe("chitty_fact_mint", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("blocks minting when evidence_id not found in ledger", async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
 
@@ -280,6 +309,7 @@ describe("dispatchToolCall", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/evidence/nonexistent-ev",
+        { headers: { Authorization: "Bearer svc-token-123" } },
       );
     });
 
@@ -291,6 +321,7 @@ describe("dispatchToolCall", () => {
       });
       // Second call: POST to facts endpoint
       mockFetch.mockResolvedValueOnce({
+        ok: true,
         status: 200,
         text: async () =>
           JSON.stringify({ fact_id: "fact-001", status: "draft", text: "Purchase price was $450,000" }),
@@ -312,6 +343,7 @@ describe("dispatchToolCall", () => {
       // Verify evidence check happened first
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/evidence/ev-123",
+        { headers: { Authorization: "Bearer svc-token-123" } },
       );
       // Verify fact creation
       expect(mockFetch).toHaveBeenCalledWith(
@@ -335,6 +367,7 @@ describe("dispatchToolCall", () => {
         json: async () => ({ evidence_id: "ev-123" }),
       });
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 422,
         text: async () => "Validation failed: text is required",
       });
@@ -345,12 +378,16 @@ describe("dispatchToolCall", () => {
         mockEnv,
       );
 
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.error).toContain("Ledger returned (422)");
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger error (422)");
     });
   });
 
   describe("chitty_fact_validate", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("blocks validation when corroborating evidence not found", async () => {
       // First corroborating evidence check passes
       mockFetch.mockResolvedValueOnce({ ok: true });
@@ -378,6 +415,7 @@ describe("dispatchToolCall", () => {
       mockFetch.mockResolvedValueOnce({ ok: true });
       // Validate endpoint
       mockFetch.mockResolvedValueOnce({
+        ok: true,
         status: 200,
         text: async () =>
           JSON.stringify({
@@ -400,8 +438,14 @@ describe("dispatchToolCall", () => {
       );
 
       // Verify evidence checks happened
-      expect(mockFetch).toHaveBeenCalledWith("https://ledger.chitty.cc/api/evidence/ev-456");
-      expect(mockFetch).toHaveBeenCalledWith("https://ledger.chitty.cc/api/evidence/ev-789");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ledger.chitty.cc/api/evidence/ev-456",
+        { headers: { Authorization: "Bearer svc-token-123" } },
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ledger.chitty.cc/api/evidence/ev-789",
+        { headers: { Authorization: "Bearer svc-token-123" } },
+      );
       // Verify validate call
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/facts/fact-001/validate",
@@ -417,6 +461,7 @@ describe("dispatchToolCall", () => {
 
     it("validates without corroborating evidence (skips pre-flight)", async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
         status: 200,
         text: async () =>
           JSON.stringify({ fact_id: "fact-001", new_status: "verified" }),
@@ -436,6 +481,7 @@ describe("dispatchToolCall", () => {
 
     it("handles validation failure from ledger", async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 409,
         text: async () => JSON.stringify({ error: "Fact is already locked" }),
       });
@@ -446,14 +492,18 @@ describe("dispatchToolCall", () => {
         mockEnv,
       );
 
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.error).toBe("Fact is already locked");
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger error (409)");
     });
   });
 
   // ── ChittyContextual tools ─────────────────────────────────────
 
   describe("chitty_contextual_timeline", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("fetches timeline with query params", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -471,10 +521,18 @@ describe("dispatchToolCall", () => {
       expect(calledUrl).toContain("contextual.chitty.cc/api/messages");
       expect(calledUrl).toContain("party=john%40example.com");
       expect(calledUrl).toContain("source=email");
+      // Verify auth header is passed
+      expect(mockFetch.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ headers: { Authorization: "Bearer svc-token-123" } }),
+      );
     });
   });
 
   describe("chitty_contextual_topics", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("sends topic query via POST", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -492,6 +550,7 @@ describe("dispatchToolCall", () => {
         "https://contextual.chitty.cc/api/topics",
         expect.objectContaining({
           method: "POST",
+          headers: expect.objectContaining({ Authorization: "Bearer svc-token-123" }),
           body: JSON.stringify({ query: "rent disputes" }),
         }),
       );
@@ -657,6 +716,10 @@ describe("dispatchToolCall", () => {
   // ── Fact Governance (seal, dispute, export) ──────────────────────
 
   describe("chitty_fact_seal", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("returns RBAC error when trust level insufficient", async () => {
       // Mock trust resolver: low trust
       mockFetch.mockResolvedValueOnce({
@@ -712,6 +775,10 @@ describe("dispatchToolCall", () => {
   });
 
   describe("chitty_fact_dispute", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("creates dispute via ChittyLedger", async () => {
       // Mock trust resolver
       mockFetch.mockResolvedValueOnce({
@@ -811,6 +878,10 @@ describe("dispatchToolCall", () => {
   });
 
   describe("chitty_fact_export", () => {
+    beforeEach(() => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+    });
+
     it("returns JSON proof bundle", async () => {
       // Mock trust resolver
       mockFetch.mockResolvedValueOnce({
@@ -836,6 +907,129 @@ describe("dispatchToolCall", () => {
       );
 
       expect(result.isError).toBeUndefined();
+    });
+  });
+
+  // ── Auth failure isolation tests ─────────────────────────────────
+
+  describe("Ledger auth failure isolation", () => {
+    it("returns auth error and skips fetch when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Authentication required");
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for chain tools when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall("chitty_ledger_query", { record_type: "evidence" }, mockEnv);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for fact tools when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_fact_mint",
+        { evidence_id: "ev-1", text: "test" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for evidence reads when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall("chitty_ledger_evidence", {}, mockEnv);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for ledger record when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_ledger_record",
+        { record_type: "evidence", entity_id: "e-1" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for chain of custody when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_ledger_chain_of_custody",
+        { entity_id: "e-1" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error before RBAC check for seal when no Ledger token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_fact_seal",
+        { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyLedger");
+      // No fetch at all — auth fires before RBAC trust check
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Contextual auth failure isolation", () => {
+    it("returns auth error and skips fetch when no Contextual token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_contextual_timeline",
+        { party: "test@example.com" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Authentication required");
+      expect(result.content[0].text).toContain("ChittyContextual");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("returns auth error for topics when no Contextual token", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_contextual_topics",
+        { query: "rent" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("ChittyContextual");
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 });
