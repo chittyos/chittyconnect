@@ -41,7 +41,7 @@ describe("dispatchToolCall", () => {
       expect(result.content[0].text).toContain("Authentication required");
     });
 
-    it("calls ChittyID service and returns result", async () => {
+    it("calls ChittyMint service and returns result", async () => {
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: true,
@@ -58,7 +58,7 @@ describe("dispatchToolCall", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.chitty_id).toBe("01-P-USA-1234-P-2601-A-X");
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://id.chitty.cc/api/v2/chittyid/mint",
+        "https://mint.chitty.cc/api/mint",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({ Authorization: "Bearer svc-token-123" }),
@@ -738,6 +738,75 @@ describe("dispatchToolCall", () => {
 
       expect(result.isError).toBeUndefined();
       expect(JSON.parse(result.content[0].text).dispute_id).toBe("d-1");
+    });
+  });
+
+  // ── Finance tools ─────────────────────────────────────────────
+
+  describe("chitty_finance_entities", () => {
+    it("uses service token (not caller auth) for finance.chitty.cc calls", async () => {
+      getServiceToken.mockResolvedValue("finance-svc-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ entities: ["ARIAS LLC", "BIANCHI TRUST"] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_finance_entities",
+        {},
+        mockEnv,
+        { authToken: "user-api-key-should-not-be-forwarded" },
+      );
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers.Authorization).toBe("Bearer finance-svc-token");
+      expect(headers.Authorization).not.toContain("user-api-key");
+    });
+
+    it("returns auth error when no service token is available", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_finance_entities",
+        {},
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Authentication required");
+      expect(result.content[0].text).toContain("ChittyFinance");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("chitty_finance_detect_transfers", () => {
+    it("whitelists args — does not forward arbitrary fields", async () => {
+      getServiceToken.mockResolvedValue("finance-svc-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ transfers: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_finance_detect_transfers",
+        {
+          entity: "arias-llc",
+          start: "2025-01-01",
+          end: "2025-12-31",
+          threshold: 1000,
+          __proto__: { polluted: true },
+          malicious_field: "should not appear",
+        },
+        mockEnv,
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.entity).toBe("arias-llc");
+      expect(body.start).toBe("2025-01-01");
+      expect(body.end).toBe("2025-12-31");
+      expect(body.threshold).toBe(1000);
+      expect(body.malicious_field).toBeUndefined();
+      expect(Object.keys(body)).toEqual(["entity", "start", "end", "threshold"]);
     });
   });
 

@@ -284,43 +284,91 @@ export class ContextResolver {
   }
 
   /**
-   * Mint ChittyID from service
+   * Mint ChittyID via ChittyMint (mint.chitty.cc).
+   * Falls back to fallback.id.chitty.cc for error-coded IDs (domain 'E')
+   * that are automatically reconciled when the primary service returns.
+   * Local generation is NEVER permitted.
    */
   async mintChittyId({ projectPath, workspace, supportType, organization }) {
-    const response = await fetch(
-      `${this.env.CHITTYID_SERVICE_URL || "https://id.chitty.cc"}/api/v1/mint`,
-      {
+    const mintUrl =
+      this.env.CHITTYMINT_URL || "https://mint.chitty.cc";
+    const fallbackUrl =
+      this.env.CHITTY_FALLBACK_URL || "https://fallback.id.chitty.cc";
+
+    const mintBody = {
+      entity_type: "P", // @canon: chittycanon://gov/governance#core-types
+      characterization: "Synthetic", // AI/Claude contexts are synthetic Persons
+      metadata: {
+        project_path: projectPath,
+        workspace,
+        support_type: supportType,
+        organization,
+      },
+    };
+
+    // Primary: ChittyMint authority service
+    try {
+      const response = await fetch(`${mintUrl}/api/mint`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.env.CHITTYMINT_SECRET || this.env.CHITTY_ID_TOKEN || ""}`,
+        },
+        body: JSON.stringify(mintBody),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const chittyId = data.chitty_id || data.id;
+        if (chittyId) return chittyId;
+        console.warn(
+          `[ContextResolver] ChittyMint returned OK but no ID in response, trying fallback`,
+        );
+      } else {
+        console.warn(
+          `[ContextResolver] ChittyMint primary failed (${response.status}), trying fallback`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[ContextResolver] ChittyMint unreachable: ${err.message}, trying fallback`,
+      );
+    }
+
+    // Fallback: pre-authorized error-coded IDs (domain 'E', auto-reconciled later)
+    try {
+      const response = await fetch(`${fallbackUrl}/api/mint`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN || ""}`,
         },
-        body: JSON.stringify({
-          entity_type: "P", // @canon: chittycanon://gov/governance#core-types
-          characterization: "Synthetic", // AI/Claude contexts are synthetic Persons
-          metadata: {
-            project_path: projectPath,
-            workspace,
-            support_type: supportType,
-            organization,
-          },
-        }),
-      },
-    );
+        body: JSON.stringify(mintBody),
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        const chittyId = data.chitty_id || data.id;
+        if (chittyId) {
+          console.warn(
+            `[ContextResolver] Using fallback error-coded ID: ${chittyId}`,
+          );
+          return chittyId;
+        }
+        throw new Error(
+          `Fallback mint returned OK but no ID in response: ${JSON.stringify(data).slice(0, 200)}`,
+        );
+      }
+
       const body = await response.text().catch(() => "");
       throw new Error(
-        `ChittyID mint failed (${response.status}): ${body.slice(0, 200)}`,
+        `Fallback mint failed (${response.status}): ${body.slice(0, 200)}`,
+      );
+    } catch (err) {
+      throw new Error(
+        `ChittyID minting failed — both primary (mint.chitty.cc) and fallback (fallback.id.chitty.cc) unavailable: ${err.message}`,
       );
     }
-
-    const data = await response.json();
-    const chittyId = data.chitty_id || data.id;
-    if (!chittyId) {
-      throw new Error("ChittyID service returned no ID");
-    }
-    return chittyId;
   }
 
   /**
