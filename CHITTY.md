@@ -1,7 +1,7 @@
 ---
-uri: chittycanon://docs/ops/summary/chittyconnect
+uri: chittycanon://docs/ops/architecture/chittyconnect
 namespace: chittycanon://docs/ops
-type: summary
+type: architecture
 version: 1.0.0
 status: CERTIFIED
 registered_with: chittycanon://core/services/canon
