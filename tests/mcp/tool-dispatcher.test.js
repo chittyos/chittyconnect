@@ -741,6 +741,60 @@ describe("dispatchToolCall", () => {
     });
   });
 
+  // ── Finance tools ─────────────────────────────────────────────
+
+  describe("chitty_finance_entities", () => {
+    it("uses service token (not caller auth) for finance.chitty.cc calls", async () => {
+      getServiceToken.mockResolvedValue("finance-svc-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ entities: ["ARIAS LLC", "BIANCHI TRUST"] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_finance_entities",
+        {},
+        mockEnv,
+        { authToken: "user-api-key-should-not-be-forwarded" },
+      );
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers.Authorization).toBe("Bearer finance-svc-token");
+      expect(headers.Authorization).not.toContain("user-api-key");
+    });
+  });
+
+  describe("chitty_finance_detect_transfers", () => {
+    it("whitelists args — does not forward arbitrary fields", async () => {
+      getServiceToken.mockResolvedValue("finance-svc-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ transfers: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_finance_detect_transfers",
+        {
+          entity: "arias-llc",
+          start: "2025-01-01",
+          end: "2025-12-31",
+          threshold: 1000,
+          __proto__: { polluted: true },
+          malicious_field: "should not appear",
+        },
+        mockEnv,
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.entity).toBe("arias-llc");
+      expect(body.start).toBe("2025-01-01");
+      expect(body.end).toBe("2025-12-31");
+      expect(body.threshold).toBe(1000);
+      expect(body.malicious_field).toBeUndefined();
+      expect(Object.keys(body)).toEqual(["entity", "start", "end", "threshold"]);
+    });
+  });
+
   describe("chitty_fact_export", () => {
     it("returns JSON proof bundle", async () => {
       // Mock trust resolver

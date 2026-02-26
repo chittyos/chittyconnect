@@ -41,7 +41,13 @@ async function checkFetchError(response, toolLabel) {
  */
 export async function dispatchToolCall(name, args = {}, env, options = {}) {
   const { baseUrl = "https://connect.chitty.cc", authToken, context } = options;
+  // authHeader: only for calls to our own baseUrl (connect.chitty.cc internal routes)
   const authHeader = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  // serviceAuthHeader: for cross-service calls to *.chitty.cc siblings
+  const makeServiceAuth = async (serviceName) => {
+    const token = await getServiceToken(env, serviceName);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   try {
     let result;
@@ -912,92 +918,105 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const response = await fetch("https://finance.chitty.cc/api/entities", {
-        headers: authHeader,
+        headers: financeAuth,
       });
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const response = await fetch(
         `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/balances`,
-        { headers: authHeader },
+        { headers: financeAuth },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_transactions") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await fetch(
         `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
-        { headers: authHeader },
+        { headers: financeAuth },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_cash_flow") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await fetch(
         `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
-        { headers: authHeader },
+        { headers: financeAuth },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_inter_entity") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const params = new URLSearchParams();
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await fetch(
         `https://finance.chitty.cc/api/transfers/inter-entity?${params}`,
-        { headers: authHeader },
+        { headers: financeAuth },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_detect_transfers") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const response = await fetch(
         "https://finance.chitty.cc/api/transfers/detect",
         {
           method: "POST",
-          headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify(args),
+          headers: { ...financeAuth, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entity: args.entity,
+            start: args.start,
+            end: args.end,
+            threshold: args.threshold,
+          }),
         },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_flow_of_funds") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await fetch(
         `https://finance.chitty.cc/api/reports/flow-of-funds?${params}`,
-        { headers: authHeader },
+        { headers: financeAuth },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
+      const financeAuth = await makeServiceAuth("chittyfinance");
       const response = await fetch(
         "https://finance.chitty.cc/api/sync/mercury",
         {
           method: "POST",
-          headers: { ...authHeader, "Content-Type": "application/json" },
+          headers: { ...financeAuth, "Content-Type": "application/json" },
         },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name.startsWith("chitty_finance_")) {
-      // Generic fallback for connect_bank and analyze
+      // Generic fallback for connect_bank and analyze — these go to our own baseUrl
       const action = name.replace("chitty_finance_", "");
-      const response = await fetch(`${baseUrl}/api/chittyfinance/${action}`, {
+      const response = await fetch(`${baseUrl}/api/chittyfinance/${encodeURIComponent(action)}`, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
