@@ -762,6 +762,21 @@ describe("dispatchToolCall", () => {
       expect(headers.Authorization).toBe("Bearer finance-svc-token");
       expect(headers.Authorization).not.toContain("user-api-key");
     });
+
+    it("returns auth error when no service token is available", async () => {
+      getServiceToken.mockResolvedValue(null);
+
+      const result = await dispatchToolCall(
+        "chitty_finance_entities",
+        {},
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Authentication required");
+      expect(result.content[0].text).toContain("ChittyFinance");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   describe("chitty_finance_detect_transfers", () => {

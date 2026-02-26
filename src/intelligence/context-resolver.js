@@ -321,11 +321,14 @@ export class ContextResolver {
         const data = await response.json();
         const chittyId = data.chitty_id || data.id;
         if (chittyId) return chittyId;
+        console.warn(
+          `[ContextResolver] ChittyMint returned OK but no ID in response, trying fallback`,
+        );
+      } else {
+        console.warn(
+          `[ContextResolver] ChittyMint primary failed (${response.status}), trying fallback`,
+        );
       }
-
-      console.warn(
-        `[ContextResolver] ChittyMint primary failed (${response.status}), trying fallback`,
-      );
     } catch (err) {
       console.warn(
         `[ContextResolver] ChittyMint unreachable: ${err.message}, trying fallback`,
@@ -352,6 +355,9 @@ export class ContextResolver {
           );
           return chittyId;
         }
+        throw new Error(
+          `Fallback mint returned OK but no ID in response: ${JSON.stringify(data).slice(0, 200)}`,
+        );
       }
 
       const body = await response.text().catch(() => "");

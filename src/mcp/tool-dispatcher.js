@@ -43,10 +43,24 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
   const { baseUrl = "https://connect.chitty.cc", authToken, context } = options;
   // authHeader: only for calls to our own baseUrl (connect.chitty.cc internal routes)
   const authHeader = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-  // serviceAuthHeader: for cross-service calls to *.chitty.cc siblings
-  const makeServiceAuth = async (serviceName) => {
+  // requireServiceAuth: for cross-service calls to *.chitty.cc siblings — fails explicitly if no token
+  const requireServiceAuth = async (serviceName, displayName) => {
     const token = await getServiceToken(env, serviceName);
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    if (!token) {
+      return {
+        error: {
+          content: [
+            {
+              type: "text",
+              text: `Authentication required: No service token available for ${displayName}`,
+            },
+          ],
+          isError: true,
+        },
+        headers: {},
+      };
+    }
+    return { error: null, headers: { Authorization: `Bearer ${token}` } };
   };
 
   try {
@@ -918,7 +932,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const response = await fetch("https://finance.chitty.cc/api/entities", {
         headers: financeAuth,
       });
@@ -926,7 +941,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const response = await fetch(
         `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/balances`,
         { headers: financeAuth },
@@ -935,7 +951,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_transactions") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
@@ -947,7 +964,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_cash_flow") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
@@ -959,7 +977,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_inter_entity") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
@@ -972,7 +991,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_detect_transfers") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const response = await fetch(
         "https://finance.chitty.cc/api/transfers/detect",
         {
@@ -990,7 +1010,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_flow_of_funds") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
@@ -1002,7 +1023,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-      const financeAuth = await makeServiceAuth("chittyfinance");
+      const { error: financeErr, headers: financeAuth } = await requireServiceAuth("chittyfinance", "ChittyFinance");
+      if (financeErr) return financeErr;
       const response = await fetch(
         "https://finance.chitty.cc/api/sync/mercury",
         {
@@ -1016,10 +1038,14 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     } else if (name.startsWith("chitty_finance_")) {
       // Generic fallback for connect_bank and analyze — these go to our own baseUrl
       const action = name.replace("chitty_finance_", "");
+      const allowedKeys = ["institution", "account_type", "query", "entity", "start", "end"];
+      const safeArgs = Object.fromEntries(
+        Object.entries(args).filter(([k]) => allowedKeys.includes(k)),
+      );
       const response = await fetch(`${baseUrl}/api/chittyfinance/${encodeURIComponent(action)}`, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        body: JSON.stringify(safeArgs),
       });
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
