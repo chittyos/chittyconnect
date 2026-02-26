@@ -913,12 +913,16 @@ describe("dispatchToolCall", () => {
   // ── Auth failure isolation tests ─────────────────────────────────
 
   describe("auth failure isolation — skips fetch when no service token", () => {
-    const ledgerCases = [
+    const serviceAuthCases = [
       ["chitty_ledger_stats", {}, "ChittyLedger"],
       ["chitty_ledger_query", { record_type: "evidence" }, "ChittyLedger"],
       ["chitty_ledger_evidence", {}, "ChittyLedger"],
       ["chitty_ledger_record", { record_type: "evidence", entity_id: "e-1" }, "ChittyLedger"],
       ["chitty_ledger_chain_of_custody", { entity_id: "e-1" }, "ChittyLedger"],
+      ["chitty_ledger_facts", { evidence_id: "ev-1" }, "ChittyLedger"],
+      ["chitty_ledger_contradictions", {}, "ChittyLedger"],
+      ["chitty_ledger_verify", {}, "ChittyLedger"],
+      ["chitty_ledger_statistics", {}, "ChittyLedger"],
       ["chitty_fact_mint", { evidence_id: "ev-1", text: "test" }, "ChittyLedger"],
       ["chitty_fact_seal", { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" }, "ChittyLedger"],
       ["chitty_fact_validate", { fact_id: "f-1", validation_method: "cross_reference" }, "ChittyLedger"],
@@ -928,8 +932,8 @@ describe("dispatchToolCall", () => {
       ["chitty_contextual_topics", { query: "rent" }, "ChittyContextual"],
     ];
 
-    it.each(ledgerCases)(
-      "%s returns auth error containing %s and never calls fetch",
+    it.each(serviceAuthCases)(
+      "%s returns auth error and never calls fetch",
       async (toolName, toolArgs, expectedService) => {
         getServiceToken.mockResolvedValue(null);
 
@@ -1041,6 +1045,37 @@ describe("dispatchToolCall", () => {
       expect(result.isError).toBeUndefined();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.proof_queue_warning).toContain("PROOF_Q binding not configured");
+    });
+
+    it("seals successfully but warns when PROOF_Q.send throws", async () => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 4, entity_type: "A" }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
+      });
+
+      const mockProofQ = { send: vi.fn().mockRejectedValue(new Error("Queue unavailable")) };
+      const envWithQueue = {
+        ...mockEnv,
+        PROOF_Q: mockProofQ,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
+
+      const result = await dispatchToolCall(
+        "chitty_fact_seal",
+        { fact_id: "fact-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        envWithQueue,
+      );
+
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proof_queue_warning).toContain("proof queue failed");
+      expect(mockProofQ.send).toHaveBeenCalled();
     });
   });
 

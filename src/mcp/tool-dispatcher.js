@@ -52,6 +52,17 @@ async function parseJsonBody(response, label) {
 }
 
 /**
+ * Check for HTTP errors and parse JSON body in one step.
+ * Returns `{ data, error }` — caller checks `error` first, then uses `data`.
+ */
+async function checkAndParseJson(response, label) {
+  const fetchErr = await checkFetchError(response, label);
+  if (fetchErr) return { data: null, error: fetchErr };
+  const { parsed, error } = await parseJsonBody(response, label);
+  return { data: parsed, error };
+}
+
+/**
  * Dispatch a tool call and return an MCP-formatted result.
  *
  * @param {string} name - Tool name (e.g. "chitty_id_mint")
@@ -209,11 +220,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         "https://ledger.chitty.cc/api/dashboard/stats",
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_evidence") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -221,11 +230,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ? `https://ledger.chitty.cc/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/evidence";
       const response = await fetch(url, { headers: ledgerAuth });
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_facts") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -233,11 +240,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_fact_mint") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -288,11 +293,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           evidence_hash_at_mint: evidenceHash,
         }),
       });
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_fact_validate") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -333,11 +336,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           }),
         },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_fact_seal") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -381,11 +382,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           }),
         },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
 
       if (env.PROOF_Q) {
         try {
@@ -479,11 +478,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           }),
         },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_fact_export") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -605,11 +602,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/export`,
           { headers: ledgerAuth },
         );
-        const fetchErr = await checkFetchError(response, "ChittyLedger");
-        if (fetchErr) return fetchErr;
-        const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-        if (parseErr) return parseErr;
-        result = parsed;
+        const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+        if (respErr) return respErr;
+        result = data;
       }
     } else if (name === "chitty_ledger_contradictions") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
@@ -618,11 +613,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/contradictions";
       const response = await fetch(url, { headers: ledgerAuth });
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     }
 
     // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
@@ -634,11 +627,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...ledgerAuth, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_query") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -652,11 +643,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://ledger.chitty.cc/api/ledger?${params}`,
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_verify") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -664,11 +653,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         "https://ledger.chitty.cc/api/ledger/verify",
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_statistics") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -676,11 +663,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         "https://ledger.chitty.cc/api/ledger/statistics",
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_ledger_chain_of_custody") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -696,11 +681,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://ledger.chitty.cc/api/ledger/${encodeURIComponent(args.entity_id)}/custody`,
         { headers: ledgerAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyLedger");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyLedger");
+      if (respErr) return respErr;
+      result = data;
     }
 
     // ── ChittyContextual tools ──────────────────────────────────────
@@ -716,11 +699,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://contextual.chitty.cc/api/messages?${params.toString()}`,
         { headers: ctxAuth },
       );
-      const fetchErr = await checkFetchError(response, "ChittyContextual");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Contextual");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyContextual");
+      if (respErr) return respErr;
+      result = data;
     } else if (name === "chitty_contextual_topics") {
       const { error: ctxErr, headers: ctxAuth } = await requireServiceAuth("chittycontextual", "ChittyContextual");
       if (ctxErr) return ctxErr;
@@ -729,11 +710,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         headers: { ...ctxAuth, "Content-Type": "application/json" },
         body: JSON.stringify({ query: args.query }),
       });
-      const fetchErr = await checkFetchError(response, "ChittyContextual");
-      if (fetchErr) return fetchErr;
-      const { parsed, error: parseErr } = await parseJsonBody(response, "Contextual");
-      if (parseErr) return parseErr;
-      result = parsed;
+      const { data, error: respErr } = await checkAndParseJson(response, "ChittyContextual");
+      if (respErr) return respErr;
+      result = data;
     }
 
     // ── Evidence AI Search tools ────────────────────────────────────
