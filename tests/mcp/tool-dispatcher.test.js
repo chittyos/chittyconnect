@@ -912,124 +912,160 @@ describe("dispatchToolCall", () => {
 
   // ── Auth failure isolation tests ─────────────────────────────────
 
-  describe("Ledger auth failure isolation", () => {
-    it("returns auth error and skips fetch when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
+  describe("auth failure isolation — skips fetch when no service token", () => {
+    const ledgerCases = [
+      ["chitty_ledger_stats", {}, "ChittyLedger"],
+      ["chitty_ledger_query", { record_type: "evidence" }, "ChittyLedger"],
+      ["chitty_ledger_evidence", {}, "ChittyLedger"],
+      ["chitty_ledger_record", { record_type: "evidence", entity_id: "e-1" }, "ChittyLedger"],
+      ["chitty_ledger_chain_of_custody", { entity_id: "e-1" }, "ChittyLedger"],
+      ["chitty_fact_mint", { evidence_id: "ev-1", text: "test" }, "ChittyLedger"],
+      ["chitty_fact_seal", { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" }, "ChittyLedger"],
+      ["chitty_fact_validate", { fact_id: "f-1", validation_method: "cross_reference" }, "ChittyLedger"],
+      ["chitty_fact_dispute", { fact_id: "f-1", reason: "test", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" }, "ChittyLedger"],
+      ["chitty_fact_export", { fact_id: "f-1", format: "json", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" }, "ChittyLedger"],
+      ["chitty_contextual_timeline", { party: "test@example.com" }, "ChittyContextual"],
+      ["chitty_contextual_topics", { query: "rent" }, "ChittyContextual"],
+    ];
+
+    it.each(ledgerCases)(
+      "%s returns auth error containing %s and never calls fetch",
+      async (toolName, toolArgs, expectedService) => {
+        getServiceToken.mockResolvedValue(null);
+
+        const result = await dispatchToolCall(toolName, toolArgs, mockEnv);
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Authentication required");
+        expect(result.content[0].text).toContain(expectedService);
+        expect(mockFetch).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // ── getServiceToken exception handling ────────────────────────────
+
+  describe("requireServiceAuth handles getServiceToken throwing", () => {
+    it("returns structured auth error when getServiceToken throws", async () => {
+      getServiceToken.mockRejectedValue(new Error("1Password connection timeout"));
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Authentication required");
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error for chain tools when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall("chitty_ledger_query", { record_type: "evidence" }, mockEnv);
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error for fact tools when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall(
-        "chitty_fact_mint",
-        { evidence_id: "ev-1", text: "test" },
-        mockEnv,
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error for evidence reads when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall("chitty_ledger_evidence", {}, mockEnv);
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error for ledger record when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall(
-        "chitty_ledger_record",
-        { record_type: "evidence", entity_id: "e-1" },
-        mockEnv,
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error for chain of custody when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall(
-        "chitty_ledger_chain_of_custody",
-        { entity_id: "e-1" },
-        mockEnv,
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it("returns auth error before RBAC check for seal when no Ledger token", async () => {
-      getServiceToken.mockResolvedValue(null);
-
-      const result = await dispatchToolCall(
-        "chitty_fact_seal",
-        { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
-        mockEnv,
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyLedger");
-      // No fetch at all — auth fires before RBAC trust check
+      expect(result.content[0].text).toContain("Authentication failed");
+      expect(result.content[0].text).toContain("1Password connection timeout");
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 
-  describe("Contextual auth failure isolation", () => {
-    it("returns auth error and skips fetch when no Contextual token", async () => {
-      getServiceToken.mockResolvedValue(null);
+  // ── Non-JSON response handling ─────────────────────────────────────
+
+  describe("non-JSON response handling", () => {
+    it("returns isError when ledger returns HTML instead of JSON", async () => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<!DOCTYPE html><html><body>Bad Gateway</body></html>",
+      });
+
+      const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Ledger returned non-JSON");
+    });
+  });
+
+  // ── fact_seal checkFetchError + PROOF_Q interaction ────────────────
+
+  describe("chitty_fact_seal error and PROOF_Q interaction", () => {
+    it("returns error and does NOT enqueue proof when seal POST returns 500", async () => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+      // Mock trust resolver: Authority with INSTITUTIONAL trust
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 4, entity_type: "A" }),
+      });
+      // Mock ChittyLedger seal — upstream failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => "Internal Server Error",
+      });
+
+      const mockProofQ = { send: vi.fn() };
+      const envWithQueue = {
+        ...mockEnv,
+        PROOF_Q: mockProofQ,
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
 
       const result = await dispatchToolCall(
-        "chitty_contextual_timeline",
-        { party: "test@example.com" },
-        mockEnv,
+        "chitty_fact_seal",
+        { fact_id: "fact-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        envWithQueue,
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Authentication required");
-      expect(result.content[0].text).toContain("ChittyContextual");
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result.content[0].text).toContain("ChittyLedger error (500)");
+      expect(mockProofQ.send).not.toHaveBeenCalled();
     });
 
-    it("returns auth error for topics when no Contextual token", async () => {
-      getServiceToken.mockResolvedValue(null);
+    it("seals successfully and warns when PROOF_Q not configured", async () => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+      // Mock trust resolver
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ trust_level: 4, entity_type: "A" }),
+      });
+      // Mock seal success
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
+      });
+
+      const envNoQueue = {
+        ...mockEnv,
+        // No PROOF_Q binding
+        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CHITTY_TRUST_TOKEN: "tok",
+      };
 
       const result = await dispatchToolCall(
-        "chitty_contextual_topics",
-        { query: "rent" },
+        "chitty_fact_seal",
+        { fact_id: "fact-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        envNoQueue,
+      );
+
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proof_queue_warning).toContain("PROOF_Q binding not configured");
+    });
+  });
+
+  // ── Evidence JSON parse failure during fact mint ────────────────────
+
+  describe("chitty_fact_mint evidence JSON parse", () => {
+    it("returns error when evidence endpoint returns invalid JSON", async () => {
+      getServiceToken.mockResolvedValue("svc-token-123");
+      // Evidence check returns 200 but non-JSON body
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => { throw new SyntaxError("Unexpected token"); },
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_fact_mint",
+        { evidence_id: "ev-corrupt", text: "test claim" },
         mockEnv,
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("ChittyContextual");
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result.content[0].text).toContain("returned invalid JSON");
+      expect(result.content[0].text).toContain("ev-corrupt");
+      // Should NOT have proceeded to mint
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

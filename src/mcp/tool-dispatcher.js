@@ -28,6 +28,30 @@ async function checkFetchError(response, toolLabel) {
 }
 
 /**
+ * Read response body and parse as JSON. Returns an MCP error result on parse failure.
+ * Caller checks `error` first; if null, uses `parsed`.
+ */
+async function parseJsonBody(response, label) {
+  const text = await response.text();
+  try {
+    return { parsed: JSON.parse(text), error: null };
+  } catch {
+    return {
+      parsed: null,
+      error: {
+        content: [
+          {
+            type: "text",
+            text: `${label} returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+}
+
+/**
  * Dispatch a tool call and return an MCP-formatted result.
  *
  * @param {string} name - Tool name (e.g. "chitty_id_mint")
@@ -45,7 +69,24 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
   const authHeader = authToken ? { Authorization: `Bearer ${authToken}` } : {};
   // requireServiceAuth: for cross-service calls to *.chitty.cc siblings — fails explicitly if no token
   const requireServiceAuth = async (serviceName, displayName) => {
-    const token = await getServiceToken(env, serviceName);
+    let token;
+    try {
+      token = await getServiceToken(env, serviceName);
+    } catch (err) {
+      console.error(`[MCP] Service token retrieval failed for ${displayName}:`, err);
+      return {
+        error: {
+          content: [
+            {
+              type: "text",
+              text: `Authentication failed: Unable to retrieve service token for ${displayName} (${err.message})`,
+            },
+          ],
+          isError: true,
+        },
+        headers: {},
+      };
+    }
     if (!token) {
       return {
         error: {
@@ -168,34 +209,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         "https://ledger.chitty.cc/api/dashboard/stats",
         { headers: ledgerAuth },
       );
-      if (!response.ok) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
-                0,
-                300,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_evidence") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -203,34 +221,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ? `https://ledger.chitty.cc/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/evidence";
       const response = await fetch(url, { headers: ledgerAuth });
-      if (!response.ok) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
-                0,
-                300,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_facts") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -238,34 +233,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
         { headers: ledgerAuth },
       );
-      if (!response.ok) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
-                0,
-                300,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_fact_mint") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -285,7 +257,20 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           isError: true,
         };
       }
-      const evidenceRecord = await evidenceCheck.json().catch(() => null);
+      let evidenceRecord;
+      try {
+        evidenceRecord = await evidenceCheck.json();
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Fact minting blocked: evidence "${args.evidence_id}" returned invalid JSON. Cannot anchor evidence hash for integrity verification.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       const evidenceHash =
         evidenceRecord?.file_hash || evidenceRecord?.thing?.file_hash || null;
 
@@ -305,20 +290,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       });
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_fact_validate") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -361,20 +335,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_fact_seal") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -420,20 +383,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
 
       if (env.PROOF_Q) {
         try {
@@ -451,7 +403,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           result.proof_queue_warning =
             "Seal succeeded but proof queue failed. Manual proof minting may be required.";
         }
-      } else if (!env.PROOF_Q) {
+      } else {
         console.warn(
           `[MCP] PROOF_Q not configured. Fact ${args.fact_id} sealed without proof minting.`,
         );
@@ -529,20 +481,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_fact_export") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -587,7 +528,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             isError: true,
           };
         }
-        const factData = await factResp.json();
+        const { parsed: factData, error: factParseErr } = await parseJsonBody(factResp, "Ledger");
+        if (factParseErr) return factParseErr;
 
         if (!factData.proof_id) {
           return {
@@ -665,20 +607,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         );
         const fetchErr = await checkFetchError(response, "ChittyLedger");
         if (fetchErr) return fetchErr;
-        const text = await response.text();
-        try {
-          result = JSON.parse(text);
-        } catch {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-              },
-            ],
-            isError: true,
-          };
-        }
+        const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+        if (parseErr) return parseErr;
+        result = parsed;
       }
     } else if (name === "chitty_ledger_contradictions") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
@@ -687,34 +618,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ? `https://ledger.chitty.cc/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
         : "https://ledger.chitty.cc/api/contradictions";
       const response = await fetch(url, { headers: ledgerAuth });
-      if (!response.ok) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `ChittyLedger error (${response.status}): ${await response.text().catch(() => "")}`.slice(
-                0,
-                300,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const fetchErr = await checkFetchError(response, "ChittyLedger");
+      if (fetchErr) return fetchErr;
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     }
 
     // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
@@ -728,20 +636,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       });
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_query") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -757,20 +654,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_verify") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -780,20 +666,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_statistics") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -803,20 +678,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_ledger_chain_of_custody") {
       const { error: ledgerErr, headers: ledgerAuth } = await requireServiceAuth("chittyledger", "ChittyLedger");
       if (ledgerErr) return ledgerErr;
@@ -834,20 +698,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyLedger");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Ledger returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Ledger");
+      if (parseErr) return parseErr;
+      result = parsed;
     }
 
     // ── ChittyContextual tools ──────────────────────────────────────
@@ -865,20 +718,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       const fetchErr = await checkFetchError(response, "ChittyContextual");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Contextual");
+      if (parseErr) return parseErr;
+      result = parsed;
     } else if (name === "chitty_contextual_topics") {
       const { error: ctxErr, headers: ctxAuth } = await requireServiceAuth("chittycontextual", "ChittyContextual");
       if (ctxErr) return ctxErr;
@@ -889,20 +731,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       });
       const fetchErr = await checkFetchError(response, "ChittyContextual");
       if (fetchErr) return fetchErr;
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Contextual returned non-JSON (${response.status}): ${text.slice(0, 200)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const { parsed, error: parseErr } = await parseJsonBody(response, "Contextual");
+      if (parseErr) return parseErr;
+      result = parsed;
     }
 
     // ── Evidence AI Search tools ────────────────────────────────────
