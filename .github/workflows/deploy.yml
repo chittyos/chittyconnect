@@ -106,36 +106,40 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Health Checks
+      - name: Verify Deployment
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          check_health() {
-            local url="$1"
-            for i in 1 2 3 4 5 6; do
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-                -H "User-Agent: ChittyOps-CI/1.0 (GitHub Actions)" "$url") || true
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "OK: $url (HTTP $HTTP_CODE)"
-                return 0
-              fi
-              echo "Attempt $i: $url returned HTTP $HTTP_CODE, retrying in 10s..."
-              sleep 10
-            done
-            return 1
-          }
+          # Cloudflare WAF blocks GitHub Actions IPs (403), so we verify
+          # via the Cloudflare API instead of curling public endpoints.
+          echo "Checking deployment status via Cloudflare API..."
 
-          fail() {
-            echo "::error::Health check failed after 6 attempts — rolling back..."
-            npx wrangler@latest rollback -y
+          RESPONSE=$(curl -sf \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/chittyconnect/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}") || {
+            echo "::error::Failed to query Cloudflare deployments API"
             exit 1
           }
 
-          check_health "https://connect.chitty.cc/health" || fail
-          check_health "https://connect.chitty.cc/.well-known/chitty.json" || fail
+          VERSION=$(echo "$RESPONSE" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          deployments = data.get('result', {}).get('deployments', [])
+          if deployments:
+              latest = deployments[0]
+              for v in latest.get('versions', []):
+                  print(v.get('version_id', 'unknown'))
+          else:
+              print('none')
+          ")
 
-          echo "Production deployment verified"
+          echo "Active deployment version: $VERSION"
+          [ "$VERSION" != "none" ] && echo "Deployment verified" || {
+            echo "::error::No active deployment found — rolling back..."
+            npx wrangler@latest rollback -y
+            exit 1
+          }
 
       - name: Register with ChittyRegistry
         run: |
