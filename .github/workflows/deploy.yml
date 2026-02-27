@@ -1,3 +1,12 @@
+# ChittyConnect CI/CD — aligned with chittyos/chittyops conventions
+#
+# NOTE: chittyconnect cannot use reusable-worker-deploy.yml because that
+# workflow calls getchitty-creds → connect.chitty.cc/credentials/deploy
+# to fetch ephemeral CF tokens.  ChittyConnect IS the credential provider,
+# so it must deploy with static CLOUDFLARE_API_TOKEN (chicken-and-egg).
+#
+# Structure mirrors the reusable workflow: validate → deploy → verify.
+
 name: Deploy ChittyConnect
 
 on:
@@ -14,29 +23,25 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: 20
+  NODE_VERSION: "20"
 
 jobs:
-  deploy:
+  #########################################
+  # Validate & Migrate
+  #########################################
+  validate:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      #########################################
-      # Validation
-      #########################################
       - name: Validate OpenAPI
         run: |
           SPEC="openapi.json"
@@ -49,15 +54,11 @@ jobs:
             npx ajv validate -s mcp/manifest.schema.json -d mcp/manifest.json || \
             echo "MCP manifest validation skipped"
 
-      #########################################
-      # D1 Migrations
-      #########################################
       - name: Run D1 Migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          echo "Running D1 migrations..."
           if [ -d migrations ]; then
             for migration in migrations/*.sql; do
               if [ -f "$migration" ]; then
@@ -67,18 +68,44 @@ jobs:
             done
           fi
 
-      #########################################
-      # Deploy
-      #########################################
-      - name: Deploy to Production
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+  #########################################
+  # Deploy to Cloudflare Workers
+  #########################################
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
 
-      #########################################
-      # Health Checks + Auto-Rollback
-      #########################################
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  #########################################
+  # Post-deploy verification + rollback
+  #########################################
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: wrangler.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Health Checks
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -87,12 +114,19 @@ jobs:
           sleep 5
 
           fail() {
-            echo "Health check failed - rolling back..."
-            npx wrangler rollback -y
+            echo "::error::Health check failed — rolling back..."
+            npx wrangler@latest rollback -y
             exit 1
           }
 
-          curl -f https://connect.chitty.cc/health || fail
-          curl -f https://connect.chitty.cc/.well-known/chitty.json || fail
+          curl -sf https://connect.chitty.cc/health || fail
+          curl -sf https://connect.chitty.cc/.well-known/chitty.json || fail
 
           echo "Production deployment verified"
+
+      - name: Register with ChittyRegistry
+        run: |
+          curl -sf -X POST https://registry.chitty.cc/api/services/chittyconnect/heartbeat \
+            -H "Content-Type: application/json" \
+            -d '{"status":"deployed","version":"${{ github.sha }}"}' || true
+        continue-on-error: true
