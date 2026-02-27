@@ -165,8 +165,7 @@ npm run format:check     # Check formatting without writing
 
 ### Deployment
 ```bash
-npm run deploy:staging       # Deploy to staging
-npm run deploy:production    # Deploy to production
+npm run deploy               # Deploy to production
 ```
 
 ### MCP Server
@@ -384,9 +383,8 @@ GET /api/v1/proxy/google-calendar/list-events
 - `ARCHITECTURE_ANALYSIS.md` - Architecture documentation
 - `INNOVATION_ROADMAP.md` - Innovation roadmap
 
-## Deployment URLs
+## Deployment URL
 
-- **Staging**: https://connect-staging.chitty.cc
 - **Production**: https://connect.chitty.cc
 
 ## Development Guidelines
@@ -394,7 +392,7 @@ GET /api/v1/proxy/google-calendar/list-events
 1. All database changes must be coordinated with other ChittyOS services
 2. Service tokens are required for inter-service calls
 3. Test locally with `npm run dev` before deploying
-4. Deploy to staging first, then production
+4. Deploy with `npm run deploy` (single production target)
 5. Follow OpenAPI specification for Custom GPT Actions
 6. Maintain MCP protocol compatibility for Claude integration
 7. Follow ChittyOS development guidelines in root `CLAUDE.md`

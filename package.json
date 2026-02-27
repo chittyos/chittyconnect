@@ -10,8 +10,6 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "deploy:production": "wrangler deploy --env production",
-    "deploy:staging": "wrangler deploy --env staging",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
@@ -21,7 +19,8 @@
     "mcp:test": "DEBUG=true node mcp-server.js",
     "mcp:setup": "./scripts/setup-mcp.sh",
     "mcp:setup:desktop": "./scripts/setup-mcp.sh desktop",
-    "mcp:setup:code": "./scripts/setup-mcp.sh code"
+    "mcp:setup:code": "./scripts/setup-mcp.sh code",
+    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js"
   },
   "keywords": [
     "chittyos",
