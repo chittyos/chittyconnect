@@ -113,19 +113,21 @@ jobs:
         run: |
           check_health() {
             local url="$1"
-            for i in 1 2 3 4 5; do
-              if curl -sf --max-time 10 "$url" > /dev/null; then
-                echo "OK: $url"
+            for i in 1 2 3 4 5 6; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                -H "User-Agent: ChittyOps-CI/1.0 (GitHub Actions)" "$url") || true
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "OK: $url (HTTP $HTTP_CODE)"
                 return 0
               fi
-              echo "Attempt $i failed for $url, retrying in 5s..."
-              sleep 5
+              echo "Attempt $i: $url returned HTTP $HTTP_CODE, retrying in 10s..."
+              sleep 10
             done
             return 1
           }
 
           fail() {
-            echo "::error::Health check failed after 5 attempts — rolling back..."
+            echo "::error::Health check failed after 6 attempts — rolling back..."
             npx wrangler@latest rollback -y
             exit 1
           }
