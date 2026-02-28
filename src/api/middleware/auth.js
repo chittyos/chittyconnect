@@ -14,6 +14,30 @@ export async function authenticate(c, next) {
   // Validate API key against KV store
   const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
 
+  // OAuth MCP flow passes bearer access tokens (not API keys). For requests
+  // that originate from the OAuth-protected /mcp endpoint, allow valid OAuth
+  // tokens as an alternate auth path.
+  if (!keyData && c.req.header("Authorization")?.startsWith("Bearer ") && c.env.OAUTH_PROVIDER?.unwrapToken) {
+    try {
+      const token = await c.env.OAUTH_PROVIDER.unwrapToken(apiKey);
+      if (!token) {
+        return c.json({ error: "Invalid API key" }, 401);
+      }
+
+      c.set("apiKey", {
+        type: "oauth",
+        userId: token.userId,
+        scopes: token.scope || [],
+        status: "active",
+      });
+
+      await next();
+      return;
+    } catch {
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+  }
+
   if (!keyData) {
     return c.json({ error: "Invalid API key" }, 401);
   }
