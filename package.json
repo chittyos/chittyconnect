@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "kv:seed": "./scripts/seed-kv.sh",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",

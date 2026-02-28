@@ -32,6 +32,8 @@ import tasksRoutes from "./routes/tasks.js";
 import { dashboard } from "./routes/dashboard.js";
 import contextResolution from "./routes/context-resolution.js";
 import contextIntelligence from "./routes/context-intelligence.js";
+import { certRoutes } from "./routes/cert.js";
+import { connectRoutes } from "./routes/connect.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -103,6 +105,8 @@ api.get("/api/health", (c) => {
       dashboard: "/api/dashboard",
       contextResolution: "/api/v1/context",
       githubActions: "/api/github-actions",
+      cert: "/api/v1/cert",
+      connect: "/api/v1/connect",
       mcp: "/mcp",
       chatgptMcp: "/chatgpt/mcp",
     },
@@ -142,5 +146,7 @@ api.route("/api/v1/intelligence", contextIntelligence);
 api.route("/mcp", mcpRoutes);
 api.route("/chatgpt/mcp", chatgptMcp);
 api.route("/api/v1/exports", exportRoutes);
+api.route("/api/v1/cert", certRoutes);
+api.route("/api/v1/connect", connectRoutes);
 
 export { api };
