@@ -33,7 +33,7 @@ import { dashboard } from "./routes/dashboard.js";
 import contextResolution from "./routes/context-resolution.js";
 import contextIntelligence from "./routes/context-intelligence.js";
 import { authenticate } from "./middleware/auth.js";
-import { autoRateLimit } from "./middleware/rateLimit.js";
+import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
 
 const api = new Hono();
@@ -81,7 +81,7 @@ api.get("/api/health", (c) => {
   return c.json({
     status: "healthy",
     service: "chittyconnect-gpt-api",
-    version: "1.0.0",
+    version: "2.0.2",
     timestamp: new Date().toISOString(),
     endpoints: {
       chittyid: "/api/chittyid",

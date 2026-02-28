@@ -621,7 +621,7 @@ describe('MCP Server', () => {
 ### 3. Add Rate Limiting
 
 ```javascript
-// src/api/middleware/rateLimit.js
+// src/api/middleware/rate-limit.js
 export async function rateLimit(c, next) {
   const apiKey = c.req.header('X-ChittyOS-API-Key');
   const rateLimitKey = `ratelimit:${apiKey}:${Math.floor(Date.now() / 60000)}`;
