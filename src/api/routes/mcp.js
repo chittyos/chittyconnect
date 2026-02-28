@@ -14,6 +14,47 @@ import { MCP_TOOLS } from "../../mcp/tool-registry.js";
 
 const mcpRoutes = new Hono();
 
+const HTTP_STATUS_PATTERN = /\((\d{3})\)(?::|$)/;
+
+function getResultMessage(result) {
+  if (!Array.isArray(result?.content)) return "";
+  const textItem = result.content.find(
+    (item) => item?.type === "text" && typeof item.text === "string",
+  );
+  return textItem?.text || "";
+}
+
+/** @visibleForTesting */
+export function resolveInternalBaseUrl(requestUrl) {
+  const url = new URL(requestUrl);
+  const internalHost = url.hostname.replace(/^mcp\./, "connect.");
+  return `${url.protocol}//${internalHost}`;
+}
+
+/** @visibleForTesting */
+export function deriveToolErrorStatus(result) {
+  const msg = getResultMessage(result);
+
+  if (msg.includes("Unknown tool")) return 400;
+  if (msg.includes("Permission denied")) return 403;
+  if (
+    msg.includes("Authentication required") ||
+    msg.includes("Missing API key") ||
+    msg.includes("Invalid API key")
+  ) {
+    return 401;
+  }
+  if (msg.includes("Rate limit exceeded")) return 429;
+
+  const statusMatch = msg.match(HTTP_STATUS_PATTERN);
+  if (statusMatch) {
+    const status = Number(statusMatch[1]);
+    if (status >= 400 && status <= 599) return status;
+  }
+
+  return 500;
+}
+
 /**
  * GET /mcp/tools/list
  * List all available MCP tools (52 tools across 10 domains)
@@ -28,7 +69,7 @@ mcpRoutes.get("/tools/list", async (c) => {
  */
 mcpRoutes.post("/tools/call", async (c) => {
   const { name, arguments: args, context } = await c.req.json();
-  const baseUrl = c.req.url.split("/mcp")[0];
+  const baseUrl = resolveInternalBaseUrl(c.req.url);
   const authToken = (c.req.header("Authorization") || "").replace(
     /^Bearer\s+/i,
     "",
@@ -41,12 +82,7 @@ mcpRoutes.post("/tools/call", async (c) => {
   });
 
   if (result.isError) {
-    const msg = result.content?.[0]?.text || "";
-    const status = msg.includes("Unknown tool")
-      ? 400
-      : msg.includes("Permission denied")
-        ? 403
-        : 500;
+    const status = deriveToolErrorStatus(result);
     return c.json(result, status);
   }
   return c.json(result);
@@ -95,7 +131,7 @@ mcpRoutes.get("/resources/read", async (c) => {
 
     if (uri === "chitty://ecosystem/status") {
       const response = await fetch(
-        `${c.req.url.split("/mcp")[0]}/api/services/status`,
+        `${resolveInternalBaseUrl(c.req.url)}/api/services/status`,
         {
           headers: { Authorization: c.req.header("Authorization") },
         },

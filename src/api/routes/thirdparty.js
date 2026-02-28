@@ -143,11 +143,13 @@ thirdpartyRoutes.post("/neon/query", async (c) => {
     }
 
     // Get Neon database URL from 1Password with fallback
-    const neonDbUrl = await getCredential(
-      c.env,
-      "infrastructure/neon/database_url",
-      "NEON_DATABASE_URL",
-    );
+    const neonDbUrl =
+      c.env.NEON_DATABASE_URL ||
+      (await getCredential(
+        c.env,
+        "database/neon/chittyos_core",
+        "NEON_DATABASE_URL",
+      ));
 
     if (!neonDbUrl) {
       return c.json(

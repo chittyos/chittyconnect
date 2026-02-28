@@ -7,7 +7,29 @@
  * @module mcp/tool-dispatcher
  */
 
-import { getServiceToken } from "../lib/credential-helper.js";
+import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import { Client } from "@neondatabase/serverless";
+
+const CHITTYOS_SERVICES = [
+  { id: "chittyid", url: "https://id.chitty.cc" },
+  { id: "chittyauth", url: "https://auth.chitty.cc" },
+  { id: "chittygateway", url: "https://gateway.chitty.cc" },
+  { id: "chittyrouter", url: "https://router.chitty.cc" },
+  { id: "chittyregistry", url: "https://registry.chitty.cc" },
+  { id: "chittycases", url: "https://cases.chitty.cc" },
+  { id: "chittyfinance", url: "https://finance.chitty.cc" },
+  { id: "chittyevidence", url: "https://evidence.chitty.cc" },
+  { id: "chittysync", url: "https://sync.chitty.cc" },
+  { id: "chittychronicle", url: "https://chronicle.chitty.cc" },
+  { id: "chittycontextual", url: "https://contextual.chitty.cc" },
+  { id: "chittyschema", url: "https://schema.chitty.cc" },
+  { id: "chittytrust", url: "https://trust.chitty.cc" },
+  { id: "chittyscore", url: "https://score.chitty.cc" },
+  { id: "chittychain", url: "https://chain.chitty.cc" },
+  { id: "chittyledger", url: "https://ledger.chitty.cc" },
+  { id: "chittydisputes", url: "https://disputes.chitty.cc" },
+  { id: "chittytrack", url: "https://track.chitty.cc" },
+];
 
 /**
  * Parse a fetch response, returning an MCP error result for non-OK responses.
@@ -60,6 +82,41 @@ async function checkAndParseJson(response, label) {
   if (fetchErr) return { data: null, error: fetchErr };
   const { parsed, error } = await parseJsonBody(response, label);
   return { data: parsed, error };
+}
+
+async function fetchServiceStatusSnapshot() {
+  const statusChecks = CHITTYOS_SERVICES.map(async (service) => {
+    try {
+      const response = await fetch(`${service.url}/health`, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
+      });
+      return {
+        serviceId: service.id,
+        name: service.id,
+        url: service.url,
+        status: response.ok ? "healthy" : "degraded",
+        statusCode: response.status,
+        lastChecked: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        serviceId: service.id,
+        name: service.id,
+        url: service.url,
+        status: "down",
+        error: error.message,
+        lastChecked: new Date().toISOString(),
+      };
+    }
+  });
+
+  const results = await Promise.all(statusChecks);
+  const services = {};
+  results.forEach((entry) => {
+    services[entry.serviceId] = entry;
+  });
+  return { services };
 }
 
 /**
@@ -1136,12 +1193,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       name.startsWith("chitty_services_") ||
       name === "chitty_ecosystem_awareness"
     ) {
-      const response = await fetch(`${baseUrl}/api/services/status`, {
-        headers: authHeader,
-      });
-      const fetchErr = await checkFetchError(response, "ServiceHealth");
-      if (fetchErr) return fetchErr;
-      result = await response.json();
+      result = await fetchServiceStatusSnapshot();
     }
 
     // ── Chronicle tools ─────────────────────────────────────────────
@@ -1176,14 +1228,48 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_neon_query") {
-      const response = await fetch(`${baseUrl}/api/thirdparty/neon/query`, {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify(args),
-      });
-      const fetchErr = await checkFetchError(response, "Neon");
-      if (fetchErr) return fetchErr;
-      result = await response.json();
+      const query = args.query || args.sql;
+      if (!query) {
+        return {
+          content: [{ type: "text", text: "Missing required parameter: sql" }],
+          isError: true,
+        };
+      }
+      const neonDbUrl =
+        env.NEON_DATABASE_URL ||
+        (await getCredential(
+          env,
+          "database/neon/chittyos_core",
+          "NEON_DATABASE_URL",
+          "Neon",
+        ));
+      if (!neonDbUrl) {
+        return {
+          content: [{ type: "text", text: "Neon error (503): Neon database URL not configured" }],
+          isError: true,
+        };
+      }
+      if (
+        neonDbUrl.startsWith("http://") ||
+        neonDbUrl.startsWith("https://")
+      ) {
+        const response = await fetch(neonDbUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, params: args.params }),
+        });
+        const fetchErr = await checkFetchError(response, "Neon");
+        if (fetchErr) return fetchErr;
+        result = await response.json();
+      } else {
+        const client = new Client({ connectionString: neonDbUrl });
+        try {
+          await client.connect();
+          result = await client.query(query, args.params || []);
+        } finally {
+          await client.end().catch(() => {});
+        }
+      }
     }
 
     // ── Sync tools ──────────────────────────────────────────────────

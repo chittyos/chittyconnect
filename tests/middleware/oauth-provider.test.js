@@ -101,6 +101,7 @@ describe("handleJsonRpcRequest", () => {
         expect(data.error.code).toBe(-32603);
         expect(data.error.message).toContain("Internal proxy error");
         expect(data.error.message).toContain("500");
+        expect(data.error.message).toContain("Internal Server Error");
         expect(data.id).toBe(10);
       },
     );
@@ -117,6 +118,7 @@ describe("handleJsonRpcRequest", () => {
         expect(data.error).toBeDefined();
         expect(data.error.code).toBe(-32603);
         expect(data.error.message).toContain("401");
+        expect(data.error.message).toContain("Unauthorized");
       },
     );
 

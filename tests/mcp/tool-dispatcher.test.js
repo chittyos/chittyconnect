@@ -6,14 +6,33 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const neonMocks = vi.hoisted(() => ({
+  connect: vi.fn(),
+  query: vi.fn(),
+  end: vi.fn(),
+}));
+
+vi.mock("@neondatabase/serverless", () => ({
+  Client: vi.fn().mockImplementation(function MockClient() {
+    return {
+    connect: neonMocks.connect,
+    query: neonMocks.query,
+    end: neonMocks.end,
+    };
+  }),
+}));
+
 import { dispatchToolCall } from "../../src/mcp/tool-dispatcher.js";
+import { Client } from "@neondatabase/serverless";
 
 // Mock credential-helper
 vi.mock("../../src/lib/credential-helper.js", () => ({
+  getCredential: vi.fn(),
   getServiceToken: vi.fn(),
 }));
 
-import { getServiceToken } from "../../src/lib/credential-helper.js";
+import { getCredential, getServiceToken } from "../../src/lib/credential-helper.js";
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -26,6 +45,9 @@ const mockEnv = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  neonMocks.connect.mockReset();
+  neonMocks.query.mockReset();
+  neonMocks.end.mockReset();
 });
 
 describe("dispatchToolCall", () => {
@@ -653,7 +675,7 @@ describe("dispatchToolCall", () => {
     it("fetches service status", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ services: { chittyid: "healthy" } }),
+        status: 200,
       });
 
       await dispatchToolCall("chitty_services_status", {}, mockEnv, {
@@ -661,9 +683,79 @@ describe("dispatchToolCall", () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://test.chitty.cc/api/services/status",
-        expect.any(Object),
+        "https://id.chitty.cc/health",
+        expect.objectContaining({ method: "GET" }),
       );
+    });
+  });
+
+  describe("chitty_neon_query", () => {
+    it("returns error when sql is missing", async () => {
+      const result = await dispatchToolCall("chitty_neon_query", {}, mockEnv);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Missing required parameter: sql");
+    });
+
+    it("returns error when Neon URL is not configured", async () => {
+      getCredential.mockResolvedValue(undefined);
+
+      const result = await dispatchToolCall(
+        "chitty_neon_query",
+        { sql: "SELECT 1" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Neon error (503)");
+    });
+
+    it("queries Neon directly using sql + params", async () => {
+      getCredential.mockResolvedValue("https://neon.example/sql");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ rows: [{ ok: 1 }] }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_neon_query",
+        { sql: "SELECT $1::int as ok", params: [1] },
+        mockEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://neon.example/sql",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).toEqual({ query: "SELECT $1::int as ok", params: [1] });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.rows[0].ok).toBe(1);
+    });
+
+    it("uses Neon serverless client for postgresql DSN credentials", async () => {
+      const dsn = "postgresql://user:pass@ep-test.us-east-2.aws.neon.tech/db";
+      getCredential.mockResolvedValue(dsn);
+      neonMocks.connect.mockResolvedValue(undefined);
+      neonMocks.query.mockResolvedValue({ rows: [{ ok: 1 }] });
+      neonMocks.end.mockResolvedValue(undefined);
+
+      const result = await dispatchToolCall(
+        "chitty_neon_query",
+        { sql: "SELECT 1 as ok" },
+        mockEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(Client).toHaveBeenCalledWith({ connectionString: dsn });
+      expect(neonMocks.connect).toHaveBeenCalled();
+      expect(neonMocks.query).toHaveBeenCalledWith("SELECT 1 as ok", []);
+      expect(neonMocks.end).toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 

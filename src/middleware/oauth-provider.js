@@ -311,8 +311,7 @@ export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         if (!resp.ok) {
-          console.error(`[MCP JSON-RPC] tools/list proxy returned ${resp.status}`);
-          return jsonRpcError(id, -32603, `Internal proxy error: tools/list (${resp.status})`);
+          return proxyErrorResponse(id, "tools/list", resp);
         }
         let data;
         try {
@@ -347,8 +346,7 @@ export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         if (!resp.ok) {
-          console.error(`[MCP JSON-RPC] tools/call proxy returned ${resp.status}`);
-          return jsonRpcError(id, -32603, `Internal proxy error: tools/call (${resp.status})`);
+          return proxyErrorResponse(id, "tools/call", resp);
         }
         let data;
         try {
@@ -378,8 +376,7 @@ export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         if (!resp.ok) {
-          console.error(`[MCP JSON-RPC] resources/list proxy returned ${resp.status}`);
-          return jsonRpcError(id, -32603, `Internal proxy error: resources/list (${resp.status})`);
+          return proxyErrorResponse(id, "resources/list", resp);
         }
         let data;
         try {
@@ -410,8 +407,7 @@ export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
         );
         const resp = await honoApp.fetch(internalReq, env, ctx);
         if (!resp.ok) {
-          console.error(`[MCP JSON-RPC] resources/read proxy returned ${resp.status}`);
-          return jsonRpcError(id, -32603, `Internal proxy error: resources/read (${resp.status})`);
+          return proxyErrorResponse(id, "resources/read", resp);
         }
         let data;
         try {
@@ -447,6 +443,43 @@ function jsonRpcResponse(id, result) {
   return new Response(JSON.stringify({ jsonrpc: "2.0", result, id }), {
     headers: { "Content-Type": "application/json" },
   });
+}
+
+async function proxyErrorResponse(id, method, resp) {
+  const bodyText = await resp.text().catch(() => "");
+  const detail = summarizeProxyErrorBody(bodyText);
+  const detailPart = detail ? `: ${detail}` : "";
+  console.error(
+    `[MCP JSON-RPC] ${method} proxy returned ${resp.status}${detailPart}`,
+  );
+  const msg = detail
+    ? `Internal proxy error: ${method} (${resp.status}) - ${detail}`
+    : `Internal proxy error: ${method} (${resp.status})`;
+  return jsonRpcError(id, -32603, msg);
+}
+
+function summarizeProxyErrorBody(bodyText) {
+  if (!bodyText) return "";
+  const trimmed = bodyText.trim();
+  if (!trimmed) return "";
+
+  let detail = trimmed;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed?.error === "string") {
+      detail = parsed.error;
+    } else if (typeof parsed?.error?.message === "string") {
+      detail = parsed.error.message;
+    } else if (typeof parsed?.message === "string") {
+      detail = parsed.message;
+    } else {
+      detail = trimmed;
+    }
+  } catch {
+    detail = trimmed;
+  }
+
+  return detail.replace(/\s+/g, " ").slice(0, 240);
 }
 
 function jsonRpcError(id, code, message) {
