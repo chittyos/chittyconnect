@@ -3,9 +3,13 @@
  */
 
 export async function authenticate(c, next) {
+  const authorizationHeader = c.req.header("Authorization") || "";
+  const bearerMatch = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+  const bearerToken = bearerMatch ? bearerMatch[1].trim() : null;
+
   const apiKey =
     c.req.header("X-ChittyOS-API-Key") ||
-    c.req.header("Authorization")?.replace("Bearer ", "");
+    bearerToken;
 
   if (!apiKey) {
     return c.json({ error: "Missing API key" }, 401);
@@ -17,7 +21,7 @@ export async function authenticate(c, next) {
   // OAuth MCP flow passes bearer access tokens (not API keys). For requests
   // that originate from the OAuth-protected /mcp endpoint, allow valid OAuth
   // tokens as an alternate auth path.
-  if (!keyData && c.req.header("Authorization")?.startsWith("Bearer ") && c.env.OAUTH_PROVIDER?.unwrapToken) {
+  if (!keyData && bearerToken && c.env.OAUTH_PROVIDER?.unwrapToken) {
     try {
       const token = await c.env.OAUTH_PROVIDER.unwrapToken(apiKey);
       if (!token) {

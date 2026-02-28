@@ -77,6 +77,26 @@ describe("authenticate middleware", () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts lowercase bearer scheme for OAuth fallback", async () => {
+    const c = createMockContext({
+      req: {
+        header: headerMap({ authorization: "bearer oauth_access_token" }),
+      },
+    });
+
+    c.env.API_KEYS.get.mockResolvedValueOnce(null);
+    c.env.OAUTH_PROVIDER = {
+      unwrapToken: vi.fn(async () => ({ userId: "oauth_user", scope: ["mcp:read"] })),
+    };
+
+    const next = vi.fn(async () => {});
+
+    await authenticate(c, next);
+
+    expect(c.env.OAUTH_PROVIDER.unwrapToken).toHaveBeenCalledWith("oauth_access_token");
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects an invalid OAuth bearer token", async () => {
     const c = createMockContext({
       req: {

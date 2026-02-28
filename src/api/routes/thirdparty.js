@@ -7,6 +7,7 @@
  */
 
 import { Hono } from "hono";
+import { Client } from "@neondatabase/serverless";
 import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
 
 const thirdpartyRoutes = new Hono();
@@ -29,6 +30,33 @@ async function getCredential(env, credentialPath, fallbackEnvVar) {
 
   // Fallback to environment variable
   return env[fallbackEnvVar];
+}
+
+/** @visibleForTesting */
+export async function executeNeonQuery(neonDbUrl, query, params = []) {
+  if (neonDbUrl.startsWith("http://") || neonDbUrl.startsWith("https://")) {
+    const response = await fetch(neonDbUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, params }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Neon query error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  const client = new Client({ connectionString: neonDbUrl });
+  try {
+    await client.connect();
+    return await client.query(query, params);
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 /**
@@ -160,20 +188,7 @@ thirdpartyRoutes.post("/neon/query", async (c) => {
       );
     }
 
-    // Use Neon serverless driver
-    const response = await fetch(neonDbUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, params }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Neon query error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const data = await executeNeonQuery(neonDbUrl, query, params || []);
     return c.json(data);
   } catch (error) {
     return c.json({ error: error.message }, 500);
