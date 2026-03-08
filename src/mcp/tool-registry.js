@@ -1082,17 +1082,27 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_ecosystem_awareness",
 ]);
 
+// Tools with irreversible or destructive side effects.
+const DESTRUCTIVE_TOOLS = new Set(["chitty_fact_seal", "chitty_neon_query"]);
+
+// Tools that interact with open external systems outside the user's account.
+const OPEN_WORLD_TOOLS = new Set(["chitty_finance_sync", "chitty_openai_chat"]);
+
 /**
  * Zod-based tool definitions for McpServer.tool() registration.
  * Generated from MCP_TOOLS — no manual maintenance needed.
  *
- * @type {Array<{name: string, description: string, schema: object, annotations: {readOnlyHint: boolean}}>}
+ * @type {Array<{name: string, description: string, schema: object, annotations: {readOnlyHint: boolean, destructiveHint: boolean, openWorldHint: boolean}}>}
  */
 const MCP_TOOL_DEFS = MCP_TOOLS.map((tool) => ({
   name: tool.name,
   description: tool.description,
   schema: inputSchemaToZodShape(tool.inputSchema),
-  annotations: { readOnlyHint: READ_ONLY_TOOLS.has(tool.name) },
+  annotations: {
+    readOnlyHint: READ_ONLY_TOOLS.has(tool.name),
+    destructiveHint: DESTRUCTIVE_TOOLS.has(tool.name),
+    openWorldHint: OPEN_WORLD_TOOLS.has(tool.name),
+  },
 }));
 
 export { MCP_TOOLS, MCP_TOOL_DEFS, MCP_TOOL_NAMES };
