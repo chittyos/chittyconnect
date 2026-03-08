@@ -15,6 +15,7 @@
  */
 
 import { OnePasswordConnectClient } from "./1password-connect-client.js";
+import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
  * Enhanced Credential provisioner for ChittyOS ecosystem
@@ -22,7 +23,7 @@ import { OnePasswordConnectClient } from "./1password-connect-client.js";
 export class EnhancedCredentialProvisioner {
   constructor(env, contextConsciousness) {
     this.env = env;
-    this.contextConsciousness = contextConsciousness;
+    this.contextConsciousness = contextConsciousness || null;
     this.onePassword = new OnePasswordConnectClient(env);
 
     // Cloudflare permissions will be fetched dynamically
@@ -110,7 +111,7 @@ export class EnhancedCredentialProvisioner {
         platform: "neon",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/neon/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.neonApiKey,
         envVar: "NEON_API_KEY",
         description: "Neon API key for MCP server and database management",
       },
@@ -119,7 +120,7 @@ export class EnhancedCredentialProvisioner {
         platform: "openai",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/openai/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.openaiApiKey,
         envVar: "OPENAI_API_KEY",
         description: "OpenAI API key for GPT models",
       },
@@ -137,7 +138,7 @@ export class EnhancedCredentialProvisioner {
         platform: "notion",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/notion/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.notionApiKey,
         envVar: "NOTION_TOKEN",
         description: "Notion integration token for workspace access",
       },
@@ -146,7 +147,7 @@ export class EnhancedCredentialProvisioner {
         platform: "github",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/github/personal_access_token",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.githubPat,
         envVar: "GITHUB_TOKEN",
         description: "GitHub personal access token",
       },
@@ -240,27 +241,38 @@ export class EnhancedCredentialProvisioner {
       recommendations: [],
     };
 
-    // Check if requesting service is healthy
-    const serviceHealth = await this.contextConsciousness.checkServiceHealth(
-      requestingService,
-      { url: `https://${requestingService}.chitty.cc` },
-    );
+    const hasContextConsciousness =
+      this.contextConsciousness &&
+      typeof this.contextConsciousness.checkServiceHealth === "function" &&
+      typeof this.contextConsciousness.detectAnomalies === "function";
 
-    if (serviceHealth.status === "down") {
-      analysis.approved = false;
-      analysis.reason = "Requesting service is down";
-      analysis.riskScore = 100;
-      return analysis;
-    }
+    if (hasContextConsciousness) {
+      // Check if requesting service is healthy
+      const serviceHealth = await this.contextConsciousness.checkServiceHealth(
+        requestingService,
+        { url: `https://${requestingService}.chitty.cc` },
+      );
 
-    // Check for anomalous patterns
-    const anomalies = await this.contextConsciousness.detectAnomalies({
-      services: [{ name: requestingService, ...serviceHealth }],
-    });
+      if (serviceHealth.status === "down") {
+        analysis.approved = false;
+        analysis.reason = "Requesting service is down";
+        analysis.riskScore = 100;
+        return analysis;
+      }
 
-    if (anomalies.length > 0) {
-      analysis.riskScore += anomalies.length * 20;
-      analysis.recommendations.push("Monitor for unusual activity");
+      // Check for anomalous patterns
+      const anomalies = await this.contextConsciousness.detectAnomalies({
+        services: [{ name: requestingService, ...serviceHealth }],
+      });
+
+      if (anomalies.length > 0) {
+        analysis.riskScore += anomalies.length * 20;
+        analysis.recommendations.push("Monitor for unusual activity");
+      }
+    } else {
+      analysis.recommendations.push(
+        "ContextConsciousness unavailable; using baseline validation only",
+      );
     }
 
     // Validate required context fields
@@ -405,14 +417,20 @@ export class EnhancedCredentialProvisioner {
         }
       }
 
+      // Merge dynamic with fallback so missing groups still resolve.
+      const mergedPermissions = {
+        ...this.cloudflarePermissionsFallback,
+        ...permissions,
+      };
+
       // Cache the results
-      this.permissionGroupsCache = permissions;
+      this.permissionGroupsCache = mergedPermissions;
       this.permissionGroupsCacheTime = Date.now();
 
       console.log(
         "[EnhancedCredentialProvisioner] Successfully fetched and cached permission groups",
       );
-      return permissions;
+      return mergedPermissions;
     } catch (error) {
       console.error(
         "[EnhancedCredentialProvisioner] Failed to fetch permissions dynamically:",
@@ -486,6 +504,12 @@ export class EnhancedCredentialProvisioner {
     const permissions = typeConfig.permissions.map(
       (p) => cloudflarePermissions[p],
     );
+    const missingPermissions = permissions.filter((p) => !p);
+    if (missingPermissions.length > 0) {
+      throw new Error(
+        `Unable to resolve all Cloudflare permission groups for ${type}`,
+      );
+    }
 
     // Create token name with context
     const tokenName = `${service} ${purpose || type} (${new Date().toISOString().split("T")[0]}) [via ChittyConnect]`;
@@ -589,7 +613,7 @@ export class EnhancedCredentialProvisioner {
    * @returns {Promise<object>} Service token
    */
   async provisionServiceToken(context, requestingService) {
-    const { source_service, target_service, scopes } = context;
+    const { source_service, target_service, scopes = [] } = context;
 
     // Retrieve the target service's token from 1Password
     const token = await this.onePassword.getServiceToken(target_service, {
@@ -868,11 +892,11 @@ export class EnhancedCredentialProvisioner {
       },
       openai: {
         note: "Use with OpenAI SDK or direct API calls. Monitor usage to control costs.",
-        sdk_example: `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: process.env.${envVar} });`,
+        sdk_example: `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: env.${envVar} });`,
       },
       anthropic: {
         note: "Use with Anthropic SDK or direct API calls for Claude models.",
-        sdk_example: `import Anthropic from '@anthropic-ai/sdk'; const client = new Anthropic({ apiKey: process.env.${envVar} });`,
+        sdk_example: `import Anthropic from '@anthropic-ai/sdk'; const client = new Anthropic({ apiKey: env.${envVar} });`,
       },
       notion: {
         note: "Use with Notion SDK or MCP server for workspace access.",
@@ -884,7 +908,7 @@ export class EnhancedCredentialProvisioner {
       },
       stripe: {
         note: `Use with Stripe SDK. Mode: ${context.mode || "test"}`,
-        sdk_example: `import Stripe from 'stripe'; const stripe = new Stripe(process.env.${envVar});`,
+        sdk_example: `import Stripe from 'stripe'; const stripe = new Stripe(env.${envVar});`,
       },
     };
 
@@ -902,9 +926,10 @@ export class EnhancedCredentialProvisioner {
    * @private
    */
   async createScopedServiceToken(_parentToken, scopes, _context) {
+    const requestedScopes = Array.isArray(scopes) ? scopes : [];
     // TODO: Call ChittyAuth to create a derivative scoped token
     throw new Error(
-      `Scoped token creation not yet implemented (requested scopes: ${scopes.join(", ")}). ` +
+      `Scoped token creation not yet implemented (requested scopes: ${requestedScopes.join(", ") || "none"}). ` +
         "Requires ChittyAuth derivative token API.",
     );
   }

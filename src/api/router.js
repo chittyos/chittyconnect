@@ -134,6 +134,7 @@ api.route("/api/chittysync", chittysyncRoutes);
 api.route("/api/chittyevidence", chittyevidenceRoutes);
 api.route("/api/registry", registryRoutes);
 api.route("/api/services", servicesRoutes);
+api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);

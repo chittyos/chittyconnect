@@ -199,7 +199,7 @@ export class AlertManager {
     if (severity === "critical" || severity === "high") {
       channels.push({
         type: "webhook",
-        recipient: process.env.ALERT_WEBHOOK_URL || null,
+        recipient: this.env?.ALERT_WEBHOOK_URL || null,
       });
     }
 
@@ -207,7 +207,7 @@ export class AlertManager {
     if (severity === "critical") {
       channels.push({
         type: "email",
-        recipient: process.env.ALERT_EMAIL || null,
+        recipient: this.env?.ALERT_EMAIL || null,
       });
     }
 

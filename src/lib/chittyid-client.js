@@ -62,14 +62,16 @@ export class ChittyIDClient {
    * @param {string} [options.serviceUrl] - ChittyID service URL (default: https://id.chitty.cc)
    * @param {string} [options.token] - Service token for authenticated requests
    * @param {string} [options.apiKey] - API key (alternative to token)
+   * @param {Object} [options.env] - Workers env bindings (used instead of process.env)
    */
   constructor(options = {}) {
+    const env = options.env || {};
     this.serviceUrl =
       options.serviceUrl ||
-      process.env.CHITTYID_SERVICE_URL ||
+      env.CHITTYID_SERVICE_URL ||
       DEFAULT_SERVICE_URL;
-    this.token = options.token || process.env.CHITTY_SERVICE_TOKEN;
-    this.apiKey = options.apiKey || process.env.CHITTY_API_KEY;
+    this.token = options.token || env.CHITTY_SERVICE_TOKEN;
+    this.apiKey = options.apiKey || env.CHITTY_API_KEY;
   }
 
   /**
