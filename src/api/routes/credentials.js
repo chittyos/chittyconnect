@@ -53,30 +53,17 @@ credentialsRoutes.post("/provision", async (c) => {
     const requestingService =
       apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
 
-    // Gather request metadata for ContextConsciousness™
-    const requestMetadata = {
-      sessionId: c.req.header("X-Session-ID"),
-      userId: c.req.header("X-User-ID"),
-      ipAddress: c.req.header("CF-Connecting-IP"),
-      userAgent: c.req.header("User-Agent"),
-    };
-
     // Initialize provisioner
-    const provisioner = new EnhancedCredentialProvisioner(c.env);
+    const provisioner = new EnhancedCredentialProvisioner(
+      c.env,
+      c.get("consciousness"),
+    );
 
     // Validate request
     provisioner.validateRequest(type, context, requestingService);
 
-    // Check rate limit
-    await provisioner.checkRateLimit(requestingService);
-
     // Provision credential with ContextConsciousness™
-    const result = await provisioner.provision(
-      type,
-      context,
-      requestingService,
-      requestMetadata,
-    );
+    const result = await provisioner.provision(type, context, requestingService);
 
     return c.json(result);
   } catch (error) {
@@ -103,7 +90,6 @@ credentialsRoutes.post("/provision", async (c) => {
         error: {
           code: "PROVISION_FAILED",
           message: error.message,
-          details: error.stack,
         },
         metadata: {
           timestamp: new Date().toISOString(),

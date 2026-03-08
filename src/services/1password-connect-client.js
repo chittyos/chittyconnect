@@ -77,6 +77,41 @@ export class OnePasswordConnectClient {
   }
 
   /**
+   * Retrieve an infrastructure credential.
+   *
+   * @param {string} item - Infrastructure item name (e.g., "cloudflare")
+   * @param {string} field - Field name (e.g., "make_api_key")
+   * @param {object} options - Retrieval options
+   * @returns {Promise<string>} Credential value
+   */
+  async getInfrastructureCredential(item, field, options = {}) {
+    return this.get(`infrastructure/${item}/${field}`, options);
+  }
+
+  /**
+   * Retrieve a ChittyOS service token.
+   *
+   * @param {string} serviceName - Service name (e.g., "chittyauth")
+   * @param {object} options - Retrieval options
+   * @returns {Promise<string>} Service token
+   */
+  async getServiceToken(serviceName, options = {}) {
+    return this.get(`services/${serviceName}/service_token`, options);
+  }
+
+  /**
+   * Retrieve an integration credential.
+   *
+   * @param {string} platform - Integration platform (e.g., "openai")
+   * @param {string} field - Field name, defaults to "api_key"
+   * @param {object} options - Retrieval options
+   * @returns {Promise<string>} Integration credential
+   */
+  async getIntegrationCredential(platform, field = "api_key", options = {}) {
+    return this.get(`integrations/${platform}/${field}`, options);
+  }
+
+  /**
    * Parse credential path into components
    *
    * @private
@@ -94,9 +129,16 @@ export class OnePasswordConnectClient {
 
     const [vault, item, field] = parts;
 
-    // Validate vault
-    if (!this.vaults[vault]) {
+    // Validate known vault names
+    if (!["infrastructure", "services", "integrations", "emergency"].includes(vault)) {
       console.error(`[1Password] Unknown vault: ${vault}`);
+      return null;
+    }
+
+    // If Connect is configured this vault should have an ID, but allow parsing
+    // in failover mode so env-based retrieval still works.
+    if (!this.vaults[vault] && this.env.CREDENTIAL_FAILOVER_ENABLED !== "true") {
+      console.error(`[1Password] Vault ID not configured: ${vault}`);
       return null;
     }
 
@@ -118,6 +160,10 @@ export class OnePasswordConnectClient {
    */
   async fetchFromConnect(parsed) {
     try {
+      if (!this.connectUrl || !this.connectToken || !parsed.vaultId) {
+        throw new Error("1Password Connect is not fully configured");
+      }
+
       // Step 1: List items in vault to find the item ID
       const itemsUrl = `${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`;
 
@@ -217,25 +263,56 @@ export class OnePasswordConnectClient {
       `[1Password] Attempting failover to environment variables for ${parsed.fullPath}`,
     );
 
-    // Convert path to environment variable name
-    // infrastructure/cloudflare/make_api_key -> CLOUDFLARE_MAKE_API_KEY
-    const envVarName = `${parsed.item}_${parsed.field}`
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "_");
+    const candidates = this.getFailoverEnvCandidates(parsed);
 
-    const envValue = this.env[envVarName];
-
-    if (!envValue) {
-      throw new Error(
-        `Failover failed: Environment variable ${envVarName} not set`,
-      );
+    for (const envVarName of candidates) {
+      const envValue = this.env[envVarName];
+      if (envValue) {
+        console.warn(
+          `[1Password] Failover SUCCESS - using ${envVarName} from environment`,
+        );
+        return envValue;
+      }
     }
 
-    console.warn(
-      `[1Password] Failover SUCCESS - using ${envVarName} from environment`,
+    throw new Error(
+      `Failover failed: none of the candidate env vars are set (${candidates.join(", ")})`,
     );
+  }
 
-    return envValue;
+  /**
+   * Build ordered env-var candidates for failover.
+   *
+   * @private
+   * @param {object} parsed - Parsed credential path
+   * @returns {string[]} Candidate env var names
+   */
+  getFailoverEnvCandidates(parsed) {
+    const normalizedItem = parsed.item.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const normalizedField = parsed.field.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const candidates = [`${normalizedItem}_${normalizedField}`];
+
+    // services/chittyauth/service_token -> CHITTY_AUTH_TOKEN (preferred)
+    if (parsed.vault === "services" && normalizedField === "SERVICE_TOKEN") {
+      const serviceSuffix = normalizedItem.replace(/^CHITTY_?/, "");
+      if (serviceSuffix) {
+        candidates.unshift(`CHITTY_${serviceSuffix}_TOKEN`);
+      }
+      candidates.push(`${normalizedItem}_TOKEN`);
+      candidates.push(`${normalizedItem}_SERVICE_TOKEN`);
+    }
+
+    // integrations/notion/api_key may be stored as NOTION_TOKEN
+    if (parsed.vault === "integrations") {
+      if (normalizedField === "API_KEY") {
+        candidates.push(`${normalizedItem}_TOKEN`);
+      }
+      if (normalizedField === "PERSONAL_ACCESS_TOKEN") {
+        candidates.push(`${normalizedItem}_TOKEN`);
+      }
+    }
+
+    return [...new Set(candidates)];
   }
 
   /**
