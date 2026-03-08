@@ -652,9 +652,13 @@ app.post("/intelligence/learning/ingest", async (c) => {
   }
 
   try {
-    const profile = await learningEngine.learnFromInteraction(userId, interaction, {
-      source: "api_ingest",
-    });
+    const profile = await learningEngine.learnFromInteraction(
+      userId,
+      interaction,
+      {
+        source: "api_ingest",
+      },
+    );
     return c.json({ status: "ok", profile });
   } catch (error) {
     return c.json(
@@ -855,7 +859,8 @@ app.get("/intelligence/intent/predict", async (c) => {
     if (learningEngine && userId) {
       await learningEngine
         .learnFromInteraction(userId, {
-          sessionId: c.req.query("session_id") || c.req.query("sessionId") || null,
+          sessionId:
+            c.req.query("session_id") || c.req.query("sessionId") || null,
           input,
           actions: prediction.nextActions || [],
           entities: [],
@@ -864,7 +869,10 @@ app.get("/intelligence/intent/predict", async (c) => {
           timestamp: Date.now(),
         })
         .catch((err) =>
-          console.warn("[LearningEngine] auto-learn from GET predict failed:", err.message),
+          console.warn(
+            "[LearningEngine] auto-learn from GET predict failed:",
+            err.message,
+          ),
         );
     }
 
@@ -937,13 +945,18 @@ app.post("/intelligence/intent/predict", async (c) => {
           timestamp: Date.now(),
         })
         .catch((err) =>
-          console.warn("[LearningEngine] auto-learn from POST predict failed:", err.message),
+          console.warn(
+            "[LearningEngine] auto-learn from POST predict failed:",
+            err.message,
+          ),
         );
     }
 
     return c.json({ status: "ok", prediction });
   } catch (error) {
-    const status = String(error?.message || "").includes("required") ? 400 : 500;
+    const status = String(error?.message || "").includes("required")
+      ? 400
+      : 500;
     return c.json(
       {
         error: "intent_prediction_failed",

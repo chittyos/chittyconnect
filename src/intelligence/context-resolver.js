@@ -290,8 +290,7 @@ export class ContextResolver {
    * Local generation is NEVER permitted.
    */
   async mintChittyId({ projectPath, workspace, supportType, organization }) {
-    const mintUrl =
-      this.env.CHITTYMINT_URL || "https://mint.chitty.cc";
+    const mintUrl = this.env.CHITTYMINT_URL || "https://mint.chitty.cc";
     const fallbackUrl =
       this.env.CHITTY_FALLBACK_URL || "https://fallback.id.chitty.cc";
 
