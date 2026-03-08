@@ -8,9 +8,11 @@
 
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
+import { CREDENTIAL_PATHS } from "../../lib/credential-paths.js";
 import { ChronicleEngine } from "../../services/chronicle-engine.js";
 
 const chittychronicleRoutes = new Hono();
+const CHRONICLE_DB_PATH = CREDENTIAL_PATHS.infrastructure.neonDatabaseUrl;
 
 // Rate limiting helper
 let requestCounts = new Map();
@@ -60,7 +62,7 @@ chittychronicleRoutes.post("/events", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );
@@ -103,7 +105,7 @@ chittychronicleRoutes.get("/events", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );
@@ -142,7 +144,7 @@ chittychronicleRoutes.get("/timeline", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );
@@ -186,7 +188,7 @@ chittychronicleRoutes.get("/audit/:entityId", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );
@@ -221,7 +223,7 @@ chittychronicleRoutes.get("/statistics", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );
@@ -252,7 +254,7 @@ chittychronicleRoutes.get("/health", async (c) => {
   try {
     const databaseUrl = await getCredential(
       c.env,
-      "database/neon/chittyos_core",
+      CHRONICLE_DB_PATH,
       "NEON_DATABASE_URL",
       "ChittyChronicle",
     );

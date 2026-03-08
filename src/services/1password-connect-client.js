@@ -7,6 +7,10 @@
  * @module services/1password-connect-client
  */
 
+import { LEGACY_CREDENTIAL_PATH_ALIASES } from "../lib/credential-paths.js";
+
+const SUPPORTED_VAULTS = ["infrastructure", "services", "integrations", "emergency"];
+
 export class OnePasswordConnectClient {
   constructor(env) {
     this.env = env;
@@ -44,24 +48,25 @@ export class OnePasswordConnectClient {
    */
   async get(credentialPath, options = {}) {
     const { bypassCache = false, cacheOverrideTTL = null } = options;
+    const resolvedPath = this.normalizeCredentialPath(credentialPath);
 
     // Parse credential path
-    const parsed = this.parseCredentialPath(credentialPath);
+    const parsed = this.parseCredentialPath(resolvedPath);
     if (!parsed) {
-      throw new Error(`Invalid credential path: ${credentialPath}`);
+      throw new Error(`Invalid credential path: ${resolvedPath}`);
     }
 
     // Check cache first (unless bypassed)
     if (!bypassCache) {
-      const cached = await this.getFromCache(credentialPath);
+      const cached = await this.getFromCache(resolvedPath);
       if (cached) {
-        console.log(`[1Password] Cache HIT for ${credentialPath}`);
+        console.log(`[1Password] Cache HIT for ${resolvedPath}`);
         return cached;
       }
     }
 
     console.log(
-      `[1Password] Cache MISS for ${credentialPath}, fetching from Connect API`,
+      `[1Password] Cache MISS for ${resolvedPath}, fetching from Connect API`,
     );
 
     // Fetch from 1Password Connect API
@@ -70,10 +75,20 @@ export class OnePasswordConnectClient {
     // Cache the result (unless emergency vault)
     if (parsed.vault !== "emergency") {
       const ttl = cacheOverrideTTL || this.cacheTTL[parsed.vault] || 900;
-      await this.setCache(credentialPath, value, ttl);
+      await this.setCache(resolvedPath, value, ttl);
     }
 
     return value;
+  }
+
+  /**
+   * Normalize legacy credential paths to their canonical equivalents.
+   *
+   * @param {string} credentialPath - Requested credential path
+   * @returns {string} Canonical credential path
+   */
+  normalizeCredentialPath(credentialPath) {
+    return LEGACY_CREDENTIAL_PATH_ALIASES[credentialPath] || credentialPath;
   }
 
   /**
@@ -130,7 +145,7 @@ export class OnePasswordConnectClient {
     const [vault, item, field] = parts;
 
     // Validate known vault names
-    if (!["infrastructure", "services", "integrations", "emergency"].includes(vault)) {
+    if (!SUPPORTED_VAULTS.includes(vault)) {
       console.error(`[1Password] Unknown vault: ${vault}`);
       return null;
     }

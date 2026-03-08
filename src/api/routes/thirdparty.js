@@ -8,29 +8,10 @@
 
 import { Hono } from "hono";
 import { Client } from "@neondatabase/serverless";
-import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { getCredential } from "../../lib/credential-helper.js";
+import { CREDENTIAL_PATHS } from "../../lib/credential-paths.js";
 
 const thirdpartyRoutes = new Hono();
-
-/**
- * Helper function to get credential with 1Password fallback
- * @private
- */
-async function getCredential(env, credentialPath, fallbackEnvVar) {
-  try {
-    const opClient = new OnePasswordConnectClient(env);
-    const credential = await opClient.get(credentialPath);
-    if (credential) return credential;
-  } catch (error) {
-    console.warn(
-      `[ThirdParty] 1Password retrieval failed for ${credentialPath}, using fallback:`,
-      error.message,
-    );
-  }
-
-  // Fallback to environment variable
-  return env[fallbackEnvVar];
-}
 
 /** @visibleForTesting */
 export async function executeNeonQuery(neonDbUrl, query, params = []) {
@@ -74,8 +55,9 @@ thirdpartyRoutes.post("/notion/query", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      "integrations/notion/api_key",
+      CREDENTIAL_PATHS.integrations.notionApiKey,
       "NOTION_TOKEN",
+      "ThirdParty",
     );
 
     if (!notionToken) {
@@ -124,8 +106,9 @@ thirdpartyRoutes.post("/notion/page/create", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      "integrations/notion/api_key",
+      CREDENTIAL_PATHS.integrations.notionApiKey,
       "NOTION_TOKEN",
+      "ThirdParty",
     );
 
     if (!notionToken) {
@@ -175,8 +158,9 @@ thirdpartyRoutes.post("/neon/query", async (c) => {
       c.env.NEON_DATABASE_URL ||
       (await getCredential(
         c.env,
-        "database/neon/chittyos_core",
+        CREDENTIAL_PATHS.infrastructure.neonDatabaseUrl,
         "NEON_DATABASE_URL",
+        "ThirdParty",
       ));
 
     if (!neonDbUrl) {
@@ -215,8 +199,9 @@ thirdpartyRoutes.post("/openai/chat", async (c) => {
     // Get OpenAI API key from 1Password with fallback
     const openaiKey = await getCredential(
       c.env,
-      "integrations/openai/api_key",
+      CREDENTIAL_PATHS.integrations.openaiApiKey,
       "OPENAI_API_KEY",
+      "ThirdParty",
     );
 
     if (!openaiKey) {
@@ -282,8 +267,9 @@ thirdpartyRoutes.patch("/notion/page/update", async (c) => {
     // Get Notion token from 1Password with fallback
     const notionToken = await getCredential(
       c.env,
-      "integrations/notion/api_key",
+      CREDENTIAL_PATHS.integrations.notionApiKey,
       "NOTION_TOKEN",
+      "ThirdParty",
     );
 
     if (!notionToken) {
@@ -337,8 +323,9 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
     // Get GitHub token from 1Password with fallback
     const githubToken = await getCredential(
       c.env,
-      "integrations/github/token",
+      CREDENTIAL_PATHS.integrations.githubPat,
       "GITHUB_TOKEN",
+      "ThirdParty",
     );
 
     if (!githubToken) {
@@ -393,8 +380,9 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
     // Get GitHub token from 1Password with fallback
     const githubToken = await getCredential(
       c.env,
-      "integrations/github/token",
+      CREDENTIAL_PATHS.integrations.githubPat,
       "GITHUB_TOKEN",
+      "ThirdParty",
     );
 
     if (!githubToken) {
@@ -445,8 +433,9 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
     // Get Google access token from 1Password with fallback
     const googleToken = await getCredential(
       c.env,
-      "integrations/google/access_token",
+      CREDENTIAL_PATHS.integrations.googleAccessToken,
       "GOOGLE_ACCESS_TOKEN",
+      "ThirdParty",
     );
 
     if (!googleToken) {
