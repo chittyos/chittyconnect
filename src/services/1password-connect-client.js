@@ -9,7 +9,12 @@
 
 import { LEGACY_CREDENTIAL_PATH_ALIASES } from "../lib/credential-paths.js";
 
-const SUPPORTED_VAULTS = ["infrastructure", "services", "integrations", "emergency"];
+const SUPPORTED_VAULTS = [
+  "infrastructure",
+  "services",
+  "integrations",
+  "emergency",
+];
 
 export class OnePasswordConnectClient {
   constructor(env) {
