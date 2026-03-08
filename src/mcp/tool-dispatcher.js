@@ -8,6 +8,7 @@
  */
 
 import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 import { Client } from "@neondatabase/serverless";
 
 const CHITTYOS_SERVICES = [
@@ -82,6 +83,14 @@ async function checkAndParseJson(response, label) {
   if (fetchErr) return { data: null, error: fetchErr };
   const { parsed, error } = await parseJsonBody(response, label);
   return { data: parsed, error };
+}
+
+async function sha256Hex(body) {
+  const bytes = body instanceof Uint8Array ? body : new Uint8Array(body);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function fetchServiceStatusSnapshot() {
@@ -629,9 +638,16 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
         const exportPath = `facts/${args.fact_id}/${Date.now()}.pdf`;
         const r2Key = `exports/${exportPath}`;
+        let integritySha256;
         try {
+          integritySha256 = await sha256Hex(pdfResult.body);
           await env.FILES.put(r2Key, pdfResult.body, {
             httpMetadata: { contentType: "application/pdf" },
+            customMetadata: {
+              integrity_sha256: integritySha256,
+              fact_id: args.fact_id,
+              proof_id: factData.proof_id,
+            },
           });
         } catch (r2Err) {
           console.error(`[MCP] R2 put failed for ${r2Key}:`, r2Err);
@@ -652,6 +668,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           download_url: `${baseUrl}/api/v1/exports/${exportPath}`,
           proof_id: factData.proof_id,
           verification_url: factData.verification_url,
+          integrity_sha256: integritySha256,
         };
       } else {
         // JSON export — fetch full fact with proof bundle
@@ -1239,7 +1256,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         env.NEON_DATABASE_URL ||
         (await getCredential(
           env,
-          "database/neon/chittyos_core",
+          CREDENTIAL_PATHS.infrastructure.neonDatabaseUrl,
           "NEON_DATABASE_URL",
           "Neon",
         ));

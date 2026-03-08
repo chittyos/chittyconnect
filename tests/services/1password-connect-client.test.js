@@ -64,4 +64,12 @@ describe("OnePasswordConnectClient", () => {
 
     expect(value).toBe("notion-token");
   });
+
+  it("normalizes legacy paths to canonical paths", () => {
+    const client = new OnePasswordConnectClient({});
+
+    expect(client.normalizeCredentialPath("database/neon/chittyos_core")).toBe(
+      "infrastructure/neon/database_url",
+    );
+  });
 });

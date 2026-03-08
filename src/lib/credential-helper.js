@@ -8,6 +8,7 @@
  */
 
 import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
+import { CREDENTIAL_PATHS } from "./credential-paths.js";
 
 /**
  * Get credential with 1Password Connect fallback to environment variable
@@ -52,7 +53,7 @@ export async function getServiceToken(env, serviceName) {
   const tokenEnvVar = `CHITTY_${serviceName.toUpperCase().replace("CHITTY", "")}_TOKEN`;
   return getCredential(
     env,
-    `services/${serviceName}/service_token`,
+    CREDENTIAL_PATHS.services.serviceToken(serviceName),
     tokenEnvVar,
     serviceName,
   );

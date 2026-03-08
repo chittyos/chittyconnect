@@ -7,6 +7,8 @@
  * @module intelligence/context-consciousness
  */
 
+import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
+
 export class ContextConsciousness {
   constructor(env) {
     this.env = env;
@@ -599,13 +601,17 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
 
     // Common credential chains
     const credentialChains = {
-      "infrastructure/cloudflare/make_api_key": [
-        "infrastructure/cloudflare/account_id",
+      [CREDENTIAL_PATHS.infrastructure.cloudflareMakeApiKey]: [
+        CREDENTIAL_PATHS.infrastructure.cloudflareAccountId,
         "infrastructure/cloudflare/zone_id",
       ],
-      "services/chittyid/service_token": ["services/chittyauth/service_token"],
-      "integrations/openai/api_key": ["integrations/openai/org_id"],
-      "integrations/notion/api_key": ["integrations/notion/workspace_id"],
+      [CREDENTIAL_PATHS.services.serviceToken("chittyid")]: [
+        CREDENTIAL_PATHS.services.serviceToken("chittyauth"),
+      ],
+      [CREDENTIAL_PATHS.integrations.openaiApiKey]: ["integrations/openai/org_id"],
+      [CREDENTIAL_PATHS.integrations.notionApiKey]: [
+        "integrations/notion/workspace_id",
+      ],
     };
 
     if (credentialChains[credentialPath]) {

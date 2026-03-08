@@ -17,6 +17,7 @@
 import { Hono } from "hono";
 import { validateGitHubOIDC } from "../../auth/github-oidc.js";
 import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { CREDENTIAL_PATHS } from "../../lib/credential-paths.js";
 
 const githubActionsRoutes = new Hono();
 
@@ -119,32 +120,32 @@ githubActionsRoutes.post("/credentials", async (c) => {
     // Credential mapping - what can be requested and where it lives
     const credentialMap = {
       CLOUDFLARE_API_TOKEN: {
-        path: "infrastructure/cloudflare/api_token",
+        path: CREDENTIAL_PATHS.infrastructure.cloudflareMakeApiKey,
         env: "CLOUDFLARE_MAKE_API_KEY", // Fallback
       },
       CLOUDFLARE_ACCOUNT_ID: {
-        path: "infrastructure/cloudflare/account_id",
+        path: CREDENTIAL_PATHS.infrastructure.cloudflareAccountId,
         env: "CLOUDFLARE_ACCOUNT_ID",
         default: "0bc21e3a5a9de1a4cc843be9c3e98121",
       },
       NEON_DATABASE_URL: {
-        path: "infrastructure/neon/database_url",
+        path: CREDENTIAL_PATHS.infrastructure.neonDatabaseUrl,
         env: "NEON_DATABASE_URL",
       },
       GITHUB_APP_ID: {
-        path: "infrastructure/github/app_id",
+        path: CREDENTIAL_PATHS.infrastructure.githubAppId,
         env: "GITHUB_APP_ID",
       },
       GITHUB_APP_PRIVATE_KEY: {
-        path: "infrastructure/github/private_key",
+        path: CREDENTIAL_PATHS.infrastructure.githubPrivateKey,
         env: "GITHUB_APP_PK",
       },
       OPENAI_API_KEY: {
-        path: "integrations/openai/api_key",
+        path: CREDENTIAL_PATHS.integrations.openaiApiKey,
         env: "OPENAI_API_KEY",
       },
       NOTION_TOKEN: {
-        path: "integrations/notion/api_key",
+        path: CREDENTIAL_PATHS.integrations.notionApiKey,
         env: "NOTION_TOKEN",
       },
     };

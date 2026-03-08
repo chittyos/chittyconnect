@@ -15,6 +15,7 @@
  */
 
 import { OnePasswordConnectClient } from "./1password-connect-client.js";
+import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
  * Enhanced Credential provisioner for ChittyOS ecosystem
@@ -110,7 +111,7 @@ export class EnhancedCredentialProvisioner {
         platform: "neon",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/neon/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.neonApiKey,
         envVar: "NEON_API_KEY",
         description: "Neon API key for MCP server and database management",
       },
@@ -119,7 +120,7 @@ export class EnhancedCredentialProvisioner {
         platform: "openai",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/openai/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.openaiApiKey,
         envVar: "OPENAI_API_KEY",
         description: "OpenAI API key for GPT models",
       },
@@ -137,7 +138,7 @@ export class EnhancedCredentialProvisioner {
         platform: "notion",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/notion/api_key",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.notionApiKey,
         envVar: "NOTION_TOKEN",
         description: "Notion integration token for workspace access",
       },
@@ -146,7 +147,7 @@ export class EnhancedCredentialProvisioner {
         platform: "github",
         ttl: null,
         requiresContext: ["purpose"],
-        onePasswordPath: "integrations/github/personal_access_token",
+        onePasswordPath: CREDENTIAL_PATHS.integrations.githubPat,
         envVar: "GITHUB_TOKEN",
         description: "GitHub personal access token",
       },
