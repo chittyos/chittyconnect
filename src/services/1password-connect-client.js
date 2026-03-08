@@ -152,7 +152,10 @@ export class OnePasswordConnectClient {
 
     // If Connect is configured this vault should have an ID, but allow parsing
     // in failover mode so env-based retrieval still works.
-    if (!this.vaults[vault] && this.env.CREDENTIAL_FAILOVER_ENABLED !== "true") {
+    if (
+      !this.vaults[vault] &&
+      this.env.CREDENTIAL_FAILOVER_ENABLED !== "true"
+    ) {
       console.error(`[1Password] Vault ID not configured: ${vault}`);
       return null;
     }
@@ -304,7 +307,9 @@ export class OnePasswordConnectClient {
    */
   getFailoverEnvCandidates(parsed) {
     const normalizedItem = parsed.item.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-    const normalizedField = parsed.field.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const normalizedField = parsed.field
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "_");
     const candidates = [`${normalizedItem}_${normalizedField}`];
 
     // services/chittyauth/service_token -> CHITTY_AUTH_TOKEN (preferred)

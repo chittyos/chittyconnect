@@ -603,14 +603,16 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
     const credentialChains = {
       [CREDENTIAL_PATHS.infrastructure.cloudflareMakeApiKey]: [
         CREDENTIAL_PATHS.infrastructure.cloudflareAccountId,
-        "infrastructure/cloudflare/zone_id",
+        CREDENTIAL_PATHS.infrastructure.cloudflareZoneId,
       ],
       [CREDENTIAL_PATHS.services.serviceToken("chittyid")]: [
         CREDENTIAL_PATHS.services.serviceToken("chittyauth"),
       ],
-      [CREDENTIAL_PATHS.integrations.openaiApiKey]: ["integrations/openai/org_id"],
+      [CREDENTIAL_PATHS.integrations.openaiApiKey]: [
+        CREDENTIAL_PATHS.integrations.openaiOrgId,
+      ],
       [CREDENTIAL_PATHS.integrations.notionApiKey]: [
-        "integrations/notion/workspace_id",
+        CREDENTIAL_PATHS.integrations.notionWorkspaceId,
       ],
     };
 

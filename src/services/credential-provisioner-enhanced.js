@@ -270,6 +270,9 @@ export class EnhancedCredentialProvisioner {
         analysis.recommendations.push("Monitor for unusual activity");
       }
     } else {
+      console.warn(
+        `[CredentialProvisioner] ContextConsciousness unavailable for ${requestingService} — using baseline validation only (degraded security posture)`,
+      );
       analysis.recommendations.push(
         "ContextConsciousness unavailable; using baseline validation only",
       );

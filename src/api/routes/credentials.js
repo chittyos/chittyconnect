@@ -63,7 +63,11 @@ credentialsRoutes.post("/provision", async (c) => {
     provisioner.validateRequest(type, context, requestingService);
 
     // Provision credential with ContextConsciousness™
-    const result = await provisioner.provision(type, context, requestingService);
+    const result = await provisioner.provision(
+      type,
+      context,
+      requestingService,
+    );
 
     return c.json(result);
   } catch (error) {
