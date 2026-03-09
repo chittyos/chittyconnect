@@ -653,9 +653,13 @@ app.post("/intelligence/learning/ingest", async (c) => {
   }
 
   try {
-    const profile = await learningEngine.learnFromInteraction(userId, interaction, {
-      source: "api_ingest",
-    });
+    const profile = await learningEngine.learnFromInteraction(
+      userId,
+      interaction,
+      {
+        source: "api_ingest",
+      },
+    );
     return c.json({ status: "ok", profile });
   } catch (error) {
     return c.json(
@@ -856,7 +860,8 @@ app.get("/intelligence/intent/predict", async (c) => {
     if (learningEngine && userId) {
       await learningEngine
         .learnFromInteraction(userId, {
-          sessionId: c.req.query("session_id") || c.req.query("sessionId") || null,
+          sessionId:
+            c.req.query("session_id") || c.req.query("sessionId") || null,
           input,
           actions: prediction.nextActions || [],
           entities: [],
@@ -865,7 +870,10 @@ app.get("/intelligence/intent/predict", async (c) => {
           timestamp: Date.now(),
         })
         .catch((err) =>
-          console.warn("[LearningEngine] auto-learn from GET predict failed:", err.message),
+          console.warn(
+            "[LearningEngine] auto-learn from GET predict failed:",
+            err.message,
+          ),
         );
     }
 
@@ -938,13 +946,18 @@ app.post("/intelligence/intent/predict", async (c) => {
           timestamp: Date.now(),
         })
         .catch((err) =>
-          console.warn("[LearningEngine] auto-learn from POST predict failed:", err.message),
+          console.warn(
+            "[LearningEngine] auto-learn from POST predict failed:",
+            err.message,
+          ),
         );
     }
 
     return c.json({ status: "ok", prediction });
   } catch (error) {
-    const status = String(error?.message || "").includes("required") ? 400 : 500;
+    const status = String(error?.message || "").includes("required")
+      ? 400
+      : 500;
     return c.json(
       {
         error: "intent_prediction_failed",
@@ -1441,11 +1454,21 @@ async function stripRedirectUriFromTokenBody(request) {
   const body = await request.text();
   const params = new URLSearchParams(body);
   const rawRedirect = params.get("redirect_uri");
-  if (!rawRedirect) return new Request(request.url, { method: request.method, headers: request.headers, body });
+  if (!rawRedirect)
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+    });
 
   try {
     const redirectUrl = new URL(rawRedirect);
-    if (!redirectUrl.search) return new Request(request.url, { method: request.method, headers: request.headers, body });
+    if (!redirectUrl.search)
+      return new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body,
+      });
 
     redirectUrl.search = "";
     params.set("redirect_uri", redirectUrl.toString());
@@ -1455,7 +1478,11 @@ async function stripRedirectUriFromTokenBody(request) {
       body: params.toString(),
     });
   } catch {
-    return new Request(request.url, { method: request.method, headers: request.headers, body });
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+    });
   }
 }
 
@@ -1500,7 +1527,9 @@ export default {
     // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
     // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
     if (url.pathname === "/.well-known/openid-configuration") {
-      console.log("[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server");
+      console.log(
+        "[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server",
+      );
       const rewritten = new URL(request.url);
       rewritten.pathname = "/.well-known/oauth-authorization-server";
       request = new Request(rewritten.toString(), request);
@@ -1537,7 +1566,9 @@ export default {
     // which strips, validates, AND re-appends the extra params to the final redirect.
     // We must NOT strip here for /authorize or the re-append logic loses the params.
     if (url.pathname === "/token" && request.method === "POST") {
-      console.log("[OAuth-Debug] Stripping redirect_uri query params from token body");
+      console.log(
+        "[OAuth-Debug] Stripping redirect_uri query params from token body",
+      );
       request = await stripRedirectUriFromTokenBody(request);
     }
 

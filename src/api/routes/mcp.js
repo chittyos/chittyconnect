@@ -152,7 +152,11 @@ mcpRoutes.get("/resources/read", async (c) => {
       const sessionId = uri.replace("chitty://memory/session/", "");
       if (!sessionId) {
         return c.json(
-          { contents: [{ uri, mimeType: "text/plain", text: "Missing session ID" }] },
+          {
+            contents: [
+              { uri, mimeType: "text/plain", text: "Missing session ID" },
+            ],
+          },
           400,
         );
       }
@@ -164,14 +168,30 @@ mcpRoutes.get("/resources/read", async (c) => {
         );
         if (!doResponse.ok) {
           return c.json(
-            { contents: [{ uri, mimeType: "text/plain", text: `Session ${sessionId} not found` }] },
+            {
+              contents: [
+                {
+                  uri,
+                  mimeType: "text/plain",
+                  text: `Session ${sessionId} not found`,
+                },
+              ],
+            },
             404,
           );
         }
         content = await doResponse.text();
       } catch (err) {
         return c.json(
-          { contents: [{ uri, mimeType: "text/plain", text: `Session lookup failed: ${err.message}` }] },
+          {
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text: `Session lookup failed: ${err.message}`,
+              },
+            ],
+          },
           500,
         );
       }
@@ -181,7 +201,11 @@ mcpRoutes.get("/resources/read", async (c) => {
         return c.json(
           {
             contents: [
-              { uri, mimeType: "text/plain", text: "Credential audit unavailable — CHITTY_CHRONICLE_TOKEN not configured" },
+              {
+                uri,
+                mimeType: "text/plain",
+                text: "Credential audit unavailable — CHITTY_CHRONICLE_TOKEN not configured",
+              },
             ],
           },
           503,
@@ -196,7 +220,11 @@ mcpRoutes.get("/resources/read", async (c) => {
           return c.json(
             {
               contents: [
-                { uri, mimeType: "text/plain", text: `Chronicle returned ${auditResponse.status}` },
+                {
+                  uri,
+                  mimeType: "text/plain",
+                  text: `Chronicle returned ${auditResponse.status}`,
+                },
               ],
             },
             auditResponse.status >= 500 ? 502 : auditResponse.status,
@@ -205,7 +233,15 @@ mcpRoutes.get("/resources/read", async (c) => {
         content = await auditResponse.text();
       } catch (err) {
         return c.json(
-          { contents: [{ uri, mimeType: "text/plain", text: `Chronicle unreachable: ${err.message}` }] },
+          {
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text: `Chronicle unreachable: ${err.message}`,
+              },
+            ],
+          },
           502,
         );
       }
@@ -260,7 +296,8 @@ mcpRoutes.post("/session/persist", async (c) => {
     return c.json({
       success: true,
       sessionId,
-      message: "Session persistence is handled automatically by McpConnectAgent Durable Object",
+      message:
+        "Session persistence is handled automatically by McpConnectAgent Durable Object",
     });
   } catch (error) {
     return c.json(
