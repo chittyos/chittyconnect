@@ -28,7 +28,7 @@ import { RelationshipEngine } from "./intelligence/relationship-engine.js";
 import { IntentPredictor } from "./intelligence/intent-predictor.js";
 import { LearningEngine } from "./intelligence/learning-engine.js";
 import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engine.js";
-import { MCPSessionDurableObject } from "./mcp/session/durable-object.js";
+import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 
 const app = new Hono();
@@ -1474,6 +1474,27 @@ export default {
       );
     }
 
+    // MCP Server Metadata (draft spec): Notion requests this to discover the
+    // MCP endpoint URL before starting OAuth. Return minimal server card.
+    if (url.pathname === "/.well-known/mcp.json") {
+      return new Response(
+        JSON.stringify({
+          mcpVersion: "2025-03-26",
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: { name: "ChittyConnect", version: "2.1.0" },
+          url: `${url.origin}/mcp`,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+          },
+        },
+      );
+    }
+
     // OIDC Discovery: Notion requests /.well-known/openid-configuration which
     // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
     // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
@@ -1482,6 +1503,32 @@ export default {
       const rewritten = new URL(request.url);
       rewritten.pathname = "/.well-known/oauth-authorization-server";
       request = new Request(rewritten.toString(), request);
+    }
+
+    // RFC 9728: Path-specific Protected Resource Metadata.
+    // OAuthProvider handles /.well-known/oauth-protected-resource (base).
+    // MCP clients request /.well-known/oauth-protected-resource/mcp
+    // for the /mcp resource path. Serve the same PRM for all subpaths.
+    if (
+      url.pathname.startsWith("/.well-known/oauth-protected-resource/") &&
+      url.pathname !== "/.well-known/oauth-protected-resource"
+    ) {
+      return new Response(
+        JSON.stringify({
+          resource: `${url.origin}`,
+          authorization_servers: [`${url.origin}`],
+          scopes_supported: ["mcp:read", "mcp:write", "mcp:admin"],
+          bearer_methods_supported: ["header"],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "Authorization, *",
+          },
+        },
+      );
     }
 
     // Strip redirect_uri query params for the token exchange (POST /token).
@@ -1556,4 +1603,4 @@ export default {
 /**
  * Export Durable Object classes
  */
-export { MCPSessionDurableObject };
+export { McpConnectAgent };

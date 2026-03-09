@@ -5,8 +5,8 @@
  * MCP clients that require OAuth authentication.
  *
  * Uses @cloudflare/workers-oauth-provider with ChittyAuth as upstream IdP.
- * MCP transport is handled by createMcpHandler() from the Cloudflare Agents SDK,
- * which implements the MCP Streamable HTTP spec correctly.
+ * MCP transport is handled by McpConnectAgent (Durable Object extending McpAgent),
+ * which implements SSE + Streamable HTTP transports via the Cloudflare Agents SDK.
  *
  * Only protects mcp.chitty.cc/mcp — connect.chitty.cc/mcp/* continues
  * using API key auth via the Hono router (backward compatible).
@@ -16,8 +16,7 @@
  */
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { createMcpHandler } from "agents/mcp";
-import { createMcpServer } from "../mcp/server-factory.js";
+import { McpConnectAgent } from "../mcp/agent.js";
 
 /**
  * Create the OAuth-wrapped worker handler
@@ -31,14 +30,7 @@ export function createOAuthProvider(honoApp) {
     // connect.chitty.cc/mcp/* falls through to defaultHandler (Hono + API key auth).
     apiRoute: "https://mcp.chitty.cc/mcp",
 
-    apiHandler: {
-      async fetch(request, env, ctx) {
-        const server = createMcpServer(env, {
-          baseUrl: new URL(request.url).origin,
-        });
-        return createMcpHandler(server)(request, env, ctx);
-      },
-    },
+    apiHandler: McpConnectAgent.serve("/mcp", { binding: "MCP_AGENT" }),
 
     defaultHandler: createDefaultHandler(honoApp),
 

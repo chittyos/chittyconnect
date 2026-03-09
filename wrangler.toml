@@ -70,16 +70,21 @@ index_name = "memory-cloude"
 binding = "CONTEXT_VECTORIZE"
 index_name = "context-embeddings"
 
-# Durable Objects for MCP session state management
+# Durable Objects for MCP session state management (McpAgent-backed)
 [[durable_objects.bindings]]
-name = "MCP_SESSIONS"
-class_name = "MCPSessionDurableObject"
+name = "MCP_AGENT"
+class_name = "McpConnectAgent"
 script_name = "chittyconnect"
 
 # Durable Objects migrations
 [[migrations]]
 tag = "v1"
 new_classes = ["MCPSessionDurableObject"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["MCPSessionDurableObject"]
+new_sqlite_classes = ["McpConnectAgent"]
 
 # D1 Database for installation mapping
 [[d1_databases]]

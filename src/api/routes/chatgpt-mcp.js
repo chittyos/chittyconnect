@@ -1,58 +1,24 @@
 /**
  * ChatGPT Developer Mode MCP Route
  *
- * Speaks real MCP protocol (JSON-RPC 2.0 over Streamable HTTP) at /chatgpt/mcp.
- * Uses the SDK's WebStandardStreamableHTTPServerTransport — designed for
- * Cloudflare Workers and Hono.js.
+ * Speaks MCP protocol (JSON-RPC 2.0 over Streamable HTTP + SSE) at /chatgpt/mcp.
+ * Delegates transport handling to McpConnectAgent (Durable Object backed by
+ * the Cloudflare Agents SDK).
  *
- * Sessions are stored in an in-memory Map with 5-minute idle cleanup.
- * Worker isolate recycling creates a fresh MCP server when the session ID
- * is not found. The SDK transport may reject the stale session ID,
- * prompting ChatGPT to re-initialize.
+ * Sessions are persisted in the Durable Object — no in-memory Map needed.
+ * API key authentication is handled by Hono middleware before forwarding
+ * to the McpAgent handler.
  */
 
 import { Hono } from "hono";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { createMcpServer } from "../../mcp/server-factory.js";
+import { McpConnectAgent } from "../../mcp/agent.js";
 
 const chatgptMcp = new Hono();
 
-/** @type {Map<string, {transport: WebStandardStreamableHTTPServerTransport, server: import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, lastAccess: number}>} */
-const sessions = new Map();
-
-const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_SESSIONS = 100;
-
-/**
- * Evict sessions that have been idle longer than SESSION_TTL_MS.
- * Also enforces hard cap of MAX_SESSIONS by evicting oldest.
- * Called lazily on each request — lightweight O(n) scan.
- */
-function evictStaleSessions() {
-  const now = Date.now();
-  for (const [sid, entry] of sessions) {
-    if (now - entry.lastAccess > SESSION_TTL_MS) {
-      entry.transport.close().catch((err) => {
-        console.warn(
-          `[ChatGPT-MCP] Failed to close session ${sid}:`,
-          err.message,
-        );
-      });
-      sessions.delete(sid);
-    }
-  }
-  // Hard cap: evict oldest if over limit
-  if (sessions.size > MAX_SESSIONS) {
-    const oldest = [...sessions.entries()].sort(
-      (a, b) => a[1].lastAccess - b[1].lastAccess,
-    );
-    while (sessions.size > MAX_SESSIONS) {
-      const [sid, entry] = oldest.shift();
-      entry.transport.close().catch(() => {});
-      sessions.delete(sid);
-    }
-  }
-}
+/** McpAgent handler for /chatgpt/mcp — DO-backed sessions */
+const mcpHandler = McpConnectAgent.serve("/chatgpt/mcp", {
+  binding: "MCP_AGENT",
+});
 
 /**
  * API key authentication middleware.
@@ -115,57 +81,13 @@ chatgptMcp.use("*", async (c, next) => {
 });
 
 /**
- * Handle all HTTP methods on /chatgpt/mcp.
- *
- * POST — JSON-RPC requests (initialize, tools/list, tools/call, etc.)
- * GET  — SSE stream (optional, for server-initiated notifications)
- * DELETE — session termination
+ * Forward all methods to McpConnectAgent handler.
+ * Injects authToken as ctx.props so the DO receives it in onStart().
  */
 chatgptMcp.all("/", async (c) => {
-  evictStaleSessions();
-
-  const sessionId = c.req.header("mcp-session-id");
-
-  try {
-    // ── Existing session ──────────────────────────────────────────────
-    if (sessionId && sessions.has(sessionId)) {
-      const entry = sessions.get(sessionId);
-      entry.lastAccess = Date.now();
-      return entry.transport.handleRequest(c.req.raw);
-    }
-
-    // ── New session (initialize request) ──────────────────────────────
-    // Derive base URL from the incoming request so local dev works too.
-    const url = new URL(c.req.url);
-    const baseUrl = `${url.protocol}//${url.host}`;
-
-    let server;
-
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-      onsessioninitialized: (sid) => {
-        sessions.set(sid, { transport, server, lastAccess: Date.now() });
-      },
-    });
-
-    server = createMcpServer(c.env, {
-      baseUrl,
-      authToken: c.get("authToken"),
-    });
-    await server.connect(transport);
-
-    return transport.handleRequest(c.req.raw);
-  } catch (err) {
-    console.error("[ChatGPT-MCP] Request handling error:", err);
-    return c.json(
-      {
-        jsonrpc: "2.0",
-        error: { code: -32603, message: "Internal error" },
-        id: null,
-      },
-      500,
-    );
-  }
+  const ctx = c.executionCtx;
+  ctx.props = { authToken: c.get("authToken") };
+  return mcpHandler.fetch(c.req.raw, c.env, ctx);
 });
 
 export { chatgptMcp };
