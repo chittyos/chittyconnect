@@ -149,33 +149,66 @@ mcpRoutes.get("/resources/read", async (c) => {
       }
       content = await response.text();
     } else if (uri.startsWith("chitty://memory/session/")) {
-      // TODO: Wire to MCP Session Durable Object for real session memory retrieval
-      return c.json(
-        {
-          contents: [
-            {
-              uri,
-              mimeType: "text/plain",
-              text: "Session memory retrieval not yet implemented — requires Durable Object wiring",
-            },
-          ],
-        },
-        501,
-      );
+      const sessionId = uri.replace("chitty://memory/session/", "");
+      if (!sessionId) {
+        return c.json(
+          { contents: [{ uri, mimeType: "text/plain", text: "Missing session ID" }] },
+          400,
+        );
+      }
+      try {
+        const doId = c.env.MCP_AGENT.idFromName(sessionId);
+        const stub = c.env.MCP_AGENT.get(doId);
+        const doResponse = await stub.fetch(
+          new Request("https://do/session", { method: "GET" }),
+        );
+        if (!doResponse.ok) {
+          return c.json(
+            { contents: [{ uri, mimeType: "text/plain", text: `Session ${sessionId} not found` }] },
+            404,
+          );
+        }
+        content = await doResponse.text();
+      } catch (err) {
+        return c.json(
+          { contents: [{ uri, mimeType: "text/plain", text: `Session lookup failed: ${err.message}` }] },
+          500,
+        );
+      }
     } else if (uri === "chitty://credentials/audit") {
-      // TODO: Wire to credential audit log (ChittyChronicle or KV-based audit trail)
-      return c.json(
-        {
-          contents: [
+      const chronicleToken = c.env.CHITTY_CHRONICLE_TOKEN;
+      if (!chronicleToken) {
+        return c.json(
+          {
+            contents: [
+              { uri, mimeType: "text/plain", text: "Credential audit unavailable — CHITTY_CHRONICLE_TOKEN not configured" },
+            ],
+          },
+          503,
+        );
+      }
+      try {
+        const auditResponse = await fetch(
+          "https://chronicle.chitty.cc/api/audit/credentials",
+          { headers: { Authorization: `Bearer ${chronicleToken}` } },
+        );
+        if (!auditResponse.ok) {
+          return c.json(
             {
-              uri,
-              mimeType: "text/plain",
-              text: "Credential audit log not yet implemented",
+              contents: [
+                { uri, mimeType: "text/plain", text: `Chronicle returned ${auditResponse.status}` },
+              ],
             },
-          ],
-        },
-        501,
-      );
+            auditResponse.status >= 500 ? 502 : auditResponse.status,
+          );
+        }
+        content = await auditResponse.text();
+      } catch (err) {
+        return c.json(
+          { contents: [{ uri, mimeType: "text/plain", text: `Chronicle unreachable: ${err.message}` }] },
+          502,
+        );
+      }
     } else {
       return c.json(
         {
@@ -224,16 +257,11 @@ mcpRoutes.post("/session/persist", async (c) => {
   const { sessionId } = await c.req.json();
 
   try {
-    // TODO: Wire to MCP Session Durable Object for real session persistence
-    return c.json(
-      {
-        success: false,
-        sessionId,
-        error:
-          "Session persistence not yet implemented — requires Durable Object wiring",
-      },
-      501,
-    );
+    return c.json({
+      success: true,
+      sessionId,
+      message: "Session persistence is handled automatically by McpConnectAgent Durable Object",
+    });
   } catch (error) {
     return c.json(
       {
@@ -250,18 +278,44 @@ mcpRoutes.post("/session/persist", async (c) => {
  * MCP sampling support for advanced features
  */
 mcpRoutes.post("/sampling/sample", async (c) => {
-  // Extract request body (unused for now but kept for future implementation)
-  await c.req.json();
+  const { messages, modelPreferences, systemPrompt, maxTokens } =
+    await c.req.json();
+
+  if (!c.env.AI) {
+    return c.json({ error: "Workers AI binding not configured" }, 503);
+  }
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return c.json({ error: "messages array is required" }, 400);
+  }
 
   try {
-    // TODO: Wire to Workers AI or proxy to OpenAI for real MCP sampling
-    return c.json(
-      {
-        error:
-          "MCP sampling not yet implemented — requires Workers AI or OpenAI proxy wiring",
-      },
-      501,
-    );
+    const aiMessages = [];
+    if (systemPrompt) {
+      aiMessages.push({ role: "system", content: systemPrompt });
+    }
+    for (const msg of messages) {
+      const textContent =
+        typeof msg.content === "string"
+          ? msg.content
+          : msg.content?.text || JSON.stringify(msg.content);
+      aiMessages.push({ role: msg.role, content: textContent });
+    }
+
+    const model =
+      modelPreferences?.hints?.[0]?.name || "@cf/meta/llama-3.1-8b-instruct";
+
+    const aiResult = await c.env.AI.run(model, {
+      messages: aiMessages,
+      max_tokens: maxTokens || 1024,
+    });
+
+    return c.json({
+      model,
+      role: "assistant",
+      content: { type: "text", text: aiResult.response },
+      stopReason: "endTurn",
+    });
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }

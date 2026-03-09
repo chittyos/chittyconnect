@@ -28,6 +28,7 @@ import { RelationshipEngine } from "./intelligence/relationship-engine.js";
 import { IntentPredictor } from "./intelligence/intent-predictor.js";
 import { LearningEngine } from "./intelligence/learning-engine.js";
 import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engine.js";
+import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 
@@ -1539,6 +1540,10 @@ export default {
       console.log("[OAuth-Debug] Stripping redirect_uri query params from token body");
       request = await stripRedirectUriFromTokenBody(request);
     }
+
+    // Route Agents SDK WebSocket upgrades to McpConnectAgent DO
+    const agentResponse = await routeAgentRequest(request, env);
+    if (agentResponse) return agentResponse;
 
     const response = await oauthProvider.fetch(request, env, ctx);
 
