@@ -26,10 +26,7 @@ certRoutes.post("/verify", async (c) => {
     const data = await resp.json();
     return c.json(data, resp.status);
   } catch (error) {
-    return c.json(
-      { error: "cert_verify_failed", message: error.message },
-      502,
-    );
+    return c.json({ error: "cert_verify_failed", message: error.message }, 502);
   }
 });
 
@@ -44,10 +41,7 @@ certRoutes.get("/:id", async (c) => {
     const data = await resp.json();
     return c.json(data, resp.status);
   } catch (error) {
-    return c.json(
-      { error: "cert_fetch_failed", message: error.message },
-      502,
-    );
+    return c.json({ error: "cert_fetch_failed", message: error.message }, 502);
   }
 });
 

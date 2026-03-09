@@ -50,7 +50,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 ## ChittyOS Ecosystem
 
 ### Certification
-- **Badge**: ChittyOS Compatible
+- **Badge**: ChittyCertified
 - **Certifier**: ChittyCertify (`chittycanon://core/services/chittycertify`)
 - **Last Certified**: --
 

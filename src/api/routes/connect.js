@@ -19,7 +19,10 @@ const connectRoutes = new Hono();
 connectRoutes.post("/discover", async (c) => {
   const apiKeyInfo = c.get("apiKey") || {};
   const rateKey =
-    apiKeyInfo.userId || apiKeyInfo.name || c.req.header("CF-Connecting-IP") || "anon";
+    apiKeyInfo.userId ||
+    apiKeyInfo.name ||
+    c.req.header("CF-Connecting-IP") ||
+    "anon";
 
   // Read rate limit from KV (default 60/min)
   let limit = 60;

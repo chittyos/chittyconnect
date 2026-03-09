@@ -24,7 +24,12 @@ import { ContextConsciousness } from "./intelligence/context-consciousness.js";
 import { MemoryCloude } from "./intelligence/memory-cloude.js";
 import { CognitiveCoordinator } from "./intelligence/cognitive-coordination.js";
 import { ContextResolver } from "./intelligence/context-resolver.js";
-import { MCPSessionDurableObject } from "./mcp/session/durable-object.js";
+import { RelationshipEngine } from "./intelligence/relationship-engine.js";
+import { IntentPredictor } from "./intelligence/intent-predictor.js";
+import { LearningEngine } from "./intelligence/learning-engine.js";
+import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engine.js";
+import { routeAgentRequest } from "agents";
+import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 
 const app = new Hono();
@@ -51,6 +56,15 @@ async function ensureEcosystemInitialized(env) {
     const consciousness = new ContextConsciousness(env);
     const memory = new MemoryCloude(env);
     const coordinator = new CognitiveCoordinator(env);
+    const relationshipEngine = new RelationshipEngine(env);
+    const learningEngine = new LearningEngine(env, { memory });
+    const taskDecompositionEngine = new TaskDecompositionEngine(env);
+    const intentPredictor = new IntentPredictor(env, {
+      memory,
+      consciousness,
+      relationshipEngine,
+      learningEngine,
+    });
 
     // Initialize all modules in parallel
     await Promise.all([
@@ -69,9 +83,48 @@ async function ensureEcosystemInitialized(env) {
         .catch((err) =>
           console.warn("[Cognitive-Coordination™] Init failed:", err.message),
         ),
+      relationshipEngine
+        .initialize()
+        .catch((err) =>
+          console.warn("[RelationshipEngine] Init failed:", err.message),
+        ),
+      learningEngine
+        .initialize()
+        .catch((err) =>
+          console.warn("[LearningEngine] Init failed:", err.message),
+        ),
+      taskDecompositionEngine
+        .initialize()
+        .catch((err) =>
+          console.warn("[TaskDecompositionEngine] Init failed:", err.message),
+        ),
+      intentPredictor
+        .initialize()
+        .catch((err) =>
+          console.warn("[IntentPredictor] Init failed:", err.message),
+        ),
     ]);
 
-    intelligenceModules = { consciousness, memory, coordinator };
+    learningEngine.bindDependencies({
+      memory,
+    });
+
+    intentPredictor.bindDependencies({
+      memory,
+      consciousness,
+      relationshipEngine,
+      learningEngine,
+    });
+
+    intelligenceModules = {
+      consciousness,
+      memory,
+      coordinator,
+      relationshipEngine,
+      learningEngine,
+      taskDecompositionEngine,
+      intentPredictor,
+    };
 
     // Initialize streaming manager (unified SSE) once per environment
     try {
@@ -97,6 +150,10 @@ async function ensureEcosystemInitialized(env) {
           "context-consciousness",
           "memory-cloude",
           "cognitive-coordination",
+          "relationship-engine",
+          "learning-engine",
+          "task-decomposition-engine",
+          "intent-predictor",
         ],
         description:
           "The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™",
@@ -137,6 +194,10 @@ app.use("*", async (c, next) => {
     c.set("consciousness", modules.consciousness);
     c.set("memory", modules.memory);
     c.set("coordinator", modules.coordinator);
+    c.set("relationshipEngine", modules.relationshipEngine);
+    c.set("learningEngine", modules.learningEngine);
+    c.set("taskDecompositionEngine", modules.taskDecompositionEngine);
+    c.set("intentPredictor", modules.intentPredictor);
   }
 
   await next();
@@ -147,7 +208,7 @@ app.use("*", async (c, next) => {
  */
 app.get("/health", (c) => {
   return c.json({
-    status: "healthy",
+    status: "ok",
     service: "chittyconnect",
     brand: "itsChitty™",
     tagline:
@@ -158,6 +219,10 @@ app.get("/health", (c) => {
       contextConsciousness: !!c.get("consciousness"),
       memoryCloude: !!c.get("memory"),
       cognitiveCoordination: !!c.get("coordinator"),
+      relationshipEngine: !!c.get("relationshipEngine"),
+      learningEngine: !!c.get("learningEngine"),
+      taskDecompositionEngine: !!c.get("taskDecompositionEngine"),
+      intentPredictor: !!c.get("intentPredictor"),
       contextResolver: !!c.get("contextResolver"),
     },
     endpoints: {
@@ -167,6 +232,12 @@ app.get("/health", (c) => {
       github: "/integrations/github/*",
       githubActions: "/api/github-actions/*",
       intelligence: "/intelligence/*",
+      intelligenceDashboard: "/intelligence/dashboard",
+      relationships: "/intelligence/relationships/:chittyId",
+      taskDecompose: "/intelligence/tasks/decompose",
+      learningIngest: "/intelligence/learning/ingest",
+      learningProfile: "/intelligence/learning/profile/:userId",
+      intentPredict: "/intelligence/intent/predict",
       openapi: "/openapi.json",
     },
   });
@@ -179,18 +250,32 @@ app.get("/intelligence/health", async (c) => {
   const consciousness = c.get("consciousness");
   const memory = c.get("memory");
   const coordinator = c.get("coordinator");
+  const relationshipEngine = c.get("relationshipEngine");
+  const learningEngine = c.get("learningEngine");
+  const taskDecompositionEngine = c.get("taskDecompositionEngine");
+  const intentPredictor = c.get("intentPredictor");
 
   // Get basic stats without requiring full execution
   let consciousnessHealth = { available: false };
   let memoryHealth = { available: false };
   let coordinatorHealth = { available: false };
+  let relationshipHealth = { available: false };
+  let learningHealth = { available: false };
+  let decompositionHealth = { available: false };
+  let intentHealth = { available: false };
 
   if (consciousness) {
     try {
+      const awareness = await consciousness.getAwareness();
       consciousnessHealth = {
         available: true,
         services: consciousness.services.size,
         historySize: consciousness.healthHistory.length,
+        anomalies: awareness?.anomalies?.count || 0,
+        predictions: awareness?.predictions?.count || 0,
+        healthyServices: awareness?.ecosystem?.healthy || 0,
+        degradedServices: awareness?.ecosystem?.degraded || 0,
+        downServices: awareness?.ecosystem?.down || 0,
       };
     } catch (error) {
       consciousnessHealth = { available: true, error: error.message };
@@ -221,6 +306,38 @@ app.get("/intelligence/health", async (c) => {
     }
   }
 
+  if (relationshipEngine) {
+    try {
+      relationshipHealth = await relationshipEngine.getHealth();
+    } catch (error) {
+      relationshipHealth = { available: true, error: error.message };
+    }
+  }
+
+  if (learningEngine) {
+    try {
+      learningHealth = await learningEngine.getStats();
+    } catch (error) {
+      learningHealth = { available: true, error: error.message };
+    }
+  }
+
+  if (taskDecompositionEngine) {
+    try {
+      decompositionHealth = await taskDecompositionEngine.getStats();
+    } catch (error) {
+      decompositionHealth = { available: true, error: error.message };
+    }
+  }
+
+  if (intentPredictor) {
+    try {
+      intentHealth = await intentPredictor.getStats();
+    } catch (error) {
+      intentHealth = { available: true, error: error.message };
+    }
+  }
+
   return c.json({
     status: "healthy",
     timestamp: new Date().toISOString(),
@@ -228,8 +345,683 @@ app.get("/intelligence/health", async (c) => {
       contextConsciousness: consciousnessHealth,
       memoryCloude: memoryHealth,
       cognitiveCoordination: coordinatorHealth,
+      relationshipEngine: relationshipHealth,
+      learningEngine: learningHealth,
+      taskDecompositionEngine: decompositionHealth,
+      intentPredictor: intentHealth,
     },
   });
+});
+
+/**
+ * Basic monitoring dashboard UI for intelligence modules
+ */
+app.get("/intelligence/dashboard", async (c) => {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChittyConnect Intelligence Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111a33;
+      --ok: #18c57a;
+      --warn: #f0b429;
+      --down: #ef5f5f;
+      --text: #e8eefc;
+      --muted: #9bb0df;
+      --border: #24345f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: radial-gradient(1200px 600px at 0% 0%, #172752, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+    .sub {
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: linear-gradient(180deg, #131e3b, var(--panel));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .down { color: var(--down); }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .row:last-child { border-bottom: 0; }
+    .badge {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ChittyConnect Intelligence Dashboard</h1>
+    <div class="sub">Live status for ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™</div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Service</div>
+        <div id="serviceStatus" class="value">...</div>
+        <div id="version" class="meta"></div>
+      </div>
+      <div class="card">
+        <div class="label">Tracked Services</div>
+        <div id="trackedServices" class="value">...</div>
+        <div class="meta">ContextConsciousness™ registry coverage</div>
+      </div>
+      <div class="card">
+        <div class="label">Anomalies</div>
+        <div id="anomalies" class="value">...</div>
+        <div class="meta">Current detected anomaly count</div>
+      </div>
+      <div class="card">
+        <div class="label">Predictions</div>
+        <div id="predictions" class="value">...</div>
+        <div class="meta">Potential upcoming failures</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 12px;">
+      <div class="label">Module Health</div>
+      <div class="row"><span>ContextConsciousness™</span><span id="moduleConsciousness" class="badge">...</span></div>
+      <div class="row"><span>MemoryCloude™</span><span id="moduleMemory" class="badge">...</span></div>
+      <div class="row"><span>Cognitive-Coordination™</span><span id="moduleCoordinator" class="badge">...</span></div>
+      <div class="row"><span>RelationshipEngine</span><span id="moduleRelationship" class="badge">...</span></div>
+      <div class="row"><span>LearningEngine</span><span id="moduleLearning" class="badge">...</span></div>
+      <div class="row"><span>TaskDecomposition</span><span id="moduleDecomposition" class="badge">...</span></div>
+      <div class="row"><span>IntentPredictor</span><span id="moduleIntent" class="badge">...</span></div>
+      <div id="lastUpdated" class="meta" style="margin-top: 8px;"></div>
+    </div>
+  </div>
+
+  <script>
+    function badgeText(mod) {
+      if (!mod || mod.available !== true) return "unavailable";
+      return "available";
+    }
+
+    function badgeClass(mod) {
+      if (!mod || mod.available !== true) return "down";
+      if (mod.error) return "warn";
+      return "ok";
+    }
+
+    function statusClass(status) {
+      if (status === "healthy" || status === "available") return "ok";
+      if (status === "degraded") return "warn";
+      return "down";
+    }
+
+    async function refresh() {
+      try {
+        const [healthRes, intelligenceRes] = await Promise.all([
+          fetch("/health"),
+          fetch("/intelligence/health"),
+        ]);
+
+        const health = await healthRes.json();
+        const intel = await intelligenceRes.json();
+
+        const serviceStatus = document.getElementById("serviceStatus");
+        serviceStatus.textContent = health.status || "unknown";
+        serviceStatus.className = "value " + statusClass(health.status);
+        document.getElementById("version").textContent = "v" + (health.version || "unknown");
+
+        const ctx = intel.modules?.contextConsciousness || {};
+        document.getElementById("trackedServices").textContent =
+          String(ctx.services ?? 0);
+        document.getElementById("anomalies").textContent =
+          String(ctx.anomalies ?? 0);
+        document.getElementById("predictions").textContent =
+          String(ctx.predictions ?? 0);
+
+        const m1 = intel.modules?.contextConsciousness;
+        const m2 = intel.modules?.memoryCloude;
+        const m3 = intel.modules?.cognitiveCoordination;
+        const m4 = intel.modules?.relationshipEngine;
+        const m5 = intel.modules?.learningEngine;
+        const m6 = intel.modules?.taskDecompositionEngine;
+        const m7 = intel.modules?.intentPredictor;
+
+        const b1 = document.getElementById("moduleConsciousness");
+        const b2 = document.getElementById("moduleMemory");
+        const b3 = document.getElementById("moduleCoordinator");
+        const b4 = document.getElementById("moduleRelationship");
+        const b5 = document.getElementById("moduleLearning");
+        const b6 = document.getElementById("moduleDecomposition");
+        const b7 = document.getElementById("moduleIntent");
+
+        b1.textContent = badgeText(m1);
+        b1.className = "badge " + badgeClass(m1);
+        b2.textContent = badgeText(m2);
+        b2.className = "badge " + badgeClass(m2);
+        b3.textContent = badgeText(m3);
+        b3.className = "badge " + badgeClass(m3);
+        b4.textContent = badgeText(m4);
+        b4.className = "badge " + badgeClass(m4);
+        b5.textContent = badgeText(m5);
+        b5.className = "badge " + badgeClass(m5);
+        b6.textContent = badgeText(m6);
+        b6.className = "badge " + badgeClass(m6);
+        b7.textContent = badgeText(m7);
+        b7.className = "badge " + badgeClass(m7);
+
+        document.getElementById("lastUpdated").textContent =
+          "Last updated: " + new Date().toLocaleString();
+      } catch (err) {
+        document.getElementById("serviceStatus").textContent = "error";
+        document.getElementById("serviceStatus").className = "value down";
+        document.getElementById("lastUpdated").textContent =
+          "Refresh failed: " + (err?.message || String(err));
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+/**
+ * Discover relationship intelligence for a context entity
+ */
+app.get("/intelligence/relationships/:chittyId", async (c) => {
+  const relationshipEngine = c.get("relationshipEngine");
+  if (!relationshipEngine) {
+    return c.json(
+      {
+        error: "relationship_engine_unavailable",
+        message: "Relationship engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  const chittyId = c.req.param("chittyId");
+  const limit = Number(c.req.query("limit") || 15);
+  const includeSummary = c.req.query("summary") !== "false";
+
+  try {
+    const result = await relationshipEngine.discoverRelationships(chittyId, {
+      limit,
+      includeSummary,
+    });
+    return c.json({
+      status: "ok",
+      ...result,
+    });
+  } catch (error) {
+    const status = String(error?.message || "").includes("Entity not found")
+      ? 404
+      : 500;
+
+    return c.json(
+      {
+        error: "relationship_discovery_failed",
+        message: error?.message || String(error),
+      },
+      status,
+    );
+  }
+});
+
+/**
+ * Ingest one interaction for cross-session learning
+ */
+app.post("/intelligence/learning/ingest", async (c) => {
+  const learningEngine = c.get("learningEngine");
+  if (!learningEngine) {
+    return c.json(
+      {
+        error: "learning_engine_unavailable",
+        message: "Learning engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(
+      { error: "invalid_json", message: "Request body must be valid JSON" },
+      400,
+    );
+  }
+
+  const userId = body.user_id || body.userId;
+  const interaction = body.interaction;
+  if (!userId || !interaction) {
+    return c.json(
+      {
+        error: "missing_fields",
+        message: "Provide user_id and interaction",
+      },
+      400,
+    );
+  }
+
+  try {
+    const profile = await learningEngine.learnFromInteraction(
+      userId,
+      interaction,
+      {
+        source: "api_ingest",
+      },
+    );
+    return c.json({ status: "ok", profile });
+  } catch (error) {
+    return c.json(
+      {
+        error: "learning_ingest_failed",
+        message: error?.message || String(error),
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Retrieve learned user profile
+ */
+app.get("/intelligence/learning/profile/:userId", async (c) => {
+  const learningEngine = c.get("learningEngine");
+  if (!learningEngine) {
+    return c.json(
+      {
+        error: "learning_engine_unavailable",
+        message: "Learning engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  const userId = c.req.param("userId");
+  const profile = await learningEngine.getProfile(userId);
+  if (!profile) {
+    return c.json(
+      {
+        error: "profile_not_found",
+        message: `No learning profile for ${userId}`,
+      },
+      404,
+    );
+  }
+
+  return c.json({ status: "ok", profile });
+});
+
+/**
+ * Get personalized defaults and suggestions for a user
+ */
+app.get("/intelligence/learning/personalize/:userId", async (c) => {
+  const learningEngine = c.get("learningEngine");
+  if (!learningEngine) {
+    return c.json(
+      {
+        error: "learning_engine_unavailable",
+        message: "Learning engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  const userId = c.req.param("userId");
+  const personalization = await learningEngine.personalizeExperience(userId, {
+    project_path: c.req.query("project_path") || null,
+  });
+
+  return c.json({ status: "ok", personalization });
+});
+
+/**
+ * Decompose task into dependency-aware execution stages
+ */
+app.get("/intelligence/tasks/decompose", async (c) => {
+  const taskDecompositionEngine = c.get("taskDecompositionEngine");
+  if (!taskDecompositionEngine) {
+    return c.json(
+      {
+        error: "task_decomposition_unavailable",
+        message: "Task decomposition engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  const task = c.req.query("task");
+  if (!task) {
+    return c.json(
+      {
+        error: "missing_task",
+        message: "Provide `task` query parameter",
+      },
+      400,
+    );
+  }
+
+  try {
+    const result = await taskDecompositionEngine.decompose(task, {
+      requireDocumentation: c.req.query("require_docs") === "true",
+      highRiskMode: c.req.query("high_risk_mode") === "true",
+    });
+    return c.json({ status: "ok", result });
+  } catch (error) {
+    return c.json(
+      {
+        error: "task_decomposition_failed",
+        message: error?.message || String(error),
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Decompose task from structured request body
+ */
+app.post("/intelligence/tasks/decompose", async (c) => {
+  const taskDecompositionEngine = c.get("taskDecompositionEngine");
+  if (!taskDecompositionEngine) {
+    return c.json(
+      {
+        error: "task_decomposition_unavailable",
+        message: "Task decomposition engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(
+      { error: "invalid_json", message: "Request body must be valid JSON" },
+      400,
+    );
+  }
+
+  const task = body.task || body.input || body.query;
+  if (!task) {
+    return c.json(
+      {
+        error: "missing_task",
+        message: "Provide `task` in request body",
+      },
+      400,
+    );
+  }
+
+  try {
+    const result = await taskDecompositionEngine.decompose(task, {
+      requireDocumentation: body.require_documentation === true,
+      highRiskMode: body.high_risk_mode === true,
+    });
+    return c.json({ status: "ok", result });
+  } catch (error) {
+    return c.json(
+      {
+        error: "task_decomposition_failed",
+        message: error?.message || String(error),
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Predict user intent from input text (query interface)
+ */
+app.get("/intelligence/intent/predict", async (c) => {
+  const intentPredictor = c.get("intentPredictor");
+  if (!intentPredictor) {
+    return c.json(
+      {
+        error: "intent_predictor_unavailable",
+        message: "Intent predictor is not initialized",
+      },
+      503,
+    );
+  }
+
+  const input = c.req.query("input");
+  if (!input) {
+    return c.json(
+      { error: "missing_input", message: "Provide `input` query parameter" },
+      400,
+    );
+  }
+
+  try {
+    const prediction = await intentPredictor.predictIntent(input, {
+      userId: c.req.query("user_id") || c.req.query("userId") || null,
+      sessionId: c.req.query("session_id") || c.req.query("sessionId") || null,
+      context: {
+        chitty_id: c.req.query("chitty_id") || null,
+      },
+      aiRefine: c.req.query("ai_refine") !== "false",
+      useServiceAwareness: c.req.query("service_awareness") === "true",
+    });
+
+    const userId = c.req.query("user_id") || c.req.query("userId") || null;
+    const learningEngine = c.get("learningEngine");
+    if (learningEngine && userId) {
+      await learningEngine
+        .learnFromInteraction(userId, {
+          sessionId:
+            c.req.query("session_id") || c.req.query("sessionId") || null,
+          input,
+          actions: prediction.nextActions || [],
+          entities: [],
+          suggestedServices: prediction.suggestedServices || [],
+          outcome: "success",
+          timestamp: Date.now(),
+        })
+        .catch((err) =>
+          console.warn(
+            "[LearningEngine] auto-learn from GET predict failed:",
+            err.message,
+          ),
+        );
+    }
+
+    return c.json({ status: "ok", prediction });
+  } catch (error) {
+    return c.json(
+      {
+        error: "intent_prediction_failed",
+        message: error?.message || String(error),
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Predict user intent from structured request body
+ */
+app.post("/intelligence/intent/predict", async (c) => {
+  const intentPredictor = c.get("intentPredictor");
+  if (!intentPredictor) {
+    return c.json(
+      {
+        error: "intent_predictor_unavailable",
+        message: "Intent predictor is not initialized",
+      },
+      503,
+    );
+  }
+
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(
+      { error: "invalid_json", message: "Request body must be valid JSON" },
+      400,
+    );
+  }
+
+  const input = body.input || body.query || body.text;
+  if (!input) {
+    return c.json(
+      { error: "missing_input", message: "Provide `input` in request body" },
+      400,
+    );
+  }
+
+  try {
+    const prediction = await intentPredictor.predictIntent(input, {
+      userId: body.user_id || body.userId || null,
+      sessionId: body.session_id || body.sessionId || null,
+      context: body.context || {},
+      aiRefine: body.ai_refine !== false,
+      useServiceAwareness: body.use_service_awareness === true,
+      historyLimit: body.history_limit,
+    });
+
+    const learningEngine = c.get("learningEngine");
+    const userId = body.user_id || body.userId || null;
+    if (learningEngine && userId) {
+      await learningEngine
+        .learnFromInteraction(userId, {
+          sessionId: body.session_id || body.sessionId || null,
+          input,
+          actions: prediction.nextActions || [],
+          entities: body.context?.entities || [],
+          suggestedServices: prediction.suggestedServices || [],
+          outcome: "success",
+          timestamp: Date.now(),
+        })
+        .catch((err) =>
+          console.warn(
+            "[LearningEngine] auto-learn from POST predict failed:",
+            err.message,
+          ),
+        );
+    }
+
+    return c.json({ status: "ok", prediction });
+  } catch (error) {
+    const status = String(error?.message || "").includes("required")
+      ? 400
+      : 500;
+    return c.json(
+      {
+        error: "intent_prediction_failed",
+        message: error?.message || String(error),
+      },
+      status,
+    );
+  }
+});
+
+/**
+ * Discover relationships via request body
+ */
+app.post("/intelligence/relationships/discover", async (c) => {
+  const relationshipEngine = c.get("relationshipEngine");
+  if (!relationshipEngine) {
+    return c.json(
+      {
+        error: "relationship_engine_unavailable",
+        message: "Relationship engine is not initialized",
+      },
+      503,
+    );
+  }
+
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(
+      { error: "invalid_json", message: "Request body must be valid JSON" },
+      400,
+    );
+  }
+
+  const chittyId = body.chitty_id || body.chittyId;
+  if (!chittyId) {
+    return c.json(
+      {
+        error: "missing_chitty_id",
+        message: "Provide chitty_id in request body",
+      },
+      400,
+    );
+  }
+
+  try {
+    const result = await relationshipEngine.discoverRelationships(chittyId, {
+      limit: body.limit,
+      includeSummary: body.include_summary !== false,
+    });
+    return c.json({ status: "ok", ...result });
+  } catch (error) {
+    const status = String(error?.message || "").includes("Entity not found")
+      ? 404
+      : 500;
+    return c.json(
+      {
+        error: "relationship_discovery_failed",
+        message: error?.message || String(error),
+      },
+      status,
+    );
+  }
 });
 
 /**
@@ -623,9 +1415,181 @@ app.get("/integrations/github/callback", async (c) => {
  */
 const oauthProvider = createOAuthProvider(app);
 
+/**
+ * Strip query-string parameters from the redirect_uri OAuth param.
+ *
+ * Notion appends ?spaceId=…&userId=… to the redirect_uri it sends, which
+ * causes an exact-match failure against the registered base URI inside
+ * @cloudflare/workers-oauth-provider. We strip those extra params before
+ * the OAuthProvider validates and re-append them to the final redirect
+ * in handleAuthorize (oauth-provider.js).
+ *
+ * This must happen BEFORE oauthProvider.fetch() because the /token
+ * endpoint is handled internally by OAuthProvider and never reaches
+ * our defaultHandler.
+ */
+function stripRedirectUriQueryParams(request) {
+  const url = new URL(request.url);
+  const rawRedirect = url.searchParams.get("redirect_uri");
+  if (!rawRedirect) return request;
+
+  try {
+    const redirectUrl = new URL(rawRedirect);
+    if (!redirectUrl.search) return request;
+
+    redirectUrl.search = "";
+    url.searchParams.set("redirect_uri", redirectUrl.toString());
+    return new Request(url.toString(), request);
+  } catch {
+    return request;
+  }
+}
+
+/**
+ * For POST /token, the redirect_uri is in the form body, not the URL.
+ * We need to parse the body, strip redirect_uri query params, and
+ * reconstruct the request.
+ */
+async function stripRedirectUriFromTokenBody(request) {
+  const body = await request.text();
+  const params = new URLSearchParams(body);
+  const rawRedirect = params.get("redirect_uri");
+  if (!rawRedirect)
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+    });
+
+  try {
+    const redirectUrl = new URL(rawRedirect);
+    if (!redirectUrl.search)
+      return new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body,
+      });
+
+    redirectUrl.search = "";
+    params.set("redirect_uri", redirectUrl.toString());
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: params.toString(),
+    });
+  } catch {
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+    });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
-    return oauthProvider.fetch(request, env, ctx);
+    const url = new URL(request.url);
+
+    // Debug: log all OAuth-related requests to diagnose Notion integration
+    if (
+      url.pathname === "/token" ||
+      url.pathname === "/authorize" ||
+      url.pathname === "/register" ||
+      url.pathname.startsWith("/.well-known/")
+    ) {
+      console.log(
+        `[OAuth-Debug] ${request.method} ${url.pathname} from ${request.headers.get("Origin") || "no-origin"} referer=${request.headers.get("Referer") || "none"}`,
+      );
+    }
+
+    // MCP Server Metadata (draft spec): Notion requests this to discover the
+    // MCP endpoint URL before starting OAuth. Return minimal server card.
+    if (url.pathname === "/.well-known/mcp.json") {
+      return new Response(
+        JSON.stringify({
+          mcpVersion: "2025-03-26",
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: { name: "ChittyConnect", version: "2.1.0" },
+          url: `${url.origin}/mcp`,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+          },
+        },
+      );
+    }
+
+    // OIDC Discovery: Notion requests /.well-known/openid-configuration which
+    // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
+    // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
+    if (url.pathname === "/.well-known/openid-configuration") {
+      console.log(
+        "[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server",
+      );
+      const rewritten = new URL(request.url);
+      rewritten.pathname = "/.well-known/oauth-authorization-server";
+      request = new Request(rewritten.toString(), request);
+    }
+
+    // RFC 9728: Path-specific Protected Resource Metadata.
+    // OAuthProvider handles /.well-known/oauth-protected-resource (base).
+    // MCP clients request /.well-known/oauth-protected-resource/mcp
+    // for the /mcp resource path. Serve the same PRM for all subpaths.
+    if (
+      url.pathname.startsWith("/.well-known/oauth-protected-resource/") &&
+      url.pathname !== "/.well-known/oauth-protected-resource"
+    ) {
+      return new Response(
+        JSON.stringify({
+          resource: `${url.origin}`,
+          authorization_servers: [`${url.origin}`],
+          scopes_supported: ["mcp:read", "mcp:write", "mcp:admin"],
+          bearer_methods_supported: ["header"],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "Authorization, *",
+          },
+        },
+      );
+    }
+
+    // Strip redirect_uri query params for the token exchange (POST /token).
+    // The /authorize endpoint is handled by oauth-provider.js's handleAuthorize,
+    // which strips, validates, AND re-appends the extra params to the final redirect.
+    // We must NOT strip here for /authorize or the re-append logic loses the params.
+    if (url.pathname === "/token" && request.method === "POST") {
+      console.log(
+        "[OAuth-Debug] Stripping redirect_uri query params from token body",
+      );
+      request = await stripRedirectUriFromTokenBody(request);
+    }
+
+    // Route Agents SDK WebSocket upgrades to McpConnectAgent DO
+    const agentResponse = await routeAgentRequest(request, env);
+    if (agentResponse) return agentResponse;
+
+    const response = await oauthProvider.fetch(request, env, ctx);
+
+    // Debug: log response status for OAuth endpoints
+    if (
+      url.pathname === "/token" ||
+      url.pathname === "/authorize" ||
+      url.pathname === "/register"
+    ) {
+      console.log(
+        `[OAuth-Debug] ${request.method} ${url.pathname} → ${response.status}`,
+      );
+    }
+
+    return response;
   },
 
   /**
@@ -675,4 +1639,4 @@ export default {
 /**
  * Export Durable Object classes
  */
-export { MCPSessionDurableObject };
+export { McpConnectAgent };

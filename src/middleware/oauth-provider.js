@@ -1,10 +1,13 @@
 /**
  * OAuth 2.1 Provider for MCP endpoints
  *
- * Provides OAuth 2.1 with PKCE for Claude Desktop/Code and other
+ * Provides OAuth 2.1 with PKCE for Claude Desktop/Code, Notion, and other
  * MCP clients that require OAuth authentication.
  *
  * Uses @cloudflare/workers-oauth-provider with ChittyAuth as upstream IdP.
+ * MCP transport is handled by McpConnectAgent (Durable Object extending McpAgent),
+ * which implements SSE + Streamable HTTP transports via the Cloudflare Agents SDK.
+ *
  * Only protects mcp.chitty.cc/mcp — connect.chitty.cc/mcp/* continues
  * using API key auth via the Hono router (backward compatible).
  *
@@ -13,6 +16,7 @@
  */
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { McpConnectAgent } from "../mcp/agent.js";
 
 /**
  * Create the OAuth-wrapped worker handler
@@ -26,7 +30,7 @@ export function createOAuthProvider(honoApp) {
     // connect.chitty.cc/mcp/* falls through to defaultHandler (Hono + API key auth).
     apiRoute: "https://mcp.chitty.cc/mcp",
 
-    apiHandler: createMcpJsonRpcHandler(honoApp),
+    apiHandler: McpConnectAgent.serve("/mcp", { binding: "MCP_AGENT" }),
 
     defaultHandler: createDefaultHandler(honoApp),
 
@@ -67,10 +71,38 @@ function createDefaultHandler(honoApp) {
  * where the user has already authenticated in the app).
  */
 async function handleAuthorize(request, env) {
+  // Notion appends ?spaceId=...&userId=... to the redirect_uri, which causes
+  // an exact-match failure against the registered base URI. Strip the query
+  // params for validation, then re-append them to the final redirect.
+  const url = new URL(request.url);
+  const rawRedirect = url.searchParams.get("redirect_uri") || "";
+  let extraRedirectParams = "";
+
+  if (rawRedirect) {
+    try {
+      const redirectUrl = new URL(rawRedirect);
+      if (redirectUrl.search) {
+        extraRedirectParams = redirectUrl.search;
+        redirectUrl.search = "";
+        url.searchParams.set("redirect_uri", redirectUrl.toString());
+        request = new Request(url.toString(), request);
+      }
+    } catch {
+      // Invalid redirect_uri — let the provider handle the error
+    }
+  }
+
+  console.log(
+    `[OAuth] Authorize: client_id=${url.searchParams.get("client_id")} redirect_uri=${url.searchParams.get("redirect_uri")}`,
+  );
+
   let oauthReqInfo;
   try {
     oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
   } catch (err) {
+    console.error(
+      `[OAuth] parseAuthRequest FAILED: ${err.message} | redirect_uri=${rawRedirect}`,
+    );
     return new Response(`Invalid OAuth request: ${err.message}`, {
       status: 400,
     });
@@ -106,388 +138,19 @@ async function handleAuthorize(request, env) {
     },
   });
 
-  return Response.redirect(redirectTo, 302);
-}
+  // Build final redirect URL:
+  // 1. Add RFC 9207 issuer identification (iss) — some clients (Notion)
+  //    validate this for security and fail with oauth_security_error without it.
+  // 2. Re-append Notion's extra query params (spaceId, userId) to the redirect.
+  const redirectUrl = new URL(redirectTo);
+  redirectUrl.searchParams.set("iss", new URL(request.url).origin);
 
-/**
- * MCP Streamable HTTP transport handler
- *
- * Implements the MCP Streamable HTTP transport (2025-03-26):
- * - POST /mcp → JSON-RPC 2.0 request/response
- * - GET  /mcp → SSE stream for server-initiated notifications
- * - DELETE /mcp → Session termination
- *
- * Delegates tool listing/calling to the existing Hono MCP REST endpoints.
- */
-function createMcpJsonRpcHandler(honoApp) {
-  return {
-    async fetch(request, env, ctx) {
-      // Resolve or generate session ID
-      const sessionId =
-        request.headers.get("Mcp-Session-Id") || crypto.randomUUID();
-
-      /** Attach the session header to every outgoing response. */
-      function withSession(body, init = {}) {
-        const headers = new Headers(init.headers);
-        headers.set("Mcp-Session-Id", sessionId);
-        return new Response(body, { ...init, headers });
-      }
-
-      if (request.method === "GET") {
-        const accept = request.headers.get("Accept") || "";
-        if (!accept.includes("text/event-stream")) {
-          return new Response(
-            "Not Acceptable: requires Accept: text/event-stream",
-            { status: 406 },
-          );
-        }
-        return handleSseStream(sessionId);
-      }
-
-      if (request.method === "DELETE") {
-        console.log(`[MCP] Session terminated: ${sessionId}`);
-        return withSession(null, { status: 204 });
-      }
-
-      if (request.method !== "POST") {
-        return new Response("Method not allowed", { status: 405 });
-      }
-
-      let body;
-      try {
-        body = await request.json();
-      } catch (err) {
-        console.warn(`[MCP JSON-RPC] Body parse failed: ${err.message}`);
-        return withSession(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            error: { code: -32700, message: "Parse error" },
-            id: null,
-          }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      // Handle batch requests
-      if (Array.isArray(body)) {
-        const results = await Promise.all(
-          body.map((req) =>
-            handleJsonRpcRequest(req, request, honoApp, env, ctx),
-          ),
-        );
-        const responses = results.filter(Boolean);
-        if (responses.length === 0) {
-          return withSession(null, { status: 204 });
-        }
-        // Extract JSON bodies from Response objects before serializing
-        const bodies = await Promise.all(
-          responses.map(async (r) => {
-            try {
-              return await r.json();
-            } catch {
-              return {
-                jsonrpc: "2.0",
-                error: {
-                  code: -32603,
-                  message: "Internal error: malformed response",
-                },
-                id: null,
-              };
-            }
-          }),
-        );
-        return withSession(JSON.stringify(bodies), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      const result = await handleJsonRpcRequest(
-        body,
-        request,
-        honoApp,
-        env,
-        ctx,
-      );
-      if (!result) {
-        return withSession(null, { status: 204 });
-      }
-
-      // Inject session header into the JSON-RPC response
-      const original = result instanceof Response ? result : new Response(null);
-      return withSession(original.body, {
-        status: original.status,
-        headers: original.headers,
-      });
-    },
-  };
-}
-
-/**
- * SSE stream for server-initiated MCP notifications (GET /mcp)
- *
- * Opens a text/event-stream connection. Sends a keepalive comment
- * immediately so clients confirm the connection is live, then holds
- * the stream open with periodic heartbeats (every 30 s) until the
- * client disconnects.
- */
-function handleSseStream(sessionId) {
-  console.log(`[MCP SSE] Stream opened: ${sessionId}`);
-  const encoder = new TextEncoder();
-  let interval;
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(": connected\n\n"));
-
-      // Periodic heartbeat to keep the connection alive
-      interval = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(": heartbeat\n\n"));
-        } catch (err) {
-          console.log(
-            `[MCP SSE] Heartbeat stopped for session ${sessionId}: ${err.message}`,
-          );
-          clearInterval(interval);
-        }
-      }, 30_000);
-    },
-    cancel() {
-      clearInterval(interval);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Mcp-Session-Id": sessionId,
-    },
-  });
-}
-
-/** @visibleForTesting */
-export async function handleJsonRpcRequest(body, request, honoApp, env, ctx) {
-  const { jsonrpc, method, params, id } = body;
-
-  // Notifications have no id — no response expected
-  const isNotification = id === undefined;
-
-  if (jsonrpc !== "2.0") {
-    if (isNotification) return null;
-    return jsonRpcError(id, -32600, "Invalid Request: expected jsonrpc 2.0");
-  }
-
-  try {
-    switch (method) {
-      case "initialize":
-        return jsonRpcResponse(id, {
-          protocolVersion: "2025-06-18",
-          capabilities: {
-            tools: { listChanged: false },
-            resources: { subscribe: false, listChanged: false },
-          },
-          serverInfo: {
-            name: "chittyconnect",
-            version: "2.0.2",
-          },
-        });
-
-      case "notifications/initialized":
-        // Client acknowledgment — no response
-        return null;
-
-      case "ping":
-        return jsonRpcResponse(id, {});
-
-      case "tools/list": {
-        const internalReq = new Request(
-          `${new URL(request.url).origin}/mcp/tools/list`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: request.headers.get("Authorization") || "",
-            },
-          },
-        );
-        const resp = await honoApp.fetch(internalReq, env, ctx);
-        if (!resp.ok) {
-          return proxyErrorResponse(id, "tools/list", resp);
-        }
-        let data;
-        try {
-          data = await resp.json();
-        } catch {
-          console.error(
-            `[MCP JSON-RPC] tools/list response not JSON (${resp.status})`,
-          );
-          return jsonRpcError(
-            id,
-            -32603,
-            `Internal error: tools/list returned non-JSON (${resp.status})`,
-          );
-        }
-        return jsonRpcResponse(id, data);
-      }
-
-      case "tools/call": {
-        const internalReq = new Request(
-          `${new URL(request.url).origin}/mcp/tools/call`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: request.headers.get("Authorization") || "",
-            },
-            body: JSON.stringify({
-              name: params?.name,
-              arguments: params?.arguments || {},
-            }),
-          },
-        );
-        const resp = await honoApp.fetch(internalReq, env, ctx);
-        if (!resp.ok) {
-          return proxyErrorResponse(id, "tools/call", resp);
-        }
-        let data;
-        try {
-          data = await resp.json();
-        } catch {
-          console.error(
-            `[MCP JSON-RPC] tools/call response not JSON (${resp.status})`,
-          );
-          return jsonRpcError(
-            id,
-            -32603,
-            `Internal error: tools/call returned non-JSON (${resp.status})`,
-          );
-        }
-        return jsonRpcResponse(id, data);
-      }
-
-      case "resources/list": {
-        const internalReq = new Request(
-          `${new URL(request.url).origin}/mcp/resources/list`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: request.headers.get("Authorization") || "",
-            },
-          },
-        );
-        const resp = await honoApp.fetch(internalReq, env, ctx);
-        if (!resp.ok) {
-          return proxyErrorResponse(id, "resources/list", resp);
-        }
-        let data;
-        try {
-          data = await resp.json();
-        } catch {
-          console.error(
-            `[MCP JSON-RPC] resources/list response not JSON (${resp.status})`,
-          );
-          return jsonRpcError(
-            id,
-            -32603,
-            `Internal error: resources/list returned non-JSON (${resp.status})`,
-          );
-        }
-        return jsonRpcResponse(id, data);
-      }
-
-      case "resources/read": {
-        const uri = params?.uri || "";
-        const internalReq = new Request(
-          `${new URL(request.url).origin}/mcp/resources/read?uri=${encodeURIComponent(uri)}`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: request.headers.get("Authorization") || "",
-            },
-          },
-        );
-        const resp = await honoApp.fetch(internalReq, env, ctx);
-        if (!resp.ok) {
-          return proxyErrorResponse(id, "resources/read", resp);
-        }
-        let data;
-        try {
-          data = await resp.json();
-        } catch {
-          console.error(
-            `[MCP JSON-RPC] resources/read response not JSON (${resp.status})`,
-          );
-          return jsonRpcError(
-            id,
-            -32603,
-            `Internal error: resources/read returned non-JSON (${resp.status})`,
-          );
-        }
-        return jsonRpcResponse(id, data);
-      }
-
-      case "prompts/list":
-        return jsonRpcResponse(id, { prompts: [] });
-
-      default:
-        if (isNotification) return null;
-        return jsonRpcError(id, -32601, `Method not found: ${method}`);
+  if (extraRedirectParams) {
+    const extra = new URLSearchParams(extraRedirectParams);
+    for (const [key, value] of extra) {
+      redirectUrl.searchParams.set(key, value);
     }
-  } catch (error) {
-    console.error(`[MCP JSON-RPC] Error handling ${method}:`, error);
-    if (isNotification) return null;
-    return jsonRpcError(id, -32603, `Internal error: ${error.message}`);
-  }
-}
-
-function jsonRpcResponse(id, result) {
-  return new Response(JSON.stringify({ jsonrpc: "2.0", result, id }), {
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-async function proxyErrorResponse(id, method, resp) {
-  const bodyText = await resp.text().catch(() => "");
-  const detail = summarizeProxyErrorBody(bodyText);
-  const detailPart = detail ? `: ${detail}` : "";
-  console.error(
-    `[MCP JSON-RPC] ${method} proxy returned ${resp.status}${detailPart}`,
-  );
-  const msg = detail
-    ? `Internal proxy error: ${method} (${resp.status}) - ${detail}`
-    : `Internal proxy error: ${method} (${resp.status})`;
-  return jsonRpcError(id, -32603, msg);
-}
-
-function summarizeProxyErrorBody(bodyText) {
-  if (!bodyText) return "";
-  const trimmed = bodyText.trim();
-  if (!trimmed) return "";
-
-  let detail = trimmed;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (typeof parsed?.error === "string") {
-      detail = parsed.error;
-    } else if (typeof parsed?.error?.message === "string") {
-      detail = parsed.error.message;
-    } else if (typeof parsed?.message === "string") {
-      detail = parsed.message;
-    } else {
-      detail = trimmed;
-    }
-  } catch {
-    detail = trimmed;
   }
 
-  return detail.replace(/\s+/g, " ").slice(0, 240);
-}
-
-function jsonRpcError(id, code, message) {
-  return new Response(
-    JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id }),
-    {
-      status: code === -32700 || code === -32600 ? 400 : 200,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+  return Response.redirect(redirectUrl.toString(), 302);
 }
