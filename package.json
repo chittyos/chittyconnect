@@ -46,6 +46,7 @@
     "@cloudflare/workers-oauth-provider": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
+    "agents": "^0.7.5",
     "hono": "^4.11.4",
     "jose": "^5.2.0",
     "node-fetch": "^3.3.2",

@@ -1,11 +1,14 @@
 /**
- * ChatGPT Developer Mode MCP Server Factory
+ * MCP Server Factory
  *
  * Creates an McpServer instance with all ChittyConnect tools registered.
  * Uses the unified tool registry as the single source of truth.
- * Used with WebStandardStreamableHTTPServerTransport for ChatGPT integration.
  *
- * @module mcp/chatgpt-server
+ * Used by:
+ * - OAuth MCP transport (mcp.chitty.cc/mcp via createMcpHandler)
+ * - ChatGPT Streamable HTTP (connect.chitty.cc/chatgpt/mcp via SDK transport)
+ *
+ * @module mcp/server-factory
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -21,7 +24,7 @@ import { MCP_TOOL_DEFS } from "./tool-registry.js";
  * @param {string} [opts.authToken] - Auth token to pass through to tool dispatcher
  * @returns {McpServer}
  */
-export function createChatGPTMcpServer(env, opts = {}) {
+export function createMcpServer(env, opts = {}) {
   const server = new McpServer(
     {
       name: "ChittyConnect",

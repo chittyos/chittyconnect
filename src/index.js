@@ -1401,9 +1401,112 @@ app.get("/integrations/github/callback", async (c) => {
  */
 const oauthProvider = createOAuthProvider(app);
 
+/**
+ * Strip query-string parameters from the redirect_uri OAuth param.
+ *
+ * Notion appends ?spaceId=…&userId=… to the redirect_uri it sends, which
+ * causes an exact-match failure against the registered base URI inside
+ * @cloudflare/workers-oauth-provider. We strip those extra params before
+ * the OAuthProvider validates and re-append them to the final redirect
+ * in handleAuthorize (oauth-provider.js).
+ *
+ * This must happen BEFORE oauthProvider.fetch() because the /token
+ * endpoint is handled internally by OAuthProvider and never reaches
+ * our defaultHandler.
+ */
+function stripRedirectUriQueryParams(request) {
+  const url = new URL(request.url);
+  const rawRedirect = url.searchParams.get("redirect_uri");
+  if (!rawRedirect) return request;
+
+  try {
+    const redirectUrl = new URL(rawRedirect);
+    if (!redirectUrl.search) return request;
+
+    redirectUrl.search = "";
+    url.searchParams.set("redirect_uri", redirectUrl.toString());
+    return new Request(url.toString(), request);
+  } catch {
+    return request;
+  }
+}
+
+/**
+ * For POST /token, the redirect_uri is in the form body, not the URL.
+ * We need to parse the body, strip redirect_uri query params, and
+ * reconstruct the request.
+ */
+async function stripRedirectUriFromTokenBody(request) {
+  const body = await request.text();
+  const params = new URLSearchParams(body);
+  const rawRedirect = params.get("redirect_uri");
+  if (!rawRedirect) return new Request(request.url, { method: request.method, headers: request.headers, body });
+
+  try {
+    const redirectUrl = new URL(rawRedirect);
+    if (!redirectUrl.search) return new Request(request.url, { method: request.method, headers: request.headers, body });
+
+    redirectUrl.search = "";
+    params.set("redirect_uri", redirectUrl.toString());
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: params.toString(),
+    });
+  } catch {
+    return new Request(request.url, { method: request.method, headers: request.headers, body });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
-    return oauthProvider.fetch(request, env, ctx);
+    const url = new URL(request.url);
+
+    // Debug: log all OAuth-related requests to diagnose Notion integration
+    if (
+      url.pathname === "/token" ||
+      url.pathname === "/authorize" ||
+      url.pathname === "/register" ||
+      url.pathname.startsWith("/.well-known/")
+    ) {
+      console.log(
+        `[OAuth-Debug] ${request.method} ${url.pathname} from ${request.headers.get("Origin") || "no-origin"} referer=${request.headers.get("Referer") || "none"}`,
+      );
+    }
+
+    // OIDC Discovery: Notion requests /.well-known/openid-configuration which
+    // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
+    // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
+    if (url.pathname === "/.well-known/openid-configuration") {
+      console.log("[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server");
+      const rewritten = new URL(request.url);
+      rewritten.pathname = "/.well-known/oauth-authorization-server";
+      request = new Request(rewritten.toString(), request);
+    }
+
+    // Strip redirect_uri query params for the token exchange (POST /token).
+    // The /authorize endpoint is handled by oauth-provider.js's handleAuthorize,
+    // which strips, validates, AND re-appends the extra params to the final redirect.
+    // We must NOT strip here for /authorize or the re-append logic loses the params.
+    if (url.pathname === "/token" && request.method === "POST") {
+      console.log("[OAuth-Debug] Stripping redirect_uri query params from token body");
+      request = await stripRedirectUriFromTokenBody(request);
+    }
+
+    const response = await oauthProvider.fetch(request, env, ctx);
+
+    // Debug: log response status for OAuth endpoints
+    if (
+      url.pathname === "/token" ||
+      url.pathname === "/authorize" ||
+      url.pathname === "/register"
+    ) {
+      console.log(
+        `[OAuth-Debug] ${request.method} ${url.pathname} → ${response.status}`,
+      );
+    }
+
+    return response;
   },
 
   /**

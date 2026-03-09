@@ -13,7 +13,7 @@
 
 import { Hono } from "hono";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { createChatGPTMcpServer } from "../../mcp/chatgpt-server.js";
+import { createMcpServer } from "../../mcp/server-factory.js";
 
 const chatgptMcp = new Hono();
 
@@ -148,7 +148,7 @@ chatgptMcp.all("/", async (c) => {
       },
     });
 
-    server = createChatGPTMcpServer(c.env, {
+    server = createMcpServer(c.env, {
       baseUrl,
       authToken: c.get("authToken"),
     });

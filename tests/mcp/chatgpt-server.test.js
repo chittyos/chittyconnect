@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createChatGPTMcpServer } from "../../src/mcp/chatgpt-server.js";
+import { createMcpServer } from "../../src/mcp/server-factory.js";
 
 // Mock the tool dispatcher to avoid real HTTP calls
 vi.mock("../../src/mcp/tool-dispatcher.js", () => ({
@@ -24,16 +24,16 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("createChatGPTMcpServer", () => {
+describe("createMcpServer", () => {
   it("returns an McpServer instance", () => {
-    const server = createChatGPTMcpServer(mockEnv);
+    const server = createMcpServer(mockEnv);
 
     expect(server).toBeDefined();
     expect(server.connect).toBeInstanceOf(Function);
   });
 
   it("registers all 34 tools", () => {
-    const server = createChatGPTMcpServer(mockEnv);
+    const server = createMcpServer(mockEnv);
 
     // The server.tool() method is called once per tool definition.
     // We can verify the number of tools by checking the internal state.
@@ -44,7 +44,7 @@ describe("createChatGPTMcpServer", () => {
   });
 
   it("accepts a custom baseUrl", () => {
-    const server = createChatGPTMcpServer(mockEnv, { baseUrl: "https://staging.chitty.cc" });
+    const server = createMcpServer(mockEnv, { baseUrl: "https://staging.chitty.cc" });
     expect(server).toBeDefined();
   });
 
