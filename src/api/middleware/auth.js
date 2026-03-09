@@ -7,9 +7,7 @@ export async function authenticate(c, next) {
   const bearerMatch = authorizationHeader.match(/^Bearer\s+(.+)$/i);
   const bearerToken = bearerMatch ? bearerMatch[1].trim() : null;
 
-  const apiKey =
-    c.req.header("X-ChittyOS-API-Key") ||
-    bearerToken;
+  const apiKey = c.req.header("X-ChittyOS-API-Key") || bearerToken;
 
   if (!apiKey) {
     return c.json({ error: "Missing API key" }, 401);
