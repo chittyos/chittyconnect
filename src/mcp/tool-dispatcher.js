@@ -1219,16 +1219,24 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       name === "memory_persist_interaction" ||
       name === "memory_persist"
     ) {
-      const response = await fetch(`${baseUrl}/api/v1/memory/persist`, {
-        method: "POST",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: args.content || args.interaction,
-          chitty_id: args.chitty_id,
-          session_id: args.session_id,
-          tags: args.tags,
-        }),
-      });
+      const response = await fetch(
+        `${baseUrl}/api/intelligence/memory/persist`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: args.session_id || "default",
+            interaction: {
+              type: args.type || "memory",
+              content: args.content || args.interaction,
+              entities: args.entities || [],
+              importance: args.importance || "medium",
+              tags: args.tags,
+              chitty_id: args.chitty_id,
+            },
+          }),
+        },
+      );
       const fetchErr = await checkFetchError(response, "MemoryPersist");
       if (fetchErr) return fetchErr;
       result = await response.json();
@@ -1237,14 +1245,17 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       name === "memory_recall_context" ||
       name === "memory_recall"
     ) {
-      const params = new URLSearchParams();
-      if (args.query) params.set("query", args.query);
-      if (args.chitty_id) params.set("chitty_id", args.chitty_id);
-      if (args.session_id) params.set("session_id", args.session_id);
-      if (args.limit) params.set("limit", String(args.limit));
       const response = await fetch(
-        `${baseUrl}/api/v1/memory/recall?${params}`,
-        { headers: authHeader },
+        `${baseUrl}/api/intelligence/memory/recall`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: args.session_id || "default",
+            query: args.query,
+            limit: args.limit ? Number(args.limit) : 5,
+          }),
+        },
       );
       const fetchErr = await checkFetchError(response, "MemoryRecall");
       if (fetchErr) return fetchErr;
@@ -1254,7 +1265,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       name === "memory_get_session_summary"
     ) {
       const response = await fetch(
-        `${baseUrl}/api/v1/memory/session/${encodeURIComponent(args.session_id)}/summary`,
+        `${baseUrl}/api/intelligence/memory/session/${encodeURIComponent(args.session_id)}`,
         { headers: authHeader },
       );
       const fetchErr = await checkFetchError(response, "MemorySessionSummary");

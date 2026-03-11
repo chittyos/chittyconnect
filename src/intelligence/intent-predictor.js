@@ -419,6 +419,19 @@ export class IntentPredictor {
       });
     }
 
+    // Inject intents with strong history affinity that weren't matched by rules
+    for (const [intentName, affinity] of Object.entries(
+      historySignals.intentAffinity,
+    )) {
+      if (!merged.some((c) => c.name === intentName) && affinity > 0.15) {
+        merged.push({
+          name: intentName,
+          score: Math.min(1, affinity * 0.35),
+          matches: [],
+        });
+      }
+    }
+
     const strongestSpecific = merged
       .filter((m) => m.name !== "general_query")
       .sort((a, b) => b.score - a.score)[0];

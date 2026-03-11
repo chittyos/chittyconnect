@@ -1,6 +1,6 @@
 {
   "name": "@chittyos/chittyconnect",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "ChittyConnect - AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for ChittyOS ecosystem",
   "type": "module",
   "main": "src/index.js",
