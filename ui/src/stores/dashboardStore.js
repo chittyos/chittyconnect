@@ -343,7 +343,7 @@ export const useDashboardStore = create((set, get) => ({
     })),
 
   fetchConnections: async () => {
-    set({ connectionsLoading: true });
+    set({ connectionsLoading: true, error: null });
     try {
       const { connectionFilters } = get();
       const params = new URLSearchParams();

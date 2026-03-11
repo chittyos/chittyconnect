@@ -18,8 +18,17 @@ connectionsRoutes.get("/", async (c) => {
   try {
     const category = c.req.query("category");
     const status = c.req.query("status");
-    const limit = Math.min(parseInt(c.req.query("limit") || "100"), 200);
-    const offset = parseInt(c.req.query("offset") || "0");
+    const limit = Math.max(
+      0,
+      Math.min(
+        Number.isFinite(+c.req.query("limit")) ? +c.req.query("limit") : 100,
+        200,
+      ),
+    );
+    const offset = Math.max(
+      0,
+      Number.isFinite(+c.req.query("offset")) ? +c.req.query("offset") : 0,
+    );
 
     let query = "SELECT * FROM connections WHERE 1=1";
     const params = [];
@@ -582,7 +591,13 @@ connectionsRoutes.post("/test-all", async (c) => {
 connectionsRoutes.get("/:slug/health-history", async (c) => {
   try {
     const slug = c.req.param("slug");
-    const limit = Math.min(parseInt(c.req.query("limit") || "100"), 500);
+    const limit = Math.max(
+      1,
+      Math.min(
+        Number.isFinite(+c.req.query("limit")) ? +c.req.query("limit") : 100,
+        500,
+      ),
+    );
 
     const conn = await c.env.DB.prepare(
       "SELECT id FROM connections WHERE slug = ?",

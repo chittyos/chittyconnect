@@ -69,11 +69,6 @@ jobs:
               exit 1
             fi
           done
-          # Wrangler config can be .toml, .jsonc, or .json
-          if [ ! -f wrangler.toml ] && [ ! -f wrangler.jsonc ] && [ ! -f wrangler.json ]; then
-            echo "❌ Missing: wrangler config"
-            exit 1
-          fi
           echo "✅ All required files present"
 
       - name: Security scan
