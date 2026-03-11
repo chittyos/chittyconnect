@@ -27,7 +27,7 @@ const CHITTYOS_SERVICES = [
   { id: "chittyscore", url: "https://score.chitty.cc" },
   { id: "chittychain", url: "https://chain.chitty.cc" },
   { id: "chittyledger", url: "https://ledger.chitty.cc" },
-  { id: "chittydisputes", url: "https://disputes.chitty.cc" },
+  { id: "chittydisputes", url: "https://command.chitty.cc" },
   { id: "chittytrack", url: "https://track.chitty.cc" },
 ];
 

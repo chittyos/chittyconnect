@@ -76,15 +76,9 @@ name = "MCP_AGENT"
 class_name = "McpConnectAgent"
 script_name = "chittyconnect"
 
-# Durable Objects migrations
-[[migrations]]
-tag = "v1"
-new_classes = ["MCPSessionDurableObject"]
-
-[[migrations]]
-tag = "v2"
-deleted_classes = ["MCPSessionDurableObject"]
-new_sqlite_classes = ["McpConnectAgent"]
+# Durable Objects migrations — v3 (new_classes) and v4 (sqlite migration)
+# already applied in production. No new migrations needed.
+# If adding a new DO class, add a [[migrations]] block with tag = "v5".
 
 # D1 Database for installation mapping
 [[d1_databases]]

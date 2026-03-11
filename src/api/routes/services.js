@@ -25,7 +25,7 @@ const CHITTYOS_SERVICES = [
   { id: "chittyledger", url: "https://ledger.chitty.cc" },
   {
     id: "chittydisputes",
-    url: "https://disputes.chitty.cc",
+    url: "https://command.chitty.cc",
     registryId: "REG-WQ6W5M",
   },
   { id: "chittytrack", url: "https://track.chitty.cc" },

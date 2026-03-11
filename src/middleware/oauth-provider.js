@@ -17,6 +17,7 @@
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { McpConnectAgent } from "../mcp/agent.js";
+import { ChittyIDClient } from "../lib/chittyid-client.js";
 
 /**
  * Create the OAuth-wrapped worker handler
@@ -63,12 +64,63 @@ function createDefaultHandler(honoApp) {
 }
 
 /**
+ * Resolve a ChittyID for an MCP client.
+ *
+ * Looks up `mcp-client:{clientId}` in KV. If not found, mints a new
+ * ChittyID (type P / Synthetic) via id.chitty.cc and caches it.
+ * This gives each MCP client (Notion, Claude Desktop, etc.) a stable
+ * identity for audit trails and per-client access control.
+ *
+ * @canon chittycanon://gov/governance#core-types
+ */
+async function resolveClientChittyId(clientId, env) {
+  const kvKey = `mcp-client:${clientId}`;
+
+  // Check KV cache first
+  const cached = await env.TOKEN_KV.get(kvKey, { type: "json" });
+  if (cached?.chittyId) {
+    return cached.chittyId;
+  }
+
+  // Mint a new ChittyID (P/Synthetic) for this client
+  try {
+    const client = new ChittyIDClient({
+      env,
+      token: env.CHITTY_ID_SERVICE_TOKEN,
+    });
+    const result = await client.mint("person", { trust: 2 });
+    const chittyId = result.chittyId || result.id;
+
+    if (chittyId) {
+      await env.TOKEN_KV.put(
+        kvKey,
+        JSON.stringify({
+          chittyId,
+          clientId,
+          mintedAt: new Date().toISOString(),
+          type: "mcp-client",
+        }),
+      );
+      console.log(`[OAuth] Minted ChittyID ${chittyId} for client ${clientId}`);
+      return chittyId;
+    }
+  } catch (err) {
+    console.error(
+      `[OAuth] Failed to mint ChittyID for client ${clientId}: ${err.message}`,
+    );
+  }
+
+  // Fallback: deterministic synthetic ID so we never block auth
+  return `mcp-client:${clientId}`;
+}
+
+/**
  * Handle OAuth authorization
  *
  * Parses the OAuth request, validates the client, and completes authorization.
- * In production this would redirect to ChittyAuth's login page; for now it
- * auto-approves registered clients (sufficient for Claude Cowork's PKCE flow
- * where the user has already authenticated in the app).
+ * Each client gets a stable ChittyID (type P / Synthetic) for per-client
+ * identity and audit trails. Auto-approves registered clients — when ChittyAuth
+ * gains a login UI, this can redirect there for per-user consent.
  */
 async function handleAuthorize(request, env) {
   // Notion appends ?spaceId=...&userId=... to the redirect_uri, which causes
@@ -120,20 +172,23 @@ async function handleAuthorize(request, env) {
     // Client not found — dynamic registration may be required
   }
 
-  // Complete authorization
-  // FIXME(canonical): Hardcoded userId violates per-actor identification.
-  // Must resolve to authenticated ChittyID (type P) via ChittyAuth.
+  // Resolve a per-client ChittyID (type P / Synthetic).
   // @canon: chittycanon://gov/governance#core-types
+  const clientId = oauthReqInfo.clientId || "unknown";
+  const chittyId = await resolveClientChittyId(clientId, env);
+
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
-    userId: "chittyos-mcp-user",
+    userId: chittyId,
     metadata: {
-      client: clientInfo?.clientName || oauthReqInfo.clientId || "unknown",
+      client: clientInfo?.clientName || clientId,
+      chittyId,
       authorizedAt: new Date().toISOString(),
     },
     scope: oauthReqInfo.scope || ["mcp:read", "mcp:write"],
     props: {
-      userId: "chittyos-mcp-user",
+      userId: chittyId,
+      chittyId,
       source: "oauth",
     },
   });

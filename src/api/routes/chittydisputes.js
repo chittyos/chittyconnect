@@ -51,7 +51,7 @@ chittydisputesRoutes.post("/create", async (c) => {
       );
     }
 
-    const response = await fetch("https://disputes.chitty.cc/api/disputes", {
+    const response = await fetch("https://command.chitty.cc/api/disputes", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -99,7 +99,7 @@ chittydisputesRoutes.get("/:disputeId", async (c) => {
     }
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}`,
+      `https://command.chitty.cc/api/disputes/${disputeId}`,
       {
         headers: {
           Authorization: `Bearer ${serviceToken}`,
@@ -148,7 +148,7 @@ chittydisputesRoutes.get("/", async (c) => {
     if (type) params.append("type", type);
     params.append("limit", limit);
 
-    const url = `https://disputes.chitty.cc/api/disputes?${params.toString()}`;
+    const url = `https://command.chitty.cc/api/disputes?${params.toString()}`;
 
     const response = await fetch(url, {
       headers: {
@@ -191,7 +191,7 @@ chittydisputesRoutes.patch("/:disputeId", async (c) => {
     }
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}`,
+      `https://command.chitty.cc/api/disputes/${disputeId}`,
       {
         method: "PATCH",
         headers: {
@@ -237,7 +237,7 @@ chittydisputesRoutes.post("/:disputeId/events", async (c) => {
     }
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}/events`,
+      `https://command.chitty.cc/api/disputes/${disputeId}/events`,
       {
         method: "POST",
         headers: {

@@ -21,4 +21,27 @@ export class McpConnectAgent extends McpAgent {
     // createMcpServer returns a fully configured McpServer with all 52 tools
     this.server = createMcpServer(this.env, { baseUrl, authToken });
   }
+
+  /**
+   * Handle non-MCP HTTP requests to the Durable Object.
+   * GET /session returns persisted session state from DO storage.
+   */
+  async onRequest(request) {
+    const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === "/session") {
+      const initializeRequest = await this.ctx.storage.get("initializeRequest");
+      const props = await this.ctx.storage.get("props");
+
+      return Response.json({
+        sessionId: this.getSessionId(),
+        active: !!initializeRequest,
+        initializeRequest: initializeRequest || null,
+        props: props || {},
+        transport: this.getTransportType(),
+      });
+    }
+
+    return super.onRequest(request);
+  }
 }
