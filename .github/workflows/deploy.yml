@@ -100,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: wrangler.toml
+          sparse-checkout: wrangler.jsonc
 
       - uses: actions/setup-node@v4
         with:
