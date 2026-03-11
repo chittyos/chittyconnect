@@ -1,13 +1,16 @@
-import React from 'react';
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
-import { useDashboardStore } from './stores/dashboardStore';
+import React from "react";
+import { Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { useDashboardStore } from "./stores/dashboardStore";
 
 // Pages
-import Overview from './pages/Overview';
-import Contexts from './pages/Contexts';
-import ContextDetail from './pages/ContextDetail';
-import Approvals from './pages/Approvals';
-import Teams from './pages/Teams';
+import Overview from "./pages/Overview";
+import Contexts from "./pages/Contexts";
+import ContextDetail from "./pages/ContextDetail";
+import Approvals from "./pages/Approvals";
+import Teams from "./pages/Teams";
+import Connections from "./pages/Connections";
+import ConnectionDetail from "./pages/ConnectionDetail";
+import ConnectionGraph from "./pages/ConnectionGraph";
 
 // Icons
 const Icons = {
@@ -41,6 +44,15 @@ const Icons = {
       <path d="M10 15l2-2 2 2" />
     </svg>
   ),
+  Connections: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="18" cy="18" r="3" />
+      <path d="M8.5 8.5l7 7" />
+      <circle cx="18" cy="6" r="3" />
+      <path d="M8.5 6h7" />
+    </svg>
+  ),
   Settings: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3" />
@@ -71,9 +83,11 @@ function Sidebar() {
           <div className="nav-section-title">Overview</div>
           <NavLink
             to="/"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
           >
-            <span className="nav-item-icon"><Icons.Dashboard /></span>
+            <span className="nav-item-icon">
+              <Icons.Dashboard />
+            </span>
             Dashboard
           </NavLink>
         </div>
@@ -82,12 +96,19 @@ function Sidebar() {
           <div className="nav-section-title">Entities</div>
           <NavLink
             to="/contexts"
-            className={({ isActive }) => `nav-item ${isActive || location.pathname.startsWith('/contexts') ? 'active' : ''}`}
+            className={({ isActive }) =>
+              `nav-item ${isActive || location.pathname.startsWith("/contexts") ? "active" : ""}`
+            }
           >
-            <span className="nav-item-icon"><Icons.Contexts /></span>
+            <span className="nav-item-icon">
+              <Icons.Contexts />
+            </span>
             Contexts
             {stats?.overview?.active_contexts > 0 && (
-              <span className="nav-badge" style={{ background: 'var(--accent-info)' }}>
+              <span
+                className="nav-badge"
+                style={{ background: "var(--accent-info)" }}
+              >
                 {stats.overview.active_contexts}
               </span>
             )}
@@ -95,12 +116,29 @@ function Sidebar() {
         </div>
 
         <div className="nav-section">
+          <div className="nav-section-title">Infrastructure</div>
+          <NavLink
+            to="/connections"
+            className={({ isActive }) =>
+              `nav-item ${isActive || location.pathname.startsWith("/connections") ? "active" : ""}`
+            }
+          >
+            <span className="nav-item-icon">
+              <Icons.Connections />
+            </span>
+            Connections
+          </NavLink>
+        </div>
+
+        <div className="nav-section">
           <div className="nav-section-title">Workflows</div>
           <NavLink
             to="/approvals"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
           >
-            <span className="nav-item-icon"><Icons.Approvals /></span>
+            <span className="nav-item-icon">
+              <Icons.Approvals />
+            </span>
             Approvals
             {stats?.overview?.pending_approvals > 0 && (
               <span className="nav-badge">
@@ -110,19 +148,32 @@ function Sidebar() {
           </NavLink>
           <NavLink
             to="/teams"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
           >
-            <span className="nav-item-icon"><Icons.Teams /></span>
+            <span className="nav-item-icon">
+              <Icons.Teams />
+            </span>
             Team Builder
           </NavLink>
         </div>
       </nav>
 
-      <div style={{ padding: '16px', borderTop: '1px solid var(--border-primary)' }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+      <div
+        style={{
+          padding: "16px",
+          borderTop: "1px solid var(--border-primary)",
+        }}
+      >
+        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           Connected to
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--accent-success)', marginTop: '4px' }}>
+        <div
+          style={{
+            fontSize: "12px",
+            color: "var(--accent-success)",
+            marginTop: "4px",
+          }}
+        >
           connect.chitty.cc
         </div>
       </div>
@@ -139,6 +190,9 @@ export default function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/contexts" element={<Contexts />} />
           <Route path="/contexts/:id" element={<ContextDetail />} />
+          <Route path="/connections" element={<Connections />} />
+          <Route path="/connections/graph" element={<ConnectionGraph />} />
+          <Route path="/connections/:slug" element={<ConnectionDetail />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/teams" element={<Teams />} />
         </Routes>
