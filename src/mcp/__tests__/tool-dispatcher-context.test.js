@@ -115,7 +115,7 @@ describe("Context MCP Tools", () => {
   });
 
   describe("memory_persist (enhanced)", () => {
-    it("should include chitty_id in request body", async () => {
+    it("should include chitty_id in interaction body", async () => {
       await dispatchToolCall(
         "memory_persist",
         {
@@ -126,23 +126,27 @@ describe("Context MCP Tools", () => {
         opts,
       );
       const body = JSON.parse(fetch.mock.calls[0][1].body);
-      expect(body.chitty_id).toBe("03-1-USA-1234-P-2602-0-01");
+      expect(body.interaction.chitty_id).toBe("03-1-USA-1234-P-2602-0-01");
+      expect(body.sessionId).toBe("default");
     });
   });
 
   describe("memory_recall (enhanced)", () => {
-    it("should include chitty_id as query param", async () => {
+    it("should POST query to intelligence memory recall endpoint", async () => {
       await dispatchToolCall(
         "memory_recall",
         {
           query: "test",
-          chitty_id: "03-1-USA-1234-P-2602-0-01",
+          session_id: "sess-1",
         },
         env,
         opts,
       );
       const url = fetch.mock.calls[0][0];
-      expect(url).toContain("chitty_id=03-1-USA-1234-P-2602-0-01");
+      expect(url).toContain("/api/intelligence/memory/recall");
+      const body = JSON.parse(fetch.mock.calls[0][1].body);
+      expect(body.query).toBe("test");
+      expect(body.sessionId).toBe("sess-1");
     });
   });
 });

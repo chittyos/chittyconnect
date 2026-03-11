@@ -75,6 +75,9 @@ export class MemoryCloude {
     // 5. Update session index
     await this.updateSessionIndex(sessionId, interactionId);
 
+    // 6. Update user index for cross-session history
+    await this.updateUserIndex(interaction.userId, sessionId, interactionId);
+
     console.log(`[MemoryCloude™] Persisted interaction ${interactionId}`);
   }
 
@@ -181,6 +184,32 @@ export class MemoryCloude {
       interactions: [],
     };
     existing.interactions.push(interactionId);
+    existing.lastUpdate = Date.now();
+
+    await this.kv.put(indexKey, JSON.stringify(existing), {
+      expirationTtl: this.retention.conversations * 86400,
+    });
+  }
+
+  /**
+   * Update user index for cross-session history lookups
+   */
+  async updateUserIndex(userId, sessionId, interactionId) {
+    if (!userId) return;
+    const indexKey = `user:${userId}:index`;
+
+    const existing = (await this.kv.get(indexKey, "json")) || {
+      sessions: [],
+      interactions: [],
+    };
+    if (!existing.sessions.includes(sessionId)) {
+      existing.sessions.push(sessionId);
+    }
+    existing.interactions.push({
+      id: interactionId,
+      sessionId,
+      timestamp: Date.now(),
+    });
     existing.lastUpdate = Date.now();
 
     await this.kv.put(indexKey, JSON.stringify(existing), {
@@ -405,11 +434,46 @@ export class MemoryCloude {
   /**
    * Get user history across sessions
    */
-  async getUserHistory(_userId, _limit = 100) {
-    // This would require a user index, which we can implement
-    // For now, return empty array
-    console.warn("[MemoryCloude™] User history not yet implemented");
-    return [];
+  async getUserHistory(userId, limit = 100) {
+    if (!userId) return [];
+
+    const indexKey = `user:${userId}:index`;
+    const index = await this.kv.get(indexKey, "json");
+
+    if (!index || !index.interactions || index.interactions.length === 0) {
+      return [];
+    }
+
+    const interactions = [];
+
+    // Iterate in reverse — newest entries are appended last
+    const entries = index.interactions.slice(-limit * 2).reverse();
+
+    for (const entry of entries) {
+      // Support both object entries { id, sessionId, timestamp } and legacy string IDs
+      const sessionId =
+        typeof entry === "string"
+          ? index.sessions?.[0] || null
+          : entry.sessionId;
+      const interactionId = typeof entry === "string" ? entry : entry.id;
+
+      if (!sessionId || !interactionId) continue;
+
+      // Extract timestamp from interaction ID (format: sessionId-timestamp)
+      const parts = interactionId.split("-");
+      const timestamp = parts[parts.length - 1];
+      const data = await this.kv.get(
+        `session:${sessionId}:${timestamp}`,
+        "json",
+      );
+
+      if (data) {
+        interactions.push(data);
+        if (interactions.length >= limit) break;
+      }
+    }
+
+    return interactions;
   }
 
   /**
