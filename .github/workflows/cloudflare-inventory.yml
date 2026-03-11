@@ -32,7 +32,7 @@ jobs:
       - name: Verify expected Workers exist (non-blocking)
         continue-on-error: true
         run: |
-          node scripts/verify-cloudflare-scripts.js --inv cloudflare-inventory.json --wrangler wrangler.toml
+          node scripts/verify-cloudflare-scripts.js --inv cloudflare-inventory.json --wrangler wrangler.jsonc
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

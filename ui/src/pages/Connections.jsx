@@ -53,18 +53,24 @@ export default function Connections() {
 
   const handleTestAll = async () => {
     setTestingAll(true);
-    await testAllConnections();
-    await Promise.all([fetchConnections(), fetchConnectionStats()]);
-    setTestingAll(false);
+    try {
+      await testAllConnections();
+      await Promise.all([fetchConnections(), fetchConnectionStats()]);
+    } finally {
+      setTestingAll(false);
+    }
   };
 
   const handleTest = async (e, slug) => {
     e.preventDefault();
     e.stopPropagation();
     setTestingSlug(slug);
-    await testConnection(slug);
-    await fetchConnections();
-    setTestingSlug(null);
+    try {
+      await testConnection(slug);
+      await fetchConnections();
+    } finally {
+      setTestingSlug(null);
+    }
   };
 
   const stats = connectionStats || {};

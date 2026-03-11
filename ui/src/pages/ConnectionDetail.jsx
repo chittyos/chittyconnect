@@ -98,28 +98,36 @@ export default function ConnectionDetail() {
 
   const handleSave = async () => {
     setSaving(true);
-    const updates = { ...form };
-    updates.tags = form.tags
-      ? form.tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      : [];
-    await updateConnection(slug, updates);
-    setEditing(false);
-    setSaving(false);
+    try {
+      const updates = { ...form };
+      updates.tags = form.tags
+        ? form.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [];
+      await updateConnection(slug, updates);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const result = await testConnection(slug);
-    setTestResult(
-      result.success ? result.data : { status: "error", error: result.error },
-    );
-    await fetchConnection(slug);
-    await fetchConnectionHealthHistory(slug);
-    setTesting(false);
+    try {
+      const result = await testConnection(slug);
+      setTestResult(
+        result.success
+          ? result.data
+          : { status: "error", error: result.error },
+      );
+      await fetchConnection(slug);
+      await fetchConnectionHealthHistory(slug);
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleCredTest = async () => {
