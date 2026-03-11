@@ -77,7 +77,11 @@ export async function resolveBinding(clientId, env, contextHints = {}) {
     // Rehydrate KV cache
     await writeKvCache(cacheKey, dbBinding, env);
     touchBinding(cacheKey, env).catch(() => {});
-    return { chittyId: dbBinding.chitty_id, binding: dbBinding, source: "neon" };
+    return {
+      chittyId: dbBinding.chitty_id,
+      binding: dbBinding,
+      source: "neon",
+    };
   }
 
   // 3. Mint new ChittyID
@@ -246,13 +250,11 @@ async function mintClientChittyId(clientId, env) {
     const result = await client.mint("person", { trust: 2 });
     const chittyId = result.chittyId || result.id;
     if (chittyId) {
-      console.log(`[ClientBinding] Minted ChittyID ${chittyId} for ${clientId}`);
+      console.log(`[ClientBinding] Minted ChittyID for client`);
       return chittyId;
     }
   } catch (err) {
-    console.error(
-      `[ClientBinding] Mint failed for ${clientId}: ${err.message}`,
-    );
+    console.error(`[ClientBinding] Mint failed: ${err.message}`);
   }
   // Fallback: deterministic synthetic ID so we never block auth
   return `mcp-client:${clientId}`;
