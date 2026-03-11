@@ -17,7 +17,10 @@
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { McpConnectAgent } from "../mcp/agent.js";
-import { ChittyIDClient } from "../lib/chittyid-client.js";
+import {
+  resolveBinding,
+  ClientBindingError,
+} from "../services/client-binding.js";
 
 /**
  * Create the OAuth-wrapped worker handler
@@ -61,57 +64,6 @@ function createDefaultHandler(honoApp) {
       return honoApp.fetch(request, env, ctx);
     },
   };
-}
-
-/**
- * Resolve a ChittyID for an MCP client.
- *
- * Looks up `mcp-client:{clientId}` in KV. If not found, mints a new
- * ChittyID (type P / Synthetic) via id.chitty.cc and caches it.
- * This gives each MCP client (Notion, Claude Desktop, etc.) a stable
- * identity for audit trails and per-client access control.
- *
- * @canon chittycanon://gov/governance#core-types
- */
-async function resolveClientChittyId(clientId, env) {
-  const kvKey = `mcp-client:${clientId}`;
-
-  // Check KV cache first
-  const cached = await env.TOKEN_KV.get(kvKey, { type: "json" });
-  if (cached?.chittyId) {
-    return cached.chittyId;
-  }
-
-  // Mint a new ChittyID (P/Synthetic) for this client
-  try {
-    const client = new ChittyIDClient({
-      env,
-      token: env.CHITTY_ID_SERVICE_TOKEN,
-    });
-    const result = await client.mint("person", { trust: 2 });
-    const chittyId = result.chittyId || result.id;
-
-    if (chittyId) {
-      await env.TOKEN_KV.put(
-        kvKey,
-        JSON.stringify({
-          chittyId,
-          clientId,
-          mintedAt: new Date().toISOString(),
-          type: "mcp-client",
-        }),
-      );
-      console.log(`[OAuth] Minted ChittyID ${chittyId} for client ${clientId}`);
-      return chittyId;
-    }
-  } catch (err) {
-    console.error(
-      `[OAuth] Failed to mint ChittyID for client ${clientId}: ${err.message}`,
-    );
-  }
-
-  // Fallback: deterministic synthetic ID so we never block auth
-  return `mcp-client:${clientId}`;
 }
 
 /**
@@ -172,10 +124,30 @@ async function handleAuthorize(request, env) {
     // Client not found — dynamic registration may be required
   }
 
-  // Resolve a per-client ChittyID (type P / Synthetic).
-  // @canon: chittycanon://gov/governance#core-types
+  // Extract context hints from redirect params (Notion sends spaceId, userId)
+  const contextHints = {};
+  if (extraRedirectParams) {
+    const extra = new URLSearchParams(extraRedirectParams);
+    if (extra.has("spaceId")) contextHints.spaceId = extra.get("spaceId");
+    if (extra.has("userId")) contextHints.userId = extra.get("userId");
+  }
+
+  // Zero-trust: resolve binding via Neon-backed service.
+  // Checks revocation status, mints if new, caches in KV.
   const clientId = oauthReqInfo.clientId || "unknown";
-  const chittyId = await resolveClientChittyId(clientId, env);
+  let chittyId;
+  try {
+    const result = await resolveBinding(clientId, env, contextHints);
+    chittyId = result.chittyId;
+  } catch (err) {
+    if (err instanceof ClientBindingError && err.code === "BINDING_REVOKED") {
+      console.error(`[OAuth] Rejected revoked binding: ${err.message}`);
+      return new Response("Access revoked", { status: 403 });
+    }
+    // Binding resolution failed — fallback so we don't block auth entirely
+    console.error(`[OAuth] Binding resolution failed: ${err.message}`);
+    chittyId = `mcp-client:${clientId}`;
+  }
 
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
