@@ -108,7 +108,10 @@
 
   // Scheduled triggers for background tasks
   "triggers": {
-    "crons": ["0 * * * *"]  // Hourly: Sync 1Password Events to ChittyChronicle
+    "crons": [
+      "0 * * * *",     // Hourly: Sync 1Password Events to ChittyChronicle
+      "*/5 * * * *"    // Every 5 min: Connection health checks
+    ]
   },
 
   // Analytics and logging

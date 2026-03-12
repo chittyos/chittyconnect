@@ -120,20 +120,19 @@ async function handleAuthorize(request, env) {
     // Client not found — dynamic registration may be required
   }
 
-  // Complete authorization
-  // FIXME(canonical): Hardcoded userId violates per-actor identification.
-  // Must resolve to authenticated ChittyID (type P) via ChittyAuth.
+  // Complete authorization — derive per-actor userId from client identity
   // @canon: chittycanon://gov/governance#core-types
+  const actorId = `mcp-client:${oauthReqInfo.clientId || "anonymous"}`;
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
-    userId: "chittyos-mcp-user",
+    userId: actorId,
     metadata: {
       client: clientInfo?.clientName || oauthReqInfo.clientId || "unknown",
       authorizedAt: new Date().toISOString(),
     },
     scope: oauthReqInfo.scope || ["mcp:read", "mcp:write"],
     props: {
-      userId: "chittyos-mcp-user",
+      userId: actorId,
       source: "oauth",
     },
   });

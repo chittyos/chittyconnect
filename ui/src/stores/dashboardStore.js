@@ -335,6 +335,8 @@ export const useDashboardStore = create((set, get) => ({
   connectionFilters: {
     category: null,
     status: "active",
+    search: "",
+    sort: "tier",
   },
 
   setConnectionFilters: (newFilters) =>
@@ -351,6 +353,9 @@ export const useDashboardStore = create((set, get) => ({
         params.set("category", connectionFilters.category);
       if (connectionFilters.status)
         params.set("status", connectionFilters.status);
+      if (connectionFilters.search)
+        params.set("search", connectionFilters.search);
+      if (connectionFilters.sort) params.set("sort", connectionFilters.sort);
 
       const response = await fetch(`${API_BASE}/api/connections?${params}`);
       const data = await response.json();

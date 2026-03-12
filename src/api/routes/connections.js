@@ -18,8 +18,10 @@ connectionsRoutes.get("/", async (c) => {
   try {
     const category = c.req.query("category");
     const status = c.req.query("status");
+    const search = c.req.query("search");
+    const sort = c.req.query("sort"); // name, latency, status, tier
     const limit = Math.max(
-      0,
+      1,
       Math.min(
         Number.isFinite(+c.req.query("limit")) ? +c.req.query("limit") : 100,
         200,
@@ -41,8 +43,20 @@ connectionsRoutes.get("/", async (c) => {
       query += " AND status = ?";
       params.push(status);
     }
+    if (search) {
+      query += " AND (name LIKE ? OR slug LIKE ? OR description LIKE ?)";
+      const s = `%${search}%`;
+      params.push(s, s, s);
+    }
 
-    query += " ORDER BY tier ASC NULLS LAST, name ASC LIMIT ? OFFSET ?";
+    const SORT_MAP = {
+      name: "name ASC",
+      latency: "last_health_latency_ms ASC NULLS LAST",
+      status: "last_health_status ASC NULLS LAST, name ASC",
+      tier: "tier ASC NULLS LAST, name ASC",
+    };
+    const orderBy = SORT_MAP[sort] || "tier ASC NULLS LAST, name ASC";
+    query += ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
     const result = await c.env.DB.prepare(query)
@@ -314,6 +328,23 @@ connectionsRoutes.put("/:slug", async (c) => {
       );
     }
 
+    // Validate base_url if being updated
+    if (body.base_url !== undefined && body.base_url !== null) {
+      if (!isUrlSafe(body.base_url) && body.base_url !== "") {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: "INVALID_URL",
+              message:
+                "base_url must use https and target an approved host (*.chitty.cc or known third-party)",
+            },
+          },
+          400,
+        );
+      }
+    }
+
     const fields = [];
     const values = [];
 
@@ -522,47 +553,56 @@ connectionsRoutes.post("/test-all", async (c) => {
       "SELECT * FROM connections WHERE status = 'active'",
     ).all();
 
-    const results = await Promise.all(
-      (conns.results || []).map(async (conn) => {
-        const result = await performHealthCheck(conn, c.env);
+    // Run health checks in batches of 5 to avoid overwhelming downstream
+    const allConns = conns.results || [];
+    const BATCH_SIZE = 5;
+    const results = [];
 
-        // Update + log in parallel
-        await Promise.all([
-          c.env.DB.prepare(
-            `UPDATE connections SET
-              last_health_check = datetime('now'),
-              last_health_status = ?,
-              last_health_latency_ms = ?,
-              consecutive_failures = ?,
-              error_count = error_count + ?,
-              updated_at = datetime('now')
-             WHERE id = ?`,
-          )
-            .bind(
-              result.status,
-              result.latency_ms,
-              result.status === "healthy" ? 0 : conn.consecutive_failures + 1,
-              result.status === "healthy" ? 0 : 1,
-              conn.id,
-            )
-            .run(),
-          c.env.DB.prepare(
-            `INSERT INTO connection_health_log (connection_id, status, latency_ms, status_code, error_message)
-             VALUES (?, ?, ?, ?, ?)`,
-          )
-            .bind(
-              conn.id,
-              result.status,
-              result.latency_ms,
-              result.status_code || null,
-              result.error || null,
-            )
-            .run(),
-        ]);
+    for (let i = 0; i < allConns.length; i += BATCH_SIZE) {
+      const batch = allConns.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (conn) => {
+          const result = await performHealthCheck(conn, c.env);
 
-        return { slug: conn.slug, name: conn.name, ...result };
-      }),
-    );
+          // Update + log in parallel
+          await Promise.all([
+            c.env.DB.prepare(
+              `UPDATE connections SET
+                last_health_check = datetime('now'),
+                last_health_status = ?,
+                last_health_latency_ms = ?,
+                consecutive_failures = ?,
+                error_count = error_count + ?,
+                updated_at = datetime('now')
+               WHERE id = ?`,
+            )
+              .bind(
+                result.status,
+                result.latency_ms,
+                result.status === "healthy" ? 0 : conn.consecutive_failures + 1,
+                result.status === "healthy" ? 0 : 1,
+                conn.id,
+              )
+              .run(),
+            c.env.DB.prepare(
+              `INSERT INTO connection_health_log (connection_id, status, latency_ms, status_code, error_message)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+              .bind(
+                conn.id,
+                result.status,
+                result.latency_ms,
+                result.status_code || null,
+                result.error || null,
+              )
+              .run(),
+          ]);
+
+          return { slug: conn.slug, name: conn.name, ...result };
+        }),
+      );
+      results.push(...batchResults);
+    }
 
     const summary = {
       total: results.length,
@@ -733,6 +773,62 @@ connectionsRoutes.post("/:slug/credential/test", async (c) => {
 
 // --- Helpers ---
 
+/**
+ * Validate a URL is safe for outbound requests (SSRF prevention).
+ * Allows only http/https to known ChittyOS domains and approved third-party hosts.
+ */
+const ALLOWED_HOSTS = new Set([
+  // ChittyOS services
+  "id.chitty.cc",
+  "auth.chitty.cc",
+  "registry.chitty.cc",
+  "connect.chitty.cc",
+  "mcp.chitty.cc",
+  "evidence.chitty.cc",
+  "cases.chitty.cc",
+  "chronicle.chitty.cc",
+  "finance.chitty.cc",
+  "sync.chitty.cc",
+  "contextual.chitty.cc",
+  "proof.chitty.cc",
+  "trust.chitty.cc",
+  "verify.chitty.cc",
+  "monitor.chitty.cc",
+  "discovery.chitty.cc",
+  "beacon.chitty.cc",
+  "score.chitty.cc",
+  "portal.chitty.cc",
+  "dashboard.chitty.cc",
+  "router.chitty.cc",
+  "api.chitty.cc",
+  // Third-party
+  "api.notion.com",
+  "api.github.com",
+  "api.openai.com",
+  "neon.tech",
+  "console.neon.tech",
+  "api.stripe.com",
+  "api.twilio.com",
+  "api.cloudflare.com",
+  "www.googleapis.com",
+  "1password-connect.chitty.cc",
+]);
+
+function isUrlSafe(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    const host = url.hostname.toLowerCase();
+    // Allow any *.chitty.cc subdomain
+    if (host.endsWith(".chitty.cc")) return true;
+    // Allow explicit third-party hosts
+    if (ALLOWED_HOSTS.has(host)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function safeParseJSON(str, fallback) {
   try {
     return str ? JSON.parse(str) : fallback;
@@ -762,6 +858,13 @@ async function performHealthCheck(conn, env) {
   ) {
     try {
       const url = conn.base_url + conn.health_endpoint;
+      if (!isUrlSafe(url)) {
+        return {
+          status: "down",
+          latency_ms: Date.now() - start,
+          error: "URL blocked by SSRF policy",
+        };
+      }
       const response = await fetch(url, {
         method: "GET",
         signal: AbortSignal.timeout(5000),
@@ -792,6 +895,14 @@ async function performHealthCheck(conn, env) {
 
   // Third-party with known health endpoints
   if (conn.base_url && conn.health_endpoint) {
+    const thirdPartyUrl = conn.base_url + conn.health_endpoint;
+    if (!isUrlSafe(thirdPartyUrl)) {
+      return {
+        status: "down",
+        latency_ms: Date.now() - start,
+        error: "URL blocked by SSRF policy",
+      };
+    }
     try {
       // Need auth for most third-party endpoints
       const credential = conn.credential_path
@@ -882,4 +993,68 @@ async function performHealthCheck(conn, env) {
   };
 }
 
-export { connectionsRoutes };
+/**
+ * Run health checks on all active connections (used by cron trigger).
+ * Returns summary object { total, healthy, degraded, down }.
+ */
+async function runAllHealthChecks(env) {
+  const conns = await env.DB.prepare(
+    "SELECT * FROM connections WHERE status = 'active'",
+  ).all();
+
+  const allConns = conns.results || [];
+  const BATCH_SIZE = 5;
+  let healthy = 0;
+  let degraded = 0;
+  let down = 0;
+
+  for (let i = 0; i < allConns.length; i += BATCH_SIZE) {
+    const batch = allConns.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (conn) => {
+        const result = await performHealthCheck(conn, env);
+
+        if (result.status === "healthy") healthy++;
+        else if (result.status === "degraded") degraded++;
+        else down++;
+
+        await Promise.all([
+          env.DB.prepare(
+            `UPDATE connections SET
+              last_health_check = datetime('now'),
+              last_health_status = ?,
+              last_health_latency_ms = ?,
+              consecutive_failures = ?,
+              error_count = error_count + ?,
+              updated_at = datetime('now')
+             WHERE id = ?`,
+          )
+            .bind(
+              result.status,
+              result.latency_ms,
+              result.status === "healthy" ? 0 : conn.consecutive_failures + 1,
+              result.status === "healthy" ? 0 : 1,
+              conn.id,
+            )
+            .run(),
+          env.DB.prepare(
+            `INSERT INTO connection_health_log (connection_id, status, latency_ms, status_code, error_message)
+             VALUES (?, ?, ?, ?, ?)`,
+          )
+            .bind(
+              conn.id,
+              result.status,
+              result.latency_ms,
+              result.status_code || null,
+              result.error || null,
+            )
+            .run(),
+        ]);
+      }),
+    );
+  }
+
+  return { total: allConns.length, healthy, degraded, down };
+}
+
+export { connectionsRoutes, runAllHealthChecks };

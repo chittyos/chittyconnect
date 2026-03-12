@@ -16,6 +16,13 @@ const STATUSES = [
   { value: "inactive", label: "Inactive" },
 ];
 
+const SORTS = [
+  { value: "tier", label: "Tier" },
+  { value: "name", label: "Name" },
+  { value: "latency", label: "Latency" },
+  { value: "status", label: "Health" },
+];
+
 const CATEGORY_COLORS = {
   chittyos_service: "#6366f1",
   thirdparty: "#06b6d4",
@@ -148,6 +155,46 @@ export default function Connections() {
           </div>
         </div>
 
+        {/* Search + Sort */}
+        <div
+          className="filters-bar"
+          style={{ display: "flex", gap: "12px", alignItems: "center" }}
+        >
+          <input
+            type="text"
+            placeholder="Search connections..."
+            value={connectionFilters.search || ""}
+            onChange={(e) => setConnectionFilters({ search: e.target.value })}
+            style={{
+              flex: 1,
+              maxWidth: "300px",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              background: "var(--bg-secondary)",
+              color: "var(--text-primary)",
+              fontSize: "13px",
+            }}
+          />
+          <span
+            style={{
+              fontSize: "13px",
+              color: "var(--text-muted)",
+            }}
+          >
+            Sort:
+          </span>
+          {SORTS.map((s) => (
+            <button
+              key={s.value}
+              className={`filter-chip ${connectionFilters.sort === s.value ? "active" : ""}`}
+              onClick={() => setConnectionFilters({ sort: s.value })}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="filters-bar">
           <span
@@ -264,8 +311,10 @@ export default function Connections() {
           <div className="empty-state">
             <div className="empty-state-title">No connections found</div>
             <div className="empty-state-message">
-              {connectionFilters.category || connectionFilters.status
-                ? "Try adjusting your filters"
+              {connectionFilters.category ||
+              connectionFilters.search ||
+              connectionFilters.status !== "active"
+                ? "Try adjusting your filters or search"
                 : "Run the migration to seed connection data"}
             </div>
           </div>
