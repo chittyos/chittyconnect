@@ -31,6 +31,7 @@ import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engin
 import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
+import { runAllHealthChecks } from "./api/routes/connections.js";
 
 const app = new Hono();
 
@@ -1604,14 +1605,28 @@ export default {
     }
   },
 
-  /**
-   * Scheduled handler for cron triggers
-   * Runs hourly (0 * * * *) for 1Password event sync to ChittyChronicle
-   */
+  // Scheduled handler for cron triggers
+  // - "0 * * * *"     (hourly)  → 1Password event sync to ChittyChronicle
+  // - every 5 min     → Connection health checks
   async scheduled(event, env, ctx) {
     console.log(
       `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
     );
+
+    // Connection health checks (every 5 minutes)
+    if (event.cron === "*/5 * * * *") {
+      try {
+        const summary = await runAllHealthChecks(env);
+        console.log(
+          `[Scheduled] Health checks complete: ${summary.healthy}/${summary.total} healthy, ${summary.degraded} degraded, ${summary.down} down`,
+        );
+      } catch (err) {
+        console.error(`[Scheduled] Health checks failed:`, err.message);
+      }
+      return;
+    }
+
+    // 1Password event sync (hourly)
     try {
       const response = await fetch(
         "https://chronicle.chitty.cc/api/sync/1password",
