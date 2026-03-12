@@ -55,6 +55,7 @@ Use `--help` flags from your MCP client to connect. See `MCP_QUICK_REFERENCE.md`
 - **[Quick Start Guide](QUICK_START.md)** - Get up and running in 30 minutes
 - **[Architecture Analysis](ARCHITECTURE_ANALYSIS.md)** - Comprehensive architectural review and improvement proposals
 - **[Innovation Roadmap](INNOVATION_ROADMAP.md)** - ContextConsciousness™ & MemoryCloude™ vision and implementation
+- **[Integrations](docs/integrations/README.md)** - Operational integration notes, including Gmail-to-ChittyRouter intake
 
 ## 🌟 Features
 
