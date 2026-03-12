@@ -142,7 +142,7 @@ async function ensureEcosystemInitialized(env) {
     const ecosystem = new ChittyOSEcosystem(env);
     ecosystem
       .initializeContext("chittyconnect", {
-        version: "2.1.0",
+        version: "2.2.0",
         type: "ai-integration-hub",
         capabilities: [
           "mcp",
@@ -214,7 +214,7 @@ app.get("/health", (c) => {
     brand: "itsChitty™",
     tagline:
       "The AI-intelligent spine with ContextConsciousness™, MemoryCloude™, and Cognitive-Coordination™",
-    version: "2.1.0",
+    version: "2.2.0",
     timestamp: new Date().toISOString(),
     intelligence: {
       contextConsciousness: !!c.get("consciousness"),
@@ -1510,7 +1510,7 @@ export default {
         JSON.stringify({
           mcpVersion: "2025-03-26",
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "ChittyConnect", version: "2.1.0" },
+          serverInfo: { name: "ChittyConnect", version: "2.2.0" },
           url: `${url.origin}/mcp`,
         }),
         {

@@ -1,0 +1,48 @@
+title = "ChittyConnect Gitleaks Configuration"
+
+[allowlist]
+  description = "Allowlisted patterns"
+  paths = [
+    '''\.github/secret-catalog\.json''',
+    '''\.github/allowed-workflow-secrets\.txt''',
+    '''tests/.*\.test\.(js|ts)''',
+    '''__tests__/.*\.test\.(js|ts)''',
+  ]
+
+[[rules]]
+  id = "cloudflare-api-token"
+  description = "Cloudflare API Token"
+  regex = '''(?i)cloudflare[_\-]?api[_\-]?token\s*[:=]\s*["\']([a-zA-Z0-9_\-]{40,})'''
+  secretGroup = 1
+
+[[rules]]
+  id = "neon-database-url"
+  description = "Neon Database URL"
+  regex = '''postgres(ql)?:\/\/[^:]+:[^@]+@[a-z0-9\-]+\.neon\.tech'''
+
+[[rules]]
+  id = "jwt-secret"
+  description = "JWT Secret"
+  regex = '''(?i)jwt[_\-]?secret\s*[:=]\s*["\']([^\s"\']{16,})'''
+  secretGroup = 1
+
+[[rules]]
+  id = "1password-token"
+  description = "1Password Connect Token"
+  regex = '''(?i)op[_\-]?connect[_\-]?token\s*[:=]\s*["\']([^\s"\']{20,})'''
+  secretGroup = 1
+
+[[rules]]
+  id = "openai-api-key"
+  description = "OpenAI API Key"
+  regex = '''sk-[a-zA-Z0-9]{20,}'''
+
+[[rules]]
+  id = "notion-api-key"
+  description = "Notion API Key"
+  regex = '''(?:ntn_|secret_)[a-zA-Z0-9]{20,}'''
+
+[[rules]]
+  id = "github-private-key"
+  description = "GitHub App Private Key"
+  regex = '''-----BEGIN RSA PRIVATE KEY-----'''

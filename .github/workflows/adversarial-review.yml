@@ -1,0 +1,39 @@
+name: Adversarial Review Orchestrator
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check for high-risk patterns
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -e
+          diff_output=$(git diff "$PR_BASE_SHA" "$PR_HEAD_SHA" || true)
+
+          # Check for hardcoded secrets patterns
+          if echo "$diff_output" | grep -iE '(password|secret|token|api_key)\s*[:=]\s*["\x27][^"\x27]{8,}' | grep -v test | grep -v mock; then
+            echo "::warning::Potential hardcoded secret detected in diff"
+          fi
+
+          # Check for eval/exec patterns
+          if echo "$diff_output" | grep -E '^\+.*\b(eval|exec|Function)\s*\(' | grep -v test; then
+            echo "::warning::Dynamic code execution pattern detected"
+          fi
+
+          echo "Adversarial review complete"

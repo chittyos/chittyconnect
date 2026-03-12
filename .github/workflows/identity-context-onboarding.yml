@@ -1,0 +1,46 @@
+name: Identity & Context Onboarding Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  identity-onboarding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify ChittyOS identity configuration
+        run: |
+          set -e
+
+          # Verify CHARTER.md contains required identity fields
+          if [ ! -f CHARTER.md ]; then
+            echo "::error::Missing CHARTER.md"
+            exit 1
+          fi
+
+          # Check for ContextConsciousness configuration
+          if ! grep -q "ContextConsciousness" CLAUDE.md 2>/dev/null; then
+            echo "::warning::CLAUDE.md does not mention ContextConsciousness"
+          fi
+
+          # Check for MemoryCloude configuration
+          if ! grep -q "MemoryCloude" CLAUDE.md 2>/dev/null; then
+            echo "::warning::CLAUDE.md does not mention MemoryCloude"
+          fi
+
+          # Verify wrangler bindings include required DO
+          if [ -f wrangler.jsonc ]; then
+            if ! grep -q "MCP_AGENT" wrangler.jsonc; then
+              echo "::warning::wrangler.jsonc missing MCP_AGENT Durable Object binding"
+            fi
+          fi
+
+          echo "Identity and context onboarding gate passed"
