@@ -1,6 +1,17 @@
 import { create } from "zustand";
+import { useAuthStore } from "./authStore";
 
 const API_BASE = import.meta.env.PROD ? "https://connect.chitty.cc" : "";
+
+async function authFetch(url, options = {}) {
+  const authHeaders = useAuthStore.getState().getAuthHeaders();
+  const headers = { ...authHeaders, ...(options.headers || {}) };
+  const response = await authFetch(url, { ...options, headers });
+  if (response.status === 401) {
+    useAuthStore.getState().logout();
+  }
+  return response;
+}
 
 export const useDashboardStore = create((set, get) => ({
   // State
@@ -36,7 +47,7 @@ export const useDashboardStore = create((set, get) => ({
         params.set("support_type", filters.support_type);
       if (filters.trust_level) params.set("trust_level", filters.trust_level);
 
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts?${params}`,
       );
       const data = await response.json();
@@ -55,7 +66,7 @@ export const useDashboardStore = create((set, get) => ({
   fetchContext: async (id) => {
     set({ loading: true, error: null });
     try {
-      const response = await fetch(`${API_BASE}/api/dashboard/contexts/${id}`);
+      const response = await authFetch(`${API_BASE}/api/dashboard/contexts/${id}`);
       const data = await response.json();
 
       if (data.success) {
@@ -74,7 +85,7 @@ export const useDashboardStore = create((set, get) => ({
   // Fetch dashboard stats
   fetchStats: async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/dashboard/stats`);
+      const response = await authFetch(`${API_BASE}/api/dashboard/stats`);
       const data = await response.json();
 
       if (data.success) {
@@ -88,7 +99,7 @@ export const useDashboardStore = create((set, get) => ({
   // Fetch approvals
   fetchApprovals: async (status = "pending") => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/approvals?status=${status}`,
       );
       const data = await response.json();
@@ -104,7 +115,7 @@ export const useDashboardStore = create((set, get) => ({
   // Approve request
   approveRequest: async (approvalId, approverChittyId, notes) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/approvals/${approvalId}/approve`,
         {
           method: "POST",
@@ -127,7 +138,7 @@ export const useDashboardStore = create((set, get) => ({
   // Deny request
   denyRequest: async (approvalId, denierChittyId, reason) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/approvals/${approvalId}/deny`,
         {
           method: "POST",
@@ -150,7 +161,7 @@ export const useDashboardStore = create((set, get) => ({
   // Get trust timeline
   fetchTrustTimeline: async (contextId, days = 30) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/trust-timeline?days=${days}`,
       );
       const data = await response.json();
@@ -164,7 +175,7 @@ export const useDashboardStore = create((set, get) => ({
   // Adjust trust
   adjustTrust: async (contextId, adjustment, reason) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/trust/adjust`,
         {
           method: "POST",
@@ -187,7 +198,7 @@ export const useDashboardStore = create((set, get) => ({
   // Decommission preview
   previewDecommission: async (contextId) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/decommission/preview`,
       );
       const data = await response.json();
@@ -201,7 +212,7 @@ export const useDashboardStore = create((set, get) => ({
   // Decommission context
   decommissionContext: async (contextId, action, reason, force = false) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/decommission`,
         {
           method: "POST",
@@ -224,7 +235,7 @@ export const useDashboardStore = create((set, get) => ({
   // Reactivate context
   reactivateContext: async (contextId, reason) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/reactivate`,
         {
           method: "POST",
@@ -247,7 +258,7 @@ export const useDashboardStore = create((set, get) => ({
   // Get Alchemy suggestions
   fetchAlchemy: async (contextId) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/contexts/${contextId}/alchemy`,
       );
       const data = await response.json();
@@ -269,7 +280,7 @@ export const useDashboardStore = create((set, get) => ({
       if (criteria.required_competencies)
         params.set("required_competencies", criteria.required_competencies);
 
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/team-candidates?${params}`,
       );
       const data = await response.json();
@@ -288,7 +299,7 @@ export const useDashboardStore = create((set, get) => ({
   // Bind team to project
   bindTeamToProject: async (projectId, contextIds, roleAssignments = {}) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/projects/${projectId}/bind`,
         {
           method: "POST",
@@ -310,7 +321,7 @@ export const useDashboardStore = create((set, get) => ({
   // Get project team
   fetchProjectTeam: async (projectId) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/dashboard/projects/${projectId}/team`,
       );
       const data = await response.json();
@@ -357,7 +368,7 @@ export const useDashboardStore = create((set, get) => ({
         params.set("search", connectionFilters.search);
       if (connectionFilters.sort) params.set("sort", connectionFilters.sort);
 
-      const response = await fetch(`${API_BASE}/api/connections?${params}`);
+      const response = await authFetch(`${API_BASE}/api/connections?${params}`);
       const data = await response.json();
 
       if (data.success) {
@@ -373,7 +384,7 @@ export const useDashboardStore = create((set, get) => ({
   fetchConnection: async (slug) => {
     set({ connectionsLoading: true });
     try {
-      const response = await fetch(`${API_BASE}/api/connections/${slug}`);
+      const response = await authFetch(`${API_BASE}/api/connections/${slug}`);
       const data = await response.json();
 
       if (data.success) {
@@ -390,7 +401,7 @@ export const useDashboardStore = create((set, get) => ({
 
   fetchConnectionStats: async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/stats`);
+      const response = await authFetch(`${API_BASE}/api/connections/stats`);
       const data = await response.json();
       if (data.success) set({ connectionStats: data.data });
     } catch (err) {
@@ -400,7 +411,7 @@ export const useDashboardStore = create((set, get) => ({
 
   fetchConnectionGraph: async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/graph`);
+      const response = await authFetch(`${API_BASE}/api/connections/graph`);
       const data = await response.json();
       if (data.success) {
         set({ connectionGraph: data.data });
@@ -415,7 +426,7 @@ export const useDashboardStore = create((set, get) => ({
 
   fetchConnectionHealthHistory: async (slug, limit = 100) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/connections/${slug}/health-history?limit=${limit}`,
       );
       const data = await response.json();
@@ -432,7 +443,7 @@ export const useDashboardStore = create((set, get) => ({
 
   updateConnection: async (slug, updates) => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/${slug}`, {
+      const response = await authFetch(`${API_BASE}/api/connections/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -450,7 +461,7 @@ export const useDashboardStore = create((set, get) => ({
 
   deleteConnection: async (slug) => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/${slug}`, {
+      const response = await authFetch(`${API_BASE}/api/connections/${slug}`, {
         method: "DELETE",
       });
       const data = await response.json();
@@ -466,7 +477,7 @@ export const useDashboardStore = create((set, get) => ({
 
   testConnection: async (slug) => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/${slug}/test`, {
+      const response = await authFetch(`${API_BASE}/api/connections/${slug}/test`, {
         method: "POST",
       });
       const data = await response.json();
@@ -480,7 +491,7 @@ export const useDashboardStore = create((set, get) => ({
 
   testAllConnections: async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections/test-all`, {
+      const response = await authFetch(`${API_BASE}/api/connections/test-all`, {
         method: "POST",
       });
       const data = await response.json();
@@ -494,7 +505,7 @@ export const useDashboardStore = create((set, get) => ({
 
   testConnectionCredential: async (slug) => {
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/connections/${slug}/credential/test`,
         { method: "POST" },
       );
