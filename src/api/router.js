@@ -35,6 +35,7 @@ import contextIntelligence from "./routes/context-intelligence.js";
 import { certRoutes } from "./routes/cert.js";
 import { connectRoutes } from "./routes/connect.js";
 import { connectionsRoutes } from "./routes/connections.js";
+import { authKeysRoutes } from "./routes/auth-keys.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -152,5 +153,6 @@ api.route("/api/v1/exports", exportRoutes);
 api.route("/api/v1/cert", certRoutes);
 api.route("/api/v1/connect", connectRoutes);
 api.route("/api/connections", connectionsRoutes);
+api.route("/api/auth/keys", authKeysRoutes);
 
 export { api };

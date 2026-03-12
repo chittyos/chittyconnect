@@ -1,6 +1,7 @@
 import React from "react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { useDashboardStore } from "./stores/dashboardStore";
+import { useAuthStore } from "./stores/authStore";
 
 // Pages
 import Overview from "./pages/Overview";
@@ -11,6 +12,15 @@ import Teams from "./pages/Teams";
 import Connections from "./pages/Connections";
 import ConnectionDetail from "./pages/ConnectionDetail";
 import ConnectionGraph from "./pages/ConnectionGraph";
+import Login from "./pages/Login";
+import Profile from "./pages/Profile";
+import ApiKeys from "./pages/ApiKeys";
+import Sessions from "./pages/Sessions";
+import OAuthCallback from "./pages/OAuthCallback";
+
+// Components
+import RequireAuth from "./components/RequireAuth";
+import UserMenu from "./components/UserMenu";
 
 // Icons
 const Icons = {
@@ -53,10 +63,22 @@ const Icons = {
       <path d="M8.5 6h7" />
     </svg>
   ),
-  Settings: () => (
+  Key: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+    </svg>
+  ),
+  User: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
+  Session: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
     </svg>
   ),
 };
@@ -156,45 +178,72 @@ function Sidebar() {
             Team Builder
           </NavLink>
         </div>
+
+        <div className="nav-section">
+          <div className="nav-section-title">Security</div>
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <span className="nav-item-icon">
+              <Icons.User />
+            </span>
+            Profile
+          </NavLink>
+          <NavLink
+            to="/api-keys"
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <span className="nav-item-icon">
+              <Icons.Key />
+            </span>
+            API Keys
+          </NavLink>
+          <NavLink
+            to="/sessions"
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <span className="nav-item-icon">
+              <Icons.Session />
+            </span>
+            Sessions
+          </NavLink>
+        </div>
       </nav>
 
-      <div
-        style={{
-          padding: "16px",
-          borderTop: "1px solid var(--border-primary)",
-        }}
-      >
-        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          Connected to
-        </div>
-        <div
-          style={{
-            fontSize: "12px",
-            color: "var(--accent-success)",
-            marginTop: "4px",
-          }}
-        >
-          connect.chitty.cc
-        </div>
-      </div>
+      <UserMenu />
     </aside>
   );
 }
 
+const NO_SIDEBAR_ROUTES = ["/login", "/oauth/callback"];
+
 export default function App() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const location = useLocation();
+  const showSidebar = isAuthenticated && !NO_SIDEBAR_ROUTES.includes(location.pathname);
+
   return (
-    <div className="app-container">
-      <Sidebar />
-      <main className="main-content">
+    <div className={`app-container ${!showSidebar ? "app-container--no-sidebar" : ""}`}>
+      {showSidebar && <Sidebar />}
+      <main className={`main-content ${!showSidebar ? "main-content--full" : ""}`}>
         <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/contexts" element={<Contexts />} />
-          <Route path="/contexts/:id" element={<ContextDetail />} />
-          <Route path="/connections" element={<Connections />} />
-          <Route path="/connections/graph" element={<ConnectionGraph />} />
-          <Route path="/connections/:slug" element={<ConnectionDetail />} />
-          <Route path="/approvals" element={<Approvals />} />
-          <Route path="/teams" element={<Teams />} />
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
+
+          {/* Protected routes */}
+          <Route path="/" element={<RequireAuth><Overview /></RequireAuth>} />
+          <Route path="/contexts" element={<RequireAuth><Contexts /></RequireAuth>} />
+          <Route path="/contexts/:id" element={<RequireAuth><ContextDetail /></RequireAuth>} />
+          <Route path="/connections" element={<RequireAuth><Connections /></RequireAuth>} />
+          <Route path="/connections/graph" element={<RequireAuth><ConnectionGraph /></RequireAuth>} />
+          <Route path="/connections/:slug" element={<RequireAuth><ConnectionDetail /></RequireAuth>} />
+          <Route path="/approvals" element={<RequireAuth><Approvals /></RequireAuth>} />
+          <Route path="/teams" element={<RequireAuth><Teams /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+          <Route path="/api-keys" element={<RequireAuth><ApiKeys /></RequireAuth>} />
+          <Route path="/sessions" element={<RequireAuth><Sessions /></RequireAuth>} />
         </Routes>
       </main>
     </div>
