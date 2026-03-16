@@ -37,7 +37,8 @@
     // OAuth 2.1 token storage (required by @cloudflare/workers-oauth-provider)
     // OAUTH_PROVIDER binding is auto-injected by @cloudflare/workers-oauth-provider at runtime.
     { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
-    { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" }
+    { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
+    { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" }
   ],
 
   // Vectorize for MemoryCloude and ContextConsciousness
