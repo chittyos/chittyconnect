@@ -89,9 +89,13 @@
     "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
     "CHITTYOS_DOMAIN": "chitty.cc",
     "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
+    // ChittyOS-Core vault: infrastructure credentials (Cloudflare, Neon, GitHub)
     "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
+    // ChittyOS-Deployment vault: service tokens (chittyauth, chittyid, chittyregister, etc.)
     "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
+    // ChittyOS-Integrations vault: third-party integration keys (OpenAI, Notion, etc.)
     "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
+    // ChittyConnect Only vault: emergency credentials
     "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
     "CREDENTIAL_FAILOVER_ENABLED": "true"
   },
@@ -104,8 +108,16 @@
   //                            CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
   //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN
   // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL
-  // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY, CLOUDFLARE_ACCOUNT_ID
-  // 1Password Connect:         ONEPASSWORD_CONNECT_TOKEN, EMERGENCY_REVOKE_TOKEN, ENCRYPTION_KEY
+  // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
+  //                            CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)
+  // 1Password Connect:         ONEPASSWORD_CONNECT_TOKEN (JWT from ~/.op-connect/connect-token),
+  //                            EMERGENCY_REVOKE_TOKEN, ENCRYPTION_KEY (random 32-byte key for KV cache)
+  //
+  // 1Password vault items required for credential provisioning:
+  //   Vault: ChittyOS-Core (oxwo63jlcbo66c7kwx67lquw4i)
+  //   Item title: "cloudflare"  fields: make_api_key, account_id
+  //   (Create via: op item create --vault ChittyOS-Core --title cloudflare
+  //                --category login make_api_key=<CF_GLOBAL_API_TOKEN> account_id=0bc21e3a5a9de1a4cc843be9c3e98121)
 
   // Scheduled triggers for background tasks
   "triggers": {
