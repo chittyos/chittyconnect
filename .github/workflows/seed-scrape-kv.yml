@@ -1,0 +1,86 @@
+name: Seed SCRAPE_KV
+# One-shot: write service token + AppFolio creds to chittyscrape KV namespace.
+# Uses chittyconnect's CLOUDFLARE_API_TOKEN + OP_SERVICE_ACCOUNT_TOKEN.
+# DELETE THIS WORKFLOW after successful execution.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KV_NAMESPACE: 6d10f7d3727c46b781181d08555f2a7c
+  CF_ACCOUNT: 0bc21e3a5a9de1a4cc843be9c3e98121
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@v1
+
+      - name: Write scrape:service_token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          TOKEN="70d4860c3f7a75da811ab3ac50d5642a2f7ff15dfd8c121f497a9005f0b8a8b3"
+          RESP=$(curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/values/scrape%3Aservice_token" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: text/plain" \
+            --data-raw "${TOKEN}")
+          echo "$RESP" | jq -e '.success == true'
+          echo "Wrote scrape:service_token"
+
+      - name: Resolve AppFolio credentials from 1Password
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        id: creds
+        run: |
+          USERNAME=$(op read "op://ARIBIA LLC/Commodore Condo Association Portal/username" 2>/dev/null || echo "")
+          PASSWORD=$(op read "op://ARIBIA LLC/Commodore Condo Association Portal/password" 2>/dev/null || echo "")
+          if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+            echo "resolved=true" >> $GITHUB_OUTPUT
+            echo "::add-mask::$USERNAME"
+            echo "::add-mask::$PASSWORD"
+            echo "username=$USERNAME" >> $GITHUB_OUTPUT
+            echo "password=$PASSWORD" >> $GITHUB_OUTPUT
+          else
+            echo "resolved=false" >> $GITHUB_OUTPUT
+            echo "::warning::Could not resolve AppFolio credentials from 1Password"
+          fi
+
+      - name: Write appfolio-propertyhill:username
+        if: steps.creds.outputs.resolved == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          RESP=$(curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/values/appfolio-propertyhill%3Ausername" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: text/plain" \
+            --data-raw '${{ steps.creds.outputs.username }}')
+          echo "$RESP" | jq -e '.success == true'
+          echo "Wrote appfolio-propertyhill:username"
+
+      - name: Write appfolio-propertyhill:password
+        if: steps.creds.outputs.resolved == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          RESP=$(curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/values/appfolio-propertyhill%3Apassword" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: text/plain" \
+            --data-raw '${{ steps.creds.outputs.password }}')
+          echo "$RESP" | jq -e '.success == true'
+          echo "Wrote appfolio-propertyhill:password"
+
+      - name: Verify keys
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          curl -sf \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/keys" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | jq '.result[] | .name'
