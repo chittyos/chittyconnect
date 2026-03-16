@@ -15,7 +15,13 @@ export class ChittyServClient {
   constructor(env) {
     this.env = env;
     this.baseUrl = env.CHITTYSERV_URL || "http://chittyserv-dev:8080";
-    this.token = env.CHITTYSERV_TOKEN || env.CHITTY_CONNECT_TOKEN;
+    this.token = env.CHITTY_SERV_TOKEN;
+
+    if (!this.token && this.baseUrl !== "http://chittyserv-dev:8080") {
+      console.warn(
+        "[ChittyServ] CHITTY_SERV_TOKEN not set — unauthenticated requests will be made",
+      );
+    }
 
     // Cache configuration — same TTLs as 1Password client
     this.cacheTTL = {
@@ -74,6 +80,9 @@ export class ChittyServClient {
 
     const headers = {
       "Content-Type": "application/json",
+      "X-Request-ID": crypto.randomUUID(),
+      "X-Source-Service": "chittyconnect",
+      "X-Canonical-URI": "chittycanon://core/services/connect",
     };
 
     if (this.token) {
@@ -214,9 +223,10 @@ export class ChittyServClient {
 
       const response = await fetch(`${this.baseUrl}/health`, {
         method: "GET",
-        headers: this.token
-          ? { Authorization: `Bearer ${this.token}` }
-          : {},
+        headers: {
+          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          "X-Source-Service": "chittyconnect",
+        },
         signal: AbortSignal.timeout(3000),
       });
 
