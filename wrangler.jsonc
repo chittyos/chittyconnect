@@ -89,10 +89,10 @@
     "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
     "CHITTYOS_DOMAIN": "chitty.cc",
     "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
-    "ONEPASSWORD_VAULT_INFRASTRUCTURE": "infrastructure-vault-uuid",
-    "ONEPASSWORD_VAULT_SERVICES": "services-vault-uuid",
-    "ONEPASSWORD_VAULT_INTEGRATIONS": "integrations-vault-uuid",
-    "ONEPASSWORD_VAULT_EMERGENCY": "emergency-vault-uuid",
+    "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
+    "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
+    "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
+    "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
     "CREDENTIAL_FAILOVER_ENABLED": "true"
   },
 
