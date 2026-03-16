@@ -107,9 +107,7 @@ export class ChittyServClient {
     const value = data.value || data.credential;
 
     if (!value) {
-      throw new Error(
-        `ChittyServ returned no value for ${credentialPath}`,
-      );
+      throw new Error(`ChittyServ returned no value for ${credentialPath}`);
     }
 
     console.log(
@@ -180,10 +178,7 @@ export class ChittyServClient {
       if (result.status === "fulfilled") {
         credentialMap.set(path, result.value);
       } else {
-        console.error(
-          `[ChittyServ] Prefetch FAILED: ${path}`,
-          result.reason,
-        );
+        console.error(`[ChittyServ] Prefetch FAILED: ${path}`, result.reason);
       }
     });
 
@@ -233,7 +228,7 @@ export class ChittyServClient {
       const body = await response.json().catch(() => ({}));
 
       return {
-        status: response.ok ? (body.status || "healthy") : "degraded",
+        status: response.ok ? body.status || "healthy" : "degraded",
         statusCode: response.status,
         backend: "chittyserv",
         url: this.baseUrl,
