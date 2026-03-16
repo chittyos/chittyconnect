@@ -422,6 +422,41 @@ export class OnePasswordConnectClient {
   }
 
   /**
+   * Retrieve an infrastructure credential from 1Password.
+   *
+   * Convenience wrapper around `get()` that constructs the path
+   * `infrastructure/{item}/{field}` so callers do not need to hard-code
+   * the vault segment.
+   *
+   * @param {string} item  - Item name within the infrastructure vault
+   *   (e.g. "cloudflare", "neon", "github")
+   * @param {string} field - Field name within that item
+   *   (e.g. "make_api_key", "account_id", "database_url")
+   * @param {object} [options] - Options forwarded to `get()`
+   * @returns {Promise<string>} Credential value
+   */
+  async getInfrastructureCredential(item, field, options = {}) {
+    const credentialPath = `infrastructure/${item}/${field}`;
+    return this.get(credentialPath, options);
+  }
+
+  /**
+   * Retrieve a ChittyOS inter-service token from 1Password.
+   *
+   * Convenience wrapper around `get()` that constructs the path
+   * `services/{service}/token` so callers do not need to hard-code
+   * the vault segment.
+   *
+   * @param {string} service  - Target service name (e.g. "chittyauth")
+   * @param {object} [options] - Options forwarded to `get()`
+   * @returns {Promise<string>} Service token value
+   */
+  async getServiceToken(service, options = {}) {
+    const credentialPath = `services/${service}/token`;
+    return this.get(credentialPath, options);
+  }
+
+  /**
    * Prefetch multiple credentials in parallel
    *
    * @param {string[]} credentialPaths - Array of credential paths
