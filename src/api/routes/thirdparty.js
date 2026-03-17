@@ -8,29 +8,9 @@
 
 import { Hono } from "hono";
 import { Client } from "@neondatabase/serverless";
-import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { getCredential } from "../../lib/credential-helper.js";
 
 const thirdpartyRoutes = new Hono();
-
-/**
- * Helper function to get credential with 1Password fallback
- * @private
- */
-async function getCredential(env, credentialPath, fallbackEnvVar) {
-  try {
-    const opClient = new OnePasswordConnectClient(env);
-    const credential = await opClient.get(credentialPath);
-    if (credential) return credential;
-  } catch (error) {
-    console.warn(
-      `[ThirdParty] 1Password retrieval failed for ${credentialPath}, using fallback:`,
-      error.message,
-    );
-  }
-
-  // Fallback to environment variable
-  return env[fallbackEnvVar];
-}
 
 /** @visibleForTesting */
 export async function executeNeonQuery(neonDbUrl, query, params = []) {

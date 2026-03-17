@@ -10,7 +10,7 @@
 
 import { Hono } from "hono";
 import { EnhancedCredentialProvisioner } from "../../services/credential-provisioner-enhanced.js";
-import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { createCredentialBroker } from "../../lib/credential-broker.js";
 
 const credentialsRoutes = new Hono();
 
@@ -472,20 +472,19 @@ credentialsRoutes.get("/twilio", async (c) => {
       `[Credentials] Twilio credentials requested by: ${serviceName}`,
     );
 
-    // Initialize 1Password client
-    const opClient = new OnePasswordConnectClient(c.env);
+    // Initialize credential broker
+    const broker = createCredentialBroker(c.env);
 
     let accountSid, authToken, phoneNumber;
 
     try {
-      // Try 1Password first
-      accountSid = await opClient.get("integrations/twilio/account_sid");
-      authToken = await opClient.get("integrations/twilio/auth_token");
-      phoneNumber = await opClient.get("integrations/twilio/phone_number");
-    } catch (opError) {
+      accountSid = await broker.get("integrations/twilio/account_sid");
+      authToken = await broker.get("integrations/twilio/auth_token");
+      phoneNumber = await broker.get("integrations/twilio/phone_number");
+    } catch (brokerError) {
       console.warn(
-        "[Credentials] 1Password unavailable, falling back to env vars:",
-        opError.message,
+        "[Credentials] Broker unavailable, falling back to env vars:",
+        brokerError.message,
       );
 
       // Fallback to environment variables
@@ -598,14 +597,14 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
 
     console.log(`[Credentials] Requesting ${vault}/${item}/${field}`);
 
-    // Initialize 1Password client
-    const opClient = new OnePasswordConnectClient(c.env);
+    // Initialize credential broker
+    const broker = createCredentialBroker(c.env);
 
     // Build credential path
     const credentialPath = `${vault}/${item}/${field}`;
 
-    // Fetch from 1Password
-    const value = await opClient.get(credentialPath);
+    // Fetch via broker (ChittyServ or 1Password depending on config)
+    const value = await broker.get(credentialPath);
 
     // Log credential access (no sensitive data)
     try {
@@ -696,7 +695,7 @@ credentialsRoutes.get("/health", async (c) => {
     database: "unknown",
     rate_limit: c.env.RATE_LIMIT ? "available" : "missing",
     chronicle: c.env.CHITTY_CHRONICLE_TOKEN ? "configured" : "missing",
-    onepassword_connect: "unknown",
+    credential_broker: "unknown",
   };
 
   // Test database connection
@@ -707,18 +706,18 @@ credentialsRoutes.get("/health", async (c) => {
     checks.database = "error";
   }
 
-  // Test 1Password Connect
+  // Test credential broker
   try {
-    const opClient = new OnePasswordConnectClient(c.env);
-    const opHealth = await opClient.healthCheck();
-    checks.onepassword_connect = opHealth.status;
+    const broker = createCredentialBroker(c.env);
+    const brokerHealth = await broker.healthCheck();
+    checks.credential_broker = `${brokerHealth.status} (${broker.type})`;
   } catch (error) {
-    checks.onepassword_connect = "error";
+    checks.credential_broker = "error";
   }
 
   const isHealthy =
     (checks.cloudflare_make_api_key === "configured" ||
-      checks.onepassword_connect === "healthy") &&
+      checks.credential_broker.includes("healthy")) &&
     checks.database === "connected";
 
   return c.json({

@@ -13,4 +13,8 @@ export const CREDENTIAL_PATHS = {
     anthropicApiKey: "integrations/anthropic/api_key",
     stripeApiKey: "integrations/stripe/api_key",
   },
+  infrastructure: {
+    cloudflareApiToken: "infrastructure/cloudflare/api_token",
+    cloudflareAccountId: "infrastructure/cloudflare/account_id",
+  },
 };

@@ -16,7 +16,7 @@
 
 import { Hono } from "hono";
 import { validateGitHubOIDC } from "../../auth/github-oidc.js";
-import { OnePasswordConnectClient } from "../../services/1password-connect-client.js";
+import { createCredentialBroker } from "../../lib/credential-broker.js";
 
 const githubActionsRoutes = new Hono();
 
@@ -170,15 +170,15 @@ githubActionsRoutes.post("/credentials", async (c) => {
 
     // Fetch credentials
     const result = {};
-    const opClient = new OnePasswordConnectClient(c.env);
+    const broker = createCredentialBroker(c.env);
 
     for (const credName of requestedCredentials) {
       const config = credentialMap[credName];
 
       try {
-        // Try 1Password first
-        if (c.env.ONEPASSWORD_CONNECT_TOKEN) {
-          const value = await opClient.get(config.path);
+        // Try credential broker (ChittyServ or 1Password)
+        {
+          const value = await broker.get(config.path);
           result[credName] = value;
           continue;
         }

@@ -14,7 +14,7 @@
  * - Rate limit requests
  */
 
-import { OnePasswordConnectClient } from "./1password-connect-client.js";
+import { createCredentialBroker } from "../lib/credential-broker.js";
 import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
@@ -24,7 +24,9 @@ export class EnhancedCredentialProvisioner {
   constructor(env, contextConsciousness) {
     this.env = env;
     this.contextConsciousness = contextConsciousness || null;
-    this.onePassword = new OnePasswordConnectClient(env);
+    this.broker = createCredentialBroker(env);
+    // Keep .onePassword as alias for backward compat in internal methods
+    this.onePassword = this.broker;
 
     // Cloudflare permissions will be fetched dynamically
     // These are fallback IDs if API fetch fails
@@ -1001,7 +1003,7 @@ export class EnhancedCredentialProvisioner {
             data: {
               ...event,
               timestamp: new Date().toISOString(),
-              provider: "1Password",
+              provider: this.broker?.type || "unknown",
               enhanced: true,
             },
           }),

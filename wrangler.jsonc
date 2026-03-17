@@ -97,7 +97,9 @@
     "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
     // ChittyConnect Only vault: emergency credentials
     "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
-    "CREDENTIAL_FAILOVER_ENABLED": "true"
+    "CREDENTIAL_FAILOVER_ENABLED": "true",
+    "CREDENTIAL_BROKER_TYPE": "auto",
+    "CHITTYSERV_URL": "http://chittyserv-dev:8080"
   },
 
   // Secrets (set via: wrangler secret put <NAME>)

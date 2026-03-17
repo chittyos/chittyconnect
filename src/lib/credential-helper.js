@@ -1,19 +1,30 @@
 /**
  * Credential Helper
  *
- * Shared utility functions for retrieving credentials from 1Password Connect
- * with automatic failover to environment variables.
+ * Shared utility functions for retrieving credentials via the credential broker.
+ * Backend selection (ChittyServ vs 1Password) is controlled by env.CREDENTIAL_BROKER_TYPE.
+ * Falls back to environment variables if the broker is unavailable.
  *
  * @module lib/credential-helper
  */
 
-import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
+import { createCredentialBroker } from "./credential-broker.js";
+
+// Singleton broker per env object (Worker lifetime)
+const brokerCache = new WeakMap();
+
+function getBroker(env) {
+  if (!brokerCache.has(env)) {
+    brokerCache.set(env, createCredentialBroker(env));
+  }
+  return brokerCache.get(env);
+}
 
 /**
- * Get credential with 1Password Connect fallback to environment variable
+ * Get credential via broker with fallback to environment variable
  *
  * @param {object} env - Worker environment bindings
- * @param {string} credentialPath - 1Password vault path (e.g., 'integrations/notion/api_key')
+ * @param {string} credentialPath - Vault path (e.g., 'integrations/notion/api_key')
  * @param {string} fallbackEnvVar - Environment variable name for fallback
  * @param {string} [logPrefix] - Optional prefix for log messages
  * @returns {Promise<string|undefined>} Credential value or undefined
@@ -25,14 +36,14 @@ export async function getCredential(
   logPrefix = "Credential",
 ) {
   try {
-    const opClient = new OnePasswordConnectClient(env);
-    const credential = await opClient.get(credentialPath);
+    const broker = getBroker(env);
+    const credential = await broker.get(credentialPath);
     if (credential) {
       return credential;
     }
   } catch (error) {
     console.warn(
-      `[${logPrefix}] 1Password retrieval failed for ${credentialPath}, using fallback:`,
+      `[${logPrefix}] Broker retrieval failed for ${credentialPath}, using fallback:`,
       error.message,
     );
   }
@@ -42,7 +53,7 @@ export async function getCredential(
 }
 
 /**
- * Get service token with 1Password Connect fallback
+ * Get service token via broker with fallback
  *
  * @param {object} env - Worker environment bindings
  * @param {string} serviceName - Service name (e.g., 'chittyid', 'chittyauth')

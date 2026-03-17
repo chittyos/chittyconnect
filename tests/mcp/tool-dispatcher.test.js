@@ -1195,4 +1195,382 @@ describe("dispatchToolCall", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ── Infrastructure tools ──────────────────────────────────────────
+
+  describe("chitty_infra_logs", () => {
+    it("returns error when no Cloudflare API token", async () => {
+      getCredential.mockResolvedValue(undefined);
+      const env = { CF_ACCOUNT_ID: "acct-123" };
+
+      const result = await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyid", query_type: "events" },
+        env,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("API token not configured");
+    });
+
+    it("returns error when no account ID", async () => {
+      getCredential.mockImplementation(async (_env, path) => {
+        if (path.includes("api_token")) return "cf-token";
+        return undefined;
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyid", query_type: "events" },
+        {},
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("account ID not configured");
+    });
+
+    it("sends events query with correct URL and body", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: { events: [] } }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyid-production", query_type: "events", timeframe: "1h" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.cloudflare.com/client/v4/accounts/acct-123/workers/observability/telemetry/query",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer cf-token",
+            "workers-observability-origin": "chittyconnect",
+          }),
+        }),
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.view).toBe("events");
+      expect(body.filters[0].key).toBe("$metadata.scriptName");
+      expect(body.filters[0].value).toBe("chittyid-production");
+    });
+
+    it("sends errors query with level filter", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "errors" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.view).toBe("events");
+      expect(body.filters).toHaveLength(2);
+      expect(body.filters[1].key).toBe("$metadata.level");
+      expect(body.filters[1].value).toBe("error");
+    });
+
+    it("sends metrics query with calculations and groupBys", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: {} }),
+      });
+
+      await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "metrics" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.view).toBe("calculations");
+      expect(body.calculations).toBeDefined();
+      expect(body.groupBys).toContain("$metadata.response.status");
+    });
+
+    it("adds needle when filter is provided", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "events", filter: "timeout" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.needle).toBe("timeout");
+    });
+
+    it("clamps limit to max 100", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "events", limit: 999 },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.limit).toBe(100);
+    });
+
+    it("returns error for invalid timeframe", async () => {
+      getCredential.mockResolvedValue("cf-token");
+
+      const result = await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "events", timeframe: "bad" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Invalid timeframe");
+    });
+
+    it("handles CF API error responses", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: async () => "Forbidden",
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_logs",
+        { service: "chittyconnect", query_type: "events" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("403");
+    });
+  });
+
+  describe("chitty_infra_audit", () => {
+    it("returns error when no Cloudflare API token", async () => {
+      getCredential.mockResolvedValue(undefined);
+
+      const result = await dispatchToolCall(
+        "chitty_infra_audit",
+        { since: "2026-01-01", before: "2026-01-02" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("API token not configured");
+    });
+
+    it("returns error when no account ID", async () => {
+      getCredential.mockImplementation(async (_env, path) => {
+        if (path.includes("api_token")) return "cf-token";
+        return undefined;
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_audit",
+        { since: "2026-01-01", before: "2026-01-02" },
+        {},
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("account ID not configured");
+    });
+
+    it("calls audit endpoint with correct params", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: [] }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_audit",
+        {
+          since: "2026-01-01",
+          before: "2026-01-02",
+          action_type: "delete",
+          actor_email: "user@example.com",
+        },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBeUndefined();
+      const url = mockFetch.mock.calls[0][0];
+      expect(url).toContain("/accounts/acct-123/logs/audit");
+      expect(url).toContain("since=2026-01-01");
+      expect(url).toContain("before=2026-01-02");
+      expect(url).toContain("action.type=delete");
+      expect(url).toContain("actor.email=user%40example.com");
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers["portal-version"]).toBe("2");
+    });
+
+    it("omits optional params when not provided", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ result: [] }),
+      });
+
+      await dispatchToolCall(
+        "chitty_infra_audit",
+        { since: "2026-01-01", before: "2026-01-02" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const url = mockFetch.mock.calls[0][0];
+      expect(url).not.toContain("action.type");
+      expect(url).not.toContain("actor.email");
+    });
+
+    it("handles CF API error responses", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => "Internal Server Error",
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_audit",
+        { since: "2026-01-01", before: "2026-01-02" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("500");
+    });
+  });
+
+  describe("chitty_infra_analytics", () => {
+    it("returns error when no Cloudflare API token", async () => {
+      getCredential.mockResolvedValue(undefined);
+
+      const result = await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: "{ viewer { zones { firewallEventsAdaptive { action } } } }" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("API token not configured");
+    });
+
+    it("sends GraphQL query with default variables", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ data: { viewer: {} } }),
+      });
+
+      const gql = "{ viewer { accounts(filter: {accountTag: $accountTag}) { httpRequests1dGroups { sum { requests } } } } }";
+      const result = await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: gql },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.cloudflare.com/client/v4/graphql",
+        expect.objectContaining({ method: "POST" }),
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.query).toBe(gql);
+      expect(body.variables).toEqual({ accountTag: "acct-123" });
+    });
+
+    it("uses provided variables instead of defaults", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ data: {} }),
+      });
+
+      const customVars = { accountTag: "custom", zoneTag: "zone-1" };
+      await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: "{ viewer { zones { } } }", variables: customVars },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.variables).toEqual(customVars);
+    });
+
+    it("rejects responses over 800KB", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      const largePayload = "x".repeat(801 * 1024);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => largePayload,
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: "{ viewer { } }" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("too large");
+      expect(result.content[0].text).toContain("800KB");
+    });
+
+    it("handles non-JSON responses gracefully", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => "<html>error page</html>",
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: "{ viewer { } }" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("non-JSON");
+    });
+
+    it("handles CF API error responses", async () => {
+      getCredential.mockResolvedValue("cf-token");
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => "Unauthorized",
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_infra_analytics",
+        { query: "{ viewer { } }" },
+        { CF_ACCOUNT_ID: "acct-123" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("401");
+    });
+  });
 });

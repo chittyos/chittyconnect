@@ -84,7 +84,7 @@ function inputSchemaToZodShape(inputSchema) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Authoritative tool definitions (JSON Schema) — 52 tools across 10 domains
+// Authoritative tool definitions (JSON Schema) — 55 tools across 11 domains
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -1042,6 +1042,103 @@ const MCP_TOOLS = [
       required: ["sql"],
     },
   },
+
+  // ── 11. Infrastructure (3) ──────────────────────────────────
+  {
+    name: "chitty_infra_logs",
+    description:
+      "Query Cloudflare Workers observability logs for any ChittyOS worker. Provides real telemetry: request events, errors, and performance metrics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        service: {
+          type: "string",
+          description:
+            "Worker script name (e.g. 'chittyconnect', 'chittyid-production')",
+        },
+        query_type: {
+          type: "string",
+          enum: ["events", "errors", "metrics"],
+          description:
+            "Query preset: events=request logs, errors=error-only logs, metrics=aggregated stats (count, avg duration by status)",
+        },
+        timeframe: {
+          type: "string",
+          description:
+            "Time window shorthand: 15m, 1h, 6h, 24h, 7d (default: 1h)",
+        },
+        filter: {
+          type: "string",
+          description: "Text search filter applied to log messages",
+        },
+        limit: {
+          type: "number",
+          description: "Max results to return (default: 25, max: 100)",
+          minimum: 1,
+          maximum: 100,
+        },
+      },
+      required: ["service", "query_type"],
+    },
+  },
+  {
+    name: "chitty_infra_audit",
+    description:
+      "Query Cloudflare audit logs. Compliance-critical 'who did what when' across all CF resources (DNS, Workers, R2, etc.).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "Start time (ISO 8601 or YYYY-MM-DD)",
+        },
+        before: {
+          type: "string",
+          description: "End time (ISO 8601 or YYYY-MM-DD)",
+        },
+        action_type: {
+          type: "string",
+          description: "Filter by action type (e.g. 'delete', 'create')",
+        },
+        actor_email: {
+          type: "string",
+          description: "Filter by actor email address",
+        },
+        resource_type: {
+          type: "string",
+          description:
+            "Filter by resource type (e.g. 'DNS_record', 'worker_script')",
+        },
+        limit: {
+          type: "number",
+          description: "Max results (default: 25, max: 100)",
+          minimum: 1,
+          maximum: 100,
+        },
+      },
+      required: ["since", "before"],
+    },
+  },
+  {
+    name: "chitty_infra_analytics",
+    description:
+      "Query Cloudflare GraphQL Analytics API. Flexible access to requests, bandwidth, errors, WAF, cache, and more. Provide a raw GraphQL query string.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "GraphQL query string for the CF analytics API",
+        },
+        variables: {
+          type: "object",
+          description:
+            "GraphQL variables (defaults to {accountTag: <account_id>})",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1080,6 +1177,9 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_credential_audit",
   "chitty_services_status",
   "chitty_ecosystem_awareness",
+  "chitty_infra_logs",
+  "chitty_infra_audit",
+  "chitty_infra_analytics",
 ]);
 
 /**
