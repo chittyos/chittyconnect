@@ -83,7 +83,7 @@ githubActionsRoutes.post("/credentials", async (c) => {
     ];
     const repoOwner = oidcResult.claims.repositoryOwner;
 
-    if (!allowedOrgs.includes(repoOwner)) {
+    if (!allowedOrgs.some((org) => org.toLowerCase() === repoOwner.toLowerCase())) {
       return c.json(
         {
           success: false,
