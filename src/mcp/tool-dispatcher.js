@@ -8,6 +8,10 @@
  */
 
 import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import {
+  getCloudflareApiCredentials,
+  parseTimeframe,
+} from "../lib/cloudflare-api-helper.js";
 import { Client } from "@neondatabase/serverless";
 
 const CHITTYOS_SERVICES = [
@@ -173,6 +177,54 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       };
     }
     return { error: null, headers: { Authorization: `Bearer ${token}` } };
+  };
+
+  // requireCloudflareAuth: for Cloudflare API calls — fails explicitly if no token/accountId
+  const requireCloudflareAuth = async () => {
+    let apiToken, accountId;
+    try {
+      ({ apiToken, accountId } = await getCloudflareApiCredentials(env));
+    } catch (err) {
+      console.error("[MCP] Cloudflare credential retrieval failed:", err);
+      return {
+        error: {
+          content: [
+            {
+              type: "text",
+              text: `Cloudflare auth failed: ${err.message}`,
+            },
+          ],
+          isError: true,
+        },
+      };
+    }
+    if (!apiToken) {
+      return {
+        error: {
+          content: [
+            {
+              type: "text",
+              text: "Cloudflare API token not configured (set CLOUDFLARE_MAKE_API_KEY or 1Password path infrastructure/cloudflare/api_token)",
+            },
+          ],
+          isError: true,
+        },
+      };
+    }
+    if (!accountId) {
+      return {
+        error: {
+          content: [
+            {
+              type: "text",
+              text: "Cloudflare account ID not configured (set CF_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID)",
+            },
+          ],
+          isError: true,
+        },
+      };
+    }
+    return { error: null, apiToken, accountId };
   };
 
   try {
@@ -1384,6 +1436,186 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ChittySync");
       if (fetchErr) return fetchErr;
       result = await response.json();
+    }
+
+    // ── Infrastructure tools ────────────────────────────────────────
+    else if (name === "chitty_infra_logs") {
+      const cfAuth = await requireCloudflareAuth();
+      if (cfAuth.error) return cfAuth.error;
+
+      const { apiToken, accountId } = cfAuth;
+      const service = args.service;
+      const queryType = args.query_type;
+      const timeframe = args.timeframe || "1h";
+      const limit = Math.min(Math.max(args.limit || 25, 1), 100);
+
+      let since, before;
+      try {
+        ({ since, before } = parseTimeframe(timeframe));
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: err.message }],
+          isError: true,
+        };
+      }
+
+      let queryBody;
+      if (queryType === "events") {
+        queryBody = {
+          queryId: "chittyconnect-events",
+          view: "events",
+          limit,
+          timeframe: { since, before },
+          filters: [
+            {
+              key: "$metadata.scriptName",
+              operation: "includes",
+              value: service,
+            },
+          ],
+        };
+      } else if (queryType === "errors") {
+        queryBody = {
+          queryId: "chittyconnect-errors",
+          view: "events",
+          limit,
+          timeframe: { since, before },
+          filters: [
+            {
+              key: "$metadata.scriptName",
+              operation: "includes",
+              value: service,
+            },
+            {
+              key: "$metadata.level",
+              operation: "eq",
+              value: "error",
+            },
+          ],
+        };
+      } else {
+        // metrics
+        queryBody = {
+          queryId: "chittyconnect-metrics",
+          view: "calculations",
+          limit,
+          timeframe: { since, before },
+          filters: [
+            {
+              key: "$metadata.scriptName",
+              operation: "includes",
+              value: service,
+            },
+          ],
+          calculations: [
+            { operator: "count" },
+            { operator: "avg", key: "$metadata.duration" },
+          ],
+          groupBys: ["$metadata.response.status"],
+        };
+      }
+
+      if (args.filter) {
+        queryBody.needle = args.filter;
+      }
+
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            "Content-Type": "application/json",
+            "workers-observability-origin": "chittyconnect",
+          },
+          body: JSON.stringify(queryBody),
+        },
+      );
+      const { data, error } = await checkAndParseJson(
+        response,
+        "Workers Observability",
+      );
+      if (error) return error;
+      result = data;
+    } else if (name === "chitty_infra_audit") {
+      const cfAuth = await requireCloudflareAuth();
+      if (cfAuth.error) return cfAuth.error;
+
+      const { apiToken, accountId } = cfAuth;
+      const params = new URLSearchParams();
+      params.set("since", args.since);
+      params.set("before", args.before);
+      if (args.action_type) params.set("action.type", args.action_type);
+      if (args.actor_email) params.set("actor.email", args.actor_email);
+      if (args.resource_type) params.set("zone.name", args.resource_type);
+      params.set(
+        "per_page",
+        String(Math.min(Math.max(args.limit || 25, 1), 100)),
+      );
+
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/logs/audit?${params}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            "Content-Type": "application/json",
+            "portal-version": "2",
+          },
+        },
+      );
+      const { data, error } = await checkAndParseJson(response, "Audit Logs");
+      if (error) return error;
+      result = data;
+    } else if (name === "chitty_infra_analytics") {
+      const cfAuth = await requireCloudflareAuth();
+      if (cfAuth.error) return cfAuth.error;
+
+      const { apiToken, accountId } = cfAuth;
+      const variables = args.variables || { accountTag: accountId };
+
+      const response = await fetch(
+        "https://api.cloudflare.com/client/v4/graphql",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query: args.query, variables }),
+        },
+      );
+
+      const fetchErr = await checkFetchError(response, "GraphQL Analytics");
+      if (fetchErr) return fetchErr;
+
+      const rawText = await response.text();
+      const MAX_RESPONSE_SIZE = 800 * 1024; // 800KB
+      if (rawText.length > MAX_RESPONSE_SIZE) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `GraphQL Analytics response too large (${(rawText.length / 1024).toFixed(0)}KB > 800KB limit). Narrow your query with filters or a shorter time range.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `GraphQL Analytics returned non-JSON: ${rawText.slice(0, 200)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
     // ── Unknown tool ────────────────────────────────────────────────
