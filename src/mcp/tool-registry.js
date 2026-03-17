@@ -84,7 +84,7 @@ function inputSchemaToZodShape(inputSchema) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Authoritative tool definitions (JSON Schema) — 55 tools across 11 domains
+// Authoritative tool definitions (JSON Schema) — 62 tools across 12 domains
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -1139,6 +1139,171 @@ const MCP_TOOLS = [
       required: ["query"],
     },
   },
+
+  // ── 12. Task Management (7) ─────────────────────────────────
+  // @canon: chittycanon://core/services/chittytask
+  {
+    name: "chitty_task_create",
+    description:
+      "Create an inter-agent task assigned to a specific ChittyAgent. Supports priority levels, structured payloads, and dependency chains for orchestration workflows.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Short human-readable title for the task",
+        },
+        task_type: {
+          type: "string",
+          description:
+            "Task category (e.g., 'analysis', 'deployment', 'review', 'sync')",
+        },
+        assigned_agent: {
+          type: "string",
+          description:
+            "Target agent name (e.g., 'chittyagent-cloudflare', 'chittyagent-canon')",
+        },
+        description: {
+          type: "string",
+          description: "Detailed description of work to be performed",
+        },
+        priority: {
+          type: "string",
+          enum: ["low", "normal", "high", "critical"],
+          description: "Task priority level (default: normal)",
+        },
+        payload: {
+          type: "object",
+          description: "Structured input data for the assigned agent",
+        },
+        depends_on: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of task IDs that must complete before this task runs",
+        },
+      },
+      required: ["title", "task_type", "assigned_agent"],
+    },
+  },
+  {
+    name: "chitty_task_list",
+    description:
+      "List and filter inter-agent tasks. Filter by assigned agent, status, task type, or combination. Supports pagination.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: {
+          type: "string",
+          description: "Filter by assigned agent name",
+        },
+        status: {
+          type: "string",
+          enum: ["pending", "claimed", "in_progress", "completed", "failed"],
+          description: "Filter by task status",
+        },
+        task_type: {
+          type: "string",
+          description: "Filter by task type",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of tasks to return (default: 20)",
+        },
+        offset: {
+          type: "number",
+          description: "Pagination offset (default: 0)",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_task_get",
+    description:
+      "Retrieve full details of a specific task by ID, including status, payload, result, and dependency chain.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "Task ID to retrieve",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "chitty_task_claim",
+    description:
+      "Claim a pending task for execution. Transitions the task from 'pending' to 'claimed'. Use the caller's agent name to assert ownership.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "Task ID to claim",
+        },
+        agent: {
+          type: "string",
+          description:
+            "Agent name claiming the task (sent as X-ChittyOS-Caller header)",
+        },
+      },
+      required: ["task_id", "agent"],
+    },
+  },
+  {
+    name: "chitty_task_complete",
+    description:
+      "Mark a claimed task as successfully completed. Optionally include a structured result payload.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "Task ID to mark as completed",
+        },
+        result: {
+          type: "object",
+          description: "Optional structured result from task execution",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "chitty_task_fail",
+    description:
+      "Mark a claimed task as failed with an error message. The task system will retain the error for audit and retry decisions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "Task ID to mark as failed",
+        },
+        error: {
+          type: "string",
+          description: "Error message or reason for failure",
+        },
+      },
+      required: ["task_id", "error"],
+    },
+  },
+  {
+    name: "chitty_task_my_tasks",
+    description:
+      "Get all pending tasks assigned to a specific agent. Equivalent to GET /api/v1/tasks/agent/:name — designed for agents to poll their own work queue.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: {
+          type: "string",
+          description: "Agent name to fetch pending tasks for",
+        },
+      },
+      required: ["agent"],
+    },
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1180,6 +1345,10 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_infra_logs",
   "chitty_infra_audit",
   "chitty_infra_analytics",
+  // Task Management — read-only query tools
+  "chitty_task_list",
+  "chitty_task_get",
+  "chitty_task_my_tasks",
 ]);
 
 /**
