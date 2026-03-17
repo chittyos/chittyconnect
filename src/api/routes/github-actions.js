@@ -81,9 +81,9 @@ githubActionsRoutes.post("/credentials", async (c) => {
       "CHICAGOAPPS",
       "FURNISHED-CONDOS",
     ];
-    const repoOwner = oidcResult.claims.repositoryOwner;
+    const repoOwner = oidcResult.claims.repositoryOwner || "";
 
-    if (!allowedOrgs.some((org) => org.toLowerCase() === repoOwner.toLowerCase())) {
+    if (!repoOwner || !allowedOrgs.some((org) => org.toLowerCase() === repoOwner.toLowerCase())) {
       return c.json(
         {
           success: false,
