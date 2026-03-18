@@ -1,14 +1,12 @@
 /**
- * Credential Provisioning Service
+ * @deprecated Use EnhancedCredentialProvisioner from credential-provisioner-enhanced.js instead.
+ * This base provisioner reads credentials directly from env vars (no broker abstraction).
+ * It is not imported anywhere and will be removed in a future cleanup.
+ *
+ * Credential Provisioning Service (LEGACY)
  *
  * Securely provisions credentials from 1Password and creates
  * appropriately scoped tokens for ChittyOS services.
- *
- * Security principles:
- * - Never return raw make_api_key tokens
- * - Always create scoped, time-limited tokens
- * - Log all provisioning operations
- * - Rate limit requests
  */
 
 /**
