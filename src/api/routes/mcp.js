@@ -56,8 +56,31 @@ export function deriveToolErrorStatus(result) {
 }
 
 /**
+ * GET /mcp/manifest
+ * MCP server manifest (unauthenticated)
+ */
+mcpRoutes.get("/manifest", (c) => {
+  return c.json({
+    name: "chittyconnect",
+    version: "2.2.0",
+    description:
+      "ChittyConnect MCP Server — ContextConsciousness™ & MemoryCloude™",
+    protocol: "mcp",
+    tools: MCP_TOOLS.length,
+    capabilities: ["tools", "resources", "sampling", "session"],
+    endpoints: {
+      tools: "/mcp/tools/list",
+      call: "/mcp/tools/call",
+      resources: "/mcp/resources/list",
+      session: "/mcp/session/persist",
+      sampling: "/mcp/sampling/sample",
+    },
+  });
+});
+
+/**
  * GET /mcp/tools/list
- * List all available MCP tools (52 tools across 10 domains)
+ * List all available MCP tools
  */
 mcpRoutes.get("/tools/list", async (c) => {
   return c.json({ tools: MCP_TOOLS });
