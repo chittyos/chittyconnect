@@ -71,6 +71,16 @@ api.use(
   }),
 );
 
+// Unauthenticated status endpoint for mesh health monitoring
+api.get("/api/v1/status", (c) => {
+  return c.json({
+    status: "ok",
+    service: "chittyconnect",
+    version: "2.2.0",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Authentication middleware for all API routes
 api.use("/api/*", authenticate);
 

@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ChittyOS GPT Connector API",
+    "title": "ChittyConnect API",
     "description": "Comprehensive API for connecting custom GPTs to ChittyOS services, third-party integrations, and banking connections",
-    "version": "1.0.0",
+    "version": "2.2.0",
     "contact": {
       "name": "ChittyOS Support",
       "url": "https://chitty.cc"
