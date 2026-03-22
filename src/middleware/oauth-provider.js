@@ -123,9 +123,11 @@ async function handleAuthorize(request, env) {
   // Complete authorization — derive per-actor userId from client identity.
   // IMPORTANT: userId must not contain colons — the OAuthProvider encodes the
   // authorization code as "${userId}:${grantId}:${secret}" and validates by
-  // splitting on ":" expecting exactly 3 parts.
+  // splitting on ":" expecting exactly 3 parts. Strip colons from the clientId
+  // itself as well, since a dynamically-registered client could supply one.
   // @canon: chittycanon://gov/governance#core-types
-  const actorId = `mcp-client-${oauthReqInfo.clientId || "anonymous"}`;
+  const safeClientId = (oauthReqInfo.clientId || "anonymous").replace(/:/g, "-");
+  const actorId = `mcp-client-${safeClientId}`;
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
     userId: actorId,
