@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import ApiKeys from "./pages/ApiKeys";
 import Sessions from "./pages/Sessions";
 import OAuthCallback from "./pages/OAuthCallback";
+import Command from "./pages/Command";
 
 // Components
 import RequireAuth from "./components/RequireAuth";
@@ -81,6 +82,11 @@ const Icons = {
       <line x1="12" y1="17" x2="12" y2="21" />
     </svg>
   ),
+  Command: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  ),
 };
 
 function Sidebar() {
@@ -139,6 +145,15 @@ function Sidebar() {
 
         <div className="nav-section">
           <div className="nav-section-title">Infrastructure</div>
+          <NavLink
+            to="/command"
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <span className="nav-item-icon">
+              <Icons.Command />
+            </span>
+            Command
+          </NavLink>
           <NavLink
             to="/connections"
             className={({ isActive }) =>
@@ -236,6 +251,7 @@ export default function App() {
           <Route path="/" element={<RequireAuth><Overview /></RequireAuth>} />
           <Route path="/contexts" element={<RequireAuth><Contexts /></RequireAuth>} />
           <Route path="/contexts/:id" element={<RequireAuth><ContextDetail /></RequireAuth>} />
+          <Route path="/command" element={<RequireAuth><Command /></RequireAuth>} />
           <Route path="/connections" element={<RequireAuth><Connections /></RequireAuth>} />
           <Route path="/connections/graph" element={<RequireAuth><ConnectionGraph /></RequireAuth>} />
           <Route path="/connections/:slug" element={<RequireAuth><ConnectionDetail /></RequireAuth>} />
