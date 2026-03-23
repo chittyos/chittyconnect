@@ -3,6 +3,7 @@
 -- governed by the TY-VY-RY framework (Identity / Connectivity / Authority)
 
 -- TY Plane (Identity): What IS this prompt?
+-- RY Plane (Authority): Gate columns included inline
 CREATE TABLE IF NOT EXISTS prompt_registry (
   id TEXT PRIMARY KEY,                    -- e.g. "litigation.synthesize"
   domain TEXT NOT NULL,                   -- e.g. "litigation", "scrape", "triage"
@@ -10,11 +11,18 @@ CREATE TABLE IF NOT EXISTS prompt_registry (
   base TEXT NOT NULL,                     -- base system prompt template
   layers TEXT NOT NULL DEFAULT '[]',      -- JSON array of { id, content, order }
   fallback TEXT NOT NULL DEFAULT 'passthrough', -- passthrough | deterministic | error
+  env_gate TEXT NOT NULL DEFAULT '{}',
+    -- JSON: { "production": "ai", "staging": "ai", "dev": "configurable", "test": "deterministic" }
+  author_gate TEXT NOT NULL DEFAULT '{}',
+    -- JSON: { "domain": "litigation", "allowedAuthors": ["chittyId..."], "requireApproval": false }
+  consumer_gate TEXT NOT NULL DEFAULT '{}',
+    -- JSON: { "allowedServices": ["*"], "allowedAgents": ["*"], "scopeBoundaries": [] }
   created_by TEXT,                        -- ChittyID of author
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   changelog TEXT                          -- description of latest change
 );
+CREATE INDEX IF NOT EXISTS idx_prompt_registry_domain ON prompt_registry(domain);
 
 -- TY Plane: Version history (immutable)
 CREATE TABLE IF NOT EXISTS prompt_versions (
@@ -31,16 +39,7 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_prompt_versions_prompt ON prompt_versions(prompt_id, version);
-
--- RY Plane (Authority): What should it be authorized to do?
--- Stored as JSON columns on prompt_registry for simplicity
-ALTER TABLE prompt_registry ADD COLUMN env_gate TEXT NOT NULL DEFAULT '{}';
-  -- JSON: { "production": "ai", "staging": "ai", "dev": "configurable", "test": "deterministic" }
-ALTER TABLE prompt_registry ADD COLUMN author_gate TEXT NOT NULL DEFAULT '{}';
-  -- JSON: { "domain": "litigation", "allowedAuthors": ["chittyId..."], "requireApproval": false }
-ALTER TABLE prompt_registry ADD COLUMN consumer_gate TEXT NOT NULL DEFAULT '{}';
-  -- JSON: { "allowedServices": ["*"], "allowedAgents": ["*"], "scopeBoundaries": [] }
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_versions_prompt ON prompt_versions(prompt_id, version);
 
 -- VY Plane (Connectivity): How has the network experienced it?
 CREATE TABLE IF NOT EXISTS prompt_executions (

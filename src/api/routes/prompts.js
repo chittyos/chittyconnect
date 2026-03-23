@@ -48,24 +48,27 @@ promptRoutes.post("/", async (c) => {
       return c.json({ error: "Prompt already exists. Use PUT to update." }, 409);
     }
 
-    await db.prepare(`
+    // Atomic: batch both inserts in a single D1 transaction
+    const registryStmt = db.prepare(`
       INSERT INTO prompt_registry (id, domain, version, base, layers, fallback, env_gate, author_gate, consumer_gate, created_by, changelog)
       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       body.id, body.domain, body.base, layers,
       body.fallback || "passthrough", envGate, authorGate, consumerGate,
       consumerId, body.changelog || "Initial creation"
-    ).run();
+    );
 
     // TY: save version 1
-    await db.prepare(`
+    const versionStmt = db.prepare(`
       INSERT INTO prompt_versions (prompt_id, version, base, layers, fallback, env_gate, author_gate, consumer_gate, changelog, created_by)
       VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       body.id, body.base, layers, body.fallback || "passthrough",
       envGate, authorGate, consumerGate,
       body.changelog || "Initial creation", consumerId
-    ).run();
+    );
+
+    await db.batch([registryStmt, versionStmt]);
 
     return c.json({ id: body.id, version: 1, status: "created" }, 201);
   } catch (err) {
@@ -81,6 +84,14 @@ promptRoutes.get("/:id", async (c) => {
 
   const prompt = await db.prepare("SELECT * FROM prompt_registry WHERE id = ?").bind(c.req.param("id")).first();
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
+
+  // RY: check consumer gate on read
+  const getApiKey = c.get("apiKey");
+  const getConsumerService = getApiKey?.service || getApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerCheck = checkConsumerGate(prompt, getConsumerService);
+  if (!consumerCheck.allowed) {
+    return c.json({ error: "Unauthorized: consumer gate denied", reason: consumerCheck.reason }, 403);
+  }
 
   return c.json(formatPrompt(prompt));
 });
@@ -98,7 +109,12 @@ promptRoutes.get("/", async (c) => {
     results = await db.prepare("SELECT * FROM prompt_registry ORDER BY domain, id").all();
   }
 
-  return c.json({ prompts: (results.results || []).map(formatPrompt), total: results.results?.length || 0 });
+  // RY: filter results by consumer gate
+  const listApiKey = c.get("apiKey");
+  const listConsumerService = listApiKey?.service || listApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const filtered = (results.results || []).filter((row) => checkConsumerGate(row, listConsumerService).allowed);
+
+  return c.json({ prompts: filtered.map(formatPrompt), total: filtered.length });
 });
 
 // Update prompt (creates new version)
@@ -131,19 +147,21 @@ promptRoutes.put("/:id", async (c) => {
   const changelog = body.changelog || `Updated to version ${newVersion}`;
 
   try {
-    // Update registry
-    await db.prepare(`
+    // Atomic: batch update + version insert in a single D1 transaction
+    const updateStmt = db.prepare(`
       UPDATE prompt_registry
       SET version = ?, base = ?, layers = ?, fallback = ?, env_gate = ?, author_gate = ?, consumer_gate = ?,
-          updated_at = datetime('now'), changelog = ?, created_by = ?
+          updated_at = datetime('now'), changelog = ?
       WHERE id = ?
-    `).bind(newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, consumerId, promptId).run();
+    `).bind(newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, promptId);
 
     // TY: save version snapshot
-    await db.prepare(`
+    const versionInsertStmt = db.prepare(`
       INSERT INTO prompt_versions (prompt_id, version, base, layers, fallback, env_gate, author_gate, consumer_gate, changelog, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(promptId, newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, consumerId).run();
+    `).bind(promptId, newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, consumerId);
+
+    await db.batch([updateStmt, versionInsertStmt]);
 
     return c.json({ id: promptId, version: newVersion, status: "updated" });
   } catch (err) {
@@ -177,8 +195,9 @@ promptRoutes.post("/resolve", async (c) => {
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
 
   const environment = body.environment || "production";
-  const consumerService = body.consumerService || c.req.header("X-Source-Service") || "unknown";
-  const consumerId = body.consumerId || c.get("apiKey")?.chittyId || null;
+  const apiKey = c.get("apiKey");
+  const consumerService = apiKey?.service || apiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerId = apiKey?.chittyId || apiKey?.userId || null;
 
   // RY: check consumer gate
   const consumerCheck = checkConsumerGate(prompt, consumerService);
@@ -244,8 +263,9 @@ promptRoutes.post("/execute", async (c) => {
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
 
   const environment = body.environment || "production";
-  const consumerService = body.consumerService || c.req.header("X-Source-Service") || "unknown";
-  const consumerId = body.consumerId || c.get("apiKey")?.chittyId || null;
+  const apiKeyExec = c.get("apiKey");
+  const consumerService = apiKeyExec?.service || apiKeyExec?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerId = apiKeyExec?.chittyId || apiKeyExec?.userId || null;
 
   // RY: gates
   const consumerCheck = checkConsumerGate(prompt, consumerService);
@@ -390,10 +410,32 @@ promptRoutes.post("/executions/:executionId/quality", async (c) => {
 
   const quality = Math.max(0, Math.min(1, Number(body.quality)));
   const source = body.source || "user_rating";
+  const executionId = Number(c.req.param("executionId"));
+
+  // Verify the execution exists and belongs to the caller
+  const qualityApiKey = c.get("apiKey");
+  const callerService = qualityApiKey?.service || qualityApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const callerId = qualityApiKey?.chittyId || qualityApiKey?.userId || null;
+
+  const execution = await db.prepare(
+    "SELECT consumer_id, consumer_service FROM prompt_executions WHERE id = ?"
+  ).bind(executionId).first();
+
+  if (!execution) {
+    return c.json({ error: "Execution not found" }, 404);
+  }
+
+  // Ownership check: caller must match the original consumer
+  if (execution.consumer_id && callerId && execution.consumer_id !== callerId) {
+    return c.json({ error: "Unauthorized: execution belongs to a different consumer" }, 403);
+  }
+  if (execution.consumer_service !== callerService && execution.consumer_id !== callerId) {
+    return c.json({ error: "Unauthorized: execution belongs to a different service" }, 403);
+  }
 
   await db.prepare(
     "UPDATE prompt_executions SET output_quality = ?, quality_source = ? WHERE id = ?"
-  ).bind(quality, source, Number(c.req.param("executionId"))).run();
+  ).bind(quality, source, executionId).run();
 
   return c.json({ status: "updated" });
 });
@@ -405,7 +447,8 @@ promptRoutes.get("/:id/drift", async (c) => {
   if (!db) return c.json({ error: "D1 not available" }, 503);
 
   const promptId = c.req.param("id");
-  const days = parseInt(c.req.query("days") || "30");
+  const rawDays = parseInt(c.req.query("days") || "30", 10);
+  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(rawDays, 365)) : 30;
 
   // Get quality distribution over time
   const results = await db.prepare(`
@@ -497,7 +540,7 @@ function composePrompt(base, layers, variables) {
   // Variable substitution: {{variable}} → value
   if (variables && typeof variables === "object") {
     for (const [key, value] of Object.entries(variables)) {
-      composed = composed.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value));
+      composed = composed.replaceAll(`{{${key}}}`, String(value));
     }
   }
   return composed;
