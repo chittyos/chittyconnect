@@ -229,6 +229,152 @@ thirdpartyRoutes.post("/openai/chat", async (c) => {
 });
 
 /**
+ * POST /api/thirdparty/ollama/chat
+ * Ollama chat completion (OpenAI-compatible) via chittyserv-dev
+ * Falls back to OpenAI if Ollama is unavailable or times out
+ */
+thirdpartyRoutes.post("/ollama/chat", async (c) => {
+  try {
+    const { messages, model = "llama3.2:3b", temperature, max_tokens } =
+      await c.req.json();
+
+    if (!messages) {
+      return c.json({ error: "messages is required" }, 400);
+    }
+
+    const ollamaUrl =
+      c.env.OLLAMA_URL || "https://ollama.chitty.cc/v1/chat/completions";
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(ollamaUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, model, temperature, max_tokens }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`Ollama error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      data._provider = "ollama";
+      return c.json(data);
+    } catch (ollamaError) {
+      clearTimeout(timeout);
+      console.log(
+        `Ollama unavailable (${ollamaError.message}), falling back to OpenAI`,
+      );
+
+      const openaiKey = await getCredential(
+        c.env,
+        "integrations/openai/api_key",
+        "OPENAI_API_KEY",
+      );
+
+      if (!openaiKey) {
+        return c.json(
+          {
+            error: "Ollama unavailable and OpenAI API key not configured",
+            ollamaError: ollamaError.message,
+          },
+          503,
+        );
+      }
+
+      const fallbackResponse = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages,
+            model: "gpt-4o-mini",
+            temperature,
+            max_tokens,
+          }),
+        },
+      );
+
+      if (!fallbackResponse.ok) {
+        throw new Error(`OpenAI fallback error: ${fallbackResponse.status}`);
+      }
+
+      const data = await fallbackResponse.json();
+      data._provider = "openai-fallback";
+      return c.json(data);
+    }
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/thirdparty/ollama/embeddings
+ * Ollama embeddings (OpenAI-compatible) via chittyserv-dev
+ */
+thirdpartyRoutes.post("/ollama/embeddings", async (c) => {
+  try {
+    const { input, model = "nomic-embed-text" } = await c.req.json();
+
+    if (!input) {
+      return c.json({ error: "input is required" }, 400);
+    }
+
+    const ollamaUrl =
+      c.env.OLLAMA_URL?.replace("/v1/chat/completions", "/v1/embeddings") ||
+      "https://ollama.chitty.cc/v1/embeddings";
+
+    const response = await fetch(ollamaUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input, model }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama embeddings error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    data._provider = "ollama";
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/thirdparty/ollama/models
+ * List available Ollama models
+ */
+thirdpartyRoutes.get("/ollama/models", async (c) => {
+  try {
+    const ollamaBase =
+      c.env.OLLAMA_URL?.replace("/v1/chat/completions", "") ||
+      "https://ollama.chitty.cc";
+
+    const response = await fetch(`${ollamaBase}/api/tags`);
+
+    if (!response.ok) {
+      throw new Error(`Ollama models error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
  * POST /api/thirdparty/cloudflare/ai/run
  * Cloudflare Workers AI
  */
