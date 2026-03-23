@@ -22,13 +22,30 @@ export async function requestReviewers(
   const {
     reviewers = [],
     teamReviewers = [],
-    useCODEOWNERS: _useCODEOWNERS = true,
+    changedFiles = [],
+    useCODEOWNERS = true,
   } = options;
 
-  // TODO: Parse CODEOWNERS file and match changed files
-  // For now, use fallback reviewers
-  const defaultReviewers = reviewers.length > 0 ? reviewers : [];
-  const defaultTeams = teamReviewers.length > 0 ? teamReviewers : ["core"];
+  let defaultReviewers = [...reviewers];
+  let defaultTeams = [...teamReviewers];
+
+  // Resolve CODEOWNERS if we have changed files
+  if (useCODEOWNERS && changedFiles.length > 0) {
+    try {
+      const owners = await getCodeOwners(token, owner, repo, changedFiles);
+      defaultReviewers = [
+        ...new Set([...defaultReviewers, ...owners.users]),
+      ];
+      defaultTeams = [...new Set([...defaultTeams, ...owners.teams])];
+    } catch {
+      // Fall through to defaults on CODEOWNERS fetch failure
+    }
+  }
+
+  // Fall back to "core" team if no reviewers resolved
+  if (defaultReviewers.length === 0 && defaultTeams.length === 0) {
+    defaultTeams = ["core"];
+  }
 
   if (defaultReviewers.length === 0 && defaultTeams.length === 0) {
     return; // No reviewers to request

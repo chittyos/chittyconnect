@@ -29,6 +29,32 @@ import { summarizePullRequest } from "../github/comments.js";
 import { requestReviewers } from "../github/reviewers.js";
 
 /**
+ * Fetch changed file paths for a pull request
+ * @param {string} token - Installation access token
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {number} prNumber - PR number
+ * @returns {Promise<string[]>} Array of changed file paths
+ */
+async function fetchChangedFiles(token, owner, repo, prNumber) {
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100`,
+    {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+      },
+    },
+  );
+
+  if (!response.ok) return [];
+
+  const files = await response.json();
+  return files.map((f) => f.filename);
+}
+
+/**
  * Process batch of queued events
  * @param {MessageBatch} batch - Queue message batch
  * @param {object} env - Worker environment
@@ -78,8 +104,8 @@ async function processEvent(message, env) {
       return;
     }
 
-    // Normalize into MCP event schema (prepared for future MCP dispatch)
-    normalizeGitHubEvent({
+    // Normalize into MCP event schema
+    const mcpEvent = normalizeGitHubEvent({
       delivery,
       event,
       payload,
@@ -87,8 +113,12 @@ async function processEvent(message, env) {
       tenantId,
     });
 
-    // Dispatch to MCP bus (TODO: implement MCP client)
-    // await dispatchToMCP(env, mcpEvent);
+    // Log normalized event for observability (MCP bus dispatch deferred to v3)
+    console.log("MCP event normalized:", {
+      type: mcpEvent.type,
+      delivery: mcpEvent.delivery,
+      tenantId: mcpEvent.tenantId,
+    });
 
     // Execute v1 automations based on event type
     await runAutomations(env, event, payload, installationId);
@@ -162,6 +192,14 @@ async function runAutomations(env, event, payload, installationId) {
         const pr = payload.pull_request;
         const repo = payload.repository;
 
+        // Fetch changed files first (used by labeling and reviewer assignment)
+        const changedFiles = await fetchChangedFiles(
+          token,
+          repo.owner.login,
+          repo.name,
+          pr.number,
+        );
+
         // Run automations in parallel
         await Promise.allSettled([
           // 1. Compliance check
@@ -179,7 +217,7 @@ async function runAutomations(env, event, payload, installationId) {
             repo.name,
             pr.number,
             pr.title,
-            [], // TODO: fetch changed files
+            changedFiles,
           ),
 
           // 3. PR summary comment
@@ -191,8 +229,10 @@ async function runAutomations(env, event, payload, installationId) {
             pr,
           ),
 
-          // 4. Request reviewers
-          requestReviewers(token, repo.owner.login, repo.name, pr.number),
+          // 4. Request reviewers (with CODEOWNERS resolution)
+          requestReviewers(token, repo.owner.login, repo.name, pr.number, {
+            changedFiles,
+          }),
         ]);
       }
       break;
