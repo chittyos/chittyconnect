@@ -178,11 +178,11 @@ This charter is part of a synchronized documentation triad. Changes to shared fi
 
 ## Compliance
 
-- [ ] Service registered in ChittyRegistry
+- [x] Service registered in ChittyRegistry
 - [x] Health endpoint operational at /health
 - [x] OpenAPI specification published
 - [x] CLAUDE.md development guide present
-- [ ] MCP manifest published
+- [x] MCP manifest published
 - [x] GitHub App webhook verified
 
 ---

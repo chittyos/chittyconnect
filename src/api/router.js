@@ -36,6 +36,7 @@ import { certRoutes } from "./routes/cert.js";
 import { connectRoutes } from "./routes/connect.js";
 import { connectionsRoutes } from "./routes/connections.js";
 import { authKeysRoutes } from "./routes/auth-keys.js";
+import { promptRoutes } from "./routes/prompts.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -120,6 +121,7 @@ api.get("/api/health", (c) => {
       cert: "/api/v1/cert",
       connect: "/api/v1/connect",
       connections: "/api/connections",
+      prompts: "/api/v1/context/prompts",
       mcp: "/mcp",
       chatgptMcp: "/chatgpt/mcp",
     },
@@ -164,5 +166,6 @@ api.route("/api/v1/cert", certRoutes);
 api.route("/api/v1/connect", connectRoutes);
 api.route("/api/connections", connectionsRoutes);
 api.route("/api/auth/keys", authKeysRoutes);
+api.route("/api/v1/context/prompts", promptRoutes);
 
 export { api };
