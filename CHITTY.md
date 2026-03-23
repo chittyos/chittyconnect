@@ -52,11 +52,11 @@ Source: `chittycanon://gov/governance#three-aspects`
 ### Certification
 - **Badge**: ChittyCertified
 - **Certifier**: ChittyCertify (`chittycanon://core/services/chittycertify`)
-- **Last Certified**: --
+- **Last Certified**: 2026-03-23
 
 ### ChittyDNA
-- **ChittyID**: --
-- **DNA Hash**: --
+- **ChittyID**: 03-1-USA-1399-T-2603-0-70
+- **DNA Hash**: bacebc8c1ba0bfee
 - **Lineage**: root (platform spine)
 
 ### Dependencies
