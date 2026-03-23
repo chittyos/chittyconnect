@@ -108,7 +108,8 @@
   // ChittyOS Services:         CHITTY_ID_TOKEN, CHITTY_AUTH_TOKEN, CHITTY_CASES_TOKEN,
   //                            CHITTY_FINANCE_TOKEN, CHITTY_EVIDENCE_TOKEN, CHITTY_SYNC_TOKEN,
   //                            CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
-  //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN
+  //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN,
+  //                            CHITTY_TASK_TOKEN
   // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL
   // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
   //                            CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)

@@ -33,6 +33,7 @@ const CHITTYOS_SERVICES = [
   { id: "chittyledger", url: "https://ledger.chitty.cc" },
   { id: "chittydisputes", url: "https://disputes.chitty.cc" },
   { id: "chittytrack", url: "https://track.chitty.cc" },
+  { id: "chittytask", url: "https://tasks.chitty.cc" },
 ];
 
 /**
@@ -1613,6 +1614,179 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
               text: `GraphQL Analytics returned non-JSON: ${rawText.slice(0, 200)}`,
             },
           ],
+          isError: true,
+        };
+      }
+    }
+
+    // ── Task Management tools ────────────────────────────────────────
+    // Proxies to tasks.chitty.cc — inter-agent task coordination
+    // Auth: CHITTY_TASK_TOKEN (service token for chittytask)
+    else if (name.startsWith("chitty_task_")) {
+      const { error: taskErr, headers: taskAuth } = await requireServiceAuth(
+        "chittytask",
+        "ChittyTask",
+      );
+      if (taskErr) return taskErr;
+      const taskHeaders = { ...taskAuth, "Content-Type": "application/json" };
+
+      if (name === "chitty_task_create") {
+        const body = {
+          title: args.title,
+          task_type: args.task_type,
+          assigned_agent: args.assigned_agent,
+        };
+        if (args.description !== undefined) body.description = args.description;
+        if (args.priority !== undefined) body.priority = args.priority;
+        if (args.payload !== undefined) body.payload = args.payload;
+        if (args.depends_on !== undefined) body.depends_on = args.depends_on;
+        const response = await fetch("https://tasks.chitty.cc/api/v1/tasks", {
+          method: "POST",
+          headers: taskHeaders,
+          body: JSON.stringify(body),
+        });
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_list") {
+        const params = new URLSearchParams();
+        if (args.agent) params.set("agent", args.agent);
+        if (args.status) params.set("status", args.status);
+        if (args.task_type) params.set("task_type", args.task_type);
+        if (args.limit !== undefined) params.set("limit", String(args.limit));
+        if (args.offset !== undefined) params.set("offset", String(args.offset));
+        const url = `https://tasks.chitty.cc/api/v1/tasks${params.toString() ? `?${params}` : ""}`;
+        const response = await fetch(url, { headers: taskAuth });
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_get") {
+        if (!args.task_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}`,
+          { headers: taskAuth },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_claim") {
+        if (!args.task_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        }
+        const claimHeaders = { ...taskAuth };
+        if (args.agent) claimHeaders["X-ChittyOS-Caller"] = args.agent;
+        const url = args.agent
+          ? `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim?agent=${encodeURIComponent(args.agent)}`
+          : `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: claimHeaders,
+        });
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_complete") {
+        if (!args.task_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        }
+        const body = {};
+        if (args.result !== undefined) body.result = args.result;
+        const response = await fetch(
+          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/complete`,
+          {
+            method: "POST",
+            headers: taskHeaders,
+            body: JSON.stringify(body),
+          },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_fail") {
+        if (!args.task_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        }
+        if (!args.error) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: error" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/fail`,
+          {
+            method: "POST",
+            headers: taskHeaders,
+            body: JSON.stringify({ error: args.error }),
+          },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_task_my_tasks") {
+        if (!args.agent) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: agent" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `https://tasks.chitty.cc/api/v1/tasks/agent/${encodeURIComponent(args.agent)}`,
+          { headers: taskAuth },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "ChittyTask",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else {
+        return {
+          content: [{ type: "text", text: `Unknown task tool: ${name}` }],
           isError: true,
         };
       }
