@@ -927,13 +927,40 @@ export class EnhancedCredentialProvisioner {
    *
    * @private
    */
-  async createScopedServiceToken(_parentToken, scopes, _context) {
+  async createScopedServiceToken(parentToken, scopes, context) {
     const requestedScopes = Array.isArray(scopes) ? scopes : [];
-    // TODO: Call ChittyAuth to create a derivative scoped token
-    throw new Error(
-      `Scoped token creation not yet implemented (requested scopes: ${requestedScopes.join(", ") || "none"}). ` +
-        "Requires ChittyAuth derivative token API.",
+
+    const response = await fetch(
+      "https://auth.chitty.cc/api/v1/tokens/derivative",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${parentToken}`,
+          "Content-Type": "application/json",
+          "User-Agent": "ChittyConnect/2.2.0",
+        },
+        body: JSON.stringify({
+          scopes: requestedScopes,
+          ttl: context.ttl || 3600,
+          source: context.source || "chittyconnect",
+          purpose: context.purpose || "inter-service-call",
+        }),
+      },
     );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(
+        `ChittyAuth derivative token failed (${response.status}): ${error}`,
+      );
+    }
+
+    const data = await response.json();
+    return {
+      value: data.token,
+      expires_at: data.expires_at,
+      scopes: data.scopes || requestedScopes,
+    };
   }
 
   /**
@@ -942,16 +969,77 @@ export class EnhancedCredentialProvisioner {
    * @private
    */
   async createGitHubInstallationToken(
-    _appId,
-    _privateKey,
-    _repository,
-    _permissions,
+    appId,
+    privateKey,
+    repository,
+    permissions,
   ) {
-    // TODO: Use GitHub App API (POST /app/installations/{id}/access_tokens) to create installation token
-    throw new Error(
-      "GitHub installation token creation not yet implemented. " +
-        "Requires GITHUB_APP_ID and GITHUB_PRIVATE_KEY secrets.",
+    const { generateAppJWT, getInstallationToken } = await import(
+      "../auth/github.js"
     );
+
+    // Generate App JWT
+    const appJwt = await generateAppJWT(appId, privateKey);
+
+    // Find installation for the repository
+    const installationsResponse = await fetch(
+      "https://api.github.com/app/installations",
+      {
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "ChittyConnect/2.2.0",
+        },
+      },
+    );
+
+    if (!installationsResponse.ok) {
+      throw new Error(
+        `Failed to list installations (${installationsResponse.status})`,
+      );
+    }
+
+    const installations = await installationsResponse.json();
+    const repoOwner = repository.split("/")[0]?.toLowerCase();
+    const installation = installations.find(
+      (i) => i.account?.login?.toLowerCase() === repoOwner,
+    );
+
+    if (!installation) {
+      throw new Error(`No GitHub App installation found for ${repository}`);
+    }
+
+    // Create scoped installation token
+    const response = await fetch(
+      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "ChittyConnect/2.2.0",
+        },
+        body: JSON.stringify({
+          repositories: [repository.split("/")[1]],
+          permissions: permissions || { contents: "read", metadata: "read" },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(
+        `GitHub installation token failed (${response.status}): ${error}`,
+      );
+    }
+
+    const data = await response.json();
+    return {
+      value: data.token,
+      expires_at: data.expires_at,
+      permissions: data.permissions,
+      repositories: data.repositories,
+    };
   }
 
   /**

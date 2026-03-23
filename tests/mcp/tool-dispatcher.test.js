@@ -816,7 +816,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver: low trust
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 2, entity_type: "P" }),
+        json: async () => ({ ty: 0.5, vy: 0.5, ry: 0.5 }),
       });
 
       const envWithCache = {
@@ -839,7 +839,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver: Authority with INSTITUTIONAL trust
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 4, entity_type: "A" }),
+        json: async () => ({ ty: 0.9, vy: 0.8, ry: 0.7 }),
       });
       // Mock ChittyLedger seal response
       mockFetch.mockResolvedValueOnce({
@@ -875,7 +875,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 2, entity_type: "P" }),
+        json: async () => ({ ty: 0.5, vy: 0.5, ry: 0.5 }),
       });
       // Mock ledger dispute response
       mockFetch.mockResolvedValueOnce({
@@ -978,7 +978,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 1, entity_type: "P" }),
+        json: async () => ({ ty: 0.3, vy: 0.3, ry: 0.3 }),
       });
       // Mock ledger fact+proof response
       mockFetch.mockResolvedValueOnce({
@@ -1080,7 +1080,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver: Authority with INSTITUTIONAL trust
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 4, entity_type: "A" }),
+        json: async () => ({ ty: 0.9, vy: 0.8, ry: 0.7 }),
       });
       // Mock ChittyLedger seal — upstream failure
       mockFetch.mockResolvedValueOnce({
@@ -1113,7 +1113,7 @@ describe("dispatchToolCall", () => {
       // Mock trust resolver
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 4, entity_type: "A" }),
+        json: async () => ({ ty: 0.9, vy: 0.8, ry: 0.7 }),
       });
       // Mock seal success
       mockFetch.mockResolvedValueOnce({
@@ -1143,7 +1143,7 @@ describe("dispatchToolCall", () => {
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trust_level: 4, entity_type: "A" }),
+        json: async () => ({ ty: 0.9, vy: 0.8, ry: 0.7 }),
       });
       mockFetch.mockResolvedValueOnce({
         ok: true,

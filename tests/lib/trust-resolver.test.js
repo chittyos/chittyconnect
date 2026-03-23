@@ -9,7 +9,6 @@ const mockEnv = {
     get: vi.fn(),
     put: vi.fn(),
   },
-  CHITTY_TRUST_TOKEN: "test-trust-token",
 };
 
 beforeEach(() => {
@@ -30,26 +29,29 @@ describe("TRUST_LEVELS", () => {
 describe("resolveTrustLevel", () => {
   it("returns cached trust level when available", async () => {
     mockEnv.CREDENTIAL_CACHE.get.mockResolvedValue(
-      JSON.stringify({ trust_level: 3, entity_type: "P" })
+      JSON.stringify({ trust_level: 3, entity_type: "P", ty: 0.8, vy: 0.7, ry: 0.5 })
     );
     const result = await resolveTrustLevel("01-P-USA-1234-P-2601-A-X", mockEnv);
-    expect(result).toEqual({ trust_level: 3, entity_type: "P" });
+    expect(result).toEqual({ trust_level: 3, entity_type: "P", ty: 0.8, vy: 0.7, ry: 0.5 });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("fetches from ChittyTrust when cache is empty", async () => {
+  it("fetches from ChittyScore DRL when cache is empty", async () => {
     mockEnv.CREDENTIAL_CACHE.get.mockResolvedValue(null);
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ trust_level: 4, entity_type: "A" }),
+      json: async () => ({ ty: 0.9, vy: 0.8, ry: 0.7 }),
     });
+    // ChittyID segment 4 = "A" (Authority entity type)
     const result = await resolveTrustLevel("01-A-USA-5678-A-2601-B-X", mockEnv);
-    expect(result).toEqual({ trust_level: 4, entity_type: "A" });
+    // deriveTrustLevel: floor((0.9+0.8+0.7)/3 * 5) = floor(0.8 * 5) = floor(4.0) = 4
+    expect(result).toEqual({ trust_level: 4, entity_type: "A", ty: 0.9, vy: 0.8, ry: 0.7 });
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://trust.chitty.cc/api/v1/trust/01-A-USA-5678-A-2601-B-X",
+      "https://score.chitty.cc/v1/reckon/01-A-USA-5678-A-2601-B-X",
       expect.objectContaining({
+        method: "POST",
         headers: expect.objectContaining({
-          Authorization: "Bearer test-trust-token",
+          "Content-Type": "application/json",
         }),
       })
     );
@@ -64,6 +66,6 @@ describe("resolveTrustLevel", () => {
     mockEnv.CREDENTIAL_CACHE.get.mockResolvedValue(null);
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
     const result = await resolveTrustLevel("bad-id", mockEnv);
-    expect(result).toEqual({ trust_level: 0, entity_type: "P" });
+    expect(result).toEqual({ trust_level: 0, entity_type: "P", ty: 0, vy: 0, ry: 0 });
   });
 });

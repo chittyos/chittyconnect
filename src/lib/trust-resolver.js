@@ -1,13 +1,14 @@
 /**
  * Trust Level Resolver
  *
- * Resolves ChittyTrust levels with KV caching (5-min TTL).
- * @canon: chittycanon://docs/tech/spec/chittyid-spec#trust-levels
+ * Resolves trust levels via ChittyScore DRL reckoning (TY/VY/RY model).
+ * Derives backward-compatible trust_level (0-5) from TY/VY/RY composite.
  *
+ * @canon: chittycanon://docs/tech/spec/chittyid-spec#trust-levels
  * @module lib/trust-resolver
  */
 
-/** Canonical trust level constants (0-5 scale) */
+/** Canonical trust level constants (0-5 scale) — backward compat */
 export const TRUST_LEVELS = {
   ANONYMOUS: 0,
   BASIC: 1,
@@ -20,18 +21,38 @@ export const TRUST_LEVELS = {
 const CACHE_TTL = 300; // 5 minutes
 
 /**
+ * Derive trust_level (0-5) from TY/VY/RY reckoning.
+ * Uses floor of the average, scaled to 0-5.
+ *
+ * @param {number} ty - Identity Substrate (0-1)
+ * @param {number} vy - Verified Yesterday (0-1)
+ * @param {number} ry - Reach and Authority (0-1)
+ * @returns {number} trust_level 0-5
+ */
+function deriveTrustLevel(ty, vy, ry) {
+  const composite = (ty + vy + ry) / 3;
+  return Math.min(5, Math.floor(composite * 5));
+}
+
+/**
  * Resolve trust level for a ChittyID entity.
  *
+ * Calls ChittyScore DRL reckoning endpoint, caches result in KV.
+ * Returns backward-compatible trust_level plus TY/VY/RY breakdown.
+ *
  * @param {string} chittyId - Entity ChittyID
- * @param {object} env - Worker environment (needs CREDENTIAL_CACHE KV, CHITTY_TRUST_TOKEN)
- * @returns {Promise<{trust_level: number, entity_type: string}>}
+ * @param {object} env - Worker environment (needs CREDENTIAL_CACHE KV)
+ * @returns {Promise<{trust_level: number, entity_type: string, ty: number, vy: number, ry: number}>}
  */
 export async function resolveTrustLevel(chittyId, env) {
   const cacheKey = `trust:${chittyId}`;
 
-  // Check cache
+  // Extract entity type from ChittyID format: VV-G-LLL-SSSS-T-YM-C-X (segment 4)
+  const segments = (chittyId || "").split("-");
+  const entityType = segments.length >= 5 ? segments[4] : "P";
+
   // Fail-closed fallback: ANONYMOUS trust grants no governance permissions
-  const FALLBACK = { trust_level: TRUST_LEVELS.ANONYMOUS, entity_type: "P" };
+  const FALLBACK = { trust_level: TRUST_LEVELS.ANONYMOUS, entity_type: entityType, ty: 0, vy: 0, ry: 0 };
 
   if (!env.CREDENTIAL_CACHE) {
     console.error(
@@ -40,6 +61,7 @@ export async function resolveTrustLevel(chittyId, env) {
     return FALLBACK;
   }
 
+  // Check cache
   const cached = await env.CREDENTIAL_CACHE.get(cacheKey);
   if (cached) {
     try {
@@ -52,19 +74,14 @@ export async function resolveTrustLevel(chittyId, env) {
     }
   }
 
-  // Fetch from ChittyTrust
+  // Fetch from ChittyScore DRL reckoning
   try {
-    const token = env.CHITTY_TRUST_TOKEN;
-    if (!token) {
-      console.error("[TrustResolver] CHITTY_TRUST_TOKEN secret not configured");
-      return FALLBACK;
-    }
-
     const resp = await fetch(
-      `https://trust.chitty.cc/api/v1/trust/${chittyId}`,
+      `https://score.chitty.cc/v1/reckon/${encodeURIComponent(chittyId)}`,
       {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
           "X-Source-Service": "chittyconnect",
         },
       },
@@ -72,15 +89,22 @@ export async function resolveTrustLevel(chittyId, env) {
 
     if (!resp.ok) {
       console.error(
-        `[TrustResolver] ChittyTrust returned ${resp.status} for ${chittyId}`,
+        `[TrustResolver] ChittyScore returned ${resp.status} for ${chittyId}`,
       );
       return FALLBACK;
     }
 
     const data = await resp.json();
+    const ty = data.ty ?? 0;
+    const vy = data.vy ?? 0;
+    const ry = data.ry ?? 0;
+
     const result = {
-      trust_level: data.trust_level ?? TRUST_LEVELS.ANONYMOUS,
-      entity_type: data.entity_type ?? "P",
+      trust_level: deriveTrustLevel(ty, vy, ry),
+      entity_type: entityType,
+      ty,
+      vy,
+      ry,
     };
 
     // Cache with TTL
