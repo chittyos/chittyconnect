@@ -927,13 +927,41 @@ export class EnhancedCredentialProvisioner {
    *
    * @private
    */
-  async createScopedServiceToken(_parentToken, scopes, _context) {
+  async createScopedServiceToken(parentToken, scopes, context) {
     const requestedScopes = Array.isArray(scopes) ? scopes : [];
-    // TODO: Call ChittyAuth to create a derivative scoped token
-    throw new Error(
-      `Scoped token creation not yet implemented (requested scopes: ${requestedScopes.join(", ") || "none"}). ` +
-        "Requires ChittyAuth derivative token API.",
+    const ttl = context.ttl || 3600; // Default 1 hour
+
+    const response = await fetch(
+      "https://auth.chitty.cc/api/tokens/derivative",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.env.CHITTY_AUTH_SERVICE_TOKEN}`,
+        },
+        body: JSON.stringify({
+          parent_token: parentToken,
+          scopes: requestedScopes,
+          ttl,
+          requesting_service: context.source_service || "chittyconnect",
+          target_service: context.target_service,
+        }),
+      },
     );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(
+        `ChittyAuth derivative token failed (${response.status}): ${error}`,
+      );
+    }
+
+    const data = await response.json();
+    return {
+      value: data.token,
+      expires_at: data.expires_at,
+      scopes: data.scopes || requestedScopes,
+    };
   }
 
   /**
@@ -942,16 +970,87 @@ export class EnhancedCredentialProvisioner {
    * @private
    */
   async createGitHubInstallationToken(
-    _appId,
-    _privateKey,
-    _repository,
-    _permissions,
+    appId,
+    privateKey,
+    repository,
+    permissions,
   ) {
-    // TODO: Use GitHub App API (POST /app/installations/{id}/access_tokens) to create installation token
-    throw new Error(
-      "GitHub installation token creation not yet implemented. " +
-        "Requires GITHUB_APP_ID and GITHUB_PRIVATE_KEY secrets.",
+    // Import the existing GitHub auth module
+    const { generateAppJWT } = await import("../auth/github.js");
+
+    // Generate App JWT
+    const appJwt = await generateAppJWT(appId, privateKey);
+
+    // Find the installation for this repository
+    const owner = repository.split("/")[0] || "CHITTYOS";
+    const installationsResp = await fetch(
+      "https://api.github.com/app/installations",
+      {
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "ChittyConnect/1.0",
+        },
+      },
     );
+
+    if (!installationsResp.ok) {
+      throw new Error(
+        `Failed to list installations (${installationsResp.status})`,
+      );
+    }
+
+    const installations = await installationsResp.json();
+    const installation = installations.find(
+      (i) =>
+        i.account?.login?.toLowerCase() === owner.toLowerCase(),
+    );
+
+    if (!installation) {
+      throw new Error(
+        `No GitHub App installation found for org: ${owner}`,
+      );
+    }
+
+    // Create scoped installation token
+    const permMap = {};
+    for (const perm of permissions) {
+      const [key, level] = perm.split(":");
+      permMap[key] = level || "write";
+    }
+
+    const tokenResp = await fetch(
+      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "ChittyConnect/1.0",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repositories: repository.includes("/")
+            ? [repository.split("/")[1]]
+            : undefined,
+          permissions: permMap,
+        }),
+      },
+    );
+
+    if (!tokenResp.ok) {
+      const error = await tokenResp.text();
+      throw new Error(
+        `GitHub installation token creation failed (${tokenResp.status}): ${error}`,
+      );
+    }
+
+    const tokenData = await tokenResp.json();
+    return {
+      value: tokenData.token,
+      expires_at: tokenData.expires_at,
+      permissions: tokenData.permissions,
+    };
   }
 
   /**
