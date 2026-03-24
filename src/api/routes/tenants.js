@@ -72,7 +72,13 @@ tenantRoutes.get("/", async (c) => {
 
     const manager = new TenantProjectManager(c.env);
     const result = await manager.listTenants({ status, limit, offset });
-    return c.json(result);
+
+    // Strip connection URIs from list response to prevent credential leakage
+    const safeTenants = result.tenants.map(
+      ({ connection_uri_encrypted, ...rest }) => rest,
+    );
+
+    return c.json({ tenants: safeTenants, total: result.total });
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
