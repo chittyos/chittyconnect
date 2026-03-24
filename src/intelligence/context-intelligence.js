@@ -691,10 +691,10 @@ export class ContextIntelligence {
       )
       .run();
 
-    // Archive source contexts
+    // Retire source contexts (supernova consumes them)
     await this.db
       .prepare(
-        `UPDATE context_entities SET status = 'archived' WHERE chitty_id IN (?, ?)`,
+        `UPDATE context_entities SET status = 'retired' WHERE chitty_id IN (?, ?)`,
       )
       .bind(chittyId1, chittyId2)
       .run();
@@ -815,15 +815,15 @@ export class ContextIntelligence {
       newContexts.push({ chittyId: newChittyId, label: split.label });
     }
 
-    // Archive source
+    // Retire source (fission replaces it)
     await this.db
       .prepare(
-        `UPDATE context_entities SET status = 'archived' WHERE chitty_id = ?`,
+        `UPDATE context_entities SET status = 'retired' WHERE chitty_id = ?`,
       )
       .bind(chittyId)
       .run();
 
-    return { success: true, sourceArchived: chittyId, newContexts };
+    return { success: true, sourceRetired: chittyId, newContexts };
   }
 
   // ============ DERIVATIVE: Fork a Context ============

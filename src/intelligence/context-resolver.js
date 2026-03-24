@@ -1,27 +1,24 @@
 /**
- * Context Resolver - Intelligent Context Matching & Binding
+ * Context Resolver - Intelligent Context Reconstitution & Binding
  *
- * Implements the Context Anchor Model:
- * - Resolves existing contexts by anchor hash (project_path + workspace + support_type)
- * - Only mints new ChittyID when no match exists
- * - Requires user confirmation for new context creation
- * - Auto-logs to context_ledger
- * - Auto-accumulates to context_dna on session end
+ * Per synthetic-continuity doctrine (chittycanon://doctrine/synthetic-continuity):
+ * - Sessions are VIEWPORTS into existing entities, not births
+ * - Entities are minted per COORDINATION NEED, not per session
+ * - DB lookup failure is an ERROR, never a minting trigger
+ * - Reconstitution evaluates temporal, experiential, trust, and context signals
  *
- * Flow:
- * 1. Extract context hints from request/headers/params
- * 2. Build anchor hash from static identifiers
- * 3. Query context_entities for existing match
- * 4. If match: return existing context for binding confirmation
- * 5. If no match: prepare new context (pending user confirmation)
- * 6. On confirmation: bind session to context, log to ledger
- * 7. On session end: roll up metrics to DNA
+ * Resolution hierarchy:
+ * 1. Explicit ChittyID → direct load (highest confidence)
+ * 2. Anchor hash match → reconstitute existing entity
+ * 3. Multi-signal fallback → find best candidate by project, workspace, org, recency
+ * 4. No match AND confirmed coordination need → mint new entity (requires confirmation)
+ * 5. DB failure → return error (NEVER mint as fallback)
  *
  * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/context-resolver
- * @version 1.0.0
+ * @canon-ref chittycanon://doctrine/synthetic-continuity
+ * @version 2.0.0
  * @status CERTIFIED
  * @author ChittyOS Foundation
- * @see chittycanon://docs/tech/architecture/context-anchor-model
  */
 
 export class ContextResolver {
@@ -31,8 +28,15 @@ export class ContextResolver {
   }
 
   /**
-   * Resolve context from hints - finds existing or prepares new
-   * Does NOT create or bind automatically - returns resolution for confirmation
+   * Resolve context from hints — reconstitute existing entity or propose new
+   *
+   * Resolution cascade:
+   * 1. Explicit ChittyID → direct reconstitution
+   * 2. Anchor hash match → reconstitute with confidence scoring
+   * 3. Multi-signal fallback → best candidate by project/workspace/org/recency
+   * 4. No match → propose new (requires confirmation + coordination need justification)
+   *
+   * Per doctrine: sessions are viewports, not births. DB failure is error, not mint trigger.
    */
   async resolveContext(hints) {
     const {
@@ -45,25 +49,36 @@ export class ContextResolver {
       explicitChittyId,
     } = hints;
 
-    // If explicit ChittyID provided, load that context directly
+    // 1. Explicit ChittyID — highest confidence, direct reconstitution
     if (explicitChittyId) {
-      const context = await this.loadContextByChittyId(explicitChittyId);
-      if (context) {
+      try {
+        const context = await this.loadContextByChittyId(explicitChittyId);
+        if (context) {
+          return {
+            action: "bind_existing",
+            context,
+            confidence: 1.0,
+            reason: "Explicit ChittyID reconstituted",
+            resolution: "explicit",
+          };
+        }
+      } catch (err) {
+        // DB failure with explicit ID is an error — never fallthrough to mint
         return {
-          action: "bind_existing",
-          context,
-          confidence: 1.0,
-          reason: "Explicit ChittyID provided",
+          action: "error",
+          error: `DB lookup failed for explicit ChittyID ${explicitChittyId}: ${err.message}`,
+          resolution: "db_error",
         };
       }
-      // Explicit ID not found - this is an error condition
+      // Explicit ID not found in DB (not a DB error, just not there)
       return {
         action: "error",
-        error: `ChittyID ${explicitChittyId} not found`,
+        error: `ChittyID ${explicitChittyId} not found in context_entities`,
+        resolution: "not_found",
       };
     }
 
-    // Build anchor hash from static identifiers
+    // Build anchor hash for matching
     const anchors = this.buildAnchors({
       projectPath,
       workspace,
@@ -72,22 +87,65 @@ export class ContextResolver {
     });
     const anchorHash = await this.hashAnchors(anchors);
 
-    // Look for existing context with matching anchor hash
-    const existingContext = await this.findContextByHash(anchorHash);
-
-    if (existingContext) {
-      // Found existing context - return for binding confirmation
+    // 2. Anchor hash match — reconstitute existing entity
+    try {
+      const existingContext = await this.findContextByHash(anchorHash);
+      if (existingContext) {
+        return {
+          action: "bind_existing",
+          context: existingContext,
+          confidence: this.calculateMatchConfidence(existingContext, hints),
+          reason: `Reconstituted by anchor hash: ${anchorHash.slice(0, 16)}...`,
+          resolution: "anchor_hash",
+          anchors,
+          anchorHash,
+        };
+      }
+    } catch (err) {
+      // DB failure during anchor lookup — return error, do NOT fall through to mint
+      console.error(
+        `[ContextResolver] DB error during anchor hash lookup: ${err.message}`,
+      );
       return {
-        action: "bind_existing",
-        context: existingContext,
-        confidence: this.calculateMatchConfidence(existingContext, hints),
-        reason: `Matched by anchor hash: ${anchorHash.slice(0, 16)}...`,
+        action: "error",
+        error: `DB unavailable during context resolution: ${err.message}`,
+        resolution: "db_error",
         anchors,
         anchorHash,
       };
     }
 
-    // No existing context - prepare new one (pending confirmation)
+    // 3. Multi-signal fallback — find best candidate entity
+    try {
+      const candidate = await this.findBestCandidate(hints);
+      if (candidate) {
+        return {
+          action: "bind_existing",
+          context: candidate.context,
+          confidence: candidate.confidence,
+          reason: candidate.reason,
+          resolution: "multi_signal",
+          anchors,
+          anchorHash,
+        };
+      }
+    } catch (err) {
+      // Multi-signal search failed — return error, do NOT fall through to mint
+      console.warn(
+        `[ContextResolver] Multi-signal search failed: ${err.message}`,
+      );
+      return {
+        action: "error",
+        error: `Multi-signal search failed: ${err.message}`,
+        resolution: "db_error",
+        anchors,
+        anchorHash,
+      };
+    }
+
+    // 4. No match found — propose new entity (requires confirmation)
+    // This is the ONLY path to minting, and it requires explicit confirmation
+    // with a coordination need justification
     return {
       action: "create_new",
       pendingContext: {
@@ -97,10 +155,142 @@ export class ContextResolver {
         organization,
         anchorHash,
       },
-      reason: "No existing context matches these anchors",
+      reason:
+        "No existing entity matches these signals. New entity requires coordination need justification.",
+      resolution: "no_match",
       anchors,
       anchorHash,
       requiresConfirmation: true,
+      coordinationNeedRequired: true,
+    };
+  }
+
+  /**
+   * Multi-signal entity matching — finds the best existing entity when
+   * anchor hash doesn't match. Evaluates:
+   * - Project path overlap
+   * - Workspace match
+   * - Organization match
+   * - Temporal recency (last activity)
+   * - Trust level (higher trust = more likely the intended entity)
+   * - Session count (established entities preferred over new)
+   */
+  async findBestCandidate(hints) {
+    const { projectPath, workspace, organization, supportType } = hints;
+
+    // Query candidates — active or dormant entities, ordered by recency
+    const candidates = await this.db
+      .prepare(
+        `
+      SELECT ce.*, cd.competencies, cd.expertise_domains, cd.success_rate, cd.total_interactions
+      FROM context_entities ce
+      LEFT JOIN context_dna cd ON ce.id = cd.context_id
+      WHERE ce.status IN ('active', 'dormant')
+      ORDER BY ce.last_activity DESC
+      LIMIT 50
+    `,
+      )
+      .all();
+
+    if (!candidates?.results?.length) return null;
+
+    let bestScore = 0;
+    let bestCandidate = null;
+    let bestReason = "";
+
+    for (const row of candidates.results) {
+      let score = 0;
+      const signals = [];
+
+      // Project path — strongest signal (same project = same coordination need)
+      if (projectPath && row.project_path === projectPath) {
+        score += 0.4;
+        signals.push("project_match");
+      } else if (
+        projectPath &&
+        row.project_path &&
+        projectPath.split("/").pop() ===
+          row.project_path.split("/").pop()
+      ) {
+        score += 0.2;
+        signals.push("project_name_match");
+      }
+
+      // Workspace
+      if (workspace && row.workspace === workspace) {
+        score += 0.15;
+        signals.push("workspace_match");
+      }
+
+      // Organization
+      if (organization && row.organization === organization) {
+        score += 0.1;
+        signals.push("organization_match");
+      }
+
+      // Support type
+      if (supportType && row.support_type === supportType) {
+        score += 0.05;
+        signals.push("support_type_match");
+      }
+
+      // Temporal recency — more recent activity = more likely correct entity
+      if (row.last_activity) {
+        const daysSince =
+          (Date.now() / 1000 - row.last_activity) / 86400;
+        if (daysSince < 1) {
+          score += 0.15;
+          signals.push("active_today");
+        } else if (daysSince < 7) {
+          score += 0.1;
+          signals.push("active_this_week");
+        } else if (daysSince < 30) {
+          score += 0.05;
+          signals.push("active_this_month");
+        }
+      }
+
+      // Trust level — established entities preferred
+      const trustLevel = Number(row.trust_level || 0);
+      if (trustLevel >= 4) {
+        score += 0.1;
+        signals.push("high_trust");
+      } else if (trustLevel >= 2) {
+        score += 0.05;
+        signals.push("moderate_trust");
+      }
+
+      // Experience depth — entities with real experience preferred over empty
+      const interactions = Number(row.total_interactions || 0);
+      if (interactions > 50) {
+        score += 0.05;
+        signals.push("deep_experience");
+      }
+
+      score = Math.min(1, score);
+
+      if (score > bestScore && score >= 0.3) {
+        bestScore = score;
+        bestCandidate = row;
+        bestReason = `Multi-signal match (${signals.join(", ")}): score ${score.toFixed(3)}`;
+      }
+    }
+
+    if (!bestCandidate) return null;
+
+    return {
+      context: {
+        ...bestCandidate,
+        competencies: JSON.parse(bestCandidate.competencies || "[]"),
+        expertise_domains: JSON.parse(
+          bestCandidate.expertise_domains || "[]",
+        ),
+        current_sessions: JSON.parse(
+          bestCandidate.current_sessions || "[]",
+        ),
+      },
+      confidence: bestScore,
+      reason: bestReason,
     };
   }
 
@@ -139,9 +329,12 @@ export class ContextResolver {
   }
 
   /**
-   * Find existing context by anchor hash
+   * Find existing context by anchor hash.
+   * Throws on DB errors — callers must handle (DB failure is never a mint trigger).
    */
   async findContextByHash(anchorHash) {
+    // This will throw on DB errors — intentionally not caught here
+    // so resolveContext can distinguish "not found" from "DB unavailable"
     const result = await this.db
       .prepare(
         `
@@ -214,7 +407,20 @@ export class ContextResolver {
   }
 
   /**
-   * Create new context entity - ONLY after user confirmation
+   * Create new context entity — ONLY after user confirmation AND coordination need.
+   *
+   * Per doctrine: minting triggers are:
+   * - Domain fission (scope diverged enough that one entity can't specialize in both)
+   * - Derivative (entering new domain where parent's trust/instinct don't transfer)
+   * - Temporal decay (entity dormant so long that reconstitution is meaningless)
+   * - Meta-orchestrator decision (user decides a new coordination role is needed)
+   *
+   * NEVER a minting trigger:
+   * - New session starting
+   * - Model/substrate switching
+   * - DB lookup failing
+   *
+   * @param {string} coordinationNeed - Required justification for new entity
    */
   async createContext({
     projectPath,
@@ -222,7 +428,15 @@ export class ContextResolver {
     supportType,
     organization,
     anchorHash,
+    coordinationNeed,
   }) {
+    if (!coordinationNeed || !coordinationNeed.trim()) {
+      throw new Error(
+        "Coordination need justification required for new entity minting. " +
+          "Sessions are viewports, not births. Provide coordinationNeed describing " +
+          "why an existing entity cannot serve this role.",
+      );
+    }
     const contextId = crypto.randomUUID();
 
     // Mint ChittyID from ChittyID service
@@ -274,9 +488,10 @@ export class ContextResolver {
       .bind(crypto.randomUUID(), contextId, chittyId)
       .run();
 
-    // Log creation to ledger
+    // Log creation to ledger with coordination need justification
     await this.logToLedger(contextId, chittyId, "system", "transaction", {
       type: "context_created",
+      coordinationNeed,
       anchors: { projectPath, workspace, supportType, organization },
     });
 
