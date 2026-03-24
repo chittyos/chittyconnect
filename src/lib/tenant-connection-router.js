@@ -31,7 +31,7 @@ export async function getTenantDb(env, tenantId) {
   // Fall back to platform DB (shared Neon)
   const platformUri = await getCredential(
     env,
-    "infrastructure/neon/database_url",
+    "integrations/neon/database_url",
     "NEON_DATABASE_URL",
     "TenantRouter",
   );

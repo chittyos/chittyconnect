@@ -1,4 +1,4 @@
--- Migration: 014_doctrine_lifecycle_states.sql
+-- Migration: 017_doctrine_lifecycle_states.sql
 -- Description: Align entity lifecycle states with synthetic-continuity doctrine
 -- Date: 2026-03-22
 -- D1-Compatible (SQLite syntax)

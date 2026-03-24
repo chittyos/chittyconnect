@@ -9,6 +9,11 @@ vi.mock("../../src/lib/credential-helper.js", () => ({
   getCredential: vi.fn().mockResolvedValue("test-neon-api-key"),
 }));
 
+// Mock tenant-migrations
+vi.mock("../../src/lib/tenant-migrations.js", () => ({
+  runTenantMigrations: vi.fn().mockResolvedValue({ applied: 2, total: 2 }),
+}));
+
 function createMockEnv() {
   return {
     NEON_API_KEY: "test-neon-api-key",
@@ -58,6 +63,7 @@ describe("TenantProjectManager", () => {
       expect(result.neonProjectId).toBe("neon-proj-123");
       expect(result.status).toBe("active");
       expect(result.region).toBe("aws-us-east-2");
+      expect(result.migrationsApplied).toBe(2);
 
       // Verify Neon API was called
       expect(mockFetch).toHaveBeenCalledWith(
