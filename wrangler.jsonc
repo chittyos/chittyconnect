@@ -89,6 +89,7 @@
     "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
     "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
     "CHITTYOS_DOMAIN": "chitty.cc",
+    "NEON_ORG_ID": "org-old-mountain-22774840",
     "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
     // ChittyOS-Core vault: infrastructure credentials (Cloudflare, Neon, GitHub)
     "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
