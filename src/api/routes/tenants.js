@@ -7,6 +7,7 @@
 
 import { Hono } from "hono";
 import { TenantProjectManager } from "../../services/tenant-project-manager.js";
+import { queryTenantDb } from "../../lib/tenant-connection-router.js";
 
 const tenantRoutes = new Hono();
 
@@ -90,6 +91,42 @@ tenantRoutes.post("/:tenantId/export", async (c) => {
   } catch (error) {
     const status = error.message.includes("not found") ? 404 : 500;
     return c.json({ error: error.message }, status);
+  }
+});
+
+/**
+ * POST /api/v1/tenants/:tenantId/replicate
+ * Replicate a record to the tenant's Neon project
+ */
+tenantRoutes.post("/:tenantId/replicate", async (c) => {
+  try {
+    const tenantId = c.req.param("tenantId");
+    const { table, record } = await c.req.json();
+
+    if (!table || !record) {
+      return c.json({ error: "table and record are required" }, 400);
+    }
+
+    // Allowlist of tables that can be replicated to tenant DBs
+    const allowedTables = ["evidence_documents", "evidence_custody_log", "document_families", "client_documents"];
+    if (!allowedTables.includes(table)) {
+      return c.json({ error: `table '${table}' is not allowed for tenant replication` }, 400);
+    }
+
+    const columns = Object.keys(record);
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+    const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(", ")}`;
+
+    const result = await queryTenantDb(c.env, tenantId, sql, Object.values(record));
+
+    return c.json({
+      replicated: true,
+      table,
+      recordId: record.id,
+      layer: result.layer,
+    });
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
   }
 });
 
