@@ -38,7 +38,8 @@
     // OAUTH_PROVIDER binding is auto-injected by @cloudflare/workers-oauth-provider at runtime.
     { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
     { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
-    { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" }
+    { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
+    { "binding": "TENANT_CONNECTIONS", "id": "PLACEHOLDER_TENANT_CONNECTIONS_KV_ID" }
   ],
 
   // Vectorize for MemoryCloude and ContextConsciousness
@@ -110,7 +111,7 @@
   //                            CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
   //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN,
   //                            CHITTY_TASK_TOKEN
-  // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL
+  // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL, NEON_API_KEY
   // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
   //                            CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)
   // 1Password Connect:         ONEPASSWORD_CONNECT_TOKEN (JWT from ~/.op-connect/connect-token),
