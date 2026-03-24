@@ -38,6 +38,7 @@ import { connectionsRoutes } from "./routes/connections.js";
 import { authKeysRoutes } from "./routes/auth-keys.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
+import { migrationRoutes } from "./routes/tenant-migration.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -170,5 +171,6 @@ api.route("/api/connections", connectionsRoutes);
 api.route("/api/auth/keys", authKeysRoutes);
 api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
+api.route("/api/v1/tenants/migration", migrationRoutes);
 
 export { api };
