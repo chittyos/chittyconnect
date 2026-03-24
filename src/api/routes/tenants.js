@@ -113,17 +113,50 @@ tenantRoutes.post("/:tenantId/replicate", async (c) => {
       return c.json({ error: "table and record are required" }, 400);
     }
 
-    // Allowlist of tables that can be replicated to tenant DBs
-    const allowedTables = ["evidence_documents", "evidence_custody_log", "document_families", "client_documents"];
-    if (!allowedTables.includes(table)) {
+    // Per-table column allowlists prevent SQL injection via record keys
+    const ALLOWED_COLUMNS = {
+      evidence_documents: [
+        "id", "document_type", "file_name", "file_size", "mime_type", "content_hash",
+        "r2_key", "ocr_text", "metadata", "processing_status", "privilege_flag",
+        "privilege_basis", "evidence_strength", "evidence_strength_rationale",
+        "uploaded_by", "client_id", "superseded_by", "supersedes",
+        "replicated_at", "source", "created_at", "updated_at",
+      ],
+      evidence_custody_log: [
+        "id", "document_id", "action", "actor", "actor_type", "details",
+        "ip_address", "created_at",
+      ],
+      document_families: [
+        "id", "parent_document_id", "child_document_id", "family_role",
+        "ordinal", "notes", "created_at",
+      ],
+      client_documents: [
+        "id", "document_type", "title", "description", "file_name", "r2_key",
+        "content_hash", "metadata", "status", "uploaded_by", "created_at", "updated_at",
+      ],
+      financial_records: [
+        "id", "record_type", "description", "amount", "currency", "date",
+        "counterparty", "account_reference", "metadata", "source_document_id",
+        "created_at", "updated_at",
+      ],
+    };
+
+    if (!ALLOWED_COLUMNS[table]) {
       return c.json({ error: `table '${table}' is not allowed for tenant replication` }, 400);
     }
 
-    const columns = Object.keys(record);
-    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-    const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(", ")}`;
+    const allowedCols = ALLOWED_COLUMNS[table];
+    const columns = Object.keys(record).filter((col) => allowedCols.includes(col));
+    if (columns.length === 0) {
+      return c.json({ error: "no valid columns in record" }, 400);
+    }
 
-    const result = await queryTenantDb(c.env, tenantId, sql, Object.values(record));
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+    const updateSet = columns.filter((c) => c !== "id").map((col) => `${col} = $${columns.indexOf(col) + 1}`).join(", ");
+    const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${updateSet}`;
+
+    const values = columns.map((col) => record[col]);
+    const result = await queryTenantDb(c.env, tenantId, sql, values);
 
     return c.json({
       replicated: true,

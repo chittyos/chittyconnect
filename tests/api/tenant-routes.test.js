@@ -20,6 +20,12 @@ vi.mock("../../src/services/tenant-project-manager.js", () => ({
   },
 }));
 
+// Mock tenant-connection-router for replicate endpoint
+const mockQueryTenantDb = vi.fn().mockResolvedValue({ layer: "tenant" });
+vi.mock("../../src/lib/tenant-connection-router.js", () => ({
+  queryTenantDb: (...args) => mockQueryTenantDb(...args),
+}));
+
 const { tenantRoutes } = await import("../../src/api/routes/tenants.js");
 
 let app;
@@ -167,5 +173,114 @@ describe("DELETE /api/v1/tenants/:tenantId", () => {
       method: "DELETE",
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/v1/tenants/:tenantId/replicate", () => {
+  it("replicates a valid record to allowed table", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "evidence_documents",
+        record: { id: "doc-1", file_name: "test.pdf", document_type: "contract" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.replicated).toBe(true);
+    expect(body.table).toBe("evidence_documents");
+    expect(body.recordId).toBe("doc-1");
+    expect(mockQueryTenantDb).toHaveBeenCalled();
+  });
+
+  it("rejects disallowed table names", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "context_dna",
+        record: { id: "x" },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("not allowed");
+  });
+
+  it("strips invalid column names from record", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "evidence_documents",
+        record: { id: "doc-1", file_name: "test.pdf", "injected); DROP TABLE x--": "evil" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    // Verify queryTenantDb was called with SQL that does NOT contain the injected column
+    const sqlArg = mockQueryTenantDb.mock.calls[0][2];
+    expect(sqlArg).not.toContain("DROP TABLE");
+    expect(sqlArg).toContain("file_name");
+  });
+
+  it("returns 400 when no valid columns remain after filtering", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "evidence_documents",
+        record: { "bad_col": "val" },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("no valid columns");
+  });
+
+  it("returns 400 when table or record missing", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ table: "evidence_documents" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("allows financial_records table", async () => {
+    const res = await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "financial_records",
+        record: { id: "fr-1", record_type: "payment", amount: 100 },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.replicated).toBe(true);
+  });
+
+  it("excludes id from ON CONFLICT UPDATE SET", async () => {
+    await app.request("/api/v1/tenants/org-123/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "evidence_documents",
+        record: { id: "doc-1", file_name: "test.pdf" },
+      }),
+    });
+
+    const sqlArg = mockQueryTenantDb.mock.calls[0][2];
+    // The UPDATE SET should not include "id ="
+    const updatePart = sqlArg.split("DO UPDATE SET")[1];
+    expect(updatePart).not.toContain("id =");
+    expect(updatePart).toContain("file_name =");
   });
 });

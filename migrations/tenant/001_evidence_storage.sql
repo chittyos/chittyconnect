@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS evidence_documents (
     metadata JSONB DEFAULT '{}',
     processing_status TEXT DEFAULT 'replicated',
     privilege_flag TEXT DEFAULT 'none'
-      CHECK (privilege_flag IN ('none', 'possible_ac', 'needs_review')),
+      CHECK (privilege_flag IN ('none', 'possible_ac', 'work_product', 'needs_review')),
     privilege_basis TEXT,
     evidence_strength INTEGER CHECK (evidence_strength BETWEEN 1 AND 5),
     evidence_strength_rationale TEXT,
