@@ -7,6 +7,7 @@
 export const CREDENTIAL_PATHS = {
   integrations: {
     neonApiKey: "integrations/neon/api_key",
+    neonDatabaseUrl: "integrations/neon/database_url",
     openaiApiKey: "integrations/openai/api_key",
     notionApiKey: "integrations/notion/api_key",
     githubPat: "integrations/github/pat",

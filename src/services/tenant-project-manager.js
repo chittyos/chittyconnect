@@ -12,6 +12,7 @@
  */
 
 import { getCredential } from "../lib/credential-helper.js";
+import { runTenantMigrations } from "../lib/tenant-migrations.js";
 
 const NEON_API_BASE = "https://console.neon.tech/api/v2";
 
@@ -30,7 +31,7 @@ export class TenantProjectManager {
   async #getNeonApiKey() {
     const key = await getCredential(
       this.env,
-      "infrastructure/neon/api_key",
+      "integrations/neon/api_key",
       "NEON_API_KEY",
       "TenantProjectManager",
     );
@@ -128,11 +129,19 @@ export class TenantProjectManager {
       );
     }
 
+    // Run base migrations on the new tenant database
+    let migrationsApplied = 0;
+    if (connectionUri) {
+      const migrationResult = await runTenantMigrations(connectionUri);
+      migrationsApplied = migrationResult.applied;
+    }
+
     return {
       tenantId,
       neonProjectId: project.id,
       region,
       status: "active",
+      migrationsApplied,
       createdAt: record.created_at,
     };
   }
