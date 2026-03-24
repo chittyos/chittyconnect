@@ -1035,6 +1035,21 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: "chitty_inference_usage",
+    description:
+      "Query Ollama and OpenAI inference usage stats. Returns daily request counts and token usage for self-hosted Ollama and OpenAI fallback.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          default: 7,
+          description: "Number of days of usage to return (default 7, max 90)",
+        },
+      },
+    },
+  },
+  {
     name: "chitty_neon_query",
     description:
       "Execute SQL queries against Neon database through secure proxy.",

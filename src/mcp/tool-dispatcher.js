@@ -1388,6 +1388,15 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, providerLabel);
       if (fetchErr) return fetchErr;
       result = await response.json();
+    } else if (name === "chitty_inference_usage") {
+      const days = Math.min(args.days || 7, 90);
+      const response = await fetch(
+        `${baseUrl}/api/thirdparty/ollama/usage?days=${days}`,
+        { headers: { ...authHeader } },
+      );
+      const fetchErr = await checkFetchError(response, "Usage");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
     } else if (name === "chitty_neon_query") {
       const query = args.query || args.sql;
       if (!query) {
