@@ -1372,12 +1372,20 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_openai_chat") {
-      const response = await fetch(`${baseUrl}/api/thirdparty/openai/chat`, {
+      // Route Ollama-hosted models to the Ollama proxy, everything else to OpenAI
+      const ollamaModels = ["llama3.2:3b", "nomic-embed-text"];
+      const isOllamaModel =
+        args.model && ollamaModels.some((m) => args.model.startsWith(m));
+      const endpoint = isOllamaModel
+        ? `${baseUrl}/api/thirdparty/ollama/chat`
+        : `${baseUrl}/api/thirdparty/openai/chat`;
+      const providerLabel = isOllamaModel ? "Ollama" : "OpenAI";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
-      const fetchErr = await checkFetchError(response, "OpenAI");
+      const fetchErr = await checkFetchError(response, providerLabel);
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_neon_query") {

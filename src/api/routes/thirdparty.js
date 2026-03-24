@@ -251,7 +251,13 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
     try {
       const response = await fetch(ollamaUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(c.env.OLLAMA_CF_CLIENT_ID && {
+            "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+            "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+          }),
+        },
         body: JSON.stringify({ messages, model, temperature, max_tokens }),
         signal: controller.signal,
       });
@@ -335,7 +341,13 @@ thirdpartyRoutes.post("/ollama/embeddings", async (c) => {
 
     const response = await fetch(ollamaUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(c.env.OLLAMA_CF_CLIENT_ID && {
+          "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+          "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+        }),
+      },
       body: JSON.stringify({ input, model }),
     });
 
@@ -361,7 +373,14 @@ thirdpartyRoutes.get("/ollama/models", async (c) => {
       c.env.OLLAMA_URL?.replace("/v1/chat/completions", "") ||
       "https://ollama.chitty.cc";
 
-    const response = await fetch(`${ollamaBase}/api/tags`);
+    const response = await fetch(`${ollamaBase}/api/tags`, {
+      headers: {
+        ...(c.env.OLLAMA_CF_CLIENT_ID && {
+          "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+          "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+        }),
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Ollama models error: ${response.status}`);
