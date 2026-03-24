@@ -92,15 +92,21 @@ export class TenantProjectManager {
     const region = config.region || "aws-us-east-2";
     const pgVersion = config.pgVersion || "16";
 
+    const orgId = config.orgId || this.env.NEON_ORG_ID || null;
+    const projectBody = {
+      project: {
+        name: `chittyos-tenant-${tenantId}`,
+        region_id: region,
+        pg_version: parseInt(pgVersion, 10),
+      },
+    };
+    if (orgId) {
+      projectBody.project.org_id = orgId;
+    }
+
     const result = await this.#neonFetch("/projects", {
       method: "POST",
-      body: JSON.stringify({
-        project: {
-          name: `chittyos-tenant-${tenantId}`,
-          region_id: region,
-          pg_version: parseInt(pgVersion, 10),
-        },
-      }),
+      body: JSON.stringify(projectBody),
     });
 
     const project = result.project;
