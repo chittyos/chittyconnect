@@ -270,6 +270,23 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
 
       const data = await response.json();
       data._provider = "ollama";
+
+      // Fire-and-forget usage logging
+      if (c.env.IDEMP_KV) {
+        const day = new Date().toISOString().slice(0, 10);
+        const key = `usage:ollama:chat:${day}`;
+        c.executionCtx.waitUntil(
+          c.env.IDEMP_KV.get(key).then((prev) => {
+            const counts = prev ? JSON.parse(prev) : { requests: 0, tokens: 0 };
+            counts.requests += 1;
+            counts.tokens += data.usage?.total_tokens || 0;
+            return c.env.IDEMP_KV.put(key, JSON.stringify(counts), {
+              expirationTtl: 90 * 86400,
+            });
+          }),
+        );
+      }
+
       return c.json(data);
     } catch (ollamaError) {
       clearTimeout(timeout);
@@ -316,6 +333,23 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
 
       const data = await fallbackResponse.json();
       data._provider = "openai-fallback";
+
+      // Log OpenAI fallback usage
+      if (c.env.IDEMP_KV) {
+        const day = new Date().toISOString().slice(0, 10);
+        const key = `usage:openai:fallback:${day}`;
+        c.executionCtx.waitUntil(
+          c.env.IDEMP_KV.get(key).then((prev) => {
+            const counts = prev ? JSON.parse(prev) : { requests: 0, tokens: 0 };
+            counts.requests += 1;
+            counts.tokens += data.usage?.total_tokens || 0;
+            return c.env.IDEMP_KV.put(key, JSON.stringify(counts), {
+              expirationTtl: 90 * 86400,
+            });
+          }),
+        );
+      }
+
       return c.json(data);
     }
   } catch (error) {
@@ -357,6 +391,23 @@ thirdpartyRoutes.post("/ollama/embeddings", async (c) => {
 
     const data = await response.json();
     data._provider = "ollama";
+
+    // Fire-and-forget usage logging
+    if (c.env.IDEMP_KV) {
+      const day = new Date().toISOString().slice(0, 10);
+      const key = `usage:ollama:embeddings:${day}`;
+      c.executionCtx.waitUntil(
+        c.env.IDEMP_KV.get(key).then((prev) => {
+          const counts = prev ? JSON.parse(prev) : { requests: 0, tokens: 0 };
+          counts.requests += 1;
+          counts.tokens += data.usage?.total_tokens || 0;
+          return c.env.IDEMP_KV.put(key, JSON.stringify(counts), {
+            expirationTtl: 90 * 86400,
+          });
+        }),
+      );
+    }
+
     return c.json(data);
   } catch (error) {
     return c.json({ error: error.message }, 500);
@@ -388,6 +439,48 @@ thirdpartyRoutes.get("/ollama/models", async (c) => {
 
     const data = await response.json();
     return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/thirdparty/ollama/usage
+ * Query inference usage stats from KV
+ */
+thirdpartyRoutes.get("/ollama/usage", async (c) => {
+  try {
+    if (!c.env.IDEMP_KV) {
+      return c.json({ error: "Usage tracking not available" }, 503);
+    }
+
+    const days = parseInt(c.req.query("days") || "7", 10);
+    const results = {};
+    const now = new Date();
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const day = date.toISOString().slice(0, 10);
+
+      const [chat, embeddings, fallback] = await Promise.all([
+        c.env.IDEMP_KV.get(`usage:ollama:chat:${day}`),
+        c.env.IDEMP_KV.get(`usage:ollama:embeddings:${day}`),
+        c.env.IDEMP_KV.get(`usage:openai:fallback:${day}`),
+      ]);
+
+      results[day] = {
+        ollama_chat: chat ? JSON.parse(chat) : { requests: 0, tokens: 0 },
+        ollama_embeddings: embeddings
+          ? JSON.parse(embeddings)
+          : { requests: 0, tokens: 0 },
+        openai_fallback: fallback
+          ? JSON.parse(fallback)
+          : { requests: 0, tokens: 0 },
+      };
+    }
+
+    return c.json({ days, usage: results });
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
