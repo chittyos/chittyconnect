@@ -77,7 +77,7 @@ export class TenantDataMigration {
 
       // Count custody logs for those documents
       const custodyResult = await this.#queryEvidenceDb(
-        `SELECT COUNT(*) as cnt FROM evidence_custody
+        `SELECT COUNT(*) as cnt FROM evidence_chain_of_custody
          WHERE document_id IN (
            SELECT id FROM evidence_documents
            WHERE client_id = ? AND (privilege_flag IS NULL OR privilege_flag IN ('none', 'possible_ac', 'needs_review'))
@@ -139,7 +139,7 @@ export class TenantDataMigration {
       mode: "execute",
       startedAt: new Date().toISOString(),
       clients: [],
-      totals: { provisioned: 0, documents: 0, custodyLogs: 0, families: 0, errors: 0 },
+      totals: { provisioned: 0, documents: 0, custodyLogs: 0, families: 0, financialRecords: 0, errors: 0 },
     };
 
     for (const client of clients) {
@@ -153,6 +153,7 @@ export class TenantDataMigration {
         results.totals.documents += clientResult.documents;
         results.totals.custodyLogs += clientResult.custodyLogs;
         results.totals.families += clientResult.families;
+        results.totals.financialRecords += clientResult.financialRecords;
       }
     }
 
@@ -173,6 +174,7 @@ export class TenantDataMigration {
       documents: 0,
       custodyLogs: 0,
       families: 0,
+      financialRecords: 0,
       error: null,
     };
 
@@ -195,6 +197,9 @@ export class TenantDataMigration {
 
       // Step 4: Migrate document families
       result.families = await this.#migrateDocumentFamilies(clientId);
+
+      // Step 5: Migrate financial records
+      result.financialRecords = await this.#migrateFinancialRecords(clientId);
     } catch (error) {
       result.error = error.message;
     }
@@ -274,8 +279,9 @@ export class TenantDataMigration {
 
     while (true) {
       const batch = await this.#queryEvidenceDb(
-        `SELECT ec.id, ec.document_id, ec.action, ec.actor, ec.details, ec.created_at
-         FROM evidence_custody ec
+        `SELECT ec.id, ec.document_id, ec.custodian, ec.custody_action,
+                ec.location, ec.notes, ec.verification_method, ec.created_at
+         FROM evidence_chain_of_custody ec
          INNER JOIN evidence_documents ed ON ec.document_id = ed.id
          WHERE ed.client_id = ?
            AND (ed.privilege_flag IS NULL OR ed.privilege_flag IN ('none', 'possible_ac', 'needs_review'))
@@ -288,13 +294,19 @@ export class TenantDataMigration {
       if (rows.length === 0) break;
 
       for (const log of rows) {
+        // Map source columns (evidence_chain_of_custody) to target (evidence_custody_log)
+        const details = JSON.stringify({
+          location: log.location || null,
+          notes: log.notes || null,
+          verification_method: log.verification_method || null,
+        });
         await this.#replicateRecord(clientId, "evidence_custody_log", {
           id: log.id,
           document_id: log.document_id,
-          action: log.action,
-          actor: log.actor,
+          action: log.custody_action || "unknown",
+          actor: log.custodian || "unknown",
           actor_type: "service",
-          details: typeof log.details === "string" ? log.details : JSON.stringify(log.details || {}),
+          details,
           created_at: log.created_at,
         });
         total++;
@@ -323,10 +335,12 @@ export class TenantDataMigration {
          FROM evidence_document_families df
          WHERE df.parent_document_id IN (
            SELECT id FROM evidence_documents WHERE client_id = ?
+         ) OR df.child_document_id IN (
+           SELECT id FROM evidence_documents WHERE client_id = ?
          )
          ORDER BY df.created_at
          LIMIT ? OFFSET ?`,
-        [clientId, BATCH_SIZE, offset],
+        [clientId, clientId, BATCH_SIZE, offset],
       );
 
       const rows = batch.results || [];
@@ -341,6 +355,58 @@ export class TenantDataMigration {
           ordinal: fam.ordinal,
           notes: fam.notes,
           created_at: fam.created_at,
+        });
+        total++;
+      }
+
+      offset += BATCH_SIZE;
+      if (rows.length < BATCH_SIZE) break;
+    }
+
+    return total;
+  }
+
+  /**
+   * Migrate financial records linked to a client's documents
+   * @param {string} clientId
+   * @returns {Promise<number>}
+   */
+  async #migrateFinancialRecords(clientId) {
+    let total = 0;
+    let offset = 0;
+
+    while (true) {
+      const batch = await this.#queryEvidenceDb(
+        `SELECT fr.id, fr.record_type, fr.description, fr.amount, fr.currency,
+                fr.date, fr.counterparty, fr.account_reference, fr.metadata,
+                fr.source_document_id, fr.created_at, fr.updated_at
+         FROM financial_records fr
+         INNER JOIN client_documents cd ON fr.source_document_id = cd.id
+         WHERE cd.uploaded_by IN (
+           SELECT DISTINCT uploaded_by FROM evidence_documents WHERE client_id = ?
+         )
+         ORDER BY fr.created_at
+         LIMIT ? OFFSET ?`,
+        [clientId, BATCH_SIZE, offset],
+      );
+
+      const rows = batch.results || [];
+      if (rows.length === 0) break;
+
+      for (const rec of rows) {
+        await this.#replicateRecord(clientId, "financial_records", {
+          id: rec.id,
+          record_type: rec.record_type,
+          description: rec.description,
+          amount: rec.amount,
+          currency: rec.currency || "USD",
+          date: rec.date,
+          counterparty: rec.counterparty,
+          account_reference: rec.account_reference,
+          metadata: typeof rec.metadata === "string" ? rec.metadata : JSON.stringify(rec.metadata || {}),
+          source_document_id: rec.source_document_id,
+          created_at: rec.created_at,
+          updated_at: rec.updated_at,
         });
         total++;
       }

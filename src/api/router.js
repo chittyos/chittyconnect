@@ -170,7 +170,7 @@ api.route("/api/v1/connect", connectRoutes);
 api.route("/api/connections", connectionsRoutes);
 api.route("/api/auth/keys", authKeysRoutes);
 api.route("/api/v1/context/prompts", promptRoutes);
-api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
+api.route("/api/v1/tenants", tenantRoutes);
 
 export { api };

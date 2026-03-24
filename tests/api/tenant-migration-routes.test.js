@@ -35,8 +35,13 @@ const { migrationRoutes } = await import(
   "../../src/api/routes/tenant-migration.js"
 );
 
-function createTestApp() {
+function createTestApp({ role = "admin" } = {}) {
   const app = new Hono();
+  // Simulate auth middleware setting apiKey context
+  app.use("*", async (c, next) => {
+    c.set("apiKey", { role, scopes: [role] });
+    return next();
+  });
   app.route("/api/v1/tenants/migration", migrationRoutes);
   return app;
 }
@@ -167,6 +172,30 @@ describe("Tenant Migration Routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("Migration failed");
+    });
+  });
+
+  describe("Admin auth enforcement", () => {
+    it("rejects non-admin callers with 403", async () => {
+      const app = createTestApp({ role: "user" });
+      const res = await app.request("/api/v1/tenants/migration/discover", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toContain("Admin scope required");
+    });
+
+    it("rejects callers with no auth context", async () => {
+      const app = new (await import("hono")).Hono();
+      app.route("/api/v1/tenants/migration", migrationRoutes);
+
+      const res = await app.request("/api/v1/tenants/migration/discover", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(403);
     });
   });
 });
