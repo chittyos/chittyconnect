@@ -1018,12 +1018,17 @@ const MCP_TOOLS = [
   {
     name: "chitty_openai_chat",
     description:
-      "Chat with OpenAI through ChittyConnect proxy for AI analysis and generation.",
+      "Chat with AI through ChittyConnect proxy. Supports OpenAI models (gpt-4, gpt-4o-mini) and self-hosted Ollama models (llama3.2:3b). Ollama models are free and routed to chittyserv-dev.",
     inputSchema: {
       type: "object",
       properties: {
         messages: { type: "array" },
-        model: { type: "string", default: "gpt-4" },
+        model: {
+          type: "string",
+          default: "gpt-4",
+          description:
+            "Model to use. OpenAI: gpt-4, gpt-4o-mini. Ollama (free): llama3.2:3b. Ollama models auto-route to self-hosted inference.",
+        },
         temperature: { type: "number", default: 0.7 },
       },
       required: ["messages"],
