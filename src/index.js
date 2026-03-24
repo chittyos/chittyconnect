@@ -32,6 +32,7 @@ import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
+import { SecretRotationService } from "./services/secret-rotation.js";
 
 const app = new Hono();
 
@@ -1396,6 +1397,21 @@ app.get("/", async (c) => {
   return c.redirect("https://get.chitty.cc");
 });
 
+// --- Secret Rotation API ---
+
+app.get("/api/v1/secrets/status", async (c) => {
+  const rotation = new SecretRotationService(c.env);
+  const status = await rotation.getStatus();
+  return c.json(status);
+});
+
+app.post("/api/v1/secrets/rotate/:name", async (c) => {
+  const { name } = c.req.param();
+  const rotation = new SecretRotationService(c.env);
+  const result = await rotation.forceRotate(name);
+  return c.json(result, result.ok ? 200 : 400);
+});
+
 /**
  * Mount API router for custom GPT integration
  */
@@ -1917,6 +1933,18 @@ export default {
       `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
     );
 
+    // OAuth token rotation (every 50 minutes)
+    if (event.cron === "*/50 * * * *") {
+      try {
+        const rotation = new SecretRotationService(env);
+        const result = await rotation.forceRotate('gdrive_access_token');
+        console.log(`[Scheduled] OAuth rotation: ${result.ok ? 'success' : result.error}`);
+      } catch (err) {
+        console.error(`[Scheduled] OAuth rotation failed:`, err.message);
+      }
+      return;
+    }
+
     // Connection health checks (every 5 minutes)
     if (event.cron === "*/5 * * * *") {
       try {
@@ -1928,6 +1956,17 @@ export default {
         console.error(`[Scheduled] Health checks failed:`, err.message);
       }
       return;
+    }
+
+    // Secret rotation check (hourly — runs due rotations only)
+    try {
+      const rotation = new SecretRotationService(env);
+      const report = await rotation.runDueRotations();
+      console.log(
+        `[Scheduled] Secret rotation: ${report.rotated.length} rotated, ${report.skipped.length} skipped, ${report.failed.length} failed`,
+      );
+    } catch (err) {
+      console.error(`[Scheduled] Secret rotation failed:`, err.message);
     }
 
     // 1Password event sync (hourly)
