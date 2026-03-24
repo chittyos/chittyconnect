@@ -48,7 +48,6 @@ export default function Command() {
     testAll,
     testCredential,
     enqueueHeal,
-    fetchApiKeys,
     createApiKey,
     revokeApiKey,
     clearNewKeyValue,
@@ -57,7 +56,6 @@ export default function Command() {
     getNeedsAttention,
     getHealthy,
     isHealing,
-    addLog,
   } = useCommandStore();
 
   const [search, setSearch] = useState("");
@@ -539,7 +537,7 @@ export default function Command() {
                             {k.status === "active" && (
                               <button
                                 className="btn btn-danger btn-sm"
-                                onClick={() => revokeApiKey(k.key.replace("...", ""))}
+                                onClick={() => revokeApiKey(k.prefix || k.key.split("...")[0])}
                               >
                                 Revoke
                               </button>

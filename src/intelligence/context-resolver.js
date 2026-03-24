@@ -130,10 +130,17 @@ export class ContextResolver {
         };
       }
     } catch (err) {
-      // Multi-signal search failed — still don't mint, return error
+      // Multi-signal search failed — return error, do NOT fall through to mint
       console.warn(
         `[ContextResolver] Multi-signal search failed: ${err.message}`,
       );
+      return {
+        action: "error",
+        error: `Multi-signal search failed: ${err.message}`,
+        resolution: "db_error",
+        anchors,
+        anchorHash,
+      };
     }
 
     // 4. No match found — propose new entity (requires confirmation)
@@ -423,7 +430,7 @@ export class ContextResolver {
     anchorHash,
     coordinationNeed,
   }) {
-    if (!coordinationNeed) {
+    if (!coordinationNeed || !coordinationNeed.trim()) {
       throw new Error(
         "Coordination need justification required for new entity minting. " +
           "Sessions are viewports, not births. Provide coordinationNeed describing " +

@@ -212,7 +212,7 @@ export const useCommandStore = create((set, get) => ({
     set({ apiKeysLoading: true });
     try {
       const token = useAuthStore.getState().token;
-      if (!token) return;
+      if (!token) { set({ apiKeysLoading: false }); return; }
       const res = await fetch(`${API_BASE}/api/auth/keys`, {
         headers: { "X-ChittyOS-API-Key": token },
       });

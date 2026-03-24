@@ -230,6 +230,7 @@ describe("ContextResolver", () => {
             first: async () => null,
             all: async () => ({ results: [] }),
           }),
+          all: async () => ({ results: [] }),
         }),
       };
       resolver = new ContextResolver(mockEnv);
@@ -255,6 +256,48 @@ describe("ContextResolver", () => {
           anchorHash: "abc123",
         }),
       ).rejects.toThrow("Coordination need justification required");
+    });
+
+    it("should throw when coordinationNeed is blank", async () => {
+      await expect(
+        resolver.createContext({
+          projectPath: "/test/project",
+          workspace: "dev",
+          supportType: "development",
+          anchorHash: "abc123",
+          coordinationNeed: "   ",
+        }),
+      ).rejects.toThrow("Coordination need justification required");
+    });
+  });
+
+  describe("resolveContext - multi-signal DB failure returns error", () => {
+    it("should return error when multi-signal search throws", async () => {
+      let callCount = 0;
+      mockEnv.DB = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => {
+              callCount++;
+              if (callCount === 1) return null; // anchor hash miss
+              throw new Error("D1 unavailable");
+            },
+            all: async () => {
+              throw new Error("D1 unavailable");
+            },
+          }),
+        }),
+      };
+      resolver = new ContextResolver(mockEnv);
+
+      const result = await resolver.resolveContext({
+        projectPath: "/test/project",
+        workspace: "dev",
+      });
+
+      expect(result.action).toBe("error");
+      expect(result.resolution).toBe("db_error");
+      expect(result.action).not.toBe("create_new");
     });
   });
 });

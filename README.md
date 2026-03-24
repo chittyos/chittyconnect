@@ -1,3 +1,6 @@
+![ChittyOS](https://img.shields.io/badge/ChittyOS-service-6366F1?style=flat-square)
+![Tier](https://img.shields.io/badge/tier-2%20platform-4338CA?style=flat-square)
+
 # ChittyConnect - itsChitty™
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/chittyos/chittyconnect/publish.yml?branch=main&label=publish)

@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS context_entities_v2 (
   -- dormant: no active sessions, but reconstitutable (instinct preserved)
   -- stale: dormant long enough that reconstitution may lose fidelity
   -- retired: consumed by supernova/fission, or composted after decay
-  status TEXT DEFAULT 'fresh' CHECK (status IN ('fresh', 'active', 'dormant', 'stale', 'retired')),
+  status TEXT DEFAULT 'fresh' CHECK (status IN ('fresh', 'active', 'dormant', 'stale', 'retired', 'dissolved')),
 
   -- Temporal
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
