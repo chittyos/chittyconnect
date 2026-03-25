@@ -216,7 +216,8 @@ export class TenantDataMigration {
     let total = 0;
     let offset = 0;
 
-    while (true) {
+    let hasMore = true;
+    while (hasMore) {
       const batch = await this.#queryEvidenceDb(
         `SELECT id, document_type, file_name, file_size, mime_type, content_hash,
                 r2_key, ocr_text, metadata, processing_status, privilege_flag,
@@ -276,8 +277,9 @@ export class TenantDataMigration {
   async #migrateCustodyLogs(clientId) {
     let total = 0;
     let offset = 0;
+    let hasMore = true;
 
-    while (true) {
+    while (hasMore) {
       const batch = await this.#queryEvidenceDb(
         `SELECT ec.id, ec.document_id, ec.custodian, ec.custody_action,
                 ec.location, ec.notes, ec.verification_method, ec.created_at
@@ -327,8 +329,9 @@ export class TenantDataMigration {
   async #migrateDocumentFamilies(clientId) {
     let total = 0;
     let offset = 0;
+    let hasMore = true;
 
-    while (true) {
+    while (hasMore) {
       const batch = await this.#queryEvidenceDb(
         `SELECT df.id, df.parent_document_id, df.child_document_id,
                 df.family_role, df.ordinal, df.notes, df.created_at
@@ -374,8 +377,9 @@ export class TenantDataMigration {
   async #migrateFinancialRecords(clientId) {
     let total = 0;
     let offset = 0;
+    let hasMore = true;
 
-    while (true) {
+    while (hasMore) {
       const batch = await this.#queryEvidenceDb(
         `SELECT fr.id, fr.record_type, fr.description, fr.amount, fr.currency,
                 fr.date, fr.counterparty, fr.account_reference, fr.metadata,
@@ -428,7 +432,7 @@ export class TenantDataMigration {
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
     const updateSet = columns
       .filter((c) => c !== "id")
-      .map((col, i) => `${col} = $${columns.indexOf(col) + 1}`)
+      .map((col) => `${col} = $${columns.indexOf(col) + 1}`)
       .join(", ");
 
     const sql = `INSERT INTO ${table} (${columns.join(", ")})
