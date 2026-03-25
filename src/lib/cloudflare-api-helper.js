@@ -26,7 +26,6 @@ export async function getCloudflareApiCredentials(env) {
 
   const accountId =
     env.CHITTYOS_ACCOUNT_ID ||
-    env.CLOUDFLARE_ACCOUNT_ID ||
     (await getCredential(
       env,
       CREDENTIAL_PATHS.infrastructure.cloudflareAccountId,

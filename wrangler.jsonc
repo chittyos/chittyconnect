@@ -12,6 +12,12 @@
   //   wrangler secret put → hot / runtime delivery (scoped per env)
   //   KV                  → short-lived rotated values only
   //   [vars]              → non-secret config only
+  //
+  // Binding inheritance:
+  //   Wrangler does NOT inherit resource bindings (KV, DO, R2, D1,
+  //   queues, vectorize, AI, tail_consumers) into env blocks.
+  //   Every env block must explicitly declare its bindings.
+  //   Only top-level metadata (name, main, compat, account_id) is shared.
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
@@ -20,63 +26,18 @@
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
-  // ──────────────────────────────────────────────────────────────────
-  // SHARED BINDINGS — inherited by all environments
-  // ──────────────────────────────────────────────────────────────────
+  "observability": { "enabled": true },
+  "build": { "command": "", "cwd": "." },
 
-  "r2_buckets": [
-    { "binding": "FILES", "bucket_name": "chittyos-files" }
-  ],
-
-  // KV — short-lived rotated values ONLY, not secrets
-  "kv_namespaces": [
-    { "binding": "IDEMP_KV", "id": "9ad1ec9795d243ca94f7502e6efb6a62" },
-    { "binding": "TOKEN_KV", "id": "788d2fce231d4819a11b46d5f4678b04" },
-    { "binding": "API_KEYS", "id": "cf6da7757caf4da5a8a365be2174f391" },
-    { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
-    { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
-    { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
-    { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
-  ],
-
-  "vectorize": [
-    { "binding": "MEMORY_VECTORIZE", "index_name": "memory-cloude" },
-    { "binding": "CONTEXT_VECTORIZE", "index_name": "context-embeddings" }
-  ],
-
-  "durable_objects": {
-    "bindings": [
-      { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
-    ]
-  },
-
+  // Migrations are global to the DO class, not per-env
   "migrations": [
     { "tag": "v3", "new_classes": ["MCPSessionDurableObject"] },
     { "tag": "v4", "deleted_classes": ["MCPSessionDurableObject"], "new_sqlite_classes": ["McpConnectAgent"] }
   ],
 
-  "d1_databases": [
-    { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
-  ],
-
-  "queues": {
-    "producers": [
-      { "binding": "EVENT_Q", "queue": "github-events" },
-      { "binding": "PROOF_Q", "queue": "documint-proofs" }
-    ],
-    "consumers": [
-      { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
-    ]
-  },
-
-  "ai": { "binding": "AI" },
-
-  "observability": { "enabled": true },
-  "build": { "command": "", "cwd": "." },
-  "tail_consumers": [{ "service": "chittytrack" }],
-
   // ──────────────────────────────────────────────────────────────────
   // ENVIRONMENTS — one worker, three declared environments
+  // Each env explicitly declares all resource bindings it needs.
   // ──────────────────────────────────────────────────────────────────
 
   "env": {
@@ -87,7 +48,6 @@
     "dev": {
       "vars": {
         "ENVIRONMENT": "development",
-        // Service URLs — local or dev instances
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -97,32 +57,60 @@
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
         "CHITTYSERV_URL": "http://chittyserv-dev:8080",
-        // Ollama / AI
         "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
         "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
-        // Identifiers
         "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
         "CHITTYOS_DOMAIN": "chitty.cc",
         "NEON_ORG_ID": "org-old-mountain-22774840",
-        // 1Password Connect
         "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
         "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
         "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
         "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
-        // Broker
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
-        // Feature flags
         "EVIDENCE_LEGACY_MODE": "false",
-        // Neon
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
-        // Twilio (non-secret)
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
-      }
-      // Secrets for dev: wrangler secret put <NAME> --env dev
-      // No crons in dev — triggered manually or via tests
+      },
+
+      // Resource bindings — dev
+      "r2_buckets": [
+        { "binding": "FILES", "bucket_name": "chittyos-files" }
+      ],
+      "kv_namespaces": [
+        { "binding": "IDEMP_KV", "id": "9ad1ec9795d243ca94f7502e6efb6a62" },
+        { "binding": "TOKEN_KV", "id": "788d2fce231d4819a11b46d5f4678b04" },
+        { "binding": "API_KEYS", "id": "cf6da7757caf4da5a8a365be2174f391" },
+        { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
+        { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
+        { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
+        { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
+      ],
+      "vectorize": [
+        { "binding": "MEMORY_VECTORIZE", "index_name": "memory-cloude" },
+        { "binding": "CONTEXT_VECTORIZE", "index_name": "context-embeddings" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+        ]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "EVENT_Q", "queue": "github-events" },
+          { "binding": "PROOF_Q", "queue": "documint-proofs" }
+        ],
+        "consumers": [
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+        ]
+      },
+      "ai": { "binding": "AI" },
+      "tail_consumers": [{ "service": "chittytrack" }]
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -130,10 +118,8 @@
     // ════════════════════════════════════════════════════════════════
     "staging": {
       "name": "chittyconnect-staging",
-      // No routes — staging is accessed directly via workers.dev URL
       "vars": {
         "ENVIRONMENT": "staging",
-        // Service URLs — production services, staging worker
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -142,39 +128,67 @@
         "CHITTYCONNECT_URL": "https://chittyconnect-staging.chittyos.workers.dev",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
-        // Ollama / AI
         "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
         "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
-        // Identifiers
         "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
         "CHITTYOS_DOMAIN": "chitty.cc",
         "NEON_ORG_ID": "org-old-mountain-22774840",
-        // 1Password Connect
         "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
         "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
         "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
         "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
-        // Broker
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
-        // Feature flags
         "EVIDENCE_LEGACY_MODE": "false",
-        // Neon
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
-        // Twilio (non-secret)
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
       },
-      // Staging crons — same schedule, hits staging worker
       "triggers": {
         "crons": [
           "0 * * * *",
           "*/5 * * * *",
           "*/50 * * * *"
         ]
-      }
-      // Secrets for staging: wrangler secret put <NAME> --env staging
+      },
+
+      // Resource bindings — staging
+      "r2_buckets": [
+        { "binding": "FILES", "bucket_name": "chittyos-files" }
+      ],
+      "kv_namespaces": [
+        { "binding": "IDEMP_KV", "id": "9ad1ec9795d243ca94f7502e6efb6a62" },
+        { "binding": "TOKEN_KV", "id": "788d2fce231d4819a11b46d5f4678b04" },
+        { "binding": "API_KEYS", "id": "cf6da7757caf4da5a8a365be2174f391" },
+        { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
+        { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
+        { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
+        { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
+      ],
+      "vectorize": [
+        { "binding": "MEMORY_VECTORIZE", "index_name": "memory-cloude" },
+        { "binding": "CONTEXT_VECTORIZE", "index_name": "context-embeddings" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+        ]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "EVENT_Q", "queue": "github-events" },
+          { "binding": "PROOF_Q", "queue": "documint-proofs" }
+        ],
+        "consumers": [
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+        ]
+      },
+      "ai": { "binding": "AI" },
+      "tail_consumers": [{ "service": "chittytrack" }]
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -185,12 +199,9 @@
       "routes": [
         { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
         { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
-        // api.chitty.cc/* still assigned to chittyapi-production worker.
-        // To consolidate: delete that worker first, then add route here.
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        // Service URLs — all production
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -199,39 +210,67 @@
         "CHITTYCONNECT_URL": "https://connect.chitty.cc",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
-        // Ollama / AI
         "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
         "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
-        // Identifiers
         "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
         "CHITTYOS_DOMAIN": "chitty.cc",
         "NEON_ORG_ID": "org-old-mountain-22774840",
-        // 1Password Connect
         "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
         "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
         "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
         "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
-        // Broker
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
-        // Feature flags
         "EVIDENCE_LEGACY_MODE": "false",
-        // Neon
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
-        // Twilio (non-secret)
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
       },
-      // Production crons
       "triggers": {
         "crons": [
-          "0 * * * *",     // Hourly: 1Password event sync + secret rotation check
-          "*/5 * * * *",   // Every 5 min: Connection health checks
-          "*/50 * * * *"   // Every 50 min: OAuth token rotation (GDrive access tokens)
+          "0 * * * *",
+          "*/5 * * * *",
+          "*/50 * * * *"
         ]
-      }
-      // Secrets for production: wrangler secret put <NAME> --env production
+      },
+
+      // Resource bindings — production
+      "r2_buckets": [
+        { "binding": "FILES", "bucket_name": "chittyos-files" }
+      ],
+      "kv_namespaces": [
+        { "binding": "IDEMP_KV", "id": "9ad1ec9795d243ca94f7502e6efb6a62" },
+        { "binding": "TOKEN_KV", "id": "788d2fce231d4819a11b46d5f4678b04" },
+        { "binding": "API_KEYS", "id": "cf6da7757caf4da5a8a365be2174f391" },
+        { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
+        { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
+        { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
+        { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
+      ],
+      "vectorize": [
+        { "binding": "MEMORY_VECTORIZE", "index_name": "memory-cloude" },
+        { "binding": "CONTEXT_VECTORIZE", "index_name": "context-embeddings" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+        ]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "EVENT_Q", "queue": "github-events" },
+          { "binding": "PROOF_Q", "queue": "documint-proofs" }
+        ],
+        "consumers": [
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+        ]
+      },
+      "ai": { "binding": "AI" },
+      "tail_consumers": [{ "service": "chittytrack" }]
     }
   }
 
@@ -250,7 +289,7 @@
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
-  // │ CHITTYOS SERVICE TOKENS (pattern: CHITTY_${SERVICE}_TOKEN)     │
+  // │ CHITTYOS SERVICE TOKENS (pattern: CHITTY_<SERVICE>_TOKEN)     │
   // ├─────────────────────────────────────────────────────────────────┤
   // │ CHITTY_ID_TOKEN            ChittyID service auth               │
   // │ CHITTY_AUTH_TOKEN          ChittyAuth service auth             │
@@ -330,8 +369,8 @@
   // │ CHRONICLE_KV         KV   guarded: if (env.CHRONICLE_KV)       │
   // │ MEMORY_KV            KV   fallback: env.MEMORY_KV||TOKEN_KV    │
   // │ SESSION_STATE        DO   guarded: throw if missing             │
-  // │ PREDICTION_CACHE     KV   LIVE: prediction-engine.js (unguarded)│
-  // │ DOCUMENT_STORAGE     R2   LIVE: DocumentStorageService (ungrd) │
+  // │ PREDICTION_CACHE     KV   dead: no non-test code references    │
+  // │ DOCUMENT_STORAGE     R2   dead: no non-test code references    │
   // │ Provision as KV/DO/R2 when features are promoted to prod.      │
   // └─────────────────────────────────────────────────────────────────┘
   //
