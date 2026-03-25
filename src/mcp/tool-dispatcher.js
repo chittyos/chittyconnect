@@ -218,7 +218,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           content: [
             {
               type: "text",
-              text: "Cloudflare account ID not configured (set CF_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID)",
+              text: "Cloudflare account ID not configured (set CHITTYOS_ACCOUNT_ID)",
             },
           ],
           isError: true,
@@ -898,13 +898,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Evidence AI Search tools ────────────────────────────────────
     else if (name === "chitty_evidence_search") {
-      const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
+      const accountId = env.CHITTYOS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
       if (!accountId) {
         return {
           content: [
             {
               type: "text",
-              text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set.",
+              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
             },
           ],
           isError: true,
@@ -970,13 +970,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ],
       };
     } else if (name === "chitty_evidence_retrieve") {
-      const accountId = env.CF_ACCOUNT_ID || env.CHITTYOS_ACCOUNT_ID;
+      const accountId = env.CHITTYOS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
       if (!accountId) {
         return {
           content: [
             {
               type: "text",
-              text: "AI Search not configured: CF_ACCOUNT_ID or CHITTYOS_ACCOUNT_ID not set.",
+              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
             },
           ],
           isError: true,

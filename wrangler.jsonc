@@ -82,14 +82,27 @@
   // Cloudflare Workers AI binding
   "ai": { "binding": "AI" },
 
-  // Environment variables
+  // Environment variables (non-secret config)
   "vars": {
     "ENVIRONMENT": "production",
+    // ChittyOS service URLs
     "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
+    "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
     "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
+    "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
+    "CHITTYMINT_URL": "https://mint.chitty.cc",
+    "CHITTYCONNECT_URL": "https://connect.chitty.cc",
+    "CHITTYROUTER_URL": "https://router.chitty.cc",
+    "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
+    "CHITTYSERV_URL": "http://chittyserv-dev:8080",
+    // Ollama / AI model routing
+    "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
+    "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
+    // Cloudflare & Neon identifiers
     "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
     "CHITTYOS_DOMAIN": "chitty.cc",
     "NEON_ORG_ID": "org-old-mountain-22774840",
+    // 1Password Connect
     "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
     // ChittyOS-Core vault: infrastructure credentials (Cloudflare, Neon, GitHub)
     "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
@@ -99,30 +112,72 @@
     "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
     // ChittyConnect Only vault: emergency credentials
     "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
+    // Credential broker config
     "CREDENTIAL_FAILOVER_ENABLED": "true",
     "CREDENTIAL_BROKER_TYPE": "auto",
-    "CHITTYSERV_URL": "http://chittyserv-dev:8080"
+    // Feature flags
+    "EVIDENCE_LEGACY_MODE": "false",
+    // Neon secret rotation defaults
+    "NEON_ROLE_NAME": "chittyos_app",
+    "NEON_DATABASE": "neondb"
   },
 
   // Secrets (set via: wrangler secret put <NAME>)
+  // Source of truth: 1Password → Cloudflare Secrets (hot runtime delivery)
   //
-  // GitHub Integration:        GITHUB_APP_ID, GITHUB_APP_PK, GITHUB_WEBHOOK_SECRET
-  // ChittyOS Services:         CHITTY_ID_TOKEN, CHITTY_AUTH_TOKEN, CHITTY_CASES_TOKEN,
-  //                            CHITTY_FINANCE_TOKEN, CHITTY_EVIDENCE_TOKEN, CHITTY_SYNC_TOKEN,
-  //                            CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
-  //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN,
-  //                            CHITTY_TASK_TOKEN
-  // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL, NEON_API_KEY
-  // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
-  //                            CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)
-  // 1Password Connect:         ONEPASSWORD_CONNECT_TOKEN (JWT from ~/.op-connect/connect-token),
-  //                            EMERGENCY_REVOKE_TOKEN, ENCRYPTION_KEY (random 32-byte key for KV cache)
+  // GitHub Integration:
+  //   GITHUB_APP_ID, GITHUB_APP_PK, GITHUB_WEBHOOK_SECRET
+  //
+  // ChittyOS Service Tokens (pattern: CHITTY_${SERVICE}_TOKEN):
+  //   CHITTY_ID_TOKEN, CHITTY_AUTH_TOKEN, CHITTY_CASES_TOKEN,
+  //   CHITTY_FINANCE_TOKEN, CHITTY_EVIDENCE_TOKEN, CHITTY_SYNC_TOKEN,
+  //   CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
+  //   CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN, CHITTY_TASK_TOKEN,
+  //   CHITTY_DNA_TOKEN, CHITTY_VERIFY_TOKEN, CHITTY_CERTIFY_TOKEN,
+  //   CHITTY_SERV_TOKEN, CHITTY_ID_SERVICE_TOKEN, CHITTYCONNECT_SERVICE_TOKEN,
+  //   CHITTYMINT_SECRET
+  //
+  // Third-Party Integrations:
+  //   NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN,
+  //   NEON_DATABASE_URL, NEON_API_KEY, NEON_PROJECT_ID, NEON_BRANCH_ID, NEON_HOST,
+  //   OLLAMA_CF_CLIENT_ID, OLLAMA_CF_CLIENT_SECRET,
+  //   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER,
+  //   GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET,
+  //   AI_SEARCH_TOKEN
+  //
+  // Credential Provisioning:
+  //   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
+  //   CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)
+  //
+  // 1Password Connect:
+  //   ONEPASSWORD_CONNECT_TOKEN (JWT from ~/.op-connect/connect-token),
+  //   EMERGENCY_REVOKE_TOKEN, ENCRYPTION_KEY (random 32-byte key for KV cache),
+  //   OP_EVENTS_API_TOKEN
+  //
+  // Internal:
+  //   INTERNAL_WEBHOOK_SECRET
   //
   // 1Password vault items required for credential provisioning:
   //   Vault: ChittyOS-Core (oxwo63jlcbo66c7kwx67lquw4i)
   //   Item title: "cloudflare"  fields: make_api_key, account_id
   //   (Create via: op item create --vault ChittyOS-Core --title cloudflare
   //                --category login make_api_key=<CF_GLOBAL_API_TOKEN> account_id=0bc21e3a5a9de1a4cc843be9c3e98121)
+  //
+  // Aliases (code references that resolve to declared vars/secrets):
+  //   CF_ACCOUNT_ID → CHITTYOS_ACCOUNT_ID (cloudflare-api-helper.js, tool-dispatcher.js)
+  //   CHITTY_SERVICE_TOKEN → CHITTY_ID_SERVICE_TOKEN (chittyid-client.js generic fallback)
+  //   CHITTY_API_KEY → API_KEYS KV lookup (chittyid-client.js generic fallback)
+  //
+  // Phantom bindings (referenced in code, not yet provisioned as KV/DO):
+  //   COMMAND_KV (connect.js), CONVERSATIONS (composite.js),
+  //   CONTEXT_CONSCIOUSNESS (documents.js, sessions.js),
+  //   MEMORY_KV (memory-cloude.js — falls back to TOKEN_KV),
+  //   PREDICTION_CACHE (prediction-engine.js),
+  //   SESSION_STATE (SessionStateService.js),
+  //   DOCUMENT_STORAGE (DocumentStorageService.js),
+  //   CHRONICLE_KV (webhook-router.js)
+  //   These are guarded with optional chaining or fallbacks in code.
+  //   Provision as KV namespaces when the features are promoted to production.
 
   // Scheduled triggers for background tasks
   "triggers": {
