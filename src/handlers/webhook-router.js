@@ -97,8 +97,8 @@ async function logWebhook(env, event) {
     }
 
     // Also log to Chronicle API if available
-    if (env.CHITTYCHRONICLE_URL) {
-      await fetch(`${env.CHITTYCHRONICLE_URL}/events`, {
+    if (env.CHITTYCHRONICLE_SERVICE_URL) {
+      await fetch(`${env.CHITTYCHRONICLE_SERVICE_URL}/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
