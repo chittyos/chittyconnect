@@ -1694,7 +1694,7 @@ app.get("/integrations/github/callback", async (c) => {
     );
 
     // 7. Log to ChittyChronicle
-    await fetch("https://chronicle.chitty.cc/api/entries", {
+    await fetch(`${c.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1977,7 +1977,7 @@ export default {
     // 1Password event sync (hourly)
     try {
       const response = await fetch(
-        "https://chronicle.chitty.cc/api/sync/1password",
+        `${env.CHITTYCHRONICLE_SERVICE_URL}/api/sync/1password`,
         {
           method: "POST",
           headers: {

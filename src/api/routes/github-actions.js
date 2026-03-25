@@ -124,8 +124,7 @@ githubActionsRoutes.post("/credentials", async (c) => {
       },
       CLOUDFLARE_ACCOUNT_ID: {
         path: "infrastructure/cloudflare/account_id",
-        env: "CLOUDFLARE_ACCOUNT_ID",
-        default: "0bc21e3a5a9de1a4cc843be9c3e98121",
+        env: "CHITTYOS_ACCOUNT_ID",
       },
       NEON_DATABASE_URL: {
         path: "infrastructure/neon/database_url",

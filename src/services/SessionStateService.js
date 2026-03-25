@@ -15,6 +15,9 @@ export class SessionStateService {
    * Get or create Durable Object for a ChittyID
    */
   getDurableObject(chittyId) {
+    if (!this.env.SESSION_STATE) {
+      throw new Error("SESSION_STATE binding not available — phantom binding not yet provisioned");
+    }
     // Use ChittyID as the Durable Object name for consistent routing
     const id = this.env.SESSION_STATE.idFromName(chittyId);
     return this.env.SESSION_STATE.get(id);
