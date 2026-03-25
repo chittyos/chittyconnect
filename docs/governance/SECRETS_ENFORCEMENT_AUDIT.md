@@ -120,30 +120,33 @@ ChittyConnect has **zero env-block separation** — everything is flat at the wr
 
 ## 5. Remediation Runbook
 
-### Phase 1: Fix Immediate Bugs
-- [ ] `CHITTYSERV_URL` dev URL in prod config → split to env blocks
-- [ ] Feature-flag "secrets" → demote to vars or delete
+### Phase 1: Fix Immediate Bugs — DONE (PR #99)
+- [x] `CHITTYSERV_URL` dev URL in prod config → split to env blocks
+- [x] Feature-flag "secrets" → demote to vars or delete
 
-### Phase 2: Wrangler Env Blocks
-- [ ] Create dev/staging KV namespaces, D1 databases, R2 buckets, Queues, Vectorize indexes
-- [ ] Restructure wrangler.jsonc with env.dev / env.staging / env.production blocks
-- [ ] Move env-specific vars into their respective blocks
-- [ ] Keep shared vars at top level
+### Phase 2: Wrangler Env Blocks — DONE (PR #99)
+- [x] Restructure wrangler.jsonc with env.dev / env.staging / env.production blocks
+- [x] Move env-specific vars into their respective blocks
+- [x] Keep shared bindings at top level
+- [x] Comprehensive secrets manifest in comments
 
-### Phase 3: Secret Provisioning
-- [ ] Document all 36 secrets in 1Password with canonical item names
+### Phase 3: Secret Provisioning — OPS TASK (no code changes)
+- [ ] Document all secrets in 1Password with canonical item names
 - [ ] Run `wrangler secret put <NAME> --env production` for each (not bare)
 - [ ] Run `wrangler secret put <NAME> --env staging` for each
 - [ ] Dev secrets via `.dev.vars` file (gitignored)
 
-### Phase 4: Ghost Binding Resolution
-- [ ] Reconcile `COMMAND_KV`, `DOCUMENT_STORAGE`, `SESSION_STATE`, `CONVERSATIONS`, `CONTEXT_CONSCIOUSNESS`
-- [ ] Add to wrangler.jsonc or remove dead code paths
+### Phase 4: Ghost Binding Resolution — DEFERRED (guarded with optional chaining)
+- [x] Documented in wrangler.jsonc as "Phantom Bindings" section
+- [ ] Provision as KV namespaces when features are promoted to production
 
-### Phase 5: Source Code Hardcoding Cleanup
-- [ ] Replace hardcoded service URLs with env var references
-- [ ] Remove hardcoded account ID from source — use `CHITTYOS_ACCOUNT_ID`
-- [ ] Ensure fallback patterns use `env.VAR || throw` not `env.VAR || "hardcoded"`
+### Phase 5: Source Code Hardcoding Cleanup — IN PROGRESS
+- [x] Remove hardcoded account ID `0bc21e3a...` from 4 source files → use `CHITTYOS_ACCOUNT_ID`
+- [x] Remove hardcoded `https://chronicle.chitty.cc` from 5 fetch calls → use `CHITTYCHRONICLE_SERVICE_URL`
+- [x] `CHITTYSERV_URL` fallback to dev URL removed — explicit guard added
+- [x] `CLOUDFLARE_ACCOUNT_ID` default in github-actions.js → falls back to `CHITTYOS_ACCOUNT_ID` env
+- [ ] Static service arrays in `services.js` and `tool-dispatcher.js` — needs architectural decision (query ChittyRegistry?)
+- [ ] Remaining `env.VAR || "https://..."` fallback patterns (11 locations) — evaluate per-instance
 
 ### Phase 6: Documentation Alignment
 - [ ] Replace SECRETS_MODEL.md with authoritative version reflecting 3-env model

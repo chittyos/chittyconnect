@@ -14,10 +14,10 @@
 export class ChittyServClient {
   constructor(env) {
     this.env = env;
-    this.baseUrl = env.CHITTYSERV_URL || "http://chittyserv-dev:8080";
+    this.baseUrl = env.CHITTYSERV_URL; // Set in env.dev only — absent in staging/prod
     this.token = env.CHITTY_SERV_TOKEN;
 
-    if (!this.token && this.baseUrl !== "http://chittyserv-dev:8080") {
+    if (this.baseUrl && !this.token) {
       console.warn(
         "[ChittyServ] CHITTY_SERV_TOKEN not set — unauthenticated requests will be made",
       );
@@ -76,6 +76,9 @@ export class ChittyServClient {
    * @returns {Promise<string>} Credential value
    */
   async fetchFromChittyServ(credentialPath) {
+    if (!this.baseUrl) {
+      throw new Error("CHITTYSERV_URL not configured — ChittyServ unavailable in this environment");
+    }
     const url = `${this.baseUrl}/v1/credentials/${credentialPath}`;
 
     const headers = {

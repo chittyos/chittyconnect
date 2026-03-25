@@ -235,8 +235,9 @@ mcpRoutes.get("/resources/read", async (c) => {
         );
       }
       try {
+        const chronicleUrl = c.env.CHITTYCHRONICLE_SERVICE_URL;
         const auditResponse = await fetch(
-          "https://chronicle.chitty.cc/api/audit/credentials",
+          `${chronicleUrl}/api/audit/credentials`,
           { headers: { Authorization: `Bearer ${chronicleToken}` } },
         );
         if (!auditResponse.ok) {

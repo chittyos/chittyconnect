@@ -489,7 +489,7 @@ export class EnhancedCredentialProvisioner {
         purpose: "credential_provisioning",
         environment,
       })
-      .catch(() => "0bc21e3a5a9de1a4cc843be9c3e98121"); // Fallback to default
+      .catch(() => this.env.CHITTYOS_ACCOUNT_ID); // Fallback to env var
 
     if (!makeApiKey) {
       throw new Error(
@@ -1078,7 +1078,7 @@ export class EnhancedCredentialProvisioner {
     try {
       // Log to ChittyChronicle
       const chronicleResponse = await fetch(
-        "https://chronicle.chitty.cc/api/entries",
+        `${this.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`,
         {
           method: "POST",
           headers: {
