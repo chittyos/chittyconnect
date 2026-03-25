@@ -2,10 +2,16 @@
   // ChittyConnect - itsChitty™
   // The AI-intelligent spine with ContextConsciousness & MemoryCloude
   //
-  // Routes:
-  // - /api/* - REST API for custom GPT Actions
-  // - /mcp/* - MCP protocol for Claude integration
-  // - /integrations/github/webhook - GitHub App integration
+  // Deploy model:
+  //   wrangler dev                     → local dev (env.dev)
+  //   wrangler deploy --env staging    → chittyconnect-staging worker
+  //   wrangler deploy --env production → chittyconnect worker (live routes)
+  //
+  // Secret model (canonical — no exceptions):
+  //   1Password           → cold / source-of-truth
+  //   wrangler secret put → hot / runtime delivery (scoped per env)
+  //   KV                  → short-lived rotated values only
+  //   [vars]              → non-secret config only
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
@@ -14,61 +20,45 @@
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
-  // Production routes
-  "routes": [
-    { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
-    // MCP gateway consolidated into chittyconnect (OAuth 2.1 + MCP protocol)
-    { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
-    // Note: api.chitty.cc/* route is still assigned to chittyapi-production worker.
-    // To consolidate, delete that worker first, then add:
-    // { "pattern": "api.chitty.cc/*", "zone_name": "chitty.cc" }
-  ],
+  // ──────────────────────────────────────────────────────────────────
+  // SHARED BINDINGS — inherited by all environments
+  // ──────────────────────────────────────────────────────────────────
 
-  // R2 bucket for shared files
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "chittyos-files" }
   ],
 
-  // KV Namespaces (production IDs)
+  // KV — short-lived rotated values ONLY, not secrets
   "kv_namespaces": [
     { "binding": "IDEMP_KV", "id": "9ad1ec9795d243ca94f7502e6efb6a62" },
     { "binding": "TOKEN_KV", "id": "788d2fce231d4819a11b46d5f4678b04" },
     { "binding": "API_KEYS", "id": "cf6da7757caf4da5a8a365be2174f391" },
-    // OAuth 2.1 token storage (required by @cloudflare/workers-oauth-provider)
-    // OAUTH_PROVIDER binding is auto-injected by @cloudflare/workers-oauth-provider at runtime.
     { "binding": "OAUTH_KV", "id": "054ff38c93854e7c87b3aa307a7759cc" },
     { "binding": "CREDENTIAL_CACHE", "id": "aa18a59a2eb24fb29cfe08ef62519f4d" },
     { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
     { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
   ],
 
-  // Vectorize for MemoryCloude and ContextConsciousness
   "vectorize": [
     { "binding": "MEMORY_VECTORIZE", "index_name": "memory-cloude" },
     { "binding": "CONTEXT_VECTORIZE", "index_name": "context-embeddings" }
   ],
 
-  // Durable Objects — McpAgent-backed MCP sessions
   "durable_objects": {
     "bindings": [
       { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
     ]
   },
 
-  // DO Migrations
-  // Production is at tag "v3" with MCPSessionDurableObject (legacy stub).
-  // v4 deletes the old stub and creates McpConnectAgent with SQLite for Agents SDK.
   "migrations": [
     { "tag": "v3", "new_classes": ["MCPSessionDurableObject"] },
     { "tag": "v4", "deleted_classes": ["MCPSessionDurableObject"], "new_sqlite_classes": ["McpConnectAgent"] }
   ],
 
-  // D1 Database for installation mapping
   "d1_databases": [
     { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
   ],
 
-  // Queues for async event processing
   "queues": {
     "producers": [
       { "binding": "EVENT_Q", "queue": "github-events" },
@@ -79,66 +69,267 @@
     ]
   },
 
-  // Cloudflare Workers AI binding
   "ai": { "binding": "AI" },
 
-  // Environment variables
-  "vars": {
-    "ENVIRONMENT": "production",
-    "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
-    "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
-    "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
-    "CHITTYOS_DOMAIN": "chitty.cc",
-    "NEON_ORG_ID": "org-old-mountain-22774840",
-    "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
-    // ChittyOS-Core vault: infrastructure credentials (Cloudflare, Neon, GitHub)
-    "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
-    // ChittyOS-Deployment vault: service tokens (chittyauth, chittyid, chittyregister, etc.)
-    "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
-    // ChittyOS-Integrations vault: third-party integration keys (OpenAI, Notion, etc.)
-    "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
-    // ChittyConnect Only vault: emergency credentials
-    "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
-    "CREDENTIAL_FAILOVER_ENABLED": "true",
-    "CREDENTIAL_BROKER_TYPE": "auto",
-    "CHITTYSERV_URL": "http://chittyserv-dev:8080"
-  },
+  "observability": { "enabled": true },
+  "build": { "command": "", "cwd": "." },
+  "tail_consumers": [{ "service": "chittytrack" }],
 
-  // Secrets (set via: wrangler secret put <NAME>)
+  // ──────────────────────────────────────────────────────────────────
+  // ENVIRONMENTS — one worker, three declared environments
+  // ──────────────────────────────────────────────────────────────────
+
+  "env": {
+
+    // ════════════════════════════════════════════════════════════════
+    // DEV — `wrangler dev`
+    // ════════════════════════════════════════════════════════════════
+    "dev": {
+      "vars": {
+        "ENVIRONMENT": "development",
+        // Service URLs — local or dev instances
+        "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
+        "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
+        "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
+        "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
+        "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTYCONNECT_URL": "http://localhost:8787",
+        "CHITTYROUTER_URL": "https://router.chitty.cc",
+        "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
+        "CHITTYSERV_URL": "http://chittyserv-dev:8080",
+        // Ollama / AI
+        "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
+        "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        // Identifiers
+        "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
+        "CHITTYOS_DOMAIN": "chitty.cc",
+        "NEON_ORG_ID": "org-old-mountain-22774840",
+        // 1Password Connect
+        "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
+        "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
+        "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
+        "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
+        "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
+        // Broker
+        "CREDENTIAL_FAILOVER_ENABLED": "true",
+        "CREDENTIAL_BROKER_TYPE": "auto",
+        // Feature flags
+        "EVIDENCE_LEGACY_MODE": "false",
+        // Neon
+        "NEON_ROLE_NAME": "chittyos_app",
+        "NEON_DATABASE": "neondb",
+        // Twilio (non-secret)
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
+      }
+      // Secrets for dev: wrangler secret put <NAME> --env dev
+      // No crons in dev — triggered manually or via tests
+    },
+
+    // ════════════════════════════════════════════════════════════════
+    // STAGING — `wrangler deploy --env staging`
+    // ════════════════════════════════════════════════════════════════
+    "staging": {
+      "name": "chittyconnect-staging",
+      // No routes — staging is accessed directly via workers.dev URL
+      "vars": {
+        "ENVIRONMENT": "staging",
+        // Service URLs — production services, staging worker
+        "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
+        "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
+        "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
+        "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
+        "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTYCONNECT_URL": "https://chittyconnect-staging.chittyos.workers.dev",
+        "CHITTYROUTER_URL": "https://router.chitty.cc",
+        "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
+        // Ollama / AI
+        "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
+        "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        // Identifiers
+        "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
+        "CHITTYOS_DOMAIN": "chitty.cc",
+        "NEON_ORG_ID": "org-old-mountain-22774840",
+        // 1Password Connect
+        "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
+        "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
+        "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
+        "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
+        "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
+        // Broker
+        "CREDENTIAL_FAILOVER_ENABLED": "true",
+        "CREDENTIAL_BROKER_TYPE": "auto",
+        // Feature flags
+        "EVIDENCE_LEGACY_MODE": "false",
+        // Neon
+        "NEON_ROLE_NAME": "chittyos_app",
+        "NEON_DATABASE": "neondb",
+        // Twilio (non-secret)
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
+      },
+      // Staging crons — same schedule, hits staging worker
+      "triggers": {
+        "crons": [
+          "0 * * * *",
+          "*/5 * * * *",
+          "*/50 * * * *"
+        ]
+      }
+      // Secrets for staging: wrangler secret put <NAME> --env staging
+    },
+
+    // ════════════════════════════════════════════════════════════════
+    // PRODUCTION — `wrangler deploy --env production`
+    // ════════════════════════════════════════════════════════════════
+    "production": {
+      "name": "chittyconnect",
+      "routes": [
+        { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
+        { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
+        // api.chitty.cc/* still assigned to chittyapi-production worker.
+        // To consolidate: delete that worker first, then add route here.
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        // Service URLs — all production
+        "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
+        "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
+        "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
+        "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
+        "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTYCONNECT_URL": "https://connect.chitty.cc",
+        "CHITTYROUTER_URL": "https://router.chitty.cc",
+        "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
+        // Ollama / AI
+        "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
+        "AI_MODEL_PRIMARY": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        // Identifiers
+        "CHITTYOS_ACCOUNT_ID": "0bc21e3a5a9de1a4cc843be9c3e98121",
+        "CHITTYOS_DOMAIN": "chitty.cc",
+        "NEON_ORG_ID": "org-old-mountain-22774840",
+        // 1Password Connect
+        "ONEPASSWORD_CONNECT_URL": "https://1password-connect.chitty.cc",
+        "ONEPASSWORD_VAULT_INFRASTRUCTURE": "oxwo63jlcbo66c7kwx67lquw4i",
+        "ONEPASSWORD_VAULT_SERVICES": "xgevq7nkt6t4bfokjaczht5gdy",
+        "ONEPASSWORD_VAULT_INTEGRATIONS": "3ngilqu4qsp4mlr53xhvyi4sry",
+        "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
+        // Broker
+        "CREDENTIAL_FAILOVER_ENABLED": "true",
+        "CREDENTIAL_BROKER_TYPE": "auto",
+        // Feature flags
+        "EVIDENCE_LEGACY_MODE": "false",
+        // Neon
+        "NEON_ROLE_NAME": "chittyos_app",
+        "NEON_DATABASE": "neondb",
+        // Twilio (non-secret)
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
+      },
+      // Production crons
+      "triggers": {
+        "crons": [
+          "0 * * * *",     // Hourly: 1Password event sync + secret rotation check
+          "*/5 * * * *",   // Every 5 min: Connection health checks
+          "*/50 * * * *"   // Every 50 min: OAuth token rotation (GDrive access tokens)
+        ]
+      }
+      // Secrets for production: wrangler secret put <NAME> --env production
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // SECRETS MANIFEST
+  // ──────────────────────────────────────────────────────────────────
+  // All secrets: wrangler secret put <NAME> --env <dev|staging|production>
+  // Source of truth: 1Password → Cloudflare Secrets (hot runtime delivery)
   //
-  // GitHub Integration:        GITHUB_APP_ID, GITHUB_APP_PK, GITHUB_WEBHOOK_SECRET
-  // ChittyOS Services:         CHITTY_ID_TOKEN, CHITTY_AUTH_TOKEN, CHITTY_CASES_TOKEN,
-  //                            CHITTY_FINANCE_TOKEN, CHITTY_EVIDENCE_TOKEN, CHITTY_SYNC_TOKEN,
-  //                            CHITTY_CHRONICLE_TOKEN, CHITTY_CONTEXTUAL_TOKEN, CHITTY_REGISTRY_TOKEN,
-  //                            CHITTY_PROOF_TOKEN, CHITTY_TRUST_TOKEN,
-  //                            CHITTY_TASK_TOKEN
-  // Third-Party Integrations:  NOTION_TOKEN, OPENAI_API_KEY, GOOGLE_ACCESS_TOKEN, NEON_DATABASE_URL, NEON_API_KEY
-  // Credential Provisioning:   CLOUDFLARE_MAKE_API_KEY (fallback if 1Password unavailable),
-  //                            CLOUDFLARE_ACCOUNT_ID (fallback if 1Password unavailable)
-  // 1Password Connect:         ONEPASSWORD_CONNECT_TOKEN (JWT from ~/.op-connect/connect-token),
-  //                            EMERGENCY_REVOKE_TOKEN, ENCRYPTION_KEY (random 32-byte key for KV cache)
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ GITHUB INTEGRATION                                             │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ GITHUB_APP_ID              GitHub App numeric ID               │
+  // │ GITHUB_APP_PK              GitHub App private key (PEM)        │
+  // │ GITHUB_WEBHOOK_SECRET      Webhook signature verification      │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ CHITTYOS SERVICE TOKENS (pattern: CHITTY_${SERVICE}_TOKEN)     │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ CHITTY_ID_TOKEN            ChittyID service auth               │
+  // │ CHITTY_AUTH_TOKEN          ChittyAuth service auth             │
+  // │ CHITTY_REGISTRY_TOKEN      ChittyRegistry service auth         │
+  // │ CHITTY_CHRONICLE_TOKEN     ChittyChronicle service auth        │
+  // │ CHITTY_DNA_TOKEN           ChittyDNA service auth              │
+  // │ CHITTY_VERIFY_TOKEN        ChittyVerify service auth           │
+  // │ CHITTY_CERTIFY_TOKEN       ChittyCertify service auth          │
+  // │ CHITTY_CASES_TOKEN         ChittyCases service auth            │
+  // │ CHITTY_FINANCE_TOKEN       ChittyFinance service auth          │
+  // │ CHITTY_EVIDENCE_TOKEN      ChittyEvidence service auth         │
+  // │ CHITTY_SYNC_TOKEN          ChittySync service auth             │
+  // │ CHITTY_PROOF_TOKEN         ChittyProof service auth            │
+  // │ CHITTY_TRUST_TOKEN         ChittyTrust service auth            │
+  // │ CHITTY_CONTEXTUAL_TOKEN    ChittyContextual service auth       │
+  // │ CHITTY_TASK_TOKEN          ChittyTask service auth             │
+  // │ CHITTY_SERV_TOKEN          ChittyServ homelab auth             │
+  // │ CHITTY_TRACK_TOKEN         ChittyTrack observability token     │
+  // │ CHITTY_ID_SERVICE_TOKEN    ChittyID generic service token      │
+  // │ CHITTYCONNECT_SERVICE_TOKEN ChittyConnect self-service token   │
+  // │ CHITTYMINT_SECRET          ChittyMint webhook secret           │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ THIRD-PARTY INTEGRATIONS                                       │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ NOTION_TOKEN               Notion API integration              │
+  // │ OPENAI_API_KEY             OpenAI API key                      │
+  // │ GOOGLE_ACCESS_TOKEN        Google OAuth access token            │
+  // │ GDRIVE_CLIENT_ID           Google Drive OAuth client ID        │
+  // │ GDRIVE_CLIENT_SECRET       Google Drive OAuth client secret    │
+  // │ OLLAMA_CF_CLIENT_ID        CF Access client ID (Ollama tunnel) │
+  // │ OLLAMA_CF_CLIENT_SECRET    CF Access client secret (Ollama)    │
+  // │ TWILIO_ACCOUNT_SID         Twilio account SID                  │
+  // │ TWILIO_AUTH_TOKEN          Twilio auth token                   │
+  // │ AI_SEARCH_TOKEN            AI search integration token         │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ NEON DATABASE                                                  │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ NEON_DATABASE_URL          Neon connection string (verify use) │
+  // │ NEON_API_KEY               Neon API key (secret rotation)     │
+  // │ NEON_PROJECT_ID            Neon project ID                     │
+  // │ NEON_BRANCH_ID             Neon branch ID                      │
+  // │ NEON_HOST                  Neon host                           │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ CREDENTIAL PROVISIONING & 1PASSWORD                            │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ ONEPASSWORD_CONNECT_TOKEN  1Password Connect JWT               │
+  // │ OP_EVENTS_API_TOKEN        1Password Events API token          │
+  // │ CLOUDFLARE_MAKE_API_KEY    CF API fallback (if 1Pass down)     │
+  // │ CLOUDFLARE_ACCOUNT_ID      CF account fallback                 │
+  // │ EMERGENCY_REVOKE_TOKEN     Emergency credential revocation     │
+  // │ ENCRYPTION_KEY             32-byte key for KV cache encryption │
+  // │ INTERNAL_WEBHOOK_SECRET    Internal webhook verification       │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ CODE ALIASES (not separate secrets — resolve to above)         │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ CF_ACCOUNT_ID              → CHITTYOS_ACCOUNT_ID (var)         │
+  // │ CHITTY_SERVICE_TOKEN       → CHITTY_ID_SERVICE_TOKEN (secret)  │
+  // │ CHITTY_API_KEY             → API_KEYS KV lookup (binding)      │
+  // └─────────────────────────────────────────────────────────────────┘
+  //
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ PHANTOM BINDINGS (referenced in code, not yet provisioned)     │
+  // ├─────────────────────────────────────────────────────────────────┤
+  // │ COMMAND_KV, CONVERSATIONS, CONTEXT_CONSCIOUSNESS,              │
+  // │ MEMORY_KV (falls back to TOKEN_KV), PREDICTION_CACHE,         │
+  // │ SESSION_STATE, DOCUMENT_STORAGE, CHRONICLE_KV                  │
+  // │ Guarded with optional chaining. Provision as KV namespaces     │
+  // │ when features are promoted to production.                      │
+  // └─────────────────────────────────────────────────────────────────┘
   //
   // 1Password vault items required for credential provisioning:
   //   Vault: ChittyOS-Core (oxwo63jlcbo66c7kwx67lquw4i)
   //   Item title: "cloudflare"  fields: make_api_key, account_id
-  //   (Create via: op item create --vault ChittyOS-Core --title cloudflare
-  //                --category login make_api_key=<CF_GLOBAL_API_TOKEN> account_id=0bc21e3a5a9de1a4cc843be9c3e98121)
-
-  // Scheduled triggers for background tasks
-  "triggers": {
-    "crons": [
-      "0 * * * *",     // Hourly: 1Password event sync + secret rotation check
-      "*/5 * * * *",   // Every 5 min: Connection health checks
-      "*/50 * * * *"   // Every 50 min: OAuth token rotation (GDrive access tokens)
-    ]
-  },
-
-  // Analytics and logging
-  "observability": { "enabled": true },
-
-  // Build configuration
-  "build": { "command": "", "cwd": "." },
-
-  // ChittyTrack observability
-  "tail_consumers": [{ "service": "chittytrack" }]
 }

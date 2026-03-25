@@ -39,7 +39,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 const mockEnv = {
-  CF_ACCOUNT_ID: "test-account-id",
+  CHITTYOS_ACCOUNT_ID: "test-account-id",
   AI_SEARCH_TOKEN: "test-ai-token",
 };
 
@@ -586,7 +586,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_evidence_search",
         { query: "closing disclosure" },
-        { CF_ACCOUNT_ID: "test" }, // no AI_SEARCH_TOKEN
+        { CHITTYOS_ACCOUNT_ID: "test" }, // no AI_SEARCH_TOKEN
       );
 
       expect(result.isError).toBe(true);
@@ -1201,7 +1201,7 @@ describe("dispatchToolCall", () => {
   describe("chitty_infra_logs", () => {
     it("returns error when no Cloudflare API token", async () => {
       getCredential.mockResolvedValue(undefined);
-      const env = { CF_ACCOUNT_ID: "acct-123" };
+      const env = { CHITTYOS_ACCOUNT_ID: "acct-123" };
 
       const result = await dispatchToolCall(
         "chitty_infra_logs",
@@ -1239,7 +1239,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyid-production", query_type: "events", timeframe: "1h" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBeUndefined();
@@ -1270,7 +1270,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "errors" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -1290,7 +1290,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "metrics" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -1309,7 +1309,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "events", filter: "timeout" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -1326,7 +1326,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "events", limit: 999 },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -1339,7 +1339,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "events", timeframe: "bad" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1357,7 +1357,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_logs",
         { service: "chittyconnect", query_type: "events" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1372,7 +1372,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_audit",
         { since: "2026-01-01", before: "2026-01-02" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1410,7 +1410,7 @@ describe("dispatchToolCall", () => {
           action_type: "delete",
           actor_email: "user@example.com",
         },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBeUndefined();
@@ -1435,7 +1435,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_audit",
         { since: "2026-01-01", before: "2026-01-02" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const url = mockFetch.mock.calls[0][0];
@@ -1454,7 +1454,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_audit",
         { since: "2026-01-01", before: "2026-01-02" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1469,7 +1469,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: "{ viewer { zones { firewallEventsAdaptive { action } } } }" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1487,7 +1487,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: gql },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBeUndefined();
@@ -1512,7 +1512,7 @@ describe("dispatchToolCall", () => {
       await dispatchToolCall(
         "chitty_infra_analytics",
         { query: "{ viewer { zones { } } }", variables: customVars },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -1530,7 +1530,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: "{ viewer { } }" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1548,7 +1548,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: "{ viewer { } }" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);
@@ -1566,7 +1566,7 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: "{ viewer { } }" },
-        { CF_ACCOUNT_ID: "acct-123" },
+        { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
       expect(result.isError).toBe(true);

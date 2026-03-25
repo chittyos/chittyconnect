@@ -16,7 +16,7 @@ vi.mock("../../src/mcp/tool-dispatcher.js", () => ({
 }));
 
 const mockEnv = {
-  CF_ACCOUNT_ID: "test-account",
+  CHITTYOS_ACCOUNT_ID: "test-account",
   AI_SEARCH_TOKEN: "test-token",
 };
 
