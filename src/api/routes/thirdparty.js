@@ -139,6 +139,94 @@ thirdpartyRoutes.post("/notion/page/create", async (c) => {
 });
 
 /**
+ * POST /api/thirdparty/notion/pages
+ * Legacy alias for Notion page creation.
+ */
+thirdpartyRoutes.post("/notion/pages", async (c) => {
+  try {
+    const body = await c.req.json();
+
+    const notionToken = await getCredential(
+      c.env,
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
+    );
+
+    if (!notionToken) {
+      return c.json(
+        {
+          error: "Notion API key not configured",
+        },
+        503,
+      );
+    }
+
+    const response = await fetch("https://api.notion.com/v1/pages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Notion API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/thirdparty/notion/comments
+ * Create Notion comment.
+ */
+thirdpartyRoutes.post("/notion/comments", async (c) => {
+  try {
+    const body = await c.req.json();
+
+    const notionToken = await getCredential(
+      c.env,
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
+    );
+
+    if (!notionToken) {
+      return c.json(
+        {
+          error: "Notion API key not configured",
+        },
+        503,
+      );
+    }
+
+    const response = await fetch("https://api.notion.com/v1/comments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Notion API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
  * POST /api/thirdparty/neon/query
  * Execute Neon SQL query
  */
@@ -518,6 +606,56 @@ thirdpartyRoutes.patch("/notion/page/update", async (c) => {
     }
 
     // Get Notion token from 1Password with fallback
+    const notionToken = await getCredential(
+      c.env,
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
+    );
+
+    if (!notionToken) {
+      return c.json(
+        {
+          error: "Notion API key not configured",
+        },
+        503,
+      );
+    }
+
+    const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(properties),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Notion API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * PATCH /api/thirdparty/notion/pages/:pageId
+ * Legacy alias for Notion page update.
+ */
+thirdpartyRoutes.patch("/notion/pages/:pageId", async (c) => {
+  try {
+    const pageId = c.req.param("pageId");
+    const properties = await c.req.json();
+
+    if (!pageId) {
+      return c.json({ error: "pageId is required" }, 400);
+    }
+
     const notionToken = await getCredential(
       c.env,
       "integrations/notion/api_key",
