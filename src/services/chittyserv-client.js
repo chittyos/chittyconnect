@@ -3,7 +3,7 @@
  *
  * HTTP client for the ChittyServ credential broker API.
  * Drop-in replacement for OnePasswordConnectClient — same interface,
- * different backend (chittyserv-dev:8080/v1/ instead of 1Password Connect).
+ * different backend (CHITTYSERV_URL/v1/ instead of 1Password Connect).
  *
  * ChittyServ uses the same {vault}/{item}/{field} path convention,
  * so existing credential paths work without modification.

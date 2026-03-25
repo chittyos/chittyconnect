@@ -13,8 +13,19 @@
 
 set -euo pipefail
 
-ENV="${1:---env production}"
-DRY_RUN="${2:-}"
+# Parse arguments
+WRANGLER_ENV="production"
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env) WRANGLER_ENV="$2"; shift 2 ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    *) echo "Unknown argument: $1"; echo "Usage: $0 [--env production|staging|dev] [--dry-run]"; exit 1 ;;
+  esac
+done
+
+ENV="--env $WRANGLER_ENV"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -29,12 +40,12 @@ VAULT_EMERGENCY="shl646vf4snnrkx6linyk3yis4"    # ChittyConnect Only
 
 echo "=========================================="
 echo " ChittyConnect Secret Deployment"
-echo " Target: $ENV"
+echo " Target: $WRANGLER_ENV"
 echo "=========================================="
 echo ""
 
 # Secrets that are in the manifest AND used in code but NOT deployed
-# Format: SECRET_NAME  OP_VAULT  OP_ITEM  OP_FIELD
+# Format: SECRET_NAME|OP_VAULT|OP_ITEM|OP_FIELD (pipe-delimited)
 MISSING_SECRETS=(
   # GitHub Integration
   "GITHUB_APP_ID|$VAULT_INTEGRATIONS|github-app|app_id"
@@ -76,7 +87,7 @@ for entry in "${MISSING_SECRETS[@]}"; do
 
   echo -n "  $SECRET_NAME ... "
 
-  if [[ "$DRY_RUN" == "--dry-run" ]]; then
+  if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}DRY RUN${NC} (would fetch op://$VAULT/$ITEM/$FIELD)"
     ((SKIPPED++))
     continue
@@ -91,8 +102,8 @@ for entry in "${MISSING_SECRETS[@]}"; do
     continue
   fi
 
-  # Deploy to Cloudflare
-  echo "$VALUE" | npx wrangler secret put "$SECRET_NAME" $ENV 2>/dev/null
+  # Deploy to Cloudflare (printf avoids secret appearing in /proc/*/cmdline unlike echo)
+  printf '%s' "$VALUE" | npx wrangler secret put "$SECRET_NAME" $ENV 2>/dev/null
   echo -e "${GREEN}DEPLOYED${NC}"
   ((DEPLOYED++))
 done

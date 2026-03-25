@@ -330,8 +330,8 @@
   // │ CHRONICLE_KV         KV   guarded: if (env.CHRONICLE_KV)       │
   // │ MEMORY_KV            KV   fallback: env.MEMORY_KV||TOKEN_KV    │
   // │ SESSION_STATE        DO   guarded: throw if missing             │
-  // │ PREDICTION_CACHE     KV   dead: no non-test code references    │
-  // │ DOCUMENT_STORAGE     R2   dead: no non-test code references    │
+  // │ PREDICTION_CACHE     KV   LIVE: prediction-engine.js (unguarded)│
+  // │ DOCUMENT_STORAGE     R2   LIVE: DocumentStorageService (ungrd) │
   // │ Provision as KV/DO/R2 when features are promoted to prod.      │
   // └─────────────────────────────────────────────────────────────────┘
   //
