@@ -33,7 +33,7 @@ If there is a disagreement between this runbook and the architecture spec, the a
 |----------|-------|--------|
 | Service-to-service URLs | ~30 | Move to `vars` (not secrets) |
 | Notion database IDs | ~12 | Move to `vars` (not secrets) |
-| 1Password-specific (`ONEPASSWORD_*`) | ~8 | **Delete** after migration |
+| 1Password-specific (`ONEPASSWORD_*`) | ~8 | Normalize to canonical runtime config; delete only obsolete names/usages |
 | Service tokens | ~25 | → Cloudflare Secrets Store |
 | Third-party credentials | ~20 | → Cloudflare Secrets Store |
 | Signing/encryption keys | ~5 | → Secrets Store + rotation audit |
@@ -49,6 +49,33 @@ If there is a disagreement between this runbook and the architecture spec, the a
 | chittyregistry | 35+ | Medium — Notion integration heavy |
 | chittygov | 25+ | Medium — Notion + OpenAI |
 | chatgpt-mcp-gateway | 13 | Medium — all MCP service tokens |
+
+### ChittyConnect Alignment Audit (2026-03-25)
+
+`chittyconnect` remains the primary exception to the target structure and must
+be aligned before the model can be considered canonical with no exceptions.
+
+Current runtime inventory from `src/` and `mcp/`:
+
+- `secret`: service tokens, API keys, webhook secrets, encryption keys, OAuth secrets
+- `var`: service URLs, account/domain identifiers, feature flags, environment labels, 1Password Connect URL, 1Password vault IDs
+- `binding`: `DB`, `API_KEYS`, `TOKEN_KV`, `CREDENTIAL_CACHE`, `RATE_LIMIT`, `FILES`, `EVENT_Q`, `PROOF_Q`, `MCP_AGENT`, `AI`, `TENANT_CONNECTIONS`
+
+Current concrete exceptions:
+
+1. `wrangler.jsonc` is still top-level production-oriented config instead of explicit `dev` / `stage` / `prod` env blocks
+2. production routes are declared only at top level
+3. `vars` still mix canonical non-secret config with production-only deployment assumptions
+4. docs still contain mixed staging/production examples and stale naming guidance
+5. some integrations still read secrets directly from `env.*` where the broker path is intended to be canonical
+
+Required enforcement rule:
+
+- non-secret config stays in `vars`
+- long-lived secrets move through 1Password → Cloudflare Secrets
+- short-lived rotated values live in KV only when rotation requires it
+- all three environments must be first-class in Wrangler config
+- Ollama-specific secrets follow the same model as every other integration
 
 ### Stale Compatibility Dates
 
@@ -98,6 +125,12 @@ Populate each with the secrets its Workers need.
 ---
 
 ## Wrangler Multi-Environment Pattern
+
+This means **one Worker codebase and one `wrangler.jsonc`** with three explicit
+environment blocks: `dev`, `stage`, and `prod`.
+
+It does **not** mean three separate Workers, three separate repos, or three
+separate Wrangler config files.
 
 **Critical rule:** Env blocks do NOT inherit top-level `vars`, `routes`, or `tail_consumers`. Each block must be self-contained.
 
@@ -161,7 +194,7 @@ Full template: `process-ops/state/wrangler-template.jsonc`
 | 4+ | chittyevidence, chittycommand, all agents | ⬜ |
 
 ### Phase 5: Cleanup ⬜
-- [ ] Remove 8 `ONEPASSWORD_*` env refs from chittyconnect
+- [ ] Remove obsolete `ONEPASSWORD_*` names/usages from chittyconnect and keep only canonical runtime config
 - [ ] Remove `op run` from legacy deploy scripts
 - [ ] Move ~30 service URLs to plain `vars`
 - [ ] Move ~12 Notion DB IDs to plain `vars`
@@ -177,10 +210,11 @@ These require architecture-level decisions (resolve in chittyconnect spec, not h
 
 | Gap | Question | Impact |
 |-----|----------|--------|
-| Auth on `/api/v1/secrets/*` | Bearer token — is this a CF Secret or a service binding? | Determines how agents authenticate to the broker |
+| Auth on `/api/v1/secrets/*` | Resolved in code: protected by existing API auth middleware; keep docs and consumers aligned | Consumer auth expectations |
 | Raw vs brokered secrets | Should broker return raw values or scoped/wrapped responses? | Affects consumer contract |
-| `ONEPASSWORD_CONNECT_HOST` vs `_URL` | Both exist in chittyconnect source — which is canonical? | Cleanup target |
+| `ONEPASSWORD_CONNECT_HOST` vs `_URL` | `_URL` is canonical; remove stale `_HOST` references from docs and scripts | Cleanup target |
 | Neon rotation: broker vs env | Should rotated Neon URI go to KV (broker-based) or CF Secrets (env-based)? | Affects whether consumers use broker or `env.NEON_DATABASE_URL` |
+| `chittyconnect` env structure | Convert top-level production Wrangler config into explicit `dev` / `stage` / `prod` blocks | Required for zero-exception alignment |
 
 ---
 
