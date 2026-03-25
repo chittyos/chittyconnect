@@ -269,6 +269,8 @@
   // │ CHITTY_TASK_TOKEN          ChittyTask service auth             │
   // │ CHITTY_SERV_TOKEN          ChittyServ homelab auth             │
   // │ CHITTY_TRACK_TOKEN         ChittyTrack observability token     │
+  // │ CHITTY_DISPUTES_TOKEN      ChittyDisputes service auth        │
+  // │ CHITTY_LEDGER_TOKEN        ChittyLedger service auth          │
   // │ CHITTY_ID_SERVICE_TOKEN    ChittyID generic service token      │
   // │ CHITTYCONNECT_SERVICE_TOKEN ChittyConnect self-service token   │
   // │ CHITTYMINT_SECRET          ChittyMint webhook secret           │
@@ -322,11 +324,15 @@
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ PHANTOM BINDINGS (referenced in code, not yet provisioned)     │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ COMMAND_KV, CONVERSATIONS, CONTEXT_CONSCIOUSNESS,              │
-  // │ MEMORY_KV (falls back to TOKEN_KV), PREDICTION_CACHE,         │
-  // │ SESSION_STATE, DOCUMENT_STORAGE, CHRONICLE_KV                  │
-  // │ Guarded with optional chaining. Provision as KV namespaces     │
-  // │ when features are promoted to production.                      │
+  // │ COMMAND_KV           KV   guarded: if (c.env.COMMAND_KV)       │
+  // │ CONVERSATIONS        KV   guarded: if (c.env.CONVERSATIONS)    │
+  // │ CONTEXT_CONSCIOUSNESS DO  guarded: if (c.env.CONTEXT_...)      │
+  // │ CHRONICLE_KV         KV   guarded: if (env.CHRONICLE_KV)       │
+  // │ MEMORY_KV            KV   fallback: env.MEMORY_KV||TOKEN_KV    │
+  // │ SESSION_STATE        DO   guarded: throw if missing             │
+  // │ PREDICTION_CACHE     KV   dead: no non-test code references    │
+  // │ DOCUMENT_STORAGE     R2   dead: no non-test code references    │
+  // │ Provision as KV/DO/R2 when features are promoted to prod.      │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // 1Password vault items required for credential provisioning:

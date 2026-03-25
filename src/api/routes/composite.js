@@ -348,11 +348,13 @@ compositeRoutes.post(
         },
       };
 
-      await c.env.CONVERSATIONS.put(
-        contextKey,
-        JSON.stringify(contextData),
-        { expirationTtl: 86400 }, // 24 hours
-      );
+      if (c.env.CONVERSATIONS) {
+        await c.env.CONVERSATIONS.put(
+          contextKey,
+          JSON.stringify(contextData),
+          { expirationTtl: 86400 }, // 24 hours
+        );
+      }
 
       // Return comprehensive response
       return contextualResponse(
