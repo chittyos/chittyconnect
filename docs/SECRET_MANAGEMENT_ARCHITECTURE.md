@@ -16,6 +16,11 @@ Machine-orchestrated credential management for a 100% synthetic development team
 
 No human intervention is required for routine secret access or rotation. The 1Password desktop app is not used — all access is headless via Service Account tokens over HTTPS.
 
+**Deployment model clarification:** the target is **one Worker codebase with one
+`wrangler.jsonc`** using explicit `dev`, `stage`, and `prod` environment
+blocks. It is **not** three separate codebases or three separate Wrangler
+files.
+
 ## Principles
 
 1. **Data Diode** — Admin SAs read from many vaults, write to exactly one. A compromised admin can only corrupt its own target vault.
