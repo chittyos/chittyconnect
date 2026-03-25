@@ -32,6 +32,7 @@ import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
+import { authenticate } from "./api/middleware/auth.js";
 import { SecretRotationService } from "./services/secret-rotation.js";
 
 const app = new Hono();
@@ -204,6 +205,10 @@ app.use("*", async (c, next) => {
 
   await next();
 });
+
+// Secret rotation endpoints are mounted on the top-level app rather than the
+// authenticated API router, so protect them explicitly here.
+app.use("/api/v1/secrets/*", authenticate);
 
 /**
  * Root health check endpoint

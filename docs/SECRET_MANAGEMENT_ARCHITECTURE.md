@@ -20,7 +20,7 @@ No human intervention is required for routine secret access or rotation. The 1Pa
 
 1. **Data Diode** — Admin SAs read from many vaults, write to exactly one. A compromised admin can only corrupt its own target vault.
 2. **Least Privilege** — Runtime SAs are read-only everywhere. Workers cannot modify vault contents.
-3. **No Secret Sprawl** — Secrets never appear in git history, shell logs, or LLM prompt context. They are injected just-in-time via `op run` or environment bindings.
+3. **No Secret Sprawl** — Secrets never appear in git history, shell logs, or general LLM prompt context. They are injected just-in-time via `op run`, environment bindings, or authenticated machine-to-machine credential responses.
 4. **Kill Switch** — Any SA token can be revoked instantly in the 1Password web UI, cutting off access globally without redeployment.
 5. **Separation of Concerns** — Provisioning, brokering, and orchestration are handled by different systems with different access levels.
 
@@ -64,7 +64,7 @@ GDRIVE_CLIENT_SECRET       — Google OAuth2 client secret
 GDRIVE_REFRESH_TOKEN       — Google OAuth2 refresh token (long-lived)
 CHITTY_AUTH_SERVICE_TOKEN   — ChittyAuth bearer token
 ONEPASSWORD_CONNECT_TOKEN  — 1Password Connect API token
-ONEPASSWORD_CONNECT_HOST   — 1Password Connect server URL
+ONEPASSWORD_CONNECT_URL    — 1Password Connect server URL
 ```
 
 ---
@@ -72,6 +72,8 @@ ONEPASSWORD_CONNECT_HOST   — 1Password Connect server URL
 ### 2. Credential Broker (ChittyConnect)
 
 **Purpose:** Runtime secret access for all ChittyOS agents. Serves credentials from hot storage (Cloudflare Secrets / env vars) or cache (Workers KV). Falls back to 1Password Connect API for on-demand retrieval.
+
+**Current delivery model:** ChittyConnect is a broker, but authenticated machine callers may still receive raw credential material on some `/api/credentials/*` routes. This is current implementation behavior, not an opaque-handle-only design.
 
 **Identity:** `sa-chitty-{env}` runtime SA tokens (read-only).
 
@@ -101,8 +103,8 @@ Agent (e.g., chittyagent-finance)
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/v1/secrets/status` | GET | Bearer | Freshness report for all managed secrets |
-| `/api/v1/secrets/rotate/:name` | POST | Bearer | Force-rotate a specific secret |
+| `/api/v1/secrets/status` | GET | API key or Bearer | Freshness report for all managed secrets |
+| `/api/v1/secrets/rotate/:name` | POST | API key or Bearer | Force-rotate a specific secret |
 
 **Cron triggers:**
 
@@ -111,6 +113,8 @@ Agent (e.g., chittyagent-finance)
 | `*/50 * * * *` | `SecretRotationService.forceRotate('gdrive_access_token')` | Refresh GDrive OAuth access token before 60-min expiry |
 | `0 * * * *` | `SecretRotationService.runDueRotations()` | Check all secrets, rotate any that are due |
 | `*/5 * * * *` | `runAllHealthChecks()` | Connection health checks (existing) |
+
+**Protected by middleware:** `/api/v1/secrets/*` is protected by the same `authenticate` middleware used for the rest of the API surface.
 
 ---
 
@@ -289,12 +293,13 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 
 **Flow:**
 ```
-1. POST https://console.neon.tech/api/v2/projects/{id}/branches/{branch}/roles/{role}/reset_password
+1. Read `NEON_API_KEY` from Worker env
+2. POST https://console.neon.tech/api/v2/projects/{id}/branches/{branch}/roles/{role}/reset_password
    - Authorization: Bearer {NEON_API_KEY}
-2. Receive new password in response
-3. Build new connection URI: postgresql://{role}:{password}@{host}/{db}?sslmode=require
-4. KV.put('secret:neon:connection_uri', uri, { expirationTtl: 8 days })
-5. Update rotation metadata
+3. Receive new password in response
+4. Build new connection URI: postgresql://{role}:{password}@{host}/{db}?sslmode=require
+5. KV.put('secret:neon:connection_uri', uri, { expirationTtl: 8 days })
+6. Update rotation metadata
 ```
 
 **Required env vars:**
@@ -304,6 +309,8 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 - `NEON_ROLE_NAME` — Database role (defaults to `chittyos_app`)
 - `NEON_HOST` — Neon host for connection string construction
 - `NEON_DATABASE` — Database name (defaults to `neondb`)
+
+**Implementation note:** the current rotator reads `NEON_API_KEY` directly from Worker env rather than through the credential broker.
 
 ### Adding New Rotators
 
