@@ -183,7 +183,7 @@ githubActionsRoutes.post("/credentials", async (c) => {
         }
       } catch (error) {
         console.warn(
-          `[GitHub Actions] 1Password fetch failed for ${credName}:`,
+          `[GitHub Actions] Credential broker fetch failed for ${credName}:`,
           error.message,
         );
       }

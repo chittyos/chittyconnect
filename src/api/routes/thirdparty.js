@@ -172,7 +172,8 @@ thirdpartyRoutes.post("/notion/pages", async (c) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Notion API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Notion API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -216,7 +217,8 @@ thirdpartyRoutes.post("/notion/comments", async (c) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Notion API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Notion API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
