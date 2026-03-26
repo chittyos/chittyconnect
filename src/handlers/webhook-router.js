@@ -54,7 +54,9 @@ export async function routeWebhook(source, payload, env) {
         "X-Webhook-Source": source,
         "X-Webhook-Timestamp": timestamp,
         "X-Forwarded-By": "chittyconnect",
-        "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET || "",
+        ...(env.INTERNAL_WEBHOOK_SECRET && {
+          "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
+        }),
       },
       body: JSON.stringify(payload),
     });
@@ -102,7 +104,7 @@ async function logWebhook(env, event) {
       console.warn('[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL');
     }
     if (chronicleUrl) {
-      await fetch(`${chronicleUrl}/events`, {
+      const resp = await fetch(`${chronicleUrl}/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -114,9 +116,12 @@ async function logWebhook(env, event) {
           data: event,
         }),
       });
+      if (!resp.ok) {
+        console.warn(`[webhook-router] Chronicle log returned ${resp.status}`);
+      }
     }
   } catch (e) {
-    console.error("Failed to log webhook:", e);
+    console.warn("[webhook-router] Failed to log webhook:", e);
   }
 }
 

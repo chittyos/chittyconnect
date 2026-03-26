@@ -1716,7 +1716,7 @@ app.get("/integrations/github/callback", async (c) => {
         });
       }
     } catch (err) {
-      console.error("[GitHub App] Chronicle log failed:", err.message);
+      console.warn("[GitHub App] Chronicle log failed:", err);
     }
 
     console.log(`[GitHub App] Installation complete: ${installChittyID}`);
@@ -1986,8 +1986,8 @@ export default {
       // 1Password event sync
       try {
         const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
-      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-      const response = await fetch(
+        if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+        const response = await fetch(
           `${chronicleUrl}/api/sync/1password`,
           {
             method: "POST",
@@ -2005,7 +2005,7 @@ export default {
         );
         console.log(`[Scheduled] 1Password sync: ${response.status}`);
       } catch (err) {
-        console.error(`[Scheduled] 1Password sync failed:`, err);
+        console.warn(`[Scheduled] 1Password sync failed:`, err);
       }
       return;
     }

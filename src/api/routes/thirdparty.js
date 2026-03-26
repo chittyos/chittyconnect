@@ -83,7 +83,8 @@ thirdpartyRoutes.post("/notion/query", async (c) => {
     );
 
     if (!response.ok) {
-      throw new Error(`Notion API error: ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(`Notion API error: ${response.status} ${body}`);
     }
 
     const data = await response.json();
@@ -128,7 +129,8 @@ thirdpartyRoutes.post("/notion/page/create", async (c) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Notion API error: ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(`Notion API error: ${response.status} ${body}`);
     }
 
     const data = await response.json();
@@ -380,8 +382,8 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
       return c.json(data);
     } catch (ollamaError) {
       clearTimeout(timeout);
-      console.log(
-        `Ollama unavailable (${ollamaError.message}), falling back to OpenAI`,
+      console.warn(
+        `[Thirdparty] Ollama unavailable (${ollamaError.message}), falling back to OpenAI`,
       );
 
       const openaiKey = await getCredential(
@@ -467,7 +469,7 @@ thirdpartyRoutes.post("/ollama/embeddings", async (c) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(c.env.OLLAMA_CF_CLIENT_ID && {
+        ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
           "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
           "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
         }),
@@ -516,7 +518,7 @@ thirdpartyRoutes.get("/ollama/models", async (c) => {
 
     const response = await fetch(`${ollamaBase}/api/tags`, {
       headers: {
-        ...(c.env.OLLAMA_CF_CLIENT_ID && {
+        ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
           "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
           "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
         }),
