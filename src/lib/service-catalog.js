@@ -36,7 +36,7 @@ const SERVICE_ENTRIES = [
  * @param {object} env - Worker environment bindings
  * @returns {Array<{id: string, url: string}>}
  */
-export function getServiceCatalog(env) {
+export function getServiceCatalog(env = {}) {
   const domain = env.CHITTYOS_DOMAIN || "chitty.cc";
   return SERVICE_ENTRIES.map(({ id, sub }) => ({
     id,
@@ -51,7 +51,7 @@ export function getServiceCatalog(env) {
  * @param {string} serviceId - e.g. "chittychronicle"
  * @returns {string|null} Full URL or null if not found
  */
-export function getServiceUrl(env, serviceId) {
+export function getServiceUrl(env = {}, serviceId) {
   const entry = SERVICE_ENTRIES.find((s) => s.id === serviceId);
   if (!entry) return null;
   const domain = env.CHITTYOS_DOMAIN || "chitty.cc";
