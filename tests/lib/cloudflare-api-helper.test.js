@@ -70,21 +70,13 @@ describe("getCloudflareApiCredentials", () => {
     expect(accountId).toBe("acct-123");
   });
 
-  it("falls back to CLOUDFLARE_ACCOUNT_ID via getCredential", async () => {
+  it("falls back to CHITTYOS_ACCOUNT_ID via getCredential", async () => {
     getCredential
       .mockResolvedValueOnce("op-api-token") // apiToken
-      .mockResolvedValueOnce("acct-456"); // accountId via env fallback
-    const env = { CLOUDFLARE_ACCOUNT_ID: "acct-456" };
+      .mockResolvedValueOnce("acct-456"); // accountId via getCredential
+    const env = { CHITTYOS_ACCOUNT_ID: "acct-456" };
 
     const { accountId } = await getCloudflareApiCredentials(env);
     expect(accountId).toBe("acct-456");
-  });
-
-  it("prefers CHITTYOS_ACCOUNT_ID over CLOUDFLARE_ACCOUNT_ID", async () => {
-    getCredential.mockResolvedValue("op-api-token");
-    const env = { CHITTYOS_ACCOUNT_ID: "primary", CLOUDFLARE_ACCOUNT_ID: "fallback" };
-
-    const { accountId } = await getCloudflareApiCredentials(env);
-    expect(accountId).toBe("primary");
   });
 });

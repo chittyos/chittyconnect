@@ -23,7 +23,7 @@ export const createMockEnv = (overrides = {}) => ({
   EVENT_Q: createMockQueue(),
   MCP_SESSIONS: createMockDurableObject(),
   CHITTYID_SERVICE_URL: 'https://id.chitty.cc',
-  CHITTY_ID_SERVICE_TOKEN: 'test-token',
+  CHITTY_ID_TOKEN: 'test-token',
   REGISTRY_SERVICE_URL: 'https://registry.chitty.cc',
   CHITTYOS_ACCOUNT_ID: 'test-account-id',
   CHITTYOS_DOMAIN: 'chitty.cc',

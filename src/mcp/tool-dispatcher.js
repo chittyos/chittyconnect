@@ -877,7 +877,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Evidence AI Search tools ────────────────────────────────────
     else if (name === "chitty_evidence_search") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
+      const accountId = env.CHITTYOS_ACCOUNT_ID;
       if (!accountId) {
         return {
           content: [
@@ -949,7 +949,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         ],
       };
     } else if (name === "chitty_evidence_retrieve") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
+      const accountId = env.CHITTYOS_ACCOUNT_ID;
       if (!accountId) {
         return {
           content: [

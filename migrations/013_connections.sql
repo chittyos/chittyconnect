@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_health_log_checked ON connection_health_log(check
 
 -- Seed: ChittyOS Services (Tier 0-5)
 INSERT OR IGNORE INTO connections (id, name, slug, category, provider, base_url, health_endpoint, tier, credential_source, service_token_pattern, status, description, icon, depends_on) VALUES
-  ('conn-chittyid', 'ChittyID', 'chittyid', 'chittyos_service', 'chittyos', 'https://id.chitty.cc', '/health', 0, 'env', 'CHITTY_ID_SERVICE_TOKEN', 'active', 'Identity minting and validation', 'ID', '[]'),
+  ('conn-chittyid', 'ChittyID', 'chittyid', 'chittyos_service', 'chittyos', 'https://id.chitty.cc', '/health', 0, 'env', 'CHITTY_ID_TOKEN', 'active', 'Identity minting and validation', 'ID', '[]'),
   ('conn-chittytrust', 'ChittyTrust', 'chittytrust', 'chittyos_service', 'chittyos', 'https://trust.chitty.cc', '/health', 0, 'env', 'CHITTY_TRUST_TOKEN', 'active', 'Trust level resolution and scoring', 'TR', '["conn-chittyid"]'),
   ('conn-chittyschema', 'ChittySchema', 'chittyschema', 'chittyos_service', 'chittyos', 'https://schema.chitty.cc', '/health', 0, 'env', NULL, 'active', 'Schema validation and canonical types', 'SC', '[]'),
   ('conn-chittyauth', 'ChittyAuth', 'chittyauth', 'chittyos_service', 'chittyos', 'https://auth.chitty.cc', '/health', 1, 'env', 'CHITTY_AUTH_SERVICE_TOKEN', 'active', 'Authentication and authorization', 'AU', '["conn-chittyid", "conn-chittytrust"]'),

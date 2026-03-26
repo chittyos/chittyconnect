@@ -1912,7 +1912,17 @@ export default {
     const agentResponse = await routeAgentRequest(request, env);
     if (agentResponse) return agentResponse;
 
-    const response = await oauthProvider.fetch(request, env, ctx);
+    let response;
+    try {
+      response = await oauthProvider.fetch(request, env, ctx);
+    } catch (err) {
+      console.error(`[OAuth-Fatal] ${request.method} ${url.pathname} threw: ${err.message}
+${err.stack}`);
+      return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    }
 
     // Debug: log response status for OAuth endpoints
     if (

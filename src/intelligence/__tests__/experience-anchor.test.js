@@ -17,7 +17,7 @@ describe("ExperienceAnchor - canonical entity_type compliance", () => {
       DB: null,
       MEMORY_KV: null,
       CHITTYID_SERVICE_URL: "https://id.chitty.cc",
-      CHITTY_ID_SERVICE_TOKEN: "test-token",
+      CHITTY_ID_TOKEN: "test-token",
     };
     anchor = new ExperienceAnchor(mockEnv);
   });

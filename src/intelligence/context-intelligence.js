@@ -37,7 +37,7 @@ async function mintChittyId(env, entityType, metadata = {}) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.CHITTY_ID_SERVICE_TOKEN || ""}`,
+        Authorization: `Bearer ${env.CHITTY_ID_TOKEN || ""}`,
       },
       body: JSON.stringify({
         entity_type: entityType,

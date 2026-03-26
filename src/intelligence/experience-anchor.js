@@ -193,7 +193,7 @@ export class ExperienceAnchor {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.env.CHITTY_ID_SERVICE_TOKEN}`,
+          Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN}`,
           "User-Agent": "ChittyConnect/1.0 (ExperienceAnchor)",
         },
         body: JSON.stringify({

@@ -52,13 +52,14 @@ MISSING_SECRETS=(
 
   # ChittyOS Service Tokens (used in code, not deployed)
   "CHITTY_ID_TOKEN|$VAULT_SERVICES|chittyid|service_token"
-  "CHITTY_ID_SERVICE_TOKEN|$VAULT_SERVICES|chittyid|generic_service_token"
   "CHITTYCONNECT_SERVICE_TOKEN|$VAULT_SERVICES|chittyconnect|service_token"
   "CHITTY_CERTIFY_TOKEN|$VAULT_SERVICES|chittycertify|service_token"
   "CHITTY_DNA_TOKEN|$VAULT_SERVICES|chittydna|service_token"
   "CHITTY_VERIFY_TOKEN|$VAULT_SERVICES|chittyverify|service_token"
   "CHITTY_SERV_TOKEN|$VAULT_SERVICES|chittyserv|service_token"
   "CHITTY_PROOF_TOKEN|$VAULT_SERVICES|chittyproof|service_token"
+  "CHITTY_TASK_TOKEN|$VAULT_SERVICES|chittytask|service_token"
+  "CHITTY_TRUST_TOKEN|$VAULT_SERVICES|chittytrust|service_token"
 
   # Third-Party Integrations
   "OLLAMA_CF_CLIENT_ID|$VAULT_INTEGRATIONS|ollama-cf-access|client_id"
@@ -71,11 +72,15 @@ MISSING_SECRETS=(
   "NEON_BRANCH_ID|$VAULT_INFRA|neon|branch_id"
   "NEON_HOST|$VAULT_INFRA|neon|host"
 
-  # Credential Provisioning
-  "CLOUDFLARE_ACCOUNT_ID|$VAULT_INFRA|cloudflare|account_id"
+  # Credential Provisioning & Emergency
+  # Note: CHITTYOS_ACCOUNT_ID is a wrangler var, not a secret — no deployment needed
   "ENCRYPTION_KEY|$VAULT_EMERGENCY|encryption|key"
   "INTERNAL_WEBHOOK_SECRET|$VAULT_EMERGENCY|internal-webhook|secret"
   "OP_EVENTS_API_TOKEN|$VAULT_EMERGENCY|1password-events|api_token"
+  "EMERGENCY_REVOKE_TOKEN|$VAULT_EMERGENCY|emergency-revoke|token"
+
+  # Google Integration
+  "GOOGLE_ACCESS_TOKEN|$VAULT_INTEGRATIONS|google-drive|access_token"
 )
 
 DEPLOYED=0
@@ -89,7 +94,7 @@ for entry in "${MISSING_SECRETS[@]}"; do
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}DRY RUN${NC} (would fetch op://$VAULT/$ITEM/$FIELD)"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
@@ -98,14 +103,14 @@ for entry in "${MISSING_SECRETS[@]}"; do
 
   if [[ -z "$VALUE" ]]; then
     echo -e "${RED}MISSING in 1Password${NC} (op://$VAULT/$ITEM/$FIELD)"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
     continue
   fi
 
   # Deploy to Cloudflare (printf avoids secret appearing in /proc/*/cmdline unlike echo)
   printf '%s' "$VALUE" | npx wrangler secret put "$SECRET_NAME" $ENV 2>/dev/null
   echo -e "${GREEN}DEPLOYED${NC}"
-  ((DEPLOYED++))
+  DEPLOYED=$((DEPLOYED + 1))
 done
 
 echo ""
