@@ -11,7 +11,7 @@
 
 ## Executive Summary
 
-ChittyConnect has **zero env-block separation** — everything is flat at the wrangler.jsonc top level with production IDs. There are no env.dev, env.staging, or env.production blocks. The architecture doc's 3-env model is completely unenforced.
+ChittyConnect now has **3 self-contained env blocks** (dev/staging/production) in `wrangler.jsonc` with per-env vars, routes, and cron triggers. Hardcoded account IDs and service URLs have been replaced with env vars. Phantom bindings are guarded. The remaining gap is **secret deployment** — 20 secrets are documented in the manifest but not yet pushed to Cloudflare via `wrangler secret put --env`. Run `scripts/deploy-missing-secrets.sh` to close that gap.
 
 ---
 
