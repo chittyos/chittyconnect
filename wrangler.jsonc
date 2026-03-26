@@ -310,7 +310,7 @@
   // │ CHITTY_TRACK_TOKEN         ChittyTrack observability token     │
   // │ CHITTY_DISPUTES_TOKEN      ChittyDisputes service auth        │
   // │ CHITTY_LEDGER_TOKEN        ChittyLedger service auth          │
-  // │ CHITTY_ID_SERVICE_TOKEN    ChittyID generic service token      │
+  // │ CHITTY_ID_TOKEN            ChittyID service auth token          │
   // │ CHITTYCONNECT_SERVICE_TOKEN ChittyConnect self-service token   │
   // │ CHITTYMINT_SECRET          ChittyMint webhook secret           │
   // └─────────────────────────────────────────────────────────────────┘
@@ -346,18 +346,20 @@
   // │ ONEPASSWORD_CONNECT_TOKEN  1Password Connect JWT               │
   // │ OP_EVENTS_API_TOKEN        1Password Events API token          │
   // │ CLOUDFLARE_MAKE_API_KEY    CF API fallback (if 1Pass down)     │
-  // │ CLOUDFLARE_ACCOUNT_ID      CF account fallback                 │
+  // │ (removed — use CHITTYOS_ACCOUNT_ID var instead)                │
   // │ EMERGENCY_REVOKE_TOKEN     Emergency credential revocation     │
   // │ ENCRYPTION_KEY             32-byte key for KV cache encryption │
   // │ INTERNAL_WEBHOOK_SECRET    Internal webhook verification       │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
-  // │ CODE ALIASES (not separate secrets — resolve to above)         │
+  // │ RETIRED ALIASES (removed from code — DO NOT re-add)            │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ CF_ACCOUNT_ID              → CHITTYOS_ACCOUNT_ID (var)         │
-  // │ CHITTY_SERVICE_TOKEN       → CHITTY_ID_SERVICE_TOKEN (secret)  │
-  // │ CHITTY_API_KEY             → API_KEYS KV lookup (binding)      │
+  // │ CF_ACCOUNT_ID              → removed, use CHITTYOS_ACCOUNT_ID  │
+  // │ CLOUDFLARE_ACCOUNT_ID      → removed, use CHITTYOS_ACCOUNT_ID  │
+  // │ CHITTY_SERVICE_TOKEN       → removed, use CHITTY_ID_TOKEN      │
+  // │ CHITTY_ID_SERVICE_TOKEN    → removed, use CHITTY_ID_TOKEN      │
+  // │ CHITTY_API_KEY             → removed (dead code)               │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐

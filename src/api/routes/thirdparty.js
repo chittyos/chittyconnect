@@ -345,7 +345,7 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(c.env.OLLAMA_CF_CLIENT_ID && {
+          ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
             "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
             "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
           }),

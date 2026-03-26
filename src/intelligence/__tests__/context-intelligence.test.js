@@ -61,7 +61,7 @@ describe("ContextIntelligence", () => {
     mockEnv = {
       DB: mockDb,
       CHITTYID_SERVICE_URL: "https://id.chitty.cc",
-      CHITTY_ID_SERVICE_TOKEN: "test-token",
+      CHITTY_ID_TOKEN: "test-token",
     };
     intelligence = new ContextIntelligence(mockEnv);
   });

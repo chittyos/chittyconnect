@@ -180,7 +180,7 @@ npm run mcp:setup:code       # Setup for Claude Code
 ```bash
 wrangler secret put NEON_DATABASE_URL
 wrangler secret put JWT_SECRET
-wrangler secret put CHITTY_ID_SERVICE_TOKEN
+wrangler secret put CHITTY_ID_TOKEN
 wrangler secret put CHITTY_AUTH_SERVICE_TOKEN
 wrangler secret put NOTION_API_KEY
 wrangler secret put OPENAI_API_KEY

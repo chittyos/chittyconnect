@@ -16,11 +16,11 @@ export class CredentialProvisioner {
   constructor(env) {
     this.env = env;
     // 1Password references are injected at deploy time via `op run`.
-    // Env vars: CLOUDFLARE_MAKE_API_KEY, CLOUDFLARE_ACCOUNT_ID
+    // Env vars: CLOUDFLARE_MAKE_API_KEY, CHITTYOS_ACCOUNT_ID
     this.onePasswordRefs = {
       cloudflare: {
         makeApiKey: "CLOUDFLARE_MAKE_API_KEY",
-        accountId: "CLOUDFLARE_ACCOUNT_ID",
+        accountId: "CHITTYOS_ACCOUNT_ID",
       },
     };
 
@@ -109,8 +109,7 @@ export class CredentialProvisioner {
     // Retrieve credentials from 1Password via environment variables
     // In production, these should be set via wrangler secrets
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
-    const accountId =
-      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
+    const accountId = this.env.CHITTYOS_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error(
@@ -119,7 +118,7 @@ export class CredentialProvisioner {
     }
     if (!accountId) {
       throw new Error(
-        "Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+        "CHITTYOS_ACCOUNT_ID not configured.",
       );
     }
 
@@ -238,14 +237,13 @@ export class CredentialProvisioner {
     const { service, purpose } = context;
 
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
-    const accountId =
-      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
+    const accountId = this.env.CHITTYOS_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error("CLOUDFLARE_MAKE_API_KEY not configured");
     }
     if (!accountId) {
-      throw new Error("Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.");
+      throw new Error("CHITTYOS_ACCOUNT_ID not configured.");
     }
 
     const tokenName = `${service} read-only (${new Date().toISOString().split("T")[0]})`;

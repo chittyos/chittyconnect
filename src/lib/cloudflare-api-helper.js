@@ -29,7 +29,7 @@ export async function getCloudflareApiCredentials(env) {
     (await getCredential(
       env,
       CREDENTIAL_PATHS.infrastructure.cloudflareAccountId,
-      "CLOUDFLARE_ACCOUNT_ID",
+      "CHITTYOS_ACCOUNT_ID",
       "CloudflareAccountId",
     ));
 
