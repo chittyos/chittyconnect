@@ -35,9 +35,6 @@ git status
 
 # Run tests
 npm test
-
-# Run build if needed
-npm run build 2>/dev/null
 ```
 
 ### 2. Deploy
@@ -60,6 +57,9 @@ curl -s https://connect.chitty.cc/health | jq .
 # Check status endpoint
 curl -s https://connect.chitty.cc/api/v1/status | jq .
 ```
+
+## Important
+`npm run deploy` runs bare `wrangler deploy` without `--env`, which deploys the top-level config (not production routes). Always use `npx wrangler deploy --env production` for production deploys.
 
 ## Environment Variables
 Secrets are managed via wrangler secrets:
