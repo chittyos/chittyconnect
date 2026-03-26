@@ -117,11 +117,12 @@ async function logWebhook(env, event) {
         }),
       });
       if (!resp.ok) {
-        console.warn(`[webhook-router] Chronicle log returned ${resp.status}`);
+        const body = await resp.text().catch(() => "");
+        console.warn(`[webhook-router] Chronicle log returned ${resp.status}: ${body}`);
       }
     }
   } catch (e) {
-    console.warn("[webhook-router] Failed to log webhook:", e);
+    console.error("[webhook-router] Failed to log webhook:", e);
   }
 }
 
