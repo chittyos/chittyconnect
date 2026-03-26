@@ -236,6 +236,7 @@ mcpRoutes.get("/resources/read", async (c) => {
       }
       try {
         const chronicleUrl = c.env.CHITTYCHRONICLE_SERVICE_URL;
+        if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
         const auditResponse = await fetch(
           `${chronicleUrl}/api/audit/credentials`,
           { headers: { Authorization: `Bearer ${chronicleToken}` } },

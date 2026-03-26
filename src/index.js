@@ -1693,24 +1693,31 @@ app.get("/integrations/github/callback", async (c) => {
       { expirationTtl: 3600 },
     );
 
-    // 7. Log to ChittyChronicle
-    await fetch(`${c.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`,
-      },
-      body: JSON.stringify({
-        eventType: "github.app.installed",
-        entityId: installChittyID,
-        data: {
-          installationId: installation.id,
-          account: installation.account.login,
-          repositorySelection: installation.repository_selection,
-          permissions: tokenData.permissions,
-        },
-      }),
-    });
+    // 7. Log to ChittyChronicle (best-effort — must not break callback)
+    try {
+      const chronicleUrl = c.env.CHITTYCHRONICLE_SERVICE_URL;
+      if (chronicleUrl) {
+        await fetch(`${chronicleUrl}/api/entries`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${c.env.CHITTY_CHRONICLE_TOKEN}`,
+          },
+          body: JSON.stringify({
+            eventType: "github.app.installed",
+            entityId: installChittyID,
+            data: {
+              installationId: installation.id,
+              account: installation.account.login,
+              repositorySelection: installation.repository_selection,
+              permissions: tokenData.permissions,
+            },
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("[GitHub App] Chronicle log failed:", err.message);
+    }
 
     console.log(`[GitHub App] Installation complete: ${installChittyID}`);
 
@@ -1945,7 +1952,7 @@ export default {
         const result = await rotation.forceRotate('gdrive_access_token');
         console.log(`[Scheduled] OAuth rotation: ${result.ok ? 'success' : result.error}`);
       } catch (err) {
-        console.error(`[Scheduled] OAuth rotation failed:`, err.message);
+        console.error(`[Scheduled] OAuth rotation failed:`, err);
       }
       return;
     }
@@ -1958,44 +1965,52 @@ export default {
           `[Scheduled] Health checks complete: ${summary.healthy}/${summary.total} healthy, ${summary.degraded} degraded, ${summary.down} down`,
         );
       } catch (err) {
-        console.error(`[Scheduled] Health checks failed:`, err.message);
+        console.error(`[Scheduled] Health checks failed:`, err);
       }
       return;
     }
 
-    // Secret rotation check (hourly — runs due rotations only)
-    try {
-      const rotation = new SecretRotationService(env);
-      const report = await rotation.runDueRotations();
-      console.log(
-        `[Scheduled] Secret rotation: ${report.rotated.length} rotated, ${report.skipped.length} skipped, ${report.failed.length} failed`,
-      );
-    } catch (err) {
-      console.error(`[Scheduled] Secret rotation failed:`, err.message);
+    // Hourly cron — secret rotation + 1Password sync
+    if (event.cron === "0 * * * *") {
+      // Secret rotation check (runs due rotations only)
+      try {
+        const rotation = new SecretRotationService(env);
+        const report = await rotation.runDueRotations();
+        console.log(
+          `[Scheduled] Secret rotation: ${report.rotated.length} rotated, ${report.skipped.length} skipped, ${report.failed.length} failed`,
+        );
+      } catch (err) {
+        console.error(`[Scheduled] Secret rotation failed:`, err);
+      }
+
+      // 1Password event sync
+      try {
+        const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
+      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+      const response = await fetch(
+          `${chronicleUrl}/api/sync/1password`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(env.CHITTY_CHRONICLE_TOKEN
+                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+                : {}),
+            },
+            body: JSON.stringify({
+              source: "chittyconnect-cron",
+              timestamp: new Date().toISOString(),
+            }),
+          },
+        );
+        console.log(`[Scheduled] 1Password sync: ${response.status}`);
+      } catch (err) {
+        console.error(`[Scheduled] 1Password sync failed:`, err);
+      }
+      return;
     }
 
-    // 1Password event sync (hourly)
-    try {
-      const response = await fetch(
-        `${env.CHITTYCHRONICLE_SERVICE_URL}/api/sync/1password`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(env.CHITTY_CHRONICLE_TOKEN
-              ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-              : {}),
-          },
-          body: JSON.stringify({
-            source: "chittyconnect-cron",
-            timestamp: new Date().toISOString(),
-          }),
-        },
-      );
-      console.log(`[Scheduled] 1Password sync: ${response.status}`);
-    } catch (err) {
-      console.error(`[Scheduled] 1Password sync failed:`, err.message);
-    }
+    console.warn(`[Scheduled] Unhandled cron trigger: ${event.cron}`);
   },
 };
 

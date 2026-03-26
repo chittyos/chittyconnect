@@ -110,11 +110,16 @@ export class CredentialProvisioner {
     // In production, these should be set via wrangler secrets
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
     const accountId =
-      this.env.CLOUDFLARE_ACCOUNT_ID || this.env.CHITTYOS_ACCOUNT_ID;
+      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error(
         "CLOUDFLARE_MAKE_API_KEY not configured. Please set via wrangler secret.",
+      );
+    }
+    if (!accountId) {
+      throw new Error(
+        "Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
       );
     }
 
@@ -234,10 +239,13 @@ export class CredentialProvisioner {
 
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
     const accountId =
-      this.env.CLOUDFLARE_ACCOUNT_ID || this.env.CHITTYOS_ACCOUNT_ID;
+      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error("CLOUDFLARE_MAKE_API_KEY not configured");
+    }
+    if (!accountId) {
+      throw new Error("Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.");
     }
 
     const tokenName = `${service} read-only (${new Date().toISOString().split("T")[0]})`;
@@ -325,8 +333,10 @@ export class CredentialProvisioner {
   async logProvisionEvent(event) {
     try {
       // Log to ChittyChronicle
+      const chronicleUrl = this.env.CHITTYCHRONICLE_SERVICE_URL;
+      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
       const chronicleResponse = await fetch(
-        `${this.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`,
+        `${chronicleUrl}/api/entries`,
         {
           method: "POST",
           headers: {
