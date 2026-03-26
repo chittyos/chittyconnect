@@ -215,8 +215,9 @@ export class TenantDataMigration {
   async #migrateDocuments(clientId) {
     let total = 0;
     let offset = 0;
+    let hasMore = true;
 
-    while (true) {
+    while (hasMore) {
       const batch = await this.#queryEvidenceDb(
         `SELECT id, document_type, file_name, file_size, mime_type, content_hash,
                 r2_key, ocr_text, metadata, processing_status, privilege_flag,
@@ -231,7 +232,10 @@ export class TenantDataMigration {
       );
 
       const rows = batch.results || [];
-      if (rows.length === 0) break;
+      if (rows.length === 0) {
+        hasMore = false;
+        continue;
+      }
 
       for (const doc of rows) {
         await this.#replicateRecord(clientId, "evidence_documents", {
@@ -292,7 +296,10 @@ export class TenantDataMigration {
       );
 
       const rows = batch.results || [];
-      if (rows.length === 0) break;
+      if (rows.length === 0) {
+        hasMore = false;
+        continue;
+      }
 
       for (const log of rows) {
         // Map source columns (evidence_chain_of_custody) to target (evidence_custody_log)
@@ -346,7 +353,10 @@ export class TenantDataMigration {
       );
 
       const rows = batch.results || [];
-      if (rows.length === 0) break;
+      if (rows.length === 0) {
+        hasMore = false;
+        continue;
+      }
 
       for (const fam of rows) {
         await this.#replicateRecord(clientId, "document_families", {
@@ -394,7 +404,10 @@ export class TenantDataMigration {
       );
 
       const rows = batch.results || [];
-      if (rows.length === 0) break;
+      if (rows.length === 0) {
+        hasMore = false;
+        continue;
+      }
 
       for (const rec of rows) {
         await this.#replicateRecord(clientId, "financial_records", {
