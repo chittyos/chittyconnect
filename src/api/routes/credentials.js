@@ -691,7 +691,7 @@ credentialsRoutes.get("/health", async (c) => {
       : "missing",
     cloudflare_account_id: (c.env.CHITTYOS_ACCOUNT_ID || c.env.CLOUDFLARE_ACCOUNT_ID)
       ? "configured"
-      : "using_default",
+      : "missing",
     database: "unknown",
     rate_limit: c.env.RATE_LIMIT ? "available" : "missing",
     chronicle: c.env.CHITTY_CHRONICLE_TOKEN ? "configured" : "missing",
