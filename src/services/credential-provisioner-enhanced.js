@@ -489,8 +489,14 @@ export class EnhancedCredentialProvisioner {
         purpose: "credential_provisioning",
         environment,
       })
-      .catch(() => this.env.CHITTYOS_ACCOUNT_ID); // Fallback to env var
+      .catch((err) => {
+        console.warn("[EnhancedCredentialProvisioner] 1Password account_id fetch failed:", err.message);
+        return this.env.CHITTYOS_ACCOUNT_ID;
+      });
 
+    if (!accountId) {
+      throw new Error("Cloudflare Account ID unavailable — both 1Password and CHITTYOS_ACCOUNT_ID env var are empty");
+    }
     if (!makeApiKey) {
       throw new Error(
         "Failed to retrieve Cloudflare credentials from 1Password",
@@ -1077,8 +1083,10 @@ export class EnhancedCredentialProvisioner {
   async logProvisionEvent(event) {
     try {
       // Log to ChittyChronicle
+      const chronicleUrl = this.env.CHITTYCHRONICLE_SERVICE_URL;
+      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
       const chronicleResponse = await fetch(
-        `${this.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`,
+        `${chronicleUrl}/api/entries`,
         {
           method: "POST",
           headers: {

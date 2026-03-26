@@ -68,7 +68,7 @@ export class ChittyIDClient {
     const env = options.env || {};
     this.serviceUrl =
       options.serviceUrl || env.CHITTYID_SERVICE_URL || DEFAULT_SERVICE_URL;
-    this.token = options.token || env.CHITTY_ID_SERVICE_TOKEN;
+    this.token = options.token || env.CHITTY_ID_SERVICE_TOKEN || env.CHITTY_SERVICE_TOKEN;
     this.apiKey = options.apiKey || env.CHITTY_API_KEY;
   }
 

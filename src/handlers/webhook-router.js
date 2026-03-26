@@ -97,8 +97,12 @@ async function logWebhook(env, event) {
     }
 
     // Also log to Chronicle API if available
-    if (env.CHITTYCHRONICLE_SERVICE_URL) {
-      await fetch(`${env.CHITTYCHRONICLE_SERVICE_URL}/events`, {
+    const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL || env.CHITTYCHRONICLE_URL;
+    if (env.CHITTYCHRONICLE_URL && !env.CHITTYCHRONICLE_SERVICE_URL) {
+      console.warn('[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL');
+    }
+    if (chronicleUrl) {
+      await fetch(`${chronicleUrl}/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

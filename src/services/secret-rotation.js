@@ -10,9 +10,8 @@
  * @canonical-uri chittycanon://core/services/chittyconnect/secret-rotation
  */
 
-import { createCredentialBroker } from '../lib/credential-broker.js';
-
 // --- Rotation Registry ---
+
 
 /**
  * Each entry defines a rotatable secret: how to refresh it, where to cache it,
@@ -28,7 +27,7 @@ const ROTATION_REGISTRY = {
   },
   neon_password: {
     description: 'Neon database role password',
-    kvKey: 'secret:neon:password_rotated_at',
+    kvKey: 'secret:neon:connection_uri',
     metaKey: 'secret:neon:meta',
     refreshIntervalMs: 7 * 24 * 60 * 60 * 1000, // 7 days
     rotator: 'rotateNeonPassword',
@@ -45,7 +44,9 @@ export class SecretRotationService {
   constructor(env) {
     this.env = env;
     this.kv = env.CREDENTIAL_CACHE;
-    this.broker = createCredentialBroker(env);
+    if (!this.kv) {
+      throw new Error('[SecretRotation] CREDENTIAL_CACHE KV binding is not configured');
+    }
   }
 
   // --- Public API ---
@@ -82,7 +83,7 @@ export class SecretRotationService {
         }
       } catch (err) {
         report.failed.push({ name, error: err.message });
-        console.error(`[SecretRotation] ${name} failed:`, err.message);
+        console.error(`[SecretRotation] ${name} failed:`, err);
       }
     }
 
@@ -113,6 +114,7 @@ export class SecretRotationService {
       });
       return result;
     } catch (err) {
+      console.error(`[SecretRotation] forceRotate("${name}") failed:`, err);
       return { ok: false, error: err.message };
     }
   }
@@ -206,10 +208,9 @@ export class SecretRotationService {
    * Rotate Neon database password via the Neon API.
    *
    * Flow:
-   *   1. Read Neon API key from credential broker
+   *   1. Read Neon API key from Worker env
    *   2. Generate new password via Neon roles API
    *   3. Update CREDENTIAL_CACHE with new connection string
-   *   4. Verify connectivity with SELECT 1
    *
    * @returns {Promise<{ok: boolean, error?: string}>}
    */
@@ -217,14 +218,20 @@ export class SecretRotationService {
     const neonApiKey = this.env.NEON_API_KEY;
     const neonProjectId = this.env.NEON_PROJECT_ID;
     const neonBranchId = this.env.NEON_BRANCH_ID;
+    const neonHost = this.env.NEON_HOST;
     const neonRoleName = this.env.NEON_ROLE_NAME || 'chittyos_app';
+    const neonDb = this.env.NEON_DATABASE || 'neondb';
 
-    if (!neonApiKey || !neonProjectId) {
-      return { ok: false, error: 'Missing Neon API credentials (NEON_API_KEY, NEON_PROJECT_ID)' };
+    if (!neonApiKey || !neonProjectId || !neonBranchId) {
+      return { ok: false, error: 'Missing Neon API credentials (NEON_API_KEY, NEON_PROJECT_ID, NEON_BRANCH_ID are all required)' };
+    }
+
+    if (!neonHost) {
+      return { ok: false, error: 'NEON_HOST is required — without it the rotated password cannot be cached as a connection URI' };
     }
 
     // Step 1: Reset the role password via Neon API
-    const resetUrl = `https://console.neon.tech/api/v2/projects/${neonProjectId}/branches/${neonBranchId || 'main'}/roles/${neonRoleName}/reset_password`;
+    const resetUrl = `https://console.neon.tech/api/v2/projects/${neonProjectId}/branches/${neonBranchId}/roles/${neonRoleName}/reset_password`;
     const resetResponse = await fetch(resetUrl, {
       method: 'POST',
       headers: {
@@ -246,14 +253,10 @@ export class SecretRotationService {
     }
 
     // Step 2: Build new connection URI and cache it
-    const neonHost = this.env.NEON_HOST;
-    const neonDb = this.env.NEON_DATABASE || 'neondb';
-    if (neonHost) {
-      const newUri = `postgresql://${neonRoleName}:${encodeURIComponent(newPassword)}@${neonHost}/${neonDb}?sslmode=require`;
-      await this.kv.put('secret:neon:connection_uri', newUri, {
-        expirationTtl: 8 * 24 * 60 * 60, // 8 days (rotation is weekly)
-      });
-    }
+    const newUri = `postgresql://${neonRoleName}:${encodeURIComponent(newPassword)}@${neonHost}/${neonDb}?sslmode=require`;
+    await this.kv.put('secret:neon:connection_uri', newUri, {
+      expirationTtl: 8 * 24 * 60 * 60, // 8 days (rotation is weekly)
+    });
 
     // Step 3: Cache the rotated-at timestamp (password itself is NOT cached in KV)
     await this.kv.put('secret:neon:password_rotated_at', new Date().toISOString());
@@ -269,7 +272,8 @@ export class SecretRotationService {
     if (!raw) return null;
     try {
       return JSON.parse(raw);
-    } catch {
+    } catch (err) {
+      console.error(`[SecretRotation] Failed to parse metadata for key "${key}":`, err.message);
       return null;
     }
   }

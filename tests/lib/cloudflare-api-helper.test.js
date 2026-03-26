@@ -70,8 +70,10 @@ describe("getCloudflareApiCredentials", () => {
     expect(accountId).toBe("acct-123");
   });
 
-  it("falls back to CLOUDFLARE_ACCOUNT_ID", async () => {
-    getCredential.mockResolvedValue("op-api-token");
+  it("falls back to CLOUDFLARE_ACCOUNT_ID via getCredential", async () => {
+    getCredential
+      .mockResolvedValueOnce("op-api-token") // apiToken
+      .mockResolvedValueOnce("acct-456"); // accountId via env fallback
     const env = { CLOUDFLARE_ACCOUNT_ID: "acct-456" };
 
     const { accountId } = await getCloudflareApiCredentials(env);

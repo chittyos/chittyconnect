@@ -117,6 +117,11 @@ export class CredentialProvisioner {
         "CLOUDFLARE_MAKE_API_KEY not configured. Please set via wrangler secret.",
       );
     }
+    if (!accountId) {
+      throw new Error(
+        "Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+      );
+    }
 
     // Create scoped API token via Cloudflare API
     const tokenName = `${service} ${purpose || "deploy"} (${new Date().toISOString().split("T")[0]})`;
@@ -239,6 +244,9 @@ export class CredentialProvisioner {
     if (!makeApiKey) {
       throw new Error("CLOUDFLARE_MAKE_API_KEY not configured");
     }
+    if (!accountId) {
+      throw new Error("Cloudflare Account ID not configured. Set CHITTYOS_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.");
+    }
 
     const tokenName = `${service} read-only (${new Date().toISOString().split("T")[0]})`;
 
@@ -325,8 +333,10 @@ export class CredentialProvisioner {
   async logProvisionEvent(event) {
     try {
       // Log to ChittyChronicle
+      const chronicleUrl = this.env.CHITTYCHRONICLE_SERVICE_URL;
+      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
       const chronicleResponse = await fetch(
-        `${this.env.CHITTYCHRONICLE_SERVICE_URL}/api/entries`,
+        `${chronicleUrl}/api/entries`,
         {
           method: "POST",
           headers: {

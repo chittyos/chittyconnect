@@ -216,8 +216,7 @@ export class TenantDataMigration {
     let total = 0;
     let offset = 0;
 
-    let hasMore = true;
-    while (hasMore) {
+    while (true) {
       const batch = await this.#queryEvidenceDb(
         `SELECT id, document_type, file_name, file_size, mime_type, content_hash,
                 r2_key, ocr_text, metadata, processing_status, privilege_flag,
