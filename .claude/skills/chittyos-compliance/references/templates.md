@@ -110,10 +110,10 @@ Cloudflare Worker (Hono) deployed at {DOMAIN}.chitty.cc.
 - **Database**: Neon PostgreSQL (Drizzle ORM)
 - **Storage**: KV / R2
 
-### Key Components (adjust to match actual project structure)
-- `src/index.js` or `server/worker.ts` — Entry point
-- `src/routes/` or `server/routes/` — API route modules
-- `src/db/` or `server/db/` — Database schema and queries
+### Key Components
+- `server/worker.ts` — Entry point
+- `server/routes/` — API route modules
+- `server/db/` — Database schema and queries
 
 ## ChittyOS Ecosystem
 
@@ -263,6 +263,6 @@ export type HonoEnv = {
 | 0 | Trust Anchors |
 | 1 | Core Identity |
 | 2 | Platform |
-| 3 | Operational |
+| 3 | Service Layer |
 | 4 | Domain |
 | 5 | Application |
