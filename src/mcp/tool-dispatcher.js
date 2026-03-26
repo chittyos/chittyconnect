@@ -12,29 +12,8 @@ import {
   getCloudflareApiCredentials,
   parseTimeframe,
 } from "../lib/cloudflare-api-helper.js";
+import { getServiceCatalog } from "../lib/service-catalog.js";
 import { Client } from "@neondatabase/serverless";
-
-const CHITTYOS_SERVICES = [
-  { id: "chittyid", url: "https://id.chitty.cc" },
-  { id: "chittyauth", url: "https://auth.chitty.cc" },
-  { id: "chittygateway", url: "https://gateway.chitty.cc" },
-  { id: "chittyrouter", url: "https://router.chitty.cc" },
-  { id: "chittyregistry", url: "https://registry.chitty.cc" },
-  { id: "chittycases", url: "https://cases.chitty.cc" },
-  { id: "chittyfinance", url: "https://finance.chitty.cc" },
-  { id: "chittyevidence", url: "https://evidence.chitty.cc" },
-  { id: "chittysync", url: "https://sync.chitty.cc" },
-  { id: "chittychronicle", url: "https://chronicle.chitty.cc" },
-  { id: "chittycontextual", url: "https://contextual.chitty.cc" },
-  { id: "chittyschema", url: "https://schema.chitty.cc" },
-  { id: "chittytrust", url: "https://trust.chitty.cc" },
-  { id: "chittyscore", url: "https://score.chitty.cc" },
-  { id: "chittychain", url: "https://chain.chitty.cc" },
-  { id: "chittyledger", url: "https://ledger.chitty.cc" },
-  { id: "chittydisputes", url: "https://disputes.chitty.cc" },
-  { id: "chittytrack", url: "https://track.chitty.cc" },
-  { id: "chittytask", url: "https://tasks.chitty.cc" },
-];
 
 /**
  * Parse a fetch response, returning an MCP error result for non-OK responses.
@@ -89,8 +68,8 @@ async function checkAndParseJson(response, label) {
   return { data: parsed, error };
 }
 
-async function fetchServiceStatusSnapshot() {
-  const statusChecks = CHITTYOS_SERVICES.map(async (service) => {
+async function fetchServiceStatusSnapshot(env) {
+  const statusChecks = getServiceCatalog(env).map(async (service) => {
     try {
       const response = await fetch(`${service.url}/health`, {
         method: "GET",
@@ -1346,7 +1325,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       name.startsWith("chitty_services_") ||
       name === "chitty_ecosystem_awareness"
     ) {
-      result = await fetchServiceStatusSnapshot();
+      result = await fetchServiceStatusSnapshot(env);
     }
 
     // ── Chronicle tools ─────────────────────────────────────────────

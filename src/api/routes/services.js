@@ -3,33 +3,9 @@
  */
 
 import { Hono } from "hono";
+import { getServiceCatalog } from "../../lib/service-catalog.js";
 
 const servicesRoutes = new Hono();
-
-const CHITTYOS_SERVICES = [
-  { id: "chittyid", url: "https://id.chitty.cc" },
-  { id: "chittyauth", url: "https://auth.chitty.cc" },
-  { id: "chittygateway", url: "https://gateway.chitty.cc" },
-  { id: "chittyrouter", url: "https://router.chitty.cc" },
-  { id: "chittyregistry", url: "https://registry.chitty.cc" },
-  { id: "chittycases", url: "https://cases.chitty.cc" },
-  { id: "chittyfinance", url: "https://finance.chitty.cc" },
-  { id: "chittyevidence", url: "https://evidence.chitty.cc" },
-  { id: "chittysync", url: "https://sync.chitty.cc" },
-  { id: "chittychronicle", url: "https://chronicle.chitty.cc" },
-  { id: "chittycontextual", url: "https://contextual.chitty.cc" },
-  { id: "chittyschema", url: "https://schema.chitty.cc" },
-  { id: "chittytrust", url: "https://trust.chitty.cc" },
-  { id: "chittyscore", url: "https://score.chitty.cc" },
-  { id: "chittychain", url: "https://chain.chitty.cc" },
-  { id: "chittyledger", url: "https://ledger.chitty.cc" },
-  {
-    id: "chittydisputes",
-    url: "https://disputes.chitty.cc",
-    registryId: "REG-WQ6W5M",
-  },
-  { id: "chittytrack", url: "https://track.chitty.cc" },
-];
 
 /**
  * GET /api/services/status
@@ -37,7 +13,7 @@ const CHITTYOS_SERVICES = [
  */
 servicesRoutes.get("/status", async (c) => {
   try {
-    const statusChecks = CHITTYOS_SERVICES.map(async (service) => {
+    const statusChecks = getServiceCatalog(c.env).map(async (service) => {
       try {
         const response = await fetch(`${service.url}/health`, {
           method: "GET",
@@ -84,7 +60,7 @@ servicesRoutes.get("/status", async (c) => {
 servicesRoutes.get("/:serviceId/status", async (c) => {
   try {
     const serviceId = c.req.param("serviceId");
-    const service = CHITTYOS_SERVICES.find((s) => s.id === serviceId);
+    const service = getServiceCatalog(c.env).find((s) => s.id === serviceId);
 
     if (!service) {
       return c.json({ error: "Service not found" }, 404);
