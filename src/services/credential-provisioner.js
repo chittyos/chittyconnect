@@ -110,7 +110,7 @@ export class CredentialProvisioner {
     // In production, these should be set via wrangler secrets
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
     const accountId =
-      this.env.CLOUDFLARE_ACCOUNT_ID || this.env.CHITTYOS_ACCOUNT_ID;
+      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error(
@@ -234,7 +234,7 @@ export class CredentialProvisioner {
 
     const makeApiKey = this.env.CLOUDFLARE_MAKE_API_KEY;
     const accountId =
-      this.env.CLOUDFLARE_ACCOUNT_ID || this.env.CHITTYOS_ACCOUNT_ID;
+      this.env.CHITTYOS_ACCOUNT_ID || this.env.CLOUDFLARE_ACCOUNT_ID;
 
     if (!makeApiKey) {
       throw new Error("CLOUDFLARE_MAKE_API_KEY not configured");

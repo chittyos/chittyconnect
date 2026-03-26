@@ -689,7 +689,7 @@ credentialsRoutes.get("/health", async (c) => {
     cloudflare_make_api_key: c.env.CLOUDFLARE_MAKE_API_KEY
       ? "configured"
       : "missing",
-    cloudflare_account_id: c.env.CLOUDFLARE_ACCOUNT_ID
+    cloudflare_account_id: c.env.CHITTYOS_ACCOUNT_ID || c.env.CLOUDFLARE_ACCOUNT_ID
       ? "configured"
       : "using_default",
     database: "unknown",
