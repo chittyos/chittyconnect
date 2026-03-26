@@ -53,7 +53,10 @@ export function getServiceCatalog(env = {}) {
  */
 export function getServiceUrl(env = {}, serviceId) {
   const entry = SERVICE_ENTRIES.find((s) => s.id === serviceId);
-  if (!entry) return null;
+  if (!entry) {
+    console.warn(`[service-catalog] Unknown service ID: "${serviceId}"`);
+    return null;
+  }
   const domain = env.CHITTYOS_DOMAIN || "chitty.cc";
   return `https://${entry.sub}.${domain}`;
 }

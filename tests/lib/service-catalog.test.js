@@ -7,7 +7,7 @@ import {
 describe("getServiceCatalog", () => {
   it("returns all services with default domain", () => {
     const catalog = getServiceCatalog({});
-    expect(catalog.length).toBeGreaterThan(10);
+    expect(catalog.length).toBe(19);
     expect(catalog[0]).toHaveProperty("id");
     expect(catalog[0]).toHaveProperty("url");
     expect(catalog[0].url).toMatch(/^https:\/\/.+\.chitty\.cc$/);
@@ -40,6 +40,11 @@ describe("getServiceUrl", () => {
 
   it("returns null for unknown service", () => {
     expect(getServiceUrl({}, "nonexistent")).toBeNull();
+  });
+
+  it("resolves non-obvious subdomain mappings", () => {
+    expect(getServiceUrl({}, "chittytask")).toBe("https://tasks.chitty.cc");
+    expect(getServiceUrl({}, "chittycases")).toBe("https://cases.chitty.cc");
   });
 
   it("uses custom domain", () => {
