@@ -1910,10 +1910,12 @@ export default {
 
     // Route /chatgpt/mcp directly to McpConnectAgent BEFORE OAuthProvider.
     // OAuthProvider strips resource bindings (KV, DO, R2) from env, so the
-    // chatgpt-mcp Hono handler cannot access MCP_AGENT DO. Handle it here
-    // where we have the full env.
+    // chatgpt-mcp Hono sub-router cannot access MCP_AGENT DO binding.
+    // Handle it here where we have the full env with all bindings.
     if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
-      return app.fetch(request, env, ctx);
+      const { McpConnectAgent } = await import("./mcp/agent.js");
+      const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
+      return handler.fetch(request, env, ctx);
     }
 
     // Route Agents SDK WebSocket upgrades to McpConnectAgent DO
