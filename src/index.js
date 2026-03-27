@@ -30,6 +30,10 @@ import { LearningEngine } from "./intelligence/learning-engine.js";
 import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engine.js";
 import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
+
+// Static handler for /chatgpt/mcp — created once at module load
+const chatgptMcpHandler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
+import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
@@ -1913,9 +1917,7 @@ export default {
     // chatgpt-mcp Hono sub-router cannot access MCP_AGENT DO binding.
     // Handle it here where we have the full env with all bindings.
     if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
-      const { McpConnectAgent } = await import("./mcp/agent.js");
-      const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
-      return handler.fetch(request, env, ctx);
+      return chatgptMcpHandler.fetch(request, env, ctx);
     }
 
     // Route Agents SDK WebSocket upgrades to McpConnectAgent DO
