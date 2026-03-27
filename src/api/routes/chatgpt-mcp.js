@@ -43,13 +43,13 @@ chatgptMcp.use("*", async (c, next) => {
     );
   }
 
-  console.log("[ChatGPT-MCP] env keys:", Object.keys(c.env || {}).join(", "));
-  if (!c.env.API_KEYS) {
-    console.error("[ChatGPT-MCP] API_KEYS KV binding missing — failing closed. env type:", typeof c.env, "keys:", Object.keys(c.env || {}).join(", "));
+  const envKeys = Object.keys(c.env || {}).sort();
+  const apiKeysKv = c.env.API_KEYS || c.env.api_keys || c.env.apiKeys;
+  if (!apiKeysKv) {
     return c.json(
       {
         jsonrpc: "2.0",
-        error: { code: -32000, message: "Service misconfigured" },
+        error: { code: -32000, message: "API_KEYS binding not found", data: { env_keys: envKeys, env_type: typeof c.env } },
         id: null,
       },
       500,
