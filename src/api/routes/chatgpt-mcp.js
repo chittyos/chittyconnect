@@ -43,8 +43,9 @@ chatgptMcp.use("*", async (c, next) => {
     );
   }
 
+  console.log("[ChatGPT-MCP] env keys:", Object.keys(c.env || {}).join(", "));
   if (!c.env.API_KEYS) {
-    console.error("[ChatGPT-MCP] API_KEYS KV binding missing — failing closed");
+    console.error("[ChatGPT-MCP] API_KEYS KV binding missing — failing closed. env type:", typeof c.env, "keys:", Object.keys(c.env || {}).join(", "));
     return c.json(
       {
         jsonrpc: "2.0",
