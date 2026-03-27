@@ -33,7 +33,6 @@ import { McpConnectAgent } from "./mcp/agent.js";
 
 // Static handler for /chatgpt/mcp — created once at module load
 const chatgptMcpHandler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
-import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
