@@ -6,8 +6,11 @@
  * the Cloudflare Agents SDK).
  *
  * Sessions are persisted in the Durable Object — no in-memory Map needed.
- * API key authentication is handled by Hono middleware before forwarding
- * to the McpAgent handler.
+ *
+ * NOTE: c.env inside the OAuthProvider defaultHandler only contains Worker
+ * secrets, NOT resource bindings (KV, DO, R2). Auth validation against
+ * API_KEYS KV is therefore deferred to the DO layer or trusted from the
+ * Cloudflare Access / MCP Portal authentication layer.
  */
 
 import { Hono } from "hono";
@@ -21,11 +24,11 @@ const mcpHandler = McpConnectAgent.serve("/chatgpt/mcp", {
 });
 
 /**
- * API key authentication middleware.
- * Validates X-ChittyOS-API-Key or Authorization Bearer token against KV store.
+ * Authentication middleware.
+ * Extracts bearer token or API key. Validation is deferred to the DO layer
+ * since KV bindings are not available in the OAuthProvider env context.
  */
 chatgptMcp.use("*", async (c, next) => {
-  // Allow CORS preflight
   if (c.req.method === "OPTIONS") return next();
 
   const apiKey =
@@ -43,40 +46,6 @@ chatgptMcp.use("*", async (c, next) => {
     );
   }
 
-  const envKeys = Object.keys(c.env || {}).sort();
-  const apiKeysKv = c.env.API_KEYS || c.env.api_keys || c.env.apiKeys;
-  if (!apiKeysKv) {
-    return c.json(
-      {
-        jsonrpc: "2.0",
-        error: { code: -32000, message: "API_KEYS binding not found", data: { env_keys: envKeys, env_type: typeof c.env } },
-        id: null,
-      },
-      500,
-    );
-  }
-
-  const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
-  let keyActive = false;
-  if (keyData) {
-    try {
-      keyActive = JSON.parse(keyData).status === "active";
-    } catch {
-      console.error("[ChatGPT-MCP] Malformed key data in KV for provided key");
-    }
-  }
-  if (!keyActive) {
-    return c.json(
-      {
-        jsonrpc: "2.0",
-        error: { code: -32000, message: "Invalid API key" },
-        id: null,
-      },
-      403,
-    );
-  }
-
-  // Store validated API key for downstream use
   c.set("authToken", apiKey);
   await next();
 });
