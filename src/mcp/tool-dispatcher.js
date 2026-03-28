@@ -1653,7 +1653,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         if (args.status) params.set("status", args.status);
         if (args.task_type) params.set("task_type", args.task_type);
         if (args.limit !== undefined) params.set("limit", String(args.limit));
-        if (args.offset !== undefined) params.set("offset", String(args.offset));
+        if (args.offset !== undefined)
+          params.set("offset", String(args.offset));
         const url = `https://tasks.chitty.cc/api/v1/tasks${params.toString() ? `?${params}` : ""}`;
         const response = await fetch(url, { headers: taskAuth });
         const { data, error: respErr } = await checkAndParseJson(
@@ -1783,6 +1784,152 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       } else {
         return {
           content: [{ type: "text", text: `Unknown task tool: ${name}` }],
+          isError: true,
+        };
+      }
+    }
+
+    // ── Tenant Management tools ─────────────────────────────────────
+    // Project-per-tenant Neon isolation — provision, query, export
+    // Routes to local /api/v1/tenants endpoints (same worker, no service token)
+    else if (name.startsWith("chitty_tenant_")) {
+      const baseUrl = env.CHITTYCONNECT_URL || "https://connect.chitty.cc";
+
+      if (name === "chitty_tenant_provision") {
+        if (!args.tenant_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: tenant_id" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(`${baseUrl}/api/v1/tenants/provision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenantId: args.tenant_id,
+            region: args.region,
+            pgVersion: args.pg_version,
+          }),
+        });
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "TenantProvision",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_tenant_get") {
+        if (!args.tenant_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: tenant_id" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "TenantGet",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_tenant_list") {
+        const params = new URLSearchParams();
+        if (args.status) params.set("status", args.status);
+        if (args.limit !== undefined) params.set("limit", String(args.limit));
+        if (args.offset !== undefined)
+          params.set("offset", String(args.offset));
+        const qs = params.toString() ? `?${params}` : "";
+        const response = await fetch(`${baseUrl}/api/v1/tenants${qs}`);
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "TenantList",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_tenant_deprovision") {
+        if (!args.tenant_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: tenant_id" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
+          { method: "DELETE" },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "TenantDeprovision",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_tenant_export") {
+        if (!args.tenant_id) {
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: tenant_id" },
+            ],
+            isError: true,
+          };
+        }
+        const response = await fetch(
+          `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}/export`,
+          { method: "POST" },
+        );
+        const { data, error: respErr } = await checkAndParseJson(
+          response,
+          "TenantExport",
+        );
+        if (respErr) return respErr;
+        result = data;
+      } else if (name === "chitty_tenant_query") {
+        if (!args.tenant_id || !args.query) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Missing required parameters: tenant_id and query",
+              },
+            ],
+            isError: true,
+          };
+        }
+        // Safety: block mutations via MCP
+        const normalized = args.query.trim().toUpperCase();
+        if (
+          !normalized.startsWith("SELECT") &&
+          !normalized.startsWith("WITH")
+        ) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Only SELECT/WITH queries are allowed via MCP tenant_query. Use the REST API for mutations.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const { queryTenantDb } =
+          await import("../lib/tenant-connection-router.js");
+        const queryResult = await queryTenantDb(
+          env,
+          args.tenant_id,
+          args.query,
+          args.params || [],
+        );
+        result = { rows: queryResult.rows, layer: queryResult.layer };
+      } else {
+        return {
+          content: [{ type: "text", text: `Unknown tenant tool: ${name}` }],
           isError: true,
         };
       }

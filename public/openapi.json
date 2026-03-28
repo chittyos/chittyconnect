@@ -1113,6 +1113,214 @@
           }
         }
       }
+    },
+    "/api/v1/tenants/provision": {
+      "post": {
+        "summary": "Provision Tenant Database",
+        "description": "Provision an isolated Neon database project for a tenant. Creates physical data isolation with base migrations for evidence storage and client data.",
+        "operationId": "provisionTenant",
+        "tags": ["Tenant Management"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tenantId": { "type": "string", "description": "Unique tenant identifier (ChittyID, org slug, or case ID)" },
+                  "region": { "type": "string", "description": "Neon region (default: aws-us-east-2)" },
+                  "pgVersion": { "type": "string", "description": "PostgreSQL version (default: 16)" }
+                },
+                "required": ["tenantId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant provisioned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "status": { "type": "string" },
+                    "migrationsApplied": { "type": "integer" },
+                    "createdAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "409": { "description": "Tenant already provisioned" }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}": {
+      "get": {
+        "summary": "Get Tenant Details",
+        "description": "Retrieve details of a provisioned tenant's Neon project including project ID, region, and status.",
+        "operationId": "getTenant",
+        "tags": ["Tenant Management"],
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "status": { "type": "string" },
+                    "pgVersion": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "updatedAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Tenant not found" }
+        }
+      },
+      "delete": {
+        "summary": "Deprovision Tenant",
+        "description": "Deprovision a tenant's Neon project. Deletes the project and marks the tenant as deprovisioned. This is destructive.",
+        "operationId": "deprovisionTenant",
+        "tags": ["Tenant Management"],
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant deprovisioned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tenantId": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Tenant not found" }
+        }
+      }
+    },
+    "/api/v1/tenants": {
+      "get": {
+        "summary": "List Tenant Projects",
+        "description": "List all provisioned tenant Neon projects with pagination. Connection strings are never exposed.",
+        "operationId": "listTenants",
+        "tags": ["Tenant Management"],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "deprovisioned", "deleted"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated tenant list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tenants": { "type": "array", "items": { "type": "object" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/export": {
+      "post": {
+        "summary": "Export Tenant Project",
+        "description": "Export tenant Neon project metadata for portability review. Does not expose connection credentials.",
+        "operationId": "exportTenant",
+        "tags": ["Tenant Management"],
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Export bundle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "project": { "type": "object" },
+                    "exportedAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Tenant not found" }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/replicate": {
+      "post": {
+        "summary": "Replicate Record to Tenant",
+        "description": "Replicate a data record to a tenant's isolated Neon database. Supports evidence_documents, evidence_custody_log, document_families, client_documents, and financial_records tables. Column allowlists prevent SQL injection.",
+        "operationId": "replicateToTenant",
+        "tags": ["Tenant Management"],
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "table": { "type": "string", "enum": ["evidence_documents", "evidence_custody_log", "document_families", "client_documents", "financial_records"] },
+                  "record": { "type": "object", "description": "Record data with column names as keys" }
+                },
+                "required": ["table", "record"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Record replicated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "replicated": { "type": "boolean" },
+                    "table": { "type": "string" },
+                    "recordId": { "type": "string" },
+                    "layer": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1510,6 +1718,10 @@
     {
       "name": "Quality",
       "description": "Document quality validation endpoints"
+    },
+    {
+      "name": "Tenant Management",
+      "description": "Project-per-tenant Neon database isolation — provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
     }
   ]
 }

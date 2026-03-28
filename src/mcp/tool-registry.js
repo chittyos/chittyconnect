@@ -1199,7 +1199,8 @@ const MCP_TOOLS = [
         depends_on: {
           type: "array",
           items: { type: "string" },
-          description: "Array of task IDs that must complete before this task runs",
+          description:
+            "Array of task IDs that must complete before this task runs",
         },
       },
       required: ["title", "task_type", "assigned_agent"],
@@ -1324,6 +1325,126 @@ const MCP_TOOLS = [
       required: ["agent"],
     },
   },
+
+  // ── Tenant Management ──────────────────────────────────────────────────
+  // Project-per-tenant Neon isolation for data ownership and portability
+  {
+    name: "chitty_tenant_provision",
+    description:
+      "Provision a new isolated Neon database project for a tenant. Creates the Neon project, runs base migrations (evidence storage + client data tables), and caches the connection string. Each tenant gets physically separate data isolation for portability and privilege protection.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenant_id: {
+          type: "string",
+          description:
+            "Unique tenant identifier (ChittyID, org slug, or case ID)",
+        },
+        region: {
+          type: "string",
+          description: "Neon region (default: aws-us-east-2)",
+        },
+        pg_version: {
+          type: "string",
+          description: "PostgreSQL version (default: 16)",
+        },
+      },
+      required: ["tenant_id"],
+    },
+  },
+  {
+    name: "chitty_tenant_get",
+    description:
+      "Get details of a provisioned tenant's Neon project, including project ID, region, status, and creation date. Does not return connection strings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenant_id: {
+          type: "string",
+          description: "Tenant identifier to look up",
+        },
+      },
+      required: ["tenant_id"],
+    },
+  },
+  {
+    name: "chitty_tenant_list",
+    description:
+      "List all provisioned tenant Neon projects with pagination. Optionally filter by status (active, deprovisioned, deleted). Connection strings are never returned in list responses.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          enum: ["active", "deprovisioned", "deleted"],
+          description: "Filter by tenant status",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum results (default: 50)",
+        },
+        offset: {
+          type: "number",
+          description: "Pagination offset (default: 0)",
+        },
+      },
+    },
+  },
+  {
+    name: "chitty_tenant_deprovision",
+    description:
+      "Deprovision a tenant's Neon project. Deletes the Neon project and marks the tenant as deprovisioned in the registry. This is destructive and cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenant_id: {
+          type: "string",
+          description: "Tenant identifier to deprovision",
+        },
+      },
+      required: ["tenant_id"],
+    },
+  },
+  {
+    name: "chitty_tenant_export",
+    description:
+      "Export a tenant's Neon project metadata and configuration for portability review. Returns project details from the Neon API without exposing connection credentials.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenant_id: {
+          type: "string",
+          description: "Tenant identifier to export",
+        },
+      },
+      required: ["tenant_id"],
+    },
+  },
+  {
+    name: "chitty_tenant_query",
+    description:
+      "Execute a read-only SQL query against a tenant's isolated Neon database. Routes to the correct tenant project via the connection router. Use for tenant-specific evidence, custody, or financial data queries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenant_id: {
+          type: "string",
+          description: "Tenant identifier whose database to query",
+        },
+        query: {
+          type: "string",
+          description:
+            "SQL query to execute (SELECT only — mutations are blocked)",
+        },
+        params: {
+          type: "array",
+          items: { type: "string" },
+          description: "Parameterized query values",
+        },
+      },
+      required: ["tenant_id", "query"],
+    },
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1369,6 +1490,11 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_task_list",
   "chitty_task_get",
   "chitty_task_my_tasks",
+  // Tenant Management — read-only query tools
+  "chitty_tenant_get",
+  "chitty_tenant_list",
+  "chitty_tenant_export",
+  "chitty_tenant_query",
 ]);
 
 /**
