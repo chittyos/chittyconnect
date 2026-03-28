@@ -292,7 +292,7 @@
   // │ CHITTYOS SERVICE TOKENS (pattern: CHITTY_<SERVICE>_TOKEN)     │
   // ├─────────────────────────────────────────────────────────────────┤
   // │ CHITTY_ID_TOKEN            ChittyID service auth               │
-  // │ CHITTY_AUTH_TOKEN          ChittyAuth service auth             │
+  // │ CHITTY_AUTH_SERVICE_TOKEN  ChittyAuth service auth             │
   // │ CHITTY_REGISTRY_TOKEN      ChittyRegistry service auth         │
   // │ CHITTY_CHRONICLE_TOKEN     ChittyChronicle service auth        │
   // │ CHITTY_DNA_TOKEN           ChittyDNA service auth              │
