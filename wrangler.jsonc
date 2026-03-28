@@ -57,7 +57,11 @@
     { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
     { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
     { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
-    { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" }
+    { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+    // Mercury OIDC (CF Access SaaS app — programmatic token exchange for write operations)
+    { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
+    { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
+    { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
   ],
 
   // ──────────────────────────────────────────────────────────────────
