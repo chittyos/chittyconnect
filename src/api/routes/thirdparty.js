@@ -885,7 +885,7 @@ async function getMercuryToken(c, integrationSlug) {
   const headerToken = c.req.header("X-Mercury-Token");
   if (headerToken) return headerToken;
 
-  const envKey = `MERCURY_API_KEY_${slug.toUpperCase()}`;
+  const envKey = `MERCURY_API_KEY_${slug.replace(/-/g, "_").toUpperCase()}`;
   if (c.env[envKey]) return c.env[envKey];
 
   if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
