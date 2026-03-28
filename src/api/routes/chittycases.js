@@ -24,11 +24,12 @@ chittycasesRoutes.post("/create", async (c) => {
       return c.json({ error: "Invalid caseType" }, 400);
     }
 
+    const serviceToken = c.get("serviceToken");
     const response = await fetch("https://cases.chitty.cc/api/cases", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${c.get("serviceToken")}`,
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({ title, description, caseType, metadata }),
     });
@@ -48,11 +49,12 @@ chittycasesRoutes.post("/create", async (c) => {
 chittycasesRoutes.get("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
+    const serviceToken = c.get("serviceToken");
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,
       {
         headers: {
-          Authorization: `Bearer ${c.get("serviceToken")}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
       },
     );
@@ -73,6 +75,7 @@ chittycasesRoutes.put("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
     const updates = await c.req.json();
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,
@@ -80,7 +83,7 @@ chittycasesRoutes.put("/:caseId", async (c) => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${c.get("serviceToken")}`,
+          Authorization: `Bearer ${serviceToken}`,
         },
         body: JSON.stringify(updates),
       },
