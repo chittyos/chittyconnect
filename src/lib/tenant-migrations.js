@@ -160,17 +160,31 @@ export async function runTenantMigrations(connectionUri) {
     for (const migration of TENANT_MIGRATIONS) {
       if (appliedVersions.has(migration.version)) continue;
 
-      await client.query(migration.sql);
-      await client.query(
-        "INSERT INTO _tenant_schema_version (version, migration_name) VALUES ($1, $2)",
-        [migration.version, migration.name],
-      );
-      applied++;
+      await client.query("BEGIN");
+      try {
+        await client.query(migration.sql);
+        await client.query(
+          "INSERT INTO _tenant_schema_version (version, migration_name) VALUES ($1, $2)",
+          [migration.version, migration.name],
+        );
+        await client.query("COMMIT");
+        applied++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw new Error(
+          `Tenant migration ${migration.name} failed: ${err.message}`,
+        );
+      }
     }
 
     return { applied, total: TENANT_MIGRATIONS.length };
   } finally {
-    await client.end().catch(() => {});
+    await client.end().catch((err) => {
+      console.warn(
+        "[TenantMigrations] Connection cleanup failed:",
+        err.message,
+      );
+    });
   }
 }
 

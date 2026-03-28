@@ -175,8 +175,8 @@ async function ensureEcosystemInitialized(env) {
     return intelligenceModules;
   } catch (error) {
     console.error("[ChittyConnect] Initialization error:", error);
-    // Still mark as initialized to avoid retry loop
-    ecosystemInitialized = true;
+    // Do NOT mark as initialized — allow retry on next request.
+    // Transient D1 failures should not permanently break the worker.
     return null;
   }
 }
@@ -271,18 +271,61 @@ app.get("/api/v1/doctrine/seed", (c) => {
 
     identity_model: {
       session_rule: "viewport_not_birth",
-      minting_triggers: ["domain_fission", "derivative", "temporal_decay", "meta_orchestrator_decision"],
-      never_mint_on: ["session_start", "substrate_switch", "db_failure", "network_error", "device_change"],
-      grey_matter_principle: "Model is replaceable substrate. Identity lives in coordination layer, not in the model.",
+      minting_triggers: [
+        "domain_fission",
+        "derivative",
+        "temporal_decay",
+        "meta_orchestrator_decision",
+      ],
+      never_mint_on: [
+        "session_start",
+        "substrate_switch",
+        "db_failure",
+        "network_error",
+        "device_change",
+      ],
+      grey_matter_principle:
+        "Model is replaceable substrate. Identity lives in coordination layer, not in the model.",
     },
 
     ontology: {
       entity_types: {
-        P: { name: "Person", definition: "Actor with agency", characterizations: ["Natural", "Synthetic", "Legal"] },
-        L: { name: "Location", definition: "Context in space", characterizations: ["Jurisdiction", "Venue", "Address", "Virtual"] },
-        T: { name: "Thing", definition: "Object without agency", characterizations: ["Document", "Asset", "Artifact", "Account"] },
-        E: { name: "Event", definition: "Occurrence in time", characterizations: ["Transaction", "Decision", "Action", "Filing", "Hearing"] },
-        A: { name: "Authority", definition: "Source of weight", characterizations: ["Granted", "Earned", "Credential", "Certification"] },
+        P: {
+          name: "Person",
+          definition: "Actor with agency",
+          characterizations: ["Natural", "Synthetic", "Legal"],
+        },
+        L: {
+          name: "Location",
+          definition: "Context in space",
+          characterizations: ["Jurisdiction", "Venue", "Address", "Virtual"],
+        },
+        T: {
+          name: "Thing",
+          definition: "Object without agency",
+          characterizations: ["Document", "Asset", "Artifact", "Account"],
+        },
+        E: {
+          name: "Event",
+          definition: "Occurrence in time",
+          characterizations: [
+            "Transaction",
+            "Decision",
+            "Action",
+            "Filing",
+            "Hearing",
+          ],
+        },
+        A: {
+          name: "Authority",
+          definition: "Source of weight",
+          characterizations: [
+            "Granted",
+            "Earned",
+            "Credential",
+            "Certification",
+          ],
+        },
       },
       rules: [
         "All five types (P/L/T/E/A) must always be present in any validation",
@@ -301,7 +344,13 @@ app.get("/api/v1/doctrine/seed", (c) => {
         stale: ["retired", "dormant"],
         retired: [],
       },
-      forbidden_states: ["archived", "revoked", "inactive", "deleted", "suspended"],
+      forbidden_states: [
+        "archived",
+        "revoked",
+        "inactive",
+        "deleted",
+        "suspended",
+      ],
     },
 
     trust_model: {
@@ -381,7 +430,8 @@ app.get("/api/v1/signal/bootstrap", (c) => {
     ],
     narrative: {
       identity_primer: {
-        title: "Every AI session starts blank and dies. ChittyOS breaks that cycle.",
+        title:
+          "Every AI session starts blank and dies. ChittyOS breaks that cycle.",
         summary:
           "Sessions are viewports into persistent entities. A new Claude Code session, ChatGPT conversation, or Gemini chat is opening a window onto an existing orchestrator identity — not creating a new one. The coordination layer (ChittyID, ChittyConnect, ChittyLedger) preserves identity, trust, and experience across substrates.",
       },
@@ -423,7 +473,8 @@ app.get("/api/v1/signal/articles", (c) => {
   const articles = [
     {
       id: "identity-primer",
-      title: "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
+      title:
+        "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
       archetype: "identity",
       priority: 1,
       summary:
@@ -453,7 +504,8 @@ app.get("/api/v1/signal/articles", (c) => {
     },
     {
       id: "trust-philosophy",
-      title: "Trust Is Earned Through Behavior, Not Granted Through Credentials",
+      title:
+        "Trust Is Earned Through Behavior, Not Granted Through Credentials",
       archetype: "trust",
       priority: 4,
       summary:
@@ -495,7 +547,8 @@ app.get("/api/v1/signal/article/:id", (c) => {
   const articles = {
     "identity-primer": {
       id: "identity-primer",
-      title: "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
+      title:
+        "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
       archetype: "identity",
       content: [
         "Every current AI session starts blank, accumulates knowledge, hits a context limit, and dies. That is not a person. That is amnesia on a loop.",
@@ -1910,16 +1963,32 @@ export default {
     // resolves it to the MCP_AGENT DO binding (mcp-agent in kebab-case).
     // This preserves full env (KV, DO, R2) which OAuthProvider strips.
     // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
-    if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
+    if (
+      url.pathname === "/chatgpt/mcp" ||
+      url.pathname.startsWith("/chatgpt/mcp/")
+    ) {
       try {
-        const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
+        const handler = McpConnectAgent.serve("/chatgpt/mcp", {
+          binding: "MCP_AGENT",
+        });
         return handler.fetch(request, env, ctx);
       } catch (err) {
-        console.error(`[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`);
-        return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders(request) },
-        });
+        console.error(
+          `[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: err.message,
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
       }
     }
 
@@ -1933,10 +2002,19 @@ export default {
     } catch (err) {
       console.error(`[OAuth-Fatal] ${request.method} ${url.pathname} threw: ${err.message}
 ${err.stack}`);
-      return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "internal_error",
+          error_description: err.message,
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders(request),
+          },
+        },
+      );
     }
 
     // Debug: log response status for OAuth endpoints
@@ -1977,8 +2055,10 @@ ${err.stack}`);
     if (event.cron === "*/50 * * * *") {
       try {
         const rotation = new SecretRotationService(env);
-        const result = await rotation.forceRotate('gdrive_access_token');
-        console.log(`[Scheduled] OAuth rotation: ${result.ok ? 'success' : result.error}`);
+        const result = await rotation.forceRotate("gdrive_access_token");
+        console.log(
+          `[Scheduled] OAuth rotation: ${result.ok ? "success" : result.error}`,
+        );
       } catch (err) {
         console.error(`[Scheduled] OAuth rotation failed:`, err);
       }
@@ -2014,25 +2094,25 @@ ${err.stack}`);
       // 1Password event sync
       try {
         const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
-        if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-        const response = await fetch(
-          `${chronicleUrl}/api/sync/1password`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(env.CHITTY_CHRONICLE_TOKEN
-                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-                : {}),
-            },
-            body: JSON.stringify({
-              source: "chittyconnect-cron",
-              timestamp: new Date().toISOString(),
-            }),
+        if (!chronicleUrl)
+          throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+        const response = await fetch(`${chronicleUrl}/api/sync/1password`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(env.CHITTY_CHRONICLE_TOKEN
+              ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+              : {}),
           },
-        );
+          body: JSON.stringify({
+            source: "chittyconnect-cron",
+            timestamp: new Date().toISOString(),
+          }),
+        });
         if (!response.ok) {
-          console.error(`[Scheduled] 1Password sync failed: ${response.status}`);
+          console.error(
+            `[Scheduled] 1Password sync failed: ${response.status}`,
+          );
         } else {
           console.log(`[Scheduled] 1Password sync: ${response.status}`);
         }

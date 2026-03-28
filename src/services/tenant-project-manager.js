@@ -110,8 +110,14 @@ export class TenantProjectManager {
     });
 
     const project = result.project;
-    const connectionUri =
-      result.connection_uris?.[0]?.connection_uri || null;
+    const connectionUri = result.connection_uris?.[0]?.connection_uri || null;
+
+    if (!connectionUri) {
+      throw new Error(
+        `Neon project ${project.id} created but no connection URI returned. ` +
+          `Manual intervention required — the project exists but cannot be used.`,
+      );
+    }
 
     const record = {
       tenant_id: tenantId,
@@ -127,20 +133,24 @@ export class TenantProjectManager {
     await this.#storeTenantRecord(record);
 
     // Cache connection string in KV for fast lookup
-    if (connectionUri && this.env.TENANT_CONNECTIONS) {
-      await this.env.TENANT_CONNECTIONS.put(
-        `tenant:${tenantId}`,
-        connectionUri,
-        { expirationTtl: 3600 },
+    try {
+      if (this.env.TENANT_CONNECTIONS) {
+        await this.env.TENANT_CONNECTIONS.put(
+          `tenant:${tenantId}`,
+          connectionUri,
+          { expirationTtl: 3600 },
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[TenantProjectManager] KV cache write failed for tenant:${tenantId}:`,
+        err.message,
       );
     }
 
     // Run base migrations on the new tenant database
-    let migrationsApplied = 0;
-    if (connectionUri) {
-      const migrationResult = await runTenantMigrations(connectionUri);
-      migrationsApplied = migrationResult.applied;
-    }
+    const migrationResult = await runTenantMigrations(connectionUri);
+    const migrationsApplied = migrationResult.applied;
 
     return {
       tenantId,
@@ -194,7 +204,9 @@ export class TenantProjectManager {
    * @returns {Promise<object|null>}
    */
   async getTenantRecord(tenantId) {
-    if (!this.env.DB) return null;
+    if (!this.env.DB) {
+      throw new Error("Platform DB (D1) not available — cannot look up tenant");
+    }
 
     const result = await this.env.DB.prepare(
       "SELECT * FROM tenant_projects WHERE tenant_id = ?",
@@ -301,7 +313,7 @@ export class TenantProjectManager {
    */
   async listTenants(options = {}) {
     if (!this.env.DB) {
-      return { tenants: [], total: 0 };
+      throw new Error("Platform DB (D1) not available — cannot list tenants");
     }
 
     const limit = options.limit || 50;
