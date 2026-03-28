@@ -18,7 +18,7 @@ export class McpConnectAgent extends McpAgent {
     const baseUrl = this.props?.baseUrl || "https://connect.chitty.cc";
     const authToken = this.props?.authToken;
 
-    // createMcpServer returns a fully configured McpServer with all 52 tools
+    // createMcpServer returns a fully configured McpServer with all registered tools
     this.server = createMcpServer(this.env, { baseUrl, authToken });
   }
 

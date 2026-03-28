@@ -16,9 +16,9 @@ const neonMocks = vi.hoisted(() => ({
 vi.mock("@neondatabase/serverless", () => ({
   Client: vi.fn().mockImplementation(function MockClient() {
     return {
-    connect: neonMocks.connect,
-    query: neonMocks.query,
-    end: neonMocks.end,
+      connect: neonMocks.connect,
+      query: neonMocks.query,
+      end: neonMocks.end,
     };
   }),
 }));
@@ -32,7 +32,10 @@ vi.mock("../../src/lib/credential-helper.js", () => ({
   getServiceToken: vi.fn(),
 }));
 
-import { getCredential, getServiceToken } from "../../src/lib/credential-helper.js";
+import {
+  getCredential,
+  getServiceToken,
+} from "../../src/lib/credential-helper.js";
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -57,7 +60,11 @@ describe("dispatchToolCall", () => {
     it("returns error when no service token available", async () => {
       getServiceToken.mockResolvedValue(null);
 
-      const result = await dispatchToolCall("chitty_id_mint", { entity_type: "PERSON" }, mockEnv);
+      const result = await dispatchToolCall(
+        "chitty_id_mint",
+        { entity_type: "PERSON" },
+        mockEnv,
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Authentication required");
@@ -67,7 +74,10 @@ describe("dispatchToolCall", () => {
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ chitty_id: "01-P-USA-1234-P-2601-A-X", success: true }),
+        json: async () => ({
+          chitty_id: "01-P-USA-1234-P-2601-A-X",
+          success: true,
+        }),
       });
 
       const result = await dispatchToolCall(
@@ -83,7 +93,9 @@ describe("dispatchToolCall", () => {
         "https://mint.chitty.cc/api/mint",
         expect.objectContaining({
           method: "POST",
-          headers: expect.objectContaining({ Authorization: "Bearer svc-token-123" }),
+          headers: expect.objectContaining({
+            Authorization: "Bearer svc-token-123",
+          }),
         }),
       );
     });
@@ -96,7 +108,11 @@ describe("dispatchToolCall", () => {
         text: async () => "Internal Server Error",
       });
 
-      const result = await dispatchToolCall("chitty_id_mint", { entity_type: "PERSON" }, mockEnv);
+      const result = await dispatchToolCall(
+        "chitty_id_mint",
+        { entity_type: "PERSON" },
+        mockEnv,
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("ChittyID error (500)");
@@ -195,7 +211,8 @@ describe("dispatchToolCall", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ total_cases: 5, total_evidence: 42 }),
+        text: async () =>
+          JSON.stringify({ total_cases: 5, total_evidence: 42 }),
       });
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
@@ -271,7 +288,8 @@ describe("dispatchToolCall", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ facts: [{ text: "Amount was $500k" }] }),
+        text: async () =>
+          JSON.stringify({ facts: [{ text: "Amount was $500k" }] }),
       });
 
       await dispatchToolCall(
@@ -299,7 +317,11 @@ describe("dispatchToolCall", () => {
         text: async () => JSON.stringify({ contradictions: [] }),
       });
 
-      await dispatchToolCall("chitty_ledger_contradictions", { case_id: "c-1" }, mockEnv);
+      await dispatchToolCall(
+        "chitty_ledger_contradictions",
+        { case_id: "c-1" },
+        mockEnv,
+      );
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://ledger.chitty.cc/api/contradictions?caseId=c-1",
@@ -339,14 +361,21 @@ describe("dispatchToolCall", () => {
       // First call: evidence check (returns evidence with file_hash)
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ evidence_id: "ev-123", file_hash: "abc123sha256" }),
+        json: async () => ({
+          evidence_id: "ev-123",
+          file_hash: "abc123sha256",
+        }),
       });
       // Second call: POST to facts endpoint
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
         text: async () =>
-          JSON.stringify({ fact_id: "fact-001", status: "draft", text: "Purchase price was $450,000" }),
+          JSON.stringify({
+            fact_id: "fact-001",
+            status: "draft",
+            text: "Purchase price was $450,000",
+          }),
       });
 
       const result = await dispatchToolCall(
@@ -545,7 +574,9 @@ describe("dispatchToolCall", () => {
       expect(calledUrl).toContain("source=email");
       // Verify auth header is passed
       expect(mockFetch.mock.calls[0][1]).toEqual(
-        expect.objectContaining({ headers: { Authorization: "Bearer svc-token-123" } }),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer svc-token-123" },
+        }),
       );
     });
   });
@@ -572,7 +603,9 @@ describe("dispatchToolCall", () => {
         "https://contextual.chitty.cc/api/topics",
         expect.objectContaining({
           method: "POST",
-          headers: expect.objectContaining({ Authorization: "Bearer svc-token-123" }),
+          headers: expect.objectContaining({
+            Authorization: "Bearer svc-token-123",
+          }),
           body: JSON.stringify({ query: "rent disputes" }),
         }),
       );
@@ -601,8 +634,16 @@ describe("dispatchToolCall", () => {
             success: true,
             result: {
               chunks: [
-                { item: { key: "closing-disclosure.pdf" }, score: 0.92, text: "Purchase price was $450,000" },
-                { item: { key: "settlement-stmt.pdf" }, score: 0.78, text: "Wire transfer of $112,500" },
+                {
+                  item: { key: "closing-disclosure.pdf" },
+                  score: 0.92,
+                  text: "Purchase price was $450,000",
+                },
+                {
+                  item: { key: "settlement-stmt.pdf" },
+                  score: 0.78,
+                  text: "Wire transfer of $112,500",
+                },
               ],
             },
           }),
@@ -615,14 +656,17 @@ describe("dispatchToolCall", () => {
       );
 
       expect(result.isError).toBeUndefined();
-      expect(result.content[0].text).toContain("[0.920] closing-disclosure.pdf");
+      expect(result.content[0].text).toContain(
+        "[0.920] closing-disclosure.pdf",
+      );
       expect(result.content[0].text).toContain("Purchase price was $450,000");
     });
 
     it("returns no matching documents message when empty", async () => {
       mockFetch.mockResolvedValue({
         status: 200,
-        text: async () => JSON.stringify({ success: true, result: { chunks: [] } }),
+        text: async () =>
+          JSON.stringify({ success: true, result: { chunks: [] } }),
       });
 
       const result = await dispatchToolCall(
@@ -637,7 +681,11 @@ describe("dispatchToolCall", () => {
     it("returns error on API failure", async () => {
       mockFetch.mockResolvedValue({
         status: 403,
-        text: async () => JSON.stringify({ success: false, errors: [{ message: "forbidden" }] }),
+        text: async () =>
+          JSON.stringify({
+            success: false,
+            errors: [{ message: "forbidden" }],
+          }),
       });
 
       const result = await dispatchToolCall(
@@ -655,7 +703,8 @@ describe("dispatchToolCall", () => {
     it("passes max_num_results to API", async () => {
       mockFetch.mockResolvedValue({
         status: 200,
-        text: async () => JSON.stringify({ success: true, result: { chunks: [] } }),
+        text: async () =>
+          JSON.stringify({ success: true, result: { chunks: [] } }),
       });
 
       await dispatchToolCall(
@@ -694,7 +743,9 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall("chitty_neon_query", {}, mockEnv);
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Missing required parameter: sql");
+      expect(result.content[0].text).toContain(
+        "Missing required parameter: sql",
+      );
     });
 
     it("returns error when Neon URL is not configured", async () => {
@@ -766,7 +817,9 @@ describe("dispatchToolCall", () => {
       const result = await dispatchToolCall("nonexistent_tool", {}, mockEnv);
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Unknown tool: nonexistent_tool");
+      expect(result.content[0].text).toContain(
+        "Unknown tool: nonexistent_tool",
+      );
     });
   });
 
@@ -777,7 +830,11 @@ describe("dispatchToolCall", () => {
       getServiceToken.mockResolvedValue("token");
       mockFetch.mockRejectedValue(new Error("Network timeout"));
 
-      const result = await dispatchToolCall("chitty_id_mint", { entity_type: "PERSON" }, mockEnv);
+      const result = await dispatchToolCall(
+        "chitty_id_mint",
+        { entity_type: "PERSON" },
+        mockEnv,
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Network timeout");
@@ -821,7 +878,10 @@ describe("dispatchToolCall", () => {
 
       const envWithCache = {
         ...mockEnv,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
@@ -844,14 +904,22 @@ describe("dispatchToolCall", () => {
       // Mock ChittyLedger seal response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed", proof_status: "PENDING" }),
+        text: async () =>
+          JSON.stringify({
+            fact_id: "fact-1",
+            status: "sealed",
+            proof_status: "PENDING",
+          }),
       });
 
       const mockProofQ = { send: vi.fn() };
       const envWithQueue = {
         ...mockEnv,
         PROOF_Q: mockProofQ,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
@@ -880,18 +948,30 @@ describe("dispatchToolCall", () => {
       // Mock ledger dispute response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ fact_id: "fact-1", status: "disputed", dispute_id: "d-1" }),
+        text: async () =>
+          JSON.stringify({
+            fact_id: "fact-1",
+            status: "disputed",
+            dispute_id: "d-1",
+          }),
       });
 
       const envWithCache = {
         ...mockEnv,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
       const result = await dispatchToolCall(
         "chitty_fact_dispute",
-        { fact_id: "fact-1", reason: "Contradicted by evidence ev-2", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" },
+        {
+          fact_id: "fact-1",
+          reason: "Contradicted by evidence ev-2",
+          actor_chitty_id: "01-P-USA-1234-P-2601-A-X",
+        },
         envWithCache,
       );
 
@@ -910,12 +990,9 @@ describe("dispatchToolCall", () => {
         json: async () => ({ entities: ["ARIAS LLC", "BIANCHI TRUST"] }),
       });
 
-      await dispatchToolCall(
-        "chitty_finance_entities",
-        {},
-        mockEnv,
-        { authToken: "user-api-key-should-not-be-forwarded" },
-      );
+      await dispatchToolCall("chitty_finance_entities", {}, mockEnv, {
+        authToken: "user-api-key-should-not-be-forwarded",
+      });
 
       const headers = mockFetch.mock.calls[0][1].headers;
       expect(headers.Authorization).toBe("Bearer finance-svc-token");
@@ -965,7 +1042,12 @@ describe("dispatchToolCall", () => {
       expect(body.end).toBe("2025-12-31");
       expect(body.threshold).toBe(1000);
       expect(body.malicious_field).toBeUndefined();
-      expect(Object.keys(body)).toEqual(["entity", "start", "end", "threshold"]);
+      expect(Object.keys(body)).toEqual([
+        "entity",
+        "start",
+        "end",
+        "threshold",
+      ]);
     });
   });
 
@@ -983,18 +1065,30 @@ describe("dispatchToolCall", () => {
       // Mock ledger fact+proof response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ fact_id: "fact-1", proof_id: "proof-1", verification_url: "https://proof.chitty.cc/verify/proof-1" }),
+        text: async () =>
+          JSON.stringify({
+            fact_id: "fact-1",
+            proof_id: "proof-1",
+            verification_url: "https://proof.chitty.cc/verify/proof-1",
+          }),
       });
 
       const envWithCache = {
         ...mockEnv,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
       const result = await dispatchToolCall(
         "chitty_fact_export",
-        { fact_id: "fact-1", format: "json", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" },
+        {
+          fact_id: "fact-1",
+          format: "json",
+          actor_chitty_id: "01-P-USA-1234-P-2601-A-X",
+        },
         envWithCache,
       );
 
@@ -1009,18 +1103,54 @@ describe("dispatchToolCall", () => {
       ["chitty_ledger_stats", {}, "ChittyLedger"],
       ["chitty_ledger_query", { record_type: "evidence" }, "ChittyLedger"],
       ["chitty_ledger_evidence", {}, "ChittyLedger"],
-      ["chitty_ledger_record", { record_type: "evidence", entity_id: "e-1" }, "ChittyLedger"],
+      [
+        "chitty_ledger_record",
+        { record_type: "evidence", entity_id: "e-1" },
+        "ChittyLedger",
+      ],
       ["chitty_ledger_chain_of_custody", { entity_id: "e-1" }, "ChittyLedger"],
       ["chitty_ledger_facts", { evidence_id: "ev-1" }, "ChittyLedger"],
       ["chitty_ledger_contradictions", {}, "ChittyLedger"],
       ["chitty_ledger_verify", {}, "ChittyLedger"],
       ["chitty_ledger_statistics", {}, "ChittyLedger"],
-      ["chitty_fact_mint", { evidence_id: "ev-1", text: "test" }, "ChittyLedger"],
-      ["chitty_fact_seal", { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" }, "ChittyLedger"],
-      ["chitty_fact_validate", { fact_id: "f-1", validation_method: "cross_reference" }, "ChittyLedger"],
-      ["chitty_fact_dispute", { fact_id: "f-1", reason: "test", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" }, "ChittyLedger"],
-      ["chitty_fact_export", { fact_id: "f-1", format: "json", actor_chitty_id: "01-P-USA-1234-P-2601-A-X" }, "ChittyLedger"],
-      ["chitty_contextual_timeline", { party: "test@example.com" }, "ChittyContextual"],
+      [
+        "chitty_fact_mint",
+        { evidence_id: "ev-1", text: "test" },
+        "ChittyLedger",
+      ],
+      [
+        "chitty_fact_seal",
+        { fact_id: "f-1", actor_chitty_id: "01-A-USA-5678-A-2601-B-X" },
+        "ChittyLedger",
+      ],
+      [
+        "chitty_fact_validate",
+        { fact_id: "f-1", validation_method: "cross_reference" },
+        "ChittyLedger",
+      ],
+      [
+        "chitty_fact_dispute",
+        {
+          fact_id: "f-1",
+          reason: "test",
+          actor_chitty_id: "01-P-USA-1234-P-2601-A-X",
+        },
+        "ChittyLedger",
+      ],
+      [
+        "chitty_fact_export",
+        {
+          fact_id: "f-1",
+          format: "json",
+          actor_chitty_id: "01-P-USA-1234-P-2601-A-X",
+        },
+        "ChittyLedger",
+      ],
+      [
+        "chitty_contextual_timeline",
+        { party: "test@example.com" },
+        "ChittyContextual",
+      ],
       ["chitty_contextual_topics", { query: "rent" }, "ChittyContextual"],
     ];
 
@@ -1043,7 +1173,9 @@ describe("dispatchToolCall", () => {
 
   describe("requireServiceAuth handles getServiceToken throwing", () => {
     it("returns structured auth error when getServiceToken throws", async () => {
-      getServiceToken.mockRejectedValue(new Error("1Password connection timeout"));
+      getServiceToken.mockRejectedValue(
+        new Error("1Password connection timeout"),
+      );
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
 
@@ -1062,7 +1194,8 @@ describe("dispatchToolCall", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        text: async () => "<!DOCTYPE html><html><body>Bad Gateway</body></html>",
+        text: async () =>
+          "<!DOCTYPE html><html><body>Bad Gateway</body></html>",
       });
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
@@ -1093,7 +1226,10 @@ describe("dispatchToolCall", () => {
       const envWithQueue = {
         ...mockEnv,
         PROOF_Q: mockProofQ,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
@@ -1118,13 +1254,17 @@ describe("dispatchToolCall", () => {
       // Mock seal success
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
+        text: async () =>
+          JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
       });
 
       const envNoQueue = {
         ...mockEnv,
         // No PROOF_Q binding
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
@@ -1136,7 +1276,9 @@ describe("dispatchToolCall", () => {
 
       expect(result.isError).toBeUndefined();
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.proof_queue_warning).toContain("PROOF_Q binding not configured");
+      expect(parsed.proof_queue_warning).toContain(
+        "PROOF_Q binding not configured",
+      );
     });
 
     it("seals successfully but warns when PROOF_Q.send throws", async () => {
@@ -1147,14 +1289,20 @@ describe("dispatchToolCall", () => {
       });
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
+        text: async () =>
+          JSON.stringify({ fact_id: "fact-1", status: "sealed" }),
       });
 
-      const mockProofQ = { send: vi.fn().mockRejectedValue(new Error("Queue unavailable")) };
+      const mockProofQ = {
+        send: vi.fn().mockRejectedValue(new Error("Queue unavailable")),
+      };
       const envWithQueue = {
         ...mockEnv,
         PROOF_Q: mockProofQ,
-        CREDENTIAL_CACHE: { get: vi.fn().mockResolvedValue(null), put: vi.fn() },
+        CREDENTIAL_CACHE: {
+          get: vi.fn().mockResolvedValue(null),
+          put: vi.fn(),
+        },
         CHITTY_TRUST_TOKEN: "tok",
       };
 
@@ -1179,7 +1327,9 @@ describe("dispatchToolCall", () => {
       // Evidence check returns 200 but non-JSON body
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => { throw new SyntaxError("Unexpected token"); },
+        json: async () => {
+          throw new SyntaxError("Unexpected token");
+        },
       });
 
       const result = await dispatchToolCall(
@@ -1238,7 +1388,11 @@ describe("dispatchToolCall", () => {
 
       const result = await dispatchToolCall(
         "chitty_infra_logs",
-        { service: "chittyid-production", query_type: "events", timeframe: "1h" },
+        {
+          service: "chittyid-production",
+          query_type: "events",
+          timeframe: "1h",
+        },
         { CHITTYOS_ACCOUNT_ID: "acct-123" },
       );
 
@@ -1483,7 +1637,8 @@ describe("dispatchToolCall", () => {
         text: async () => JSON.stringify({ data: { viewer: {} } }),
       });
 
-      const gql = "{ viewer { accounts(filter: {accountTag: $accountTag}) { httpRequests1dGroups { sum { requests } } } } }";
+      const gql =
+        "{ viewer { accounts(filter: {accountTag: $accountTag}) { httpRequests1dGroups { sum { requests } } } } }";
       const result = await dispatchToolCall(
         "chitty_infra_analytics",
         { query: gql },
@@ -1571,6 +1726,152 @@ describe("dispatchToolCall", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("401");
+    });
+  });
+
+  // ── Tenant Management tools ─────────────────────────────────────────
+  describe("chitty_tenant_* tools", () => {
+    const tenantEnv = { CHITTYCONNECT_URL: "https://connect.chitty.cc" };
+
+    it("chitty_tenant_provision calls POST /api/v1/tenants/provision", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            tenantId: "org-42",
+            neonProjectId: "np-123",
+            status: "active",
+          }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_tenant_provision",
+        { tenant_id: "org-42", region: "aws-us-east-2" },
+        tenantEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.tenantId).toBe("org-42");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://connect.chitty.cc/api/v1/tenants/provision",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    it("chitty_tenant_provision rejects missing tenant_id", async () => {
+      const result = await dispatchToolCall(
+        "chitty_tenant_provision",
+        {},
+        tenantEnv,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("tenant_id");
+    });
+
+    it("chitty_tenant_get fetches tenant details", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ tenantId: "org-42", status: "active" }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_tenant_get",
+        { tenant_id: "org-42" },
+        tenantEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://connect.chitty.cc/api/v1/tenants/org-42",
+      );
+    });
+
+    it("chitty_tenant_list passes query params", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ tenants: [], total: 0 }),
+      });
+
+      await dispatchToolCall(
+        "chitty_tenant_list",
+        { status: "active", limit: 10 },
+        tenantEnv,
+      );
+
+      const calledUrl = mockFetch.mock.calls[0][0];
+      expect(calledUrl).toContain("status=active");
+      expect(calledUrl).toContain("limit=10");
+    });
+
+    it("chitty_tenant_deprovision calls DELETE", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ tenantId: "org-42", status: "deprovisioned" }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_tenant_deprovision",
+        { tenant_id: "org-42" },
+        tenantEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://connect.chitty.cc/api/v1/tenants/org-42",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("chitty_tenant_export calls POST export", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            tenantId: "org-42",
+            exportedAt: "2026-03-28T00:00:00Z",
+          }),
+      });
+
+      const result = await dispatchToolCall(
+        "chitty_tenant_export",
+        { tenant_id: "org-42" },
+        tenantEnv,
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://connect.chitty.cc/api/v1/tenants/org-42/export",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    it("chitty_tenant_query blocks non-SELECT queries", async () => {
+      const result = await dispatchToolCall(
+        "chitty_tenant_query",
+        { tenant_id: "org-42", query: "DELETE FROM evidence_documents" },
+        tenantEnv,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("SELECT");
+    });
+
+    it("chitty_tenant_query requires tenant_id and query", async () => {
+      const result = await dispatchToolCall(
+        "chitty_tenant_query",
+        { tenant_id: "org-42" },
+        tenantEnv,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("tenant_id and query");
     });
   });
 });

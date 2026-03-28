@@ -138,6 +138,20 @@ mcpRoutes.get("/resources/list", async (c) => {
         description: "Credential access patterns and security posture",
         mimeType: "application/json",
       },
+      {
+        uri: "chitty://tenants/catalog",
+        name: "Tenant Catalog",
+        description:
+          "All provisioned tenant Neon projects — data isolation registry for project-per-tenant multitenancy",
+        mimeType: "application/json",
+      },
+      {
+        uri: "chitty://tenants/{tenantId}/schema",
+        name: "Tenant Schema",
+        description:
+          "Schema and migration status for a tenant's isolated Neon database (evidence, custody, financials)",
+        mimeType: "application/json",
+      },
     ],
   });
 });
@@ -236,7 +250,8 @@ mcpRoutes.get("/resources/read", async (c) => {
       }
       try {
         const chronicleUrl = c.env.CHITTYCHRONICLE_SERVICE_URL;
-        if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+        if (!chronicleUrl)
+          throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
         const auditResponse = await fetch(
           `${chronicleUrl}/api/audit/credentials`,
           { headers: { Authorization: `Bearer ${chronicleToken}` } },
@@ -268,6 +283,90 @@ mcpRoutes.get("/resources/read", async (c) => {
             ],
           },
           502,
+        );
+      }
+    } else if (uri === "chitty://tenants/catalog") {
+      try {
+        const response = await fetch(
+          `${resolveInternalBaseUrl(c.req.url)}/api/v1/tenants?limit=100`,
+          {
+            headers: { Authorization: c.req.header("Authorization") },
+          },
+        );
+        if (!response.ok) {
+          return c.json({
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text: `Tenant catalog unavailable (${response.status})`,
+              },
+            ],
+          });
+        }
+        content = await response.text();
+      } catch (err) {
+        return c.json(
+          {
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text: `Tenant catalog error: ${err.message}`,
+              },
+            ],
+          },
+          500,
+        );
+      }
+    } else if (uri.startsWith("chitty://tenants/") && uri.endsWith("/schema")) {
+      const tenantId = uri
+        .replace("chitty://tenants/", "")
+        .replace("/schema", "");
+      if (!tenantId) {
+        return c.json(
+          {
+            contents: [
+              { uri, mimeType: "text/plain", text: "Missing tenant ID" },
+            ],
+          },
+          400,
+        );
+      }
+      try {
+        const response = await fetch(
+          `${resolveInternalBaseUrl(c.req.url)}/api/v1/tenants/${encodeURIComponent(tenantId)}`,
+          {
+            headers: { Authorization: c.req.header("Authorization") },
+          },
+        );
+        if (!response.ok) {
+          return c.json({
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text:
+                  response.status === 404
+                    ? `Tenant ${tenantId} not found`
+                    : `Tenant lookup failed (${response.status})`,
+              },
+            ],
+          });
+        }
+        content = await response.text();
+      } catch (err) {
+        return c.json(
+          {
+            contents: [
+              {
+                uri,
+                mimeType: "text/plain",
+                text: `Tenant schema error: ${err.message}`,
+              },
+            ],
+          },
+          500,
         );
       }
     } else {
