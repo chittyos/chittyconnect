@@ -7,6 +7,8 @@
  * @module intelligence/streaming-manager
  */
 
+import { getAllowedOrigin } from "../lib/cors.js";
+
 export class StreamingManager {
   constructor(env) {
     this.env = env;
@@ -65,7 +67,8 @@ export class StreamingManager {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "https://connect.chitty.cc",
+        "Access-Control-Allow-Origin": getAllowedOrigin(options.origin) || "https://connect.chitty.cc",
+        Vary: "Origin",
       },
     });
   }

@@ -66,11 +66,15 @@ export function validateChittyIDFormat(chittyid) {
  */
 export async function verifyJWTProof(chittyid, jwtToken, env) {
   try {
+    const authToken = env.CHITTY_AUTH_SERVICE_TOKEN || env.CHITTY_AUTH_TOKEN;
+    if (!env.CHITTY_AUTH_SERVICE_TOKEN && env.CHITTY_AUTH_TOKEN) {
+      console.warn("[Auth] CHITTY_AUTH_TOKEN is deprecated, migrate to CHITTY_AUTH_SERVICE_TOKEN");
+    }
     const response = await fetch(`${env.CHITTYAUTH_SERVICE_URL}/api/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.CHITTY_AUTH_SERVICE_TOKEN || env.CHITTY_AUTH_TOKEN}`,
+        Authorization: `Bearer ${authToken}`,
       },
       body: JSON.stringify({
         jwt: jwtToken,

@@ -4,7 +4,11 @@
  */
 
 const ALLOWED_PATTERNS = [
-  /^https?:\/\/([a-z0-9-]+\.)*chitty\.cc$/,
+  /^https:\/\/([a-z0-9-]+\.)*chitty\.cc$/,
+  /^https:\/\/chat\.openai\.com$/,
+  /^https:\/\/chatgpt\.com$/,
+  /^https:\/\/chittyconnect-ui\.pages\.dev$/,
+  /^https:\/\/[a-z0-9-]+\.chittyconnect-ui\.pages\.dev$/,
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
@@ -16,10 +20,7 @@ const ALLOWED_PATTERNS = [
  */
 export function getAllowedOrigin(origin) {
   if (!origin) return null;
-  for (const pattern of ALLOWED_PATTERNS) {
-    if (pattern.test(origin)) return origin;
-  }
-  return null;
+  return ALLOWED_PATTERNS.some((p) => p.test(origin)) ? origin : null;
 }
 
 /**
@@ -34,5 +35,6 @@ export function corsHeaders(request) {
     ...(allowed && { "Access-Control-Allow-Origin": allowed }),
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    Vary: "Origin",
   };
 }

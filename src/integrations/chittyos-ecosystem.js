@@ -260,11 +260,15 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyAuth] Requesting API keys for ${chittyid}...`);
 
     try {
+      const authToken = this.env.CHITTY_AUTH_SERVICE_TOKEN || this.env.CHITTY_AUTH_TOKEN;
+      if (!this.env.CHITTY_AUTH_SERVICE_TOKEN && this.env.CHITTY_AUTH_TOKEN) {
+        console.warn("[Auth] CHITTY_AUTH_TOKEN is deprecated, migrate to CHITTY_AUTH_SERVICE_TOKEN");
+      }
       const response = await fetch(`${this.baseUrls.auth}/api/keys/provision`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.env.CHITTY_AUTH_SERVICE_TOKEN || this.env.CHITTY_AUTH_TOKEN}`,
+          Authorization: `Bearer ${authToken}`,
           "X-ChittyID": chittyid,
         },
         body: JSON.stringify(keyParams),
