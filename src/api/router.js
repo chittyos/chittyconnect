@@ -157,10 +157,15 @@ api.route("/api/thirdparty", thirdpartyRoutes);
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
 // Rewrites to /api/thirdparty/mercury/* so the thirdparty handler picks them up.
 api.all("/api/mercury/*", async (c) => {
-  const url = new URL(c.req.url);
-  url.pathname = url.pathname.replace("/api/mercury", "/api/thirdparty/mercury");
-  const newReq = new Request(url.toString(), c.req.raw);
-  return thirdpartyRoutes.fetch(newReq, c.env, c.executionCtx);
+  try {
+    const url = new URL(c.req.url);
+    url.pathname = url.pathname.replace("/api/mercury", "/api/thirdparty/mercury");
+    const newReq = new Request(url.toString(), c.req.raw);
+    return thirdpartyRoutes.fetch(newReq, c.env, c.executionCtx);
+  } catch (error) {
+    console.error("[Mercury] Legacy rewrite failed:", error.message);
+    return c.json({ error: error.message }, 500);
+  }
 });
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);
