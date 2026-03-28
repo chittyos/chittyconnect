@@ -1914,9 +1914,9 @@ export default {
     // This preserves full env (KV, DO, R2) which OAuthProvider strips.
     // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
     if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
-      const rewrittenUrl = new URL(request.url);
-      rewrittenUrl.pathname = "/agents/mcp-agent/chatgpt-mcp" + url.pathname.slice("/chatgpt/mcp".length);
-      request = new Request(rewrittenUrl.toString(), request);
+      // Use McpConnectAgent.serve() directly with full env (has MCP_AGENT DO binding)
+      const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
+      return handler.fetch(request, env, ctx);
     }
 
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
