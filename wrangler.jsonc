@@ -36,6 +36,31 @@
   ],
 
   // ──────────────────────────────────────────────────────────────────
+  // CLOUDFLARE SECRETS STORE — shared secrets across workers
+  // Store: default_secrets_store (e914522471964c3c8cf1e601770edcc3)
+  // Top-level binding — inherited by all environments
+  // ──────────────────────────────────────────────────────────────────
+  "secrets_store_secrets": [
+    // Mercury API tokens (7 orgs)
+    { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
+    { "binding": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" },
+    { "binding": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" },
+    { "binding": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" },
+    { "binding": "MERCURY_TOKEN_IT_CAN_BE_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_IT_CAN_BE_LLC" },
+    { "binding": "MERCURY_TOKEN_CHITTY_SERVICES", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHITTY_SERVICES" },
+    { "binding": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" },
+    // MCP token
+    { "binding": "CH1TTY_MCP_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "ch1tty_mcp_token" },
+    // CF Access service tokens (client_id + secret for each consumer)
+    { "binding": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND" },
+    { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND" },
+    { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
+    { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
+    { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
+    { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" }
+  ],
+
+  // ──────────────────────────────────────────────────────────────────
   // ENVIRONMENTS — one worker, three declared environments
   // Each env explicitly declares all resource bindings it needs.
   // ──────────────────────────────────────────────────────────────────
