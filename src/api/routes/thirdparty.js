@@ -904,7 +904,12 @@ async function mercuryFetch(token, path, options = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Mercury API ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`Mercury API ${res.status} on ${path}: ${body.slice(0, 200)}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Mercury API returned non-JSON (${ct}) on ${path}: ${body.slice(0, 100)}`);
   }
   return res.json();
 }
@@ -914,7 +919,9 @@ async function mercuryFetch(token, path, options = {}) {
  * Accepts ?slug= or ?entity= (legacy).
  */
 function getSlug(c) {
-  return c.req.query("slug") || c.req.query("entity");
+  const slug = c.req.query("slug") || c.req.query("entity");
+  if (slug && !/^[a-z0-9_-]+$/i.test(slug)) return undefined;
+  return slug;
 }
 
 /**
