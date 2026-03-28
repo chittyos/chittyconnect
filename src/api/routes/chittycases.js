@@ -1,20 +1,16 @@
 /**
  * ChittyCases API Routes
  * Legal case management with 1Password Connect integration
- *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
  */
 
 import { Hono } from "hono";
-import { getServiceToken } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const chittycasesRoutes = new Hono();
 
-/**
- * POST /api/chittycases/create
- * Create a new legal case
- */
+chittycasesRoutes.use("*", requireServiceToken("chittycases"));
+
+/** POST /api/chittycases/create */
 chittycasesRoutes.post("/create", async (c) => {
   try {
     const { title, description, caseType, metadata } = await c.req.json();
@@ -28,19 +24,7 @@ chittycasesRoutes.post("/create", async (c) => {
       return c.json({ error: "Invalid caseType" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, "chittycases");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyCases service token not configured",
-          details:
-            "Neither 1Password Connect nor environment variable available",
-        },
-        503,
-      );
-    }
-
+    const serviceToken = c.get("serviceToken");
     const response = await fetch("https://cases.chitty.cc/api/cases", {
       method: "POST",
       headers: {
@@ -61,25 +45,11 @@ chittycasesRoutes.post("/create", async (c) => {
   }
 });
 
-/**
- * GET /api/chittycases/:caseId
- * Get case details
- */
+/** GET /api/chittycases/:caseId */
 chittycasesRoutes.get("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
-
-    const serviceToken = await getServiceToken(c.env, "chittycases");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyCases service token not configured",
-        },
-        503,
-      );
-    }
-
+    const serviceToken = c.get("serviceToken");
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,
       {
@@ -100,25 +70,12 @@ chittycasesRoutes.get("/:caseId", async (c) => {
   }
 });
 
-/**
- * PUT /api/chittycases/:caseId
- * Update case
- */
+/** PUT /api/chittycases/:caseId */
 chittycasesRoutes.put("/:caseId", async (c) => {
   try {
     const caseId = c.req.param("caseId");
     const updates = await c.req.json();
-
-    const serviceToken = await getServiceToken(c.env, "chittycases");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyCases service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
       `https://cases.chitty.cc/api/cases/${caseId}`,

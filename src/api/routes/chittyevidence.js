@@ -13,10 +13,11 @@
  */
 
 import { Hono } from "hono";
-import { getServiceToken } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 import { EvidenceCompatibilityLayer } from "../../lib/evidence-compatibility.js";
 
 const chittyevidenceRoutes = new Hono();
+chittyevidenceRoutes.use("*", requireServiceToken("chittyevidence"));
 
 /**
  * POST /api/chittyevidence/ingest
@@ -36,18 +37,7 @@ chittyevidenceRoutes.post("/ingest", async (c) => {
       return c.json({ error: "file and caseId are required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyEvidence service token not configured",
-          details:
-            "Neither 1Password Connect nor environment variable available",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     // Forward to ChittyEvidence service
     const uploadFormData = new FormData();
@@ -93,16 +83,7 @@ chittyevidenceRoutes.get("/:identifier", async (c) => {
     const identifier = c.req.param("identifier");
     const legacyFormat = c.req.query("legacy") === "true"; // Optional legacy response format
 
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyEvidence service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     // Detect if identifier is UUID or file_hash
     const isUUID =
@@ -173,16 +154,7 @@ chittyevidenceRoutes.get("/case/:caseId", async (c) => {
     const limit = c.req.query("limit") || "50";
     const offset = c.req.query("offset") || "0";
 
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyEvidence service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
       `https://evidence.chitty.cc/api/case/${caseId}/evidence?limit=${limit}&offset=${offset}`,
@@ -214,16 +186,7 @@ chittyevidenceRoutes.get("/:evidenceId/sync-status", async (c) => {
   try {
     const evidenceId = c.req.param("evidenceId");
 
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyEvidence service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
       `https://evidence.chitty.cc/api/evidence/${evidenceId}/sync-status`,
@@ -256,16 +219,7 @@ chittyevidenceRoutes.post("/:evidenceId/verify", async (c) => {
     const evidenceId = c.req.param("evidenceId");
     const verificationOptions = await c.req.json();
 
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyEvidence service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
       `https://evidence.chitty.cc/api/evidence/${evidenceId}/verify`,
@@ -296,17 +250,7 @@ chittyevidenceRoutes.post("/:evidenceId/verify", async (c) => {
  */
 chittyevidenceRoutes.get("/health", async (c) => {
   try {
-    const serviceToken = await getServiceToken(c.env, "chittyevidence");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          status: "degraded",
-          error: "Service token not available",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch("https://evidence.chitty.cc/health", {
       headers: {
