@@ -1873,5 +1873,32 @@ describe("dispatchToolCall", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("tenant_id and query");
     });
+
+    it("chitty_tenant_query blocks semicolons (multi-statement injection)", async () => {
+      const result = await dispatchToolCall(
+        "chitty_tenant_query",
+        {
+          tenant_id: "org-42",
+          query: "SELECT 1; DROP TABLE evidence_documents",
+        },
+        tenantEnv,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("semicolons");
+    });
+
+    it("chitty_tenant_query blocks data-modifying CTEs", async () => {
+      const result = await dispatchToolCall(
+        "chitty_tenant_query",
+        {
+          tenant_id: "org-42",
+          query:
+            "WITH deleted AS (DELETE FROM evidence_documents RETURNING *) SELECT * FROM deleted",
+        },
+        tenantEnv,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Data-modifying CTEs");
+    });
   });
 });

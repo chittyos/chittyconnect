@@ -1370,13 +1370,13 @@ const MCP_TOOLS = [
   {
     name: "chitty_tenant_list",
     description:
-      "List all provisioned tenant Neon projects with pagination. Optionally filter by status (active, deprovisioned, deleted). Connection strings are never returned in list responses.",
+      "List all provisioned tenant Neon projects with pagination. Optionally filter by status (active, suspended, deprovisioned). Connection strings are never returned in list responses.",
     inputSchema: {
       type: "object",
       properties: {
         status: {
           type: "string",
-          enum: ["active", "deprovisioned", "deleted"],
+          enum: ["active", "suspended", "deprovisioned"],
           description: "Filter by tenant status",
         },
         limit: {

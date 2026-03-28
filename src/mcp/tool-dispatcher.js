@@ -1901,8 +1901,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             isError: true,
           };
         }
-        // Safety: block mutations via MCP
-        const normalized = args.query.trim().toUpperCase();
+        // Safety: block mutations via MCP — check prefix, semicolons, and DML in CTEs
+        const trimmed = args.query.trim();
+        const normalized = trimmed.toUpperCase();
         if (
           !normalized.startsWith("SELECT") &&
           !normalized.startsWith("WITH")
@@ -1912,6 +1913,32 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
               {
                 type: "text",
                 text: "Only SELECT/WITH queries are allowed via MCP tenant_query. Use the REST API for mutations.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        // Block multi-statement injection (SELECT 1; DROP TABLE ...)
+        if (trimmed.includes(";")) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Multi-statement queries (semicolons) are not allowed via MCP tenant_query.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        // Block data-modifying CTEs (WITH deleted AS (DELETE FROM ...))
+        const dmlPattern =
+          /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE)\b/i;
+        if (normalized.startsWith("WITH") && dmlPattern.test(trimmed)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Data-modifying CTEs are not allowed via MCP tenant_query. Use the REST API for mutations.",
               },
             ],
             isError: true,

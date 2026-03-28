@@ -58,24 +58,31 @@ describe("resolveDataLayer", () => {
 });
 
 describe("queryTenantDb", () => {
-  it("executes query and returns rows with layer info", async () => {
-    mockQuery.mockResolvedValue({ rows: [{ id: 1, name: "test" }] });
+  it("throws when tenantId provided but has no connection string", async () => {
+    const env = { NEON_DATABASE_URL: "postgresql://platform-db" };
+    await expect(
+      queryTenantDb(env, "tenant-1", "SELECT * FROM t", []),
+    ).rejects.toThrow("has no connection string");
+  });
+
+  it("uses platform DB when no tenantId provided", async () => {
+    mockQuery.mockResolvedValue({ rows: [{ id: 1 }] });
 
     const env = { NEON_DATABASE_URL: "postgresql://platform-db" };
-    const result = await queryTenantDb(env, "tenant-1", "SELECT * FROM t", []);
+    const result = await queryTenantDb(env, null, "SELECT 1", []);
 
-    expect(result.rows).toEqual([{ id: 1, name: "test" }]);
-    expect(result.layer).toBe("platform"); // Falls back to platform since mock returns null
+    expect(result.rows).toEqual([{ id: 1 }]);
+    expect(result.layer).toBe("platform");
     expect(mockConnect).toHaveBeenCalled();
     expect(mockEnd).toHaveBeenCalled();
   });
 
-  it("always closes the client connection", async () => {
+  it("always closes the client connection on query error", async () => {
     mockQuery.mockRejectedValue(new Error("query failed"));
 
     const env = { NEON_DATABASE_URL: "postgresql://platform-db" };
     await expect(
-      queryTenantDb(env, "tenant-1", "BAD SQL", []),
+      queryTenantDb(env, null, "BAD SQL", []),
     ).rejects.toThrow("query failed");
 
     expect(mockEnd).toHaveBeenCalled();
