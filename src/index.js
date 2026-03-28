@@ -12,6 +12,7 @@
  */
 
 import { Hono } from "hono";
+import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { verifyWebhookSignature } from "./auth/webhook.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -1851,9 +1852,7 @@ export default {
         {
           headers: {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
+            ...corsHeaders(request),
           },
         },
       );
@@ -1889,9 +1888,7 @@ export default {
         {
           headers: {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "Authorization, *",
+            ...corsHeaders(request),
           },
         },
       );
@@ -1931,7 +1928,7 @@ export default {
 ${err.stack}`);
       return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
         status: 500,
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
     }
 
