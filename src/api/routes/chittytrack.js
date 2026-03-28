@@ -7,17 +7,15 @@
  */
 
 import { Hono } from "hono";
-import { getServiceToken } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const chittytrackRoutes = new Hono();
+chittytrackRoutes.use("*", requireServiceToken("chittytrack"));
 
 const TRACK_URL = "https://track.chitty.cc";
 
 async function proxyGet(c, path) {
-  const serviceToken = await getServiceToken(c.env, "chittytrack");
-  if (!serviceToken) {
-    return c.json({ error: "ChittyTrack service token not configured" }, 503);
-  }
+  const serviceToken = c.get("serviceToken");
 
   const url = new URL(path, TRACK_URL);
   for (const [k, v] of Object.entries(c.req.query())) {

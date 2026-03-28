@@ -7,9 +7,10 @@
  */
 
 import { Hono } from "hono";
-import { getServiceToken } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const chittycontextualRoutes = new Hono();
+chittycontextualRoutes.use("*", requireServiceToken("chittycontextual"));
 
 /**
  * POST /api/chittycontextual/analyze
@@ -38,18 +39,7 @@ chittycontextualRoutes.post("/analyze", async (c) => {
       return c.json({ error: "Invalid analysisType" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, "chittycontextual");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyContextual service token not configured",
-          details:
-            "Neither 1Password Connect nor environment variable available",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     // Forward to ChittyContextual service
     const response = await fetch("https://contextual.chitty.cc/api/analyze", {
@@ -84,16 +74,7 @@ chittycontextualRoutes.post("/extract", async (c) => {
       return c.json({ error: "text is required" }, 400);
     }
 
-    const serviceToken = await getServiceToken(c.env, "chittycontextual");
-
-    if (!serviceToken) {
-      return c.json(
-        {
-          error: "ChittyContextual service token not configured",
-        },
-        503,
-      );
-    }
+    const serviceToken = c.get("serviceToken");
 
     const response = await fetch("https://contextual.chitty.cc/api/extract", {
       method: "POST",
