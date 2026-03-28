@@ -264,7 +264,7 @@ export class ChittyOSEcosystem {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.env.CHITTY_AUTH_TOKEN}`,
+          Authorization: `Bearer ${this.env.CHITTY_AUTH_SERVICE_TOKEN || this.env.CHITTY_AUTH_TOKEN}`,
           "X-ChittyID": chittyid,
         },
         body: JSON.stringify(keyParams),

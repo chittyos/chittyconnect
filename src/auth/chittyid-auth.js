@@ -70,7 +70,7 @@ export async function verifyJWTProof(chittyid, jwtToken, env) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.CHITTY_AUTH_TOKEN}`,
+        Authorization: `Bearer ${env.CHITTY_AUTH_SERVICE_TOKEN || env.CHITTY_AUTH_TOKEN}`,
       },
       body: JSON.stringify({
         jwt: jwtToken,

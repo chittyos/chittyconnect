@@ -55,7 +55,7 @@ api.use(
       "https://chatgpt.com",
       "https://chittyconnect-ui.pages.dev",
       /\.chittyconnect-ui\.pages\.dev$/,
-      "https://dashboard.chitty.cc",
+      /^https:\/\/[a-z0-9-]+\.chitty\.cc$/,
       "http://localhost:5173",
       "http://localhost:3000",
     ],
@@ -133,7 +133,6 @@ api.get("/api/health", (c) => {
 
 // OpenAPI spec endpoint - bundled via JSON import
 api.get("/openapi.json", (c) => {
-  c.header("Access-Control-Allow-Origin", "*");
   c.header("Content-Type", "application/json");
   return c.json(openapiSpec);
 });

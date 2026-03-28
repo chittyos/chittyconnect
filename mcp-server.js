@@ -12,7 +12,7 @@
  *
  * Environment Variables:
  *   CHITTYCONNECT_URL - ChittyConnect API URL (default: https://connect.chitty.cc)
- *   CHITTY_AUTH_TOKEN - Authentication token for ChittyConnect
+ *   CHITTY_AUTH_SERVICE_TOKEN - Authentication token for ChittyConnect
  *   ENABLE_STREAMING - Enable SSE streaming (default: true)
  *   SESSION_PERSISTENCE - Enable session persistence (default: true)
  *   PLATFORM - Platform type: desktop, code, web (default: desktop)
@@ -27,7 +27,7 @@ import { MCP_TOOLS } from './src/mcp/tool-registry.js';
 // Configuration from environment
 const config = {
   chittyconnectUrl: process.env.CHITTYCONNECT_URL || 'https://connect.chitty.cc',
-  authToken: process.env.CHITTY_AUTH_TOKEN,
+  authToken: process.env.CHITTY_AUTH_SERVICE_TOKEN,
   enableStreaming: process.env.ENABLE_STREAMING !== 'false',
   sessionPersistence: process.env.SESSION_PERSISTENCE !== 'false',
   platform: process.env.PLATFORM || 'desktop',
@@ -36,8 +36,8 @@ const config = {
 
 // Validate configuration
 if (!config.authToken) {
-  console.error('[ChittyConnect MCP] Error: CHITTY_AUTH_TOKEN is required');
-  console.error('Please set the CHITTY_AUTH_TOKEN environment variable');
+  console.error('[ChittyConnect MCP] Error: CHITTY_AUTH_SERVICE_TOKEN is required');
+  console.error('Please set the CHITTY_AUTH_SERVICE_TOKEN environment variable');
   process.exit(1);
 }
 
