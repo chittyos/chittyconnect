@@ -30,9 +30,6 @@ import { LearningEngine } from "./intelligence/learning-engine.js";
 import { TaskDecompositionEngine } from "./intelligence/task-decomposition-engine.js";
 import { routeAgentRequest } from "agents";
 import { McpConnectAgent } from "./mcp/agent.js";
-
-// Static handler for /chatgpt/mcp — created once at module load
-const chatgptMcpHandler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
@@ -1911,15 +1908,18 @@ export default {
       request = await stripRedirectUriFromTokenBody(request);
     }
 
-    // Route /chatgpt/mcp directly to McpConnectAgent BEFORE OAuthProvider.
-    // OAuthProvider strips resource bindings (KV, DO, R2) from env, so the
-    // chatgpt-mcp Hono sub-router cannot access MCP_AGENT DO binding.
-    // Handle it here where we have the full env with all bindings.
+    // Route /chatgpt/mcp to McpConnectAgent via agents routing.
+    // Rewrite URL to /agents/mcp-agent/chatgpt-mcp so routeAgentRequest
+    // resolves it to the MCP_AGENT DO binding (mcp-agent in kebab-case).
+    // This preserves full env (KV, DO, R2) which OAuthProvider strips.
+    // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
     if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
-      return chatgptMcpHandler.fetch(request, env, ctx);
+      const rewrittenUrl = new URL(request.url);
+      rewrittenUrl.pathname = "/agents/mcp-agent/chatgpt-mcp" + url.pathname.slice("/chatgpt/mcp".length);
+      request = new Request(rewrittenUrl.toString(), request);
     }
 
-    // Route Agents SDK WebSocket upgrades to McpConnectAgent DO
+    // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
     const agentResponse = await routeAgentRequest(request, env);
     if (agentResponse) return agentResponse;
 
