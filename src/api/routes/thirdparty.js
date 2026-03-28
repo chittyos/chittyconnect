@@ -867,8 +867,6 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
   }
 });
 
-export { thirdpartyRoutes };
-
 // ── Mercury Banking API Proxy ────────────────────────────────────────
 // Mercury API: https://api.mercury.com/api/v1
 // Auth: Bearer token per business login (one API key per Mercury business)
@@ -879,28 +877,20 @@ const MERCURY_API = "https://api.mercury.com/api/v1";
 
 /**
  * Resolve Mercury API token for a given integration.
- * Checks: request header > env secret > credential broker
+ * Checks: request header > env secret > credential broker (1Password)
  */
 async function getMercuryToken(c, integrationSlug) {
-  // 1. Explicit header (for testing)
+  const slug = integrationSlug || "default";
+
   const headerToken = c.req.header("X-Mercury-Token");
   if (headerToken) return headerToken;
 
-  // 2. Env secret by slug pattern: MERCURY_API_KEY_{SLUG}
-  const envKey = `MERCURY_API_KEY_${(integrationSlug || "default").toUpperCase()}`;
+  const envKey = `MERCURY_API_KEY_${slug.toUpperCase()}`;
   if (c.env[envKey]) return c.env[envKey];
 
-  // 3. Generic fallback
   if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
 
-  // 4. Credential broker (1Password)
-  const { getCredential } = await import("../../lib/credential-helper.js");
-  return getCredential(
-    c.env,
-    `integrations/mercury/${integrationSlug || "default"}`,
-    "MERCURY_API_TOKEN",
-    "Mercury",
-  );
+  return getCredential(c.env, `integrations/mercury/${slug}`, "MERCURY_API_TOKEN", "Mercury");
 }
 
 async function mercuryFetch(token, path, options = {}) {
@@ -920,90 +910,95 @@ async function mercuryFetch(token, path, options = {}) {
 }
 
 /**
- * GET /api/thirdparty/mercury/accounts
- * List all bank accounts for a Mercury login.
- * Query: ?slug=mgmt (resolves API key by slug)
+ * Extract the integration slug from query params.
+ * Accepts ?slug= or ?entity= (legacy).
  */
-thirdpartyRoutes.get("/mercury/accounts", async (c) => {
-  try {
-    const slug = c.req.query("slug") || c.req.query("entity");
-    const token = await getMercuryToken(c, slug);
-    if (!token) {
-      return c.json({ error: "Mercury API token not configured for " + (slug || "default") }, 503);
-    }
-    const data = await mercuryFetch(token, "/accounts");
-    return c.json(data);
-  } catch (error) {
-    return c.json({ error: error.message }, 500);
-  }
-});
+function getSlug(c) {
+  return c.req.query("slug") || c.req.query("entity");
+}
 
 /**
- * GET /api/thirdparty/mercury/account/:accountId
- * Get details for a specific Mercury bank account.
- * Query: ?slug=mgmt
+ * Middleware: resolve Mercury token and attach to context.
+ * Returns 503 if no token can be resolved for the slug.
  */
-thirdpartyRoutes.get("/mercury/account/:accountId", async (c) => {
-  try {
-    const slug = c.req.query("slug") || c.req.query("entity");
-    const accountId = c.req.param("accountId");
-    const token = await getMercuryToken(c, slug);
-    if (!token) {
-      return c.json({ error: "Mercury API token not configured" }, 503);
-    }
-    const data = await mercuryFetch(token, `/account/${accountId}`);
-    return c.json(data);
-  } catch (error) {
-    return c.json({ error: error.message }, 500);
+async function requireMercuryToken(c, next) {
+  const slug = c.get("mercurySlug") ?? getSlug(c);
+  const token = await getMercuryToken(c, slug);
+  if (!token) {
+    return c.json({ error: `Mercury API token not configured for ${slug || "default"}` }, 503);
   }
-});
+  c.set("mercuryToken", token);
+  c.set("mercurySlug", slug);
+  await next();
+}
 
 /**
- * GET /api/thirdparty/mercury/account/:accountId/transactions
- * List transactions for a Mercury bank account.
- * Query: ?slug=mgmt&start=2026-01-01&end=2026-03-28&limit=100&offset=0
+ * Validate :accountId path param — alphanumeric, hyphens, underscores only.
  */
-thirdpartyRoutes.get("/mercury/account/:accountId/transactions", async (c) => {
-  try {
-    const slug = c.req.query("slug") || c.req.query("entity");
-    const accountId = c.req.param("accountId");
-    const token = await getMercuryToken(c, slug);
-    if (!token) {
-      return c.json({ error: "Mercury API token not configured" }, 503);
-    }
-    const params = new URLSearchParams();
-    if (c.req.query("start")) params.set("start", c.req.query("start"));
-    if (c.req.query("end")) params.set("end", c.req.query("end"));
-    if (c.req.query("limit")) params.set("limit", c.req.query("limit"));
-    if (c.req.query("offset")) params.set("offset", c.req.query("offset"));
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    const data = await mercuryFetch(token, `/account/${accountId}/transactions${qs}`);
-    return c.json(data);
-  } catch (error) {
-    return c.json({ error: error.message }, 500);
+function validateAccountId(c, next) {
+  const accountId = c.req.param("accountId");
+  if (!/^[a-zA-Z0-9_-]+$/.test(accountId)) {
+    return c.json({ error: "Invalid account ID format" }, 400);
   }
-});
+  return next();
+}
+
+/**
+ * Wrap Mercury handler with error logging.
+ */
+function mercuryHandler(operation, handler) {
+  return async (c) => {
+    try {
+      return await handler(c);
+    } catch (error) {
+      const slug = c.get("mercurySlug") || "default";
+      console.error(`[Mercury] ${operation} failed (slug=${slug}):`, error.message);
+      return c.json({ error: error.message }, 500);
+    }
+  };
+}
+
+/** GET /api/thirdparty/mercury/accounts */
+thirdpartyRoutes.get("/mercury/accounts", requireMercuryToken, mercuryHandler("GET /accounts", async (c) => {
+  const data = await mercuryFetch(c.get("mercuryToken"), "/accounts");
+  return c.json(data);
+}));
+
+/** GET /api/thirdparty/mercury/account/:accountId */
+thirdpartyRoutes.get("/mercury/account/:accountId", validateAccountId, requireMercuryToken, mercuryHandler("GET /account/:id", async (c) => {
+  const data = await mercuryFetch(c.get("mercuryToken"), `/account/${c.req.param("accountId")}`);
+  return c.json(data);
+}));
+
+/** GET /api/thirdparty/mercury/account/:accountId/transactions */
+thirdpartyRoutes.get("/mercury/account/:accountId/transactions", validateAccountId, requireMercuryToken, mercuryHandler("GET /account/:id/transactions", async (c) => {
+  const params = new URLSearchParams();
+  for (const key of ["start", "end", "limit", "offset"]) {
+    const val = c.req.query(key);
+    if (val) params.set(key, val);
+  }
+  const qs = params.toString() ? `?${params}` : "";
+  const data = await mercuryFetch(c.get("mercuryToken"), `/account/${c.req.param("accountId")}/transactions${qs}`);
+  return c.json(data);
+}));
 
 /**
  * POST /api/thirdparty/mercury/refresh
- * Keepalive ping — prevents Mercury token from expiring (30-day inactivity).
- * Body: { slug: "mgmt" } or query: ?slug=mgmt
+ * Keepalive ping — any successful API call resets Mercury's 30-day inactivity timer.
  */
-thirdpartyRoutes.post("/mercury/refresh", async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const slug = body.slug || c.req.query("slug") || c.req.query("entity");
-    const token = await getMercuryToken(c, slug);
-    if (!token) {
-      return c.json({ error: "Mercury API token not configured for " + (slug || "default") }, 503);
-    }
-    // Keepalive: just list accounts — any successful API call resets the 30-day timer
-    const data = await mercuryFetch(token, "/accounts");
-    return c.json({ ok: true, slug, accounts: data.accounts?.length || 0, timestamp: new Date().toISOString() });
-  } catch (error) {
-    return c.json({ error: error.message, slug: c.req.query("slug") }, 500);
-  }
-});
+thirdpartyRoutes.post("/mercury/refresh", async (c, next) => {
+  const body = await c.req.json().catch(() => ({}));
+  c.set("mercurySlug", body.slug || getSlug(c));
+  await next();
+}, requireMercuryToken, mercuryHandler("POST /refresh", async (c) => {
+  const slug = c.get("mercurySlug");
+  const data = await mercuryFetch(c.get("mercuryToken"), "/accounts");
+  return c.json({
+    ok: true,
+    slug,
+    accounts: data.accounts?.length || 0,
+    timestamp: new Date().toISOString(),
+  });
+}));
 
-// Legacy aliases for ChittyFinance compatibility
-// ChittyFinance calls /api/mercury/accounts → maps to /api/thirdparty/mercury/accounts
+export { thirdpartyRoutes };

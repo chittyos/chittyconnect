@@ -14,6 +14,21 @@ describe("CORS origin validation", () => {
     expect(getAllowedOrigin("http://127.0.0.1:8787")).toBe("http://127.0.0.1:8787");
   });
 
+  it("allows ChatGPT origins", () => {
+    expect(getAllowedOrigin("https://chat.openai.com")).toBe("https://chat.openai.com");
+    expect(getAllowedOrigin("https://chatgpt.com")).toBe("https://chatgpt.com");
+  });
+
+  it("allows Cloudflare Pages preview origins", () => {
+    expect(getAllowedOrigin("https://chittyconnect-ui.pages.dev")).toBe("https://chittyconnect-ui.pages.dev");
+    expect(getAllowedOrigin("https://abc123.chittyconnect-ui.pages.dev")).toBe("https://abc123.chittyconnect-ui.pages.dev");
+  });
+
+  it("rejects HTTP for production domains", () => {
+    expect(getAllowedOrigin("http://connect.chitty.cc")).toBeNull();
+    expect(getAllowedOrigin("http://chatgpt.com")).toBeNull();
+  });
+
   it("rejects unknown origins", () => {
     expect(getAllowedOrigin("https://evil.com")).toBeNull();
     expect(getAllowedOrigin("https://not-chitty.cc")).toBeNull();
@@ -32,6 +47,7 @@ describe("CORS origin validation", () => {
     const headers = corsHeaders(req);
     expect(headers["Access-Control-Allow-Origin"]).toBe("https://dashboard.chitty.cc");
     expect(headers["Access-Control-Allow-Methods"]).toContain("GET");
+    expect(headers.Vary).toBe("Origin");
   });
 
   it("corsHeaders omits origin when disallowed", () => {

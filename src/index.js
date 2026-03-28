@@ -1382,7 +1382,7 @@ app.get("/sse", (c) => {
   }
 
   try {
-    return sm.createStream(sessionId, {});
+    return sm.createStream(sessionId, { origin: c.req.header("Origin") });
   } catch (err) {
     console.error("[SSE] Error creating stream:", err?.message || err);
     return c.json(
@@ -1911,9 +1911,16 @@ export default {
     // This preserves full env (KV, DO, R2) which OAuthProvider strips.
     // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
     if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
-      // Use McpConnectAgent.serve() directly with full env (has MCP_AGENT DO binding)
-      const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
-      return handler.fetch(request, env, ctx);
+      try {
+        const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
+        return handler.fetch(request, env, ctx);
+      } catch (err) {
+        console.error(`[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`);
+        return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+        });
+      }
     }
 
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
