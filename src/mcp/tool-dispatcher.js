@@ -234,10 +234,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           Authorization: `Bearer ${serviceToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: {
           entity_type: args.entity_type,
           metadata: args.metadata,
-        }),
+        },
       });
       if (!response.ok) {
         const errorText = await response.text();
@@ -304,10 +304,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
+const response = await fetch(
         "/api/dashboard/stats",
         {},
       );
@@ -318,13 +315,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_evidence") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const url = args.case_id
+const url = args.case_id
         ? `/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
         : "/api/evidence";
-      const response = await fetch(url, {});
+      const response = await serviceFetch(env, "ledger", url);
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -332,10 +326,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_facts") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await serviceFetch(env, "ledger", 
+const response = await serviceFetch(env, "ledger", 
         `/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
         {},
       );
@@ -346,10 +337,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_mint") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      // Pre-flight: verify the cited evidence exists in ChittyLedger
+// Pre-flight: verify the cited evidence exists in ChittyLedger
       const evidenceCheck = await serviceFetch(env, "ledger", 
         `/api/evidence/${encodeURIComponent(args.evidence_id)}`,
         {},
@@ -385,7 +373,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const response = await serviceFetch(env, "ledger", "/api/facts", {
         method: "POST",
         
-        body: JSON.stringify({
+        body: {
           evidence_id: args.evidence_id,
           case_id: args.case_id,
           text: args.text,
@@ -394,7 +382,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           category: args.category,
           // Anchor fact to evidence integrity state at mint time
           evidence_hash_at_mint: evidenceHash,
-        }),
+        },
       });
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -403,10 +391,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_validate") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      // Pre-flight: verify all corroborating evidence IDs exist (parallel)
+// Pre-flight: verify all corroborating evidence IDs exist (parallel)
       if (args.corroborating_evidence?.length) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
@@ -436,11 +421,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           
-          body: JSON.stringify({
+          body: {
             validation_method: args.validation_method,
             corroborating_evidence: args.corroborating_evidence,
             notes: args.notes,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -450,10 +435,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_seal") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      if (!args.actor_chitty_id) {
+if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -487,10 +469,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           
-          body: JSON.stringify({
+          body: {
             sealed_by: args.actor_chitty_id,
             seal_reason: args.seal_reason,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -524,10 +506,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           "PROOF_Q binding not configured. Proof will not be minted.";
       }
     } else if (name === "chitty_fact_dispute") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      if (!args.actor_chitty_id) {
+if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -585,12 +564,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           
-          body: JSON.stringify({
+          body: {
             reason: args.reason,
             challenger_chitty_id:
               args.challenger_chitty_id || args.actor_chitty_id,
             counter_evidence_ids: args.counter_evidence_ids,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -600,10 +579,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_export") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      if (!args.actor_chitty_id) {
+if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -732,13 +708,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = data;
       }
     } else if (name === "chitty_ledger_contradictions") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const url = args.case_id
+const url = args.case_id
         ? `/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
         : "/api/contradictions";
-      const response = await fetch(url, {});
+      const response = await serviceFetch(env, "ledger", url);
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -749,10 +722,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
     else if (name === "chitty_ledger_record") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await serviceFetch(env, "ledger", "/api/ledger", {
+const response = await serviceFetch(env, "ledger", "/api/ledger", {
         method: "POST",
         
         body: JSON.stringify(args),
@@ -764,10 +734,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_query") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       if (args.record_type) params.set("type", args.record_type);
       if (args.entity_id) params.set("entity_id", args.entity_id);
       if (args.actor) params.set("actor", args.actor);
@@ -784,10 +751,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_verify") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
+const response = await fetch(
         "/api/ledger/verify",
         {},
       );
@@ -798,10 +762,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_statistics") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
+const response = await fetch(
         "/api/ledger/statistics",
         {},
       );
@@ -812,10 +773,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_chain_of_custody") {
-      const { error: ledgerErr,  } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      if (!args.entity_id) {
+if (!args.entity_id) {
         return {
           content: [
             { type: "text", text: "Missing required parameter: entity_id" },
@@ -866,7 +824,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const response = await serviceFetch(env, "contextual", "/api/topics", {
         method: "POST",
         headers: { ...ctxAuth, "Content-Type": "application/json" },
-        body: JSON.stringify({ query: args.query }),
+        body: { query: args.query },
       });
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -1023,20 +981,14 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await serviceFetch(env, "finance", "/api/entities", {
+const response = await serviceFetch(env, "finance", "/api/entities", {
         
       });
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await serviceFetch(env, "finance", 
+const response = await serviceFetch(env, "finance", 
         `/api/entities/${encodeURIComponent(args.entity)}/balances`,
         {},
       );
@@ -1044,10 +996,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_transactions") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await serviceFetch(env, "finance", 
@@ -1058,10 +1007,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_cash_flow") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await serviceFetch(env, "finance", 
@@ -1072,10 +1018,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_inter_entity") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
@@ -1087,30 +1030,23 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_detect_transfers") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch(
-        "/api/transfers/detect",
+const response = await serviceFetch(env, "finance", "/api/transfers/detect",
         {
           method: "POST",
           
-          body: JSON.stringify({
+          body: {
             entity: args.entity,
             start: args.start,
             end: args.end,
             threshold: args.threshold,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_flow_of_funds") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
       const response = await serviceFetch(env, "finance", 
@@ -1121,11 +1057,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-      const { error: financeErr,  } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch(
-        "/api/sync/mercury",
+const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         {
           method: "POST",
           
@@ -1180,12 +1112,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             project_path: args.project_path,
             platform: args.platform || "claude_code",
             support_type: args.support_type || "development",
             organization: args.organization,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "ContextResolve");
@@ -1207,13 +1139,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             session_id: args.session_id,
             chitty_id: args.chitty_id,
             project_slug: args.project_slug,
             metrics: args.metrics,
             decisions: args.decisions,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCommit");
@@ -1233,12 +1165,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             chitty_id: args.chitty_id,
             project_slug: args.project_slug,
             name: args.name,
             state: args.state,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
@@ -1283,11 +1215,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             sessionId: args.session_id || "default",
             query: args.query,
             limit: args.limit ? Number(args.limit) : 5,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "MemoryRecall");
@@ -1408,7 +1340,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         const response = await fetch(neonDbUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, params: args.params }),
+          body: { query, params: args.params },
         });
         const fetchErr = await checkFetchError(response, "Neon");
         if (fetchErr) return fetchErr;
@@ -1580,7 +1512,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             Authorization: `Bearer ${apiToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ query: args.query, variables }),
+          body: { query: args.query, variables },
         },
       );
 
@@ -1689,11 +1621,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         const response = await fetch(`${baseUrl}/api/v1/tenants/provision`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             tenantId: args.tenant_id,
             region: args.region,
             pgVersion: args.pg_version,
-          }),
+          },
         });
         const { data, error: respErr } = await checkAndParseJson(
           response,
