@@ -13,15 +13,15 @@
 
 const DEFAULTS = {
   tasks:       { enabled: true, mode: "binding", binding: "SVC_TASKS" },
-  ledger:      { enabled: true, mode: "http", url: "https://ledger.chitty.cc" },
-  finance:     { enabled: true, mode: "http", url: "https://finance.chitty.cc" },
-  contextual:  { enabled: true, mode: "http", url: "https://contextual.chitty.cc" },
-  id:          { enabled: true, mode: "http", url: "https://id.chitty.cc" },
-  mint:        { enabled: true, mode: "http", url: "https://mint.chitty.cc" },
-  evidence:    { enabled: true, mode: "http", url: "https://evidence.chitty.cc" },
-  chronicle:   { enabled: true, mode: "http", url: "https://chronicle.chitty.cc" },
-  disputes:    { enabled: true, mode: "http", url: "https://disputes.chitty.cc" },
-  score:       { enabled: true, mode: "http", url: "https://score.chitty.cc" },
+  ledger:      { enabled: true, mode: "binding", binding: "SVC_LEDGER" },
+  finance:     { enabled: true, mode: "binding", binding: "SVC_FINANCE" },
+  contextual:  { enabled: true, mode: "binding", binding: "SVC_CONTEXTUAL" },
+  id:          { enabled: true, mode: "binding", binding: "SVC_ID" },
+  mint:        { enabled: true, mode: "binding", binding: "SVC_ID" },
+  evidence:    { enabled: true, mode: "binding", binding: "SVC_EVIDENCE" },
+  chronicle:   { enabled: true, mode: "binding", binding: "SVC_CHRONICLE" },
+  disputes:    { enabled: true, mode: "binding", binding: "SVC_DISPUTES" },
+  score:       { enabled: true, mode: "binding", binding: "SVC_SCORE" },
 };
 
 let _cache = null;
