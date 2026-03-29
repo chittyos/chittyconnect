@@ -149,7 +149,8 @@
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
 
@@ -238,7 +239,8 @@
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
 
@@ -331,7 +333,8 @@
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     }
   }
