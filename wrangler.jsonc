@@ -110,9 +110,9 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }]
+      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
-        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
@@ -199,9 +199,9 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }]
+      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
-        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
@@ -292,9 +292,9 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }]
+      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
-        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
