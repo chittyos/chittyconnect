@@ -38,7 +38,8 @@ async function loadSwitches(env) {
   try {
     const raw = env.IDEMP_KV ? await env.IDEMP_KV.get("service:switches") : null;
     _cache = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
-  } catch {
+  } catch (err) {
+    console.error("[service-switch] Failed to load switches from KV:", err);
     _cache = { ...DEFAULTS };
   }
   _cacheTs = now;
@@ -80,6 +81,13 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
     ...options.headers,
   };
 
+  if (sw.mode === "binding" && sw.binding && !env[sw.binding]) {
+    console.error(`[service-switch] Binding "${sw.binding}" for "${serviceName}" not in env. Check wrangler.jsonc services.`);
+    return new Response(JSON.stringify({
+      error: `Service "${serviceName}" binding "${sw.binding}" not configured in wrangler.jsonc`,
+    }), { status: 503, headers: { "Content-Type": "application/json" } });
+  }
+
   if (sw.mode === "binding" && sw.binding && env[sw.binding]) {
     // Service binding — direct Worker-to-Worker, no auth needed
     const req = new Request(`https://internal${path}`, {
@@ -96,6 +104,8 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
     const token = await getServiceToken(env, serviceName);
     if (token) {
       headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn(`[service-switch] No service token for "${serviceName}" in HTTP mode`);
     }
 
     const req = new Request(`${sw.url}${path}`, {
