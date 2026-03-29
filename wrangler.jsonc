@@ -111,6 +111,9 @@
       },
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }]
+      "services": [
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+      ],
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -189,6 +192,9 @@
       },
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }]
+      "services": [
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+      ],
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -271,6 +277,9 @@
       },
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }]
+      "services": [
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" }
+      ],
     }
   }
 
