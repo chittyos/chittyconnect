@@ -306,7 +306,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-      const response = await fetch("/api/dashboard/stats", {});
+      const response = await serviceFetch(env, "ledger", "/api/dashboard/stats");
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -398,9 +398,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.corroborating_evidence?.length) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
-            const resp = await fetch(
+            const resp = await serviceFetch(
+              env,
+              "ledger",
               `/api/evidence/${encodeURIComponent(evId)}`,
-              {},
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -545,9 +546,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.counter_evidence_ids?.length) {
         const checks = await Promise.all(
           args.counter_evidence_ids.map(async (evId) => {
-            const resp = await fetch(
+            const resp = await serviceFetch(
+              env,
+              "ledger",
               `/api/evidence/${encodeURIComponent(evId)}`,
-              {},
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -766,7 +768,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_verify") {
-      const response = await fetch("/api/ledger/verify", {});
+      const response = await serviceFetch(env, "ledger", "/api/ledger/verify");
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -774,7 +776,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_statistics") {
-      const response = await fetch("/api/ledger/statistics", {});
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        "/api/ledger/statistics",
+      );
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -1133,12 +1139,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: {
+          body: JSON.stringify({
             project_path: args.project_path,
             platform: args.platform || "claude_code",
             support_type: args.support_type || "development",
             organization: args.organization,
-          },
+          }),
         },
       );
       const fetchErr = await checkFetchError(response, "ContextResolve");
@@ -1160,13 +1166,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: {
+          body: JSON.stringify({
             session_id: args.session_id,
             chitty_id: args.chitty_id,
             project_slug: args.project_slug,
             metrics: args.metrics,
             decisions: args.decisions,
-          },
+          }),
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCommit");
@@ -1186,12 +1192,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: {
+          body: JSON.stringify({
             chitty_id: args.chitty_id,
             project_slug: args.project_slug,
             name: args.name,
             state: args.state,
-          },
+          }),
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
@@ -1236,11 +1242,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         {
           method: "POST",
           headers: { ...authHeader, "Content-Type": "application/json" },
-          body: {
+          body: JSON.stringify({
             sessionId: args.session_id || "default",
             query: args.query,
             limit: args.limit ? Number(args.limit) : 5,
-          },
+          }),
         },
       );
       const fetchErr = await checkFetchError(response, "MemoryRecall");
@@ -1361,7 +1367,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         const response = await fetch(neonDbUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: { query, params: args.params },
+          body: JSON.stringify({ query, params: args.params }),
         });
         const fetchErr = await checkFetchError(response, "Neon");
         if (fetchErr) return fetchErr;
@@ -1533,7 +1539,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             Authorization: `Bearer ${apiToken}`,
             "Content-Type": "application/json",
           },
-          body: { query: args.query, variables },
+          body: JSON.stringify({ query: args.query, variables }),
         },
       );
 
