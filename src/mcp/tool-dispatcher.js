@@ -854,134 +854,50 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Evidence AI Search tools ────────────────────────────────────
+    // ── Evidence tools — delegated to ChittyStorage (search/retrieve/ingest) ──
     else if (name === "chitty_evidence_search") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID;
-      if (!accountId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
-            },
-          ],
-          isError: true,
-        };
+      if (!env.SVC_STORAGE) {
+        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
       }
-      const aiSearchToken = env.AI_SEARCH_TOKEN;
-      if (!aiSearchToken) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
-            },
-          ],
-          isError: true,
-        };
+      const params = new URLSearchParams({ q: args.query || "", limit: String(args.max_num_results || 10) });
+      if (args.entity_slug) params.set("entity", args.entity_slug);
+      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?${params}`);
+      const data = await response.json();
+      if (!data.docs || !data.docs.length) {
+        return { content: [{ type: "text", text: "No matching documents found." }] };
       }
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${aiSearchToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: args.query }],
-            max_num_results: 10,
-          }),
-        },
-      );
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
-      }
-      if (!data || !data.success) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `AI Search error (${response.status}): ${(text || "").slice(0, 300)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-      const chunks = data.result?.chunks || [];
-      const formatted = chunks
-        .slice(0, 5)
-        .map((d) => {
-          const fname = d.item?.key || d.filename || "unknown";
-          const score = (d.score || 0).toFixed(3);
-          const snippet = (d.text || "").slice(0, 200).replace(/\n/g, " ");
-          return `[${score}] ${fname}\n  ${snippet}`;
-        })
-        .join("\n\n");
-      return {
-        content: [
-          { type: "text", text: formatted || "No matching documents found." },
-        ],
-      };
+      const formatted = data.docs.slice(0, 10).map((d) => {
+        const tags = d.tags || {};
+        const entity = tags.primary_entity || "unlinked";
+        const docType = tags.doc_type || "unclassified";
+        return `[${entity}/${docType}] ${d.filename}\n  hash: ${d.content_hash}\n  tier: ${d.processing_tier} | created: ${d.created_at}`;
+      }).join("\n\n");
+      return { content: [{ type: "text", text: formatted }] };
     } else if (name === "chitty_evidence_retrieve") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID;
-      if (!accountId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
-            },
-          ],
-          isError: true,
-        };
+      if (!env.SVC_STORAGE) {
+        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
       }
-      const aiSearchToken = env.AI_SEARCH_TOKEN;
-      if (!aiSearchToken) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
-            },
-          ],
-          isError: true,
-        };
+      const hash = args.content_hash || args.evidence_id || args.query;
+      if (!hash) {
+        return { content: [{ type: "text", text: "Provide content_hash, evidence_id, or query to retrieve." }], isError: true };
       }
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${aiSearchToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: args.query }],
-            max_num_results: args.max_num_results || 10,
-          }),
-        },
-      );
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `AI Search retrieve error (${response.status}): ${(text || "").slice(0, 300)}`,
-            },
-          ],
-          isError: true,
-        };
+      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?q=${encodeURIComponent(hash)}&limit=1`);
+      const data = await response.json();
+      if (!data.docs?.length) {
+        return { content: [{ type: "text", text: `Document not found: ${hash}` }], isError: true };
       }
+      const doc = data.docs[0];
+      result = {
+        chitty_id: doc.chitty_id,
+        content_hash: doc.content_hash,
+        filename: doc.filename,
+        processing_tier: doc.processing_tier,
+        tags: doc.tags || {},
+        entities: doc.entities || [],
+        file_url: `https://storage.chitty.cc/api/files/${doc.content_hash}`,
+      };
     }
 
-    // ── Evidence CRUD tools (ingest/verify) ─────────────────────────
     else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
       const endpoint =
