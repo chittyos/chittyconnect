@@ -265,7 +265,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           isError: true,
         };
       }
-      const response = await serviceFetch(env, "id", 
+      const response = await serviceFetch(
+        env,
+        "id",
         `/api/v2/chittyid/validate/${encodeURIComponent(args.chitty_id)}`,
         { headers: { Authorization: `Bearer ${serviceToken}` } },
       );
@@ -304,10 +306,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-const response = await fetch(
-        "/api/dashboard/stats",
-        {},
-      );
+      const response = await fetch("/api/dashboard/stats", {});
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -315,7 +314,7 @@ const response = await fetch(
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_evidence") {
-const url = args.case_id
+      const url = args.case_id
         ? `/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
         : "/api/evidence";
       const response = await serviceFetch(env, "ledger", url);
@@ -326,7 +325,9 @@ const url = args.case_id
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_facts") {
-const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
         {},
       );
@@ -337,8 +338,10 @@ const response = await serviceFetch(env, "ledger",
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_mint") {
-// Pre-flight: verify the cited evidence exists in ChittyLedger
-      const evidenceCheck = await serviceFetch(env, "ledger", 
+      // Pre-flight: verify the cited evidence exists in ChittyLedger
+      const evidenceCheck = await serviceFetch(
+        env,
+        "ledger",
         `/api/evidence/${encodeURIComponent(args.evidence_id)}`,
         {},
       );
@@ -372,7 +375,7 @@ const response = await serviceFetch(env, "ledger",
 
       const response = await serviceFetch(env, "ledger", "/api/facts", {
         method: "POST",
-        
+
         body: {
           evidence_id: args.evidence_id,
           case_id: args.case_id,
@@ -391,7 +394,7 @@ const response = await serviceFetch(env, "ledger",
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_validate") {
-// Pre-flight: verify all corroborating evidence IDs exist (parallel)
+      // Pre-flight: verify all corroborating evidence IDs exist (parallel)
       if (args.corroborating_evidence?.length) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
@@ -416,11 +419,13 @@ const response = await serviceFetch(env, "ledger",
         }
       }
 
-      const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/facts/${encodeURIComponent(args.fact_id)}/validate`,
         {
           method: "POST",
-          
+
           body: {
             validation_method: args.validation_method,
             corroborating_evidence: args.corroborating_evidence,
@@ -435,7 +440,7 @@ const response = await serviceFetch(env, "ledger",
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_seal") {
-if (!args.actor_chitty_id) {
+      if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -464,11 +469,13 @@ if (!args.actor_chitty_id) {
       }
 
       // Seal the fact in ChittyLedger
-      const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/facts/${encodeURIComponent(args.fact_id)}/seal`,
         {
           method: "POST",
-          
+
           body: {
             sealed_by: args.actor_chitty_id,
             seal_reason: args.seal_reason,
@@ -506,7 +513,7 @@ if (!args.actor_chitty_id) {
           "PROOF_Q binding not configured. Proof will not be minted.";
       }
     } else if (name === "chitty_fact_dispute") {
-if (!args.actor_chitty_id) {
+      if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -559,11 +566,13 @@ if (!args.actor_chitty_id) {
         }
       }
 
-      const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/facts/${encodeURIComponent(args.fact_id)}/dispute`,
         {
           method: "POST",
-          
+
           body: {
             reason: args.reason,
             challenger_chitty_id:
@@ -579,7 +588,7 @@ if (!args.actor_chitty_id) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_export") {
-if (!args.actor_chitty_id) {
+      if (!args.actor_chitty_id) {
         return {
           content: [
             {
@@ -605,7 +614,9 @@ if (!args.actor_chitty_id) {
 
       if (args.format === "pdf") {
         // Fetch fact with proof data
-        const factResp = await serviceFetch(env, "ledger", 
+        const factResp = await serviceFetch(
+          env,
+          "ledger",
           `/api/facts/${encodeURIComponent(args.fact_id)}/export`,
           {},
         );
@@ -696,7 +707,9 @@ if (!args.actor_chitty_id) {
         };
       } else {
         // JSON export — fetch full fact with proof bundle
-        const response = await serviceFetch(env, "ledger", 
+        const response = await serviceFetch(
+          env,
+          "ledger",
           `/api/facts/${encodeURIComponent(args.fact_id)}/export`,
           {},
         );
@@ -708,7 +721,7 @@ if (!args.actor_chitty_id) {
         result = data;
       }
     } else if (name === "chitty_ledger_contradictions") {
-const url = args.case_id
+      const url = args.case_id
         ? `/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
         : "/api/contradictions";
       const response = await serviceFetch(env, "ledger", url);
@@ -722,9 +735,9 @@ const url = args.case_id
 
     // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
     else if (name === "chitty_ledger_record") {
-const response = await serviceFetch(env, "ledger", "/api/ledger", {
+      const response = await serviceFetch(env, "ledger", "/api/ledger", {
         method: "POST",
-        
+
         body: JSON.stringify(args),
       });
       const { data, error: respErr } = await checkAndParseJson(
@@ -734,13 +747,15 @@ const response = await serviceFetch(env, "ledger", "/api/ledger", {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_query") {
-const params = new URLSearchParams();
+      const params = new URLSearchParams();
       if (args.record_type) params.set("type", args.record_type);
       if (args.entity_id) params.set("entity_id", args.entity_id);
       if (args.actor) params.set("actor", args.actor);
       if (args.status) params.set("status", args.status);
       if (args.limit) params.set("limit", String(args.limit));
-      const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/ledger?${params}`,
         {},
       );
@@ -751,10 +766,7 @@ const params = new URLSearchParams();
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_verify") {
-const response = await fetch(
-        "/api/ledger/verify",
-        {},
-      );
+      const response = await fetch("/api/ledger/verify", {});
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -762,10 +774,7 @@ const response = await fetch(
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_statistics") {
-const response = await fetch(
-        "/api/ledger/statistics",
-        {},
-      );
+      const response = await fetch("/api/ledger/statistics", {});
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -773,7 +782,7 @@ const response = await fetch(
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_chain_of_custody") {
-if (!args.entity_id) {
+      if (!args.entity_id) {
         return {
           content: [
             { type: "text", text: "Missing required parameter: entity_id" },
@@ -781,7 +790,9 @@ if (!args.entity_id) {
           isError: true,
         };
       }
-      const response = await serviceFetch(env, "ledger", 
+      const response = await serviceFetch(
+        env,
+        "ledger",
         `/api/ledger/${encodeURIComponent(args.entity_id)}/custody`,
         {},
       );
@@ -805,7 +816,9 @@ if (!args.entity_id) {
       if (args.start_date) params.set("start", args.start_date);
       if (args.end_date) params.set("end", args.end_date);
       if (args.source) params.set("source", args.source);
-      const response = await serviceFetch(env, "contextual", 
+      const response = await serviceFetch(
+        env,
+        "contextual",
         `/api/messages?${params.toString()}`,
         { headers: ctxAuth },
       );
@@ -981,14 +994,14 @@ if (!args.entity_id) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
-const response = await serviceFetch(env, "finance", "/api/entities", {
-        
-      });
+      const response = await serviceFetch(env, "finance", "/api/entities", {});
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
-const response = await serviceFetch(env, "finance", 
+      const response = await serviceFetch(
+        env,
+        "finance",
         `/api/entities/${encodeURIComponent(args.entity)}/balances`,
         {},
       );
@@ -996,10 +1009,12 @@ const response = await serviceFetch(env, "finance",
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_transactions") {
-const params = new URLSearchParams();
+      const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(env, "finance", 
+      const response = await serviceFetch(
+        env,
+        "finance",
         `/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
         {},
       );
@@ -1007,10 +1022,12 @@ const params = new URLSearchParams();
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_cash_flow") {
-const params = new URLSearchParams();
+      const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(env, "finance", 
+      const response = await serviceFetch(
+        env,
+        "finance",
         `/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
         {},
       );
@@ -1018,11 +1035,13 @@ const params = new URLSearchParams();
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_inter_entity") {
-const params = new URLSearchParams();
+      const params = new URLSearchParams();
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(env, "finance", 
+      const response = await serviceFetch(
+        env,
+        "finance",
         `/api/transfers/inter-entity?${params}`,
         {},
       );
@@ -1030,10 +1049,13 @@ const params = new URLSearchParams();
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_detect_transfers") {
-const response = await serviceFetch(env, "finance", "/api/transfers/detect",
+      const response = await serviceFetch(
+        env,
+        "finance",
+        "/api/transfers/detect",
         {
           method: "POST",
-          
+
           body: {
             entity: args.entity,
             start: args.start,
@@ -1046,10 +1068,12 @@ const response = await serviceFetch(env, "finance", "/api/transfers/detect",
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_flow_of_funds") {
-const params = new URLSearchParams();
+      const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(env, "finance", 
+      const response = await serviceFetch(
+        env,
+        "finance",
         `/api/reports/flow-of-funds?${params}`,
         {},
       );
@@ -1057,12 +1081,9 @@ const params = new URLSearchParams();
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-const response = await serviceFetch(env, "finance", "/api/sync/mercury",
-        {
-          method: "POST",
-          
-        },
-      );
+      const response = await serviceFetch(env, "finance", "/api/sync/mercury", {
+        method: "POST",
+      });
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
@@ -1555,60 +1576,133 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
       let response;
 
       if (name === "chitty_task_create") {
-        const body = { title: args.title, task_type: args.task_type, assigned_agent: args.assigned_agent };
+        const body = {
+          title: args.title,
+          task_type: args.task_type,
+          assigned_agent: args.assigned_agent,
+        };
         if (args.description !== undefined) body.description = args.description;
         if (args.priority !== undefined) body.priority = args.priority;
         if (args.payload !== undefined) body.payload = args.payload;
         if (args.depends_on !== undefined) body.depends_on = args.depends_on;
-        response = await serviceFetch(env, "tasks", "/api/v1/tasks", { method: "POST", body });
+        response = await serviceFetch(env, "tasks", "/api/v1/tasks", {
+          method: "POST",
+          body,
+        });
       } else if (name === "chitty_task_list") {
         const params = new URLSearchParams();
         if (args.agent) params.set("agent", args.agent);
         if (args.status) params.set("status", args.status);
         if (args.task_type) params.set("task_type", args.task_type);
         if (args.limit !== undefined) params.set("limit", String(args.limit));
-        if (args.offset !== undefined) params.set("offset", String(args.offset));
+        if (args.offset !== undefined)
+          params.set("offset", String(args.offset));
         const qs = params.toString() ? `?${params}` : "";
         response = await serviceFetch(env, "tasks", `/api/v1/tasks${qs}`);
       } else if (name === "chitty_task_get") {
-        if (!args.task_id) return { content: [{ type: "text", text: "Missing required parameter: task_id" }], isError: true };
-        response = await serviceFetch(env, "tasks", `/api/v1/tasks/${encodeURIComponent(args.task_id)}`);
+        if (!args.task_id)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}`,
+        );
       } else if (name === "chitty_task_claim") {
-        if (!args.task_id) return { content: [{ type: "text", text: "Missing required parameter: task_id" }], isError: true };
+        if (!args.task_id)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
         const qs = args.agent ? `?agent=${encodeURIComponent(args.agent)}` : "";
-        response = await serviceFetch(env, "tasks", `/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim${qs}`, {
-          method: "POST",
-          headers: args.agent ? { "X-ChittyOS-Caller": args.agent } : {},
-        });
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim${qs}`,
+          {
+            method: "POST",
+            headers: args.agent ? { "X-ChittyOS-Caller": args.agent } : {},
+          },
+        );
       } else if (name === "chitty_task_complete") {
-        if (!args.task_id) return { content: [{ type: "text", text: "Missing required parameter: task_id" }], isError: true };
-        response = await serviceFetch(env, "tasks", `/api/v1/tasks/${encodeURIComponent(args.task_id)}/complete`, {
-          method: "POST", body: args.result ? { result: args.result } : {},
-        });
+        if (!args.task_id)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/complete`,
+          {
+            method: "POST",
+            body: args.result ? { result: args.result } : {},
+          },
+        );
       } else if (name === "chitty_task_fail") {
-        if (!args.task_id) return { content: [{ type: "text", text: "Missing required parameter: task_id" }], isError: true };
-        if (!args.error) return { content: [{ type: "text", text: "Missing required parameter: error" }], isError: true };
-        response = await serviceFetch(env, "tasks", `/api/v1/tasks/${encodeURIComponent(args.task_id)}/fail`, {
-          method: "POST", body: { error: args.error },
-        });
+        if (!args.task_id)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        if (!args.error)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: error" },
+            ],
+            isError: true,
+          };
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/fail`,
+          {
+            method: "POST",
+            body: { error: args.error },
+          },
+        );
       } else if (name === "chitty_task_my_tasks") {
-        if (!args.agent) return { content: [{ type: "text", text: "Missing required parameter: agent" }], isError: true };
-        response = await serviceFetch(env, "tasks", `/api/v1/tasks/agent/${encodeURIComponent(args.agent)}`);
+        if (!args.agent)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: agent" },
+            ],
+            isError: true,
+          };
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/agent/${encodeURIComponent(args.agent)}`,
+        );
       } else {
-        return { content: [{ type: "text", text: `Unknown task tool: ${name}` }], isError: true };
+        return {
+          content: [{ type: "text", text: `Unknown task tool: ${name}` }],
+          isError: true,
+        };
       }
 
-      const { data, error: respErr } = await checkAndParseJson(response, "ChittyTask");
+      const { data, error: respErr } = await checkAndParseJson(
+        response,
+        "ChittyTask",
+      );
       if (respErr) return respErr;
       result = data;
     }
 
     // ── Tenant Management tools ─────────────────────────────────────
     // Project-per-tenant Neon isolation — provision, query, export
-    // Routes to local /api/v1/tenants endpoints (same worker, no service token)
+    // Routes to local /api/v1/tenants endpoints via authHeader (same worker)
     else if (name.startsWith("chitty_tenant_")) {
-      const baseUrl = env.CHITTYCONNECT_URL || "https://connect.chitty.cc";
-
       if (name === "chitty_tenant_provision") {
         if (!args.tenant_id) {
           return {
@@ -1620,12 +1714,12 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         }
         const response = await fetch(`${baseUrl}/api/v1/tenants/provision`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: {
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
             tenantId: args.tenant_id,
             region: args.region,
             pgVersion: args.pg_version,
-          },
+          }),
         });
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1644,6 +1738,7 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
+          { headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1658,7 +1753,9 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         if (args.offset !== undefined)
           params.set("offset", String(args.offset));
         const qs = params.toString() ? `?${params}` : "";
-        const response = await fetch(`${baseUrl}/api/v1/tenants${qs}`);
+        const response = await fetch(`${baseUrl}/api/v1/tenants${qs}`, {
+          headers: authHeader,
+        });
         const { data, error: respErr } = await checkAndParseJson(
           response,
           "TenantList",
@@ -1676,7 +1773,7 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
-          { method: "DELETE" },
+          { method: "DELETE", headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1695,7 +1792,7 @@ const response = await serviceFetch(env, "finance", "/api/sync/mercury",
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}/export`,
-          { method: "POST" },
+          { method: "POST", headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,

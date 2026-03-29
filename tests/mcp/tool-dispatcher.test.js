@@ -1760,6 +1760,30 @@ describe("dispatchToolCall", () => {
       );
     });
 
+    it("chitty_tenant_provision passes auth header", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ tenantId: "org-42" }),
+      });
+
+      await dispatchToolCall(
+        "chitty_tenant_provision",
+        { tenant_id: "org-42" },
+        tenantEnv,
+        { authToken: "test-bearer-token" },
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer test-bearer-token",
+          }),
+        }),
+      );
+    });
+
     it("chitty_tenant_provision rejects missing tenant_id", async () => {
       const result = await dispatchToolCall(
         "chitty_tenant_provision",
@@ -1787,6 +1811,7 @@ describe("dispatchToolCall", () => {
       expect(result.isError).toBeUndefined();
       expect(mockFetch).toHaveBeenCalledWith(
         "https://connect.chitty.cc/api/v1/tenants/org-42",
+        expect.objectContaining({ headers: {} }),
       );
     });
 
