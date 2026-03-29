@@ -151,6 +151,8 @@
         { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
       ],
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+      ]
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -240,6 +242,8 @@
         { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
       ],
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+      ]
     },
 
     // ════════════════════════════════════════════════════════════════
@@ -333,6 +337,8 @@
         { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
       ],
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+      ]
     }
   }
 
