@@ -103,6 +103,63 @@ contextResolution.post("/resolve", async (c) => {
       );
     }
 
+    // Build entity resume if we found an existing entity — shows the user
+    // work history, competencies, access, and proposed provisioning so they
+    // can confirm "yes, bind me to this entity"
+    let resume = null;
+    let proposedProvisioning = null;
+
+    if (resolution.context?.chitty_id) {
+      resume = await resolver.buildEntityResume(
+        resolution.context.chitty_id,
+        resolution.context,
+      );
+
+      // Proposed provisioning: what this entity would have access to
+      // Based on its identity class, trust level, and existing connections
+      const trustLevel = Number(resolution.context.trust_level || 0);
+      const identityClass =
+        trustLevel >= 4 ? "agent" :
+        trustLevel >= 3 ? "coordinator" :
+        trustLevel >= 1 ? "context" : "advocate";
+
+      // TY-VY-RY describes what the entity can PERCEIVE and INFLUENCE
+      // at each plane — not database permissions.
+      // @canon chittycanon://gov/governance#identity-classes
+      const planes = {
+        advocate: {
+          ty: "Can see who entities are (identity, ChittyDNA)",
+          vy: null,
+          ry: null,
+        },
+        context: {
+          ty: "Can see who entities are",
+          vy: "Can observe and record behavior (sessions, tool usage, outcomes)",
+          ry: null,
+        },
+        coordinator: {
+          ty: "Can see who entities are",
+          vy: "Can observe and record behavior",
+          ry: "Can see trust levels and authority grants (cannot grant)",
+        },
+        agent: {
+          ty: "Can see who entities are",
+          vy: "Can observe and record behavior",
+          ry: "Can see AND grant authority, modify trust, issue capability grants",
+        },
+      };
+
+      // Build concrete provisioning — what services, what access, what's already active
+      proposedProvisioning = await resolver.buildProvisioningRecommendation(
+        resolution.context.chitty_id,
+        resolution.context,
+        hints,
+      )
+
+      // Add TY-VY-RY plane access for the identity class
+      proposedProvisioning.planes = planes[proposedProvisioning.identityClass] || planes.advocate;
+    }
+
     // Return resolution for client to display and confirm
     return apiResponse(c, {
       success: true,
@@ -116,6 +173,10 @@ contextResolution.post("/resolve", async (c) => {
         anchorHash: resolution.anchorHash?.slice(0, 16) + "...",
         requiresConfirmation:
           resolution.action === "create_new" || resolution.confidence < 0.9,
+        // Entity resume — work history, competencies, outcomes
+        resume,
+        // What this entity would have access to if bound
+        proposedProvisioning,
       },
     });
   } catch (error) {

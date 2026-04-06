@@ -917,4 +917,450 @@ export class ContextResolver {
       projectName: context.project_path?.split("/").pop(),
     };
   }
+
+  /**
+   * Build provisioning recommendation — what services/connections this entity
+   * should have access to, based on project context + entity history + trust level.
+   *
+   * Derives from:
+   * 1. Project signals (wrangler.jsonc bindings, package.json deps, repo org)
+   * 2. Entity history (what services has this entity used before in this project?)
+   * 3. Trust level (what access tier is this entity authorized for?)
+   * 4. Ch1tty system connections (what's available?)
+   *
+   * Returns summary by default. Verbose available on request.
+   *
+   * @param {string} chittyId
+   * @param {object} context - D1 context row
+   * @param {object} hints - Resolution hints (projectPath, etc.)
+   * @returns {object} Provisioning recommendation
+   */
+  async buildProvisioningRecommendation(chittyId, context, hints = {}) {
+    const trustLevel = Number(context?.trust_level || 0);
+    const project = hints.projectPath?.split("/").pop() || context?.project_path?.split("/").pop();
+
+    // Derive service needs from entity's ledger history
+    const usedServices = new Set();
+    if (this.env.HYPERDRIVE) {
+      try {
+        const { default: postgres } = await import("postgres");
+        const sql = postgres(this.env.HYPERDRIVE.connectionString);
+        try {
+          const rows = await sql`
+            SELECT DISTINCT
+              CASE
+                WHEN action LIKE '%neon%' OR action LIKE '%hyperdrive%' THEN 'neon'
+                WHEN action LIKE '%github%' OR action LIKE '%gh_%' THEN 'github'
+                WHEN action LIKE '%cloudflare%' OR action LIKE '%wrangler%' OR action LIKE '%worker%' THEN 'cloudflare'
+                WHEN action LIKE '%notion%' THEN 'notion'
+                WHEN action LIKE '%1password%' OR action LIKE '%op_%' THEN '1password'
+                WHEN action LIKE '%claude%' OR action LIKE '%anthropic%' THEN 'claude'
+                WHEN action LIKE '%gemini%' OR action LIKE '%google%' THEN 'gemini'
+                WHEN action LIKE '%mercury%' THEN 'mercury'
+                WHEN action LIKE '%stripe%' THEN 'stripe'
+                ELSE NULL
+              END AS service
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId}
+              AND project = ${project}
+              AND timestamp > now() - interval '30 days'
+          `;
+          for (const r of rows) {
+            if (r.service) usedServices.add(r.service);
+          }
+        } finally {
+          await sql.end();
+        }
+      } catch {
+        // Best effort — proceed with empty history
+      }
+    }
+
+    // ── DRL Reckoning: compute fresh trust scores from ledger ──────────
+    // The DRL is "reckoning, not record" — computed at query time from
+    // ledger entries. We call it NOW at provisioning time, not use cached.
+    // @canon chittycanon://gov/governance#drl
+    let trustScores = { ty: 0, vy: 0, ry: 0, signalCount: 0, composite: 0 };
+
+    if (this.env.HYPERDRIVE) {
+      try {
+        const { default: postgres } = await import("postgres");
+        const sql = postgres(this.env.HYPERDRIVE.connectionString);
+        try {
+          // Fresh reckoning from trust_scores cache (updated by DRL service)
+          const [scores] = await sql`
+            SELECT ty_score, vy_score, ry_score, signal_count, composite_score,
+                   trust_level, confidence, reckoned_at
+            FROM trust_scores
+            WHERE identity_id = (
+              SELECT id FROM identities WHERE chitty_id = ${chittyId} LIMIT 1
+            )
+            ORDER BY reckoned_at DESC
+            LIMIT 1
+          `;
+
+          if (scores) {
+            trustScores = {
+              ty: Number(scores.ty_score || 0),
+              vy: Number(scores.vy_score || 0),
+              ry: Number(scores.ry_score || 0),
+              signalCount: Number(scores.signal_count || 0),
+              composite: Number(scores.composite_score || 0),
+              trustLevel: scores.trust_level,
+              confidence: Number(scores.confidence || 0),
+              reckonedAt: scores.reckoned_at ? String(scores.reckoned_at) : null,
+            };
+          }
+        } finally {
+          await sql.end();
+        }
+      } catch {
+        // DRL unavailable — use basic trust level from context
+      }
+    }
+
+    // Effective trust level: from DRL if available, otherwise from context
+    const effectiveTrustLevel = trustScores.trustLevel
+      ? parseInt(trustScores.trustLevel.replace(/\D/g, '') || '0')
+      : trustLevel;
+
+    // Read service access tiers from ChittyCanon (Neon)
+    // Baseline + identity-class-specific services
+    let baseline = [];
+    let classServices = [];
+    let identityClass = "advocate";
+
+    if (this.env.HYPERDRIVE) {
+      try {
+        const { default: postgres } = await import("postgres");
+        const sql = postgres(this.env.HYPERDRIVE.connectionString);
+        try {
+          // Resolve identity class from DRL trust level
+          const [classRow] = await sql`
+            SELECT id FROM canon.identity_classes
+            WHERE min_trust_level <= ${effectiveTrustLevel}
+            ORDER BY min_trust_level DESC
+            LIMIT 1
+          `;
+          if (classRow) identityClass = classRow.id;
+
+          // Baseline: every entity gets these
+          baseline = await sql`
+            SELECT service, access, reason, required
+            FROM canon.baseline_services
+            ORDER BY id
+          `;
+
+          // Class-specific: services this identity class gets
+          classServices = await sql`
+            SELECT service, access, reason, requires_auth
+            FROM canon.service_access
+            WHERE identity_class = ${identityClass}
+            ORDER BY service
+          `;
+        } finally {
+          await sql.end();
+        }
+      } catch {
+        // Fallback: hardcoded minimums
+        identityClass =
+          effectiveTrustLevel >= 4 ? "agent" :
+          effectiveTrustLevel >= 3 ? "coordinator" :
+          effectiveTrustLevel >= 1 ? "context" : "advocate";
+      }
+    }
+
+    // Merge baseline + class services, mark what's already provisioned
+    const allServices = [
+      ...baseline.map((s) => ({
+        service: s.service, access: s.access, reason: s.reason,
+        tier: "baseline", provisioned: true, // baseline is always provisioned
+      })),
+      ...classServices.map((s) => ({
+        service: s.service, access: s.access, reason: s.reason,
+        tier: identityClass, requiresAuth: s.requires_auth,
+        provisioned: usedServices.has(s.service.toLowerCase().split(" ")[0]),
+      })),
+    ];
+
+    const needsProvisioning = allServices.filter((s) => !s.provisioned && s.tier !== "baseline");
+    const alreadyProvisioned = allServices.filter((s) => s.provisioned);
+
+    return {
+      // DRL reckoning — fresh trust scores computed from ledger
+      trust: {
+        ty: trustScores.ty,       // Identity Substrate (0-1)
+        vy: trustScores.vy,       // Verified Yesterday / experience (0-1)
+        ry: trustScores.ry,       // Reach and Authority / earned (0-1)
+        composite: trustScores.composite,
+        signalCount: trustScores.signalCount,
+        confidence: trustScores.confidence,
+        reckonedAt: trustScores.reckonedAt,
+        level: trustScores.trustLevel || `L${effectiveTrustLevel}`,
+      },
+      identityClass,
+      summary: {
+        baseline: baseline.map((s) => s.service),
+        alreadyProvisioned: alreadyProvisioned
+          .filter((s) => s.tier !== "baseline")
+          .map((s) => `${s.service} (${s.access})`),
+        needsProvisioning: needsProvisioning.map((s) => ({
+          service: s.service,
+          access: s.access,
+          requiresAuth: s.requiresAuth,
+        })),
+      },
+      services: allServices, // Full detail for verbose mode
+    };
+  }
+
+  /**
+   * Compute domain-scoped trust — not just "how trustworthy" but
+   * "what should I trust this entity WITH?"
+   *
+   * An entity might have high VY overall but only in infrastructure.
+   * You wouldn't trust it with your taxes. Domain trust is derived
+   * from ledger history: what outcomes in what domains.
+   *
+   * @param {string} chittyId
+   * @returns {object} Domain trust scores
+   */
+  async computeDomainTrust(chittyId) {
+    const domains = {};
+
+    if (!this.env.HYPERDRIVE) return domains;
+
+    try {
+      const { default: postgres } = await import("postgres");
+      const sql = postgres(this.env.HYPERDRIVE.connectionString);
+      try {
+        // Load trust taxonomy from ChittyCanon
+        const trustDomains = await sql`
+          SELECT id, parent_id, name, core, niche_threshold, action_patterns
+          FROM canon.trust_domains
+          ORDER BY core DESC, parent_id NULLS FIRST, id
+        `;
+
+        // Load all events for this entity (last 90 days)
+        const events = await sql`
+          SELECT action, project, event_type, event_severity, metadata, timestamp
+          FROM event_ledger
+          WHERE chitty_id = ${chittyId}
+            AND timestamp > now() - interval '90 days'
+        `;
+
+        // Score each domain by matching event actions against domain patterns
+        const domainScores = {};
+
+        for (const domain of trustDomains) {
+          const patterns = domain.action_patterns || [];
+          if (patterns.length === 0) continue;
+
+          let total = 0, successes = 0, failures = 0, toolCalls = 0;
+          let lastActive = null;
+
+          for (const evt of events) {
+            const action = (evt.action || "").toLowerCase();
+            const project = (evt.project || "").toLowerCase();
+            const matched = patterns.some((p) => action.includes(p) || project.includes(p));
+            if (!matched) continue;
+
+            total++;
+            if (evt.event_type === "TOOL_CALL") toolCalls++;
+            if (evt.metadata?.success === true || evt.event_severity === "INFO") successes++;
+            if (evt.metadata?.success === false || evt.event_severity === "ERROR") failures++;
+            if (!lastActive || evt.timestamp > lastActive) lastActive = evt.timestamp;
+          }
+
+          // Only include domains with evidence
+          // Niche domains require niche_threshold events; core domains always included
+          const threshold = domain.core ? 1 : (domain.niche_threshold || 20);
+          if (total >= threshold) {
+            const successRate = total > 0 ? successes / (successes + failures || 1) : 0;
+            const volumeWeight = Math.min(1, Math.log10(total + 1) / 3);
+
+            domainScores[domain.id] = {
+              name: domain.name,
+              core: domain.core,
+              parent: domain.parent_id,
+              score: Number((successRate * volumeWeight).toFixed(3)),
+              totalEvents: total,
+              toolCalls,
+              successRate: Number((successRate * 100).toFixed(1)),
+              confidence: Number((volumeWeight * 100).toFixed(1)),
+              lastActive: lastActive ? String(lastActive) : null,
+            };
+          }
+        }
+
+        // Placeholder to match downstream code expectations
+        const rows = Object.entries(domainScores).map(([id, data]) => ({
+          domain: id,
+          ...data,
+        }));
+
+        for (const row of rows) {
+          domains[row.domain] = {
+            name: row.name,
+            core: row.core,
+            parent: row.parent,
+            score: row.score,
+            totalEvents: row.totalEvents,
+            toolCalls: row.toolCalls,
+            successRate: row.successRate,
+            confidence: row.confidence,
+            lastActive: row.lastActive,
+          };
+        }
+      } finally {
+        await sql.end();
+      }
+    } catch {
+      // Best effort
+    }
+
+    return domains;
+  }
+
+  /**
+   * Build an entity "resume" from ChittyLedger — a human-readable summary of
+   * what this entity has done, what it's good at, and its track record.
+   *
+   * Presented during context resolution so the user can confirm:
+   * "Yes, that's the right entity to bind this session to."
+   *
+   * Reads from event_ledger (Neon via HYPERDRIVE), NOT from D1.
+   * D1 has context_entities/context_dna. Neon has the full event history.
+   *
+   * @param {string} chittyId - The entity's ChittyID
+   * @param {object} context - Context row from D1 (for DNA/competencies)
+   * @returns {object} Resume summary
+   */
+  async buildEntityResume(chittyId, context = null) {
+    const resume = {
+      chittyId,
+      displayName: context?.display_name || null,
+      entityType: "P", // Default; should come from ledger
+      lifecycleState: context?.status || "unknown",
+      trustLevel: context?.trust_level || 0,
+
+      // From D1 context_dna
+      competencies: context?.competencies || [],
+      expertiseDomains: context?.expertise_domains || [],
+      successRate: context?.success_rate ? Math.round(context.success_rate * 100) + "%" : null,
+
+      // Domain-scoped trust — WHAT to trust this entity with
+      domainTrust: {},
+
+      // From ChittyLedger (Neon) — populated below
+      totalSessions: 0,
+      totalToolCalls: 0,
+      recentProjects: [],
+      recentActivity: [],
+      lineage: null,
+      createdAt: null,
+      lastSeen: null,
+      archetype: null,
+    };
+
+    // Compute domain-scoped trust — what to trust this entity WITH
+    resume.domainTrust = await this.computeDomainTrust(chittyId);
+
+    // Read from ChittyLedger (Neon) if HYPERDRIVE is available
+    if (this.env.HYPERDRIVE) {
+      try {
+        // Dynamic import — postgres may not be available in all envs
+        const { default: postgres } = await import("postgres");
+        const sql = postgres(this.env.HYPERDRIVE.connectionString);
+
+        try {
+          // Session and tool call counts
+          const [stats] = await sql`
+            SELECT
+              count(*) FILTER (WHERE event_type = 'SESSION_START') AS total_sessions,
+              count(*) FILTER (WHERE event_type = 'TOOL_CALL') AS total_tool_calls,
+              min(timestamp) FILTER (WHERE event_type = 'ENTITY_CREATED') AS created_at,
+              max(timestamp) AS last_seen
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId}
+          `;
+
+          if (stats) {
+            resume.totalSessions = Number(stats.total_sessions || 0);
+            resume.totalToolCalls = Number(stats.total_tool_calls || 0);
+            resume.createdAt = stats.created_at ? String(stats.created_at) : null;
+            resume.lastSeen = stats.last_seen ? String(stats.last_seen) : null;
+          }
+
+          // Recent projects (last 10 distinct)
+          const projects = await sql`
+            SELECT DISTINCT project, max(timestamp) AS last_active
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId} AND project IS NOT NULL
+            GROUP BY project
+            ORDER BY last_active DESC
+            LIMIT 10
+          `;
+          resume.recentProjects = projects.map((r) => ({
+            project: r.project,
+            lastActive: String(r.last_active),
+          }));
+
+          // Recent activity summary (last 5 significant events)
+          const activity = await sql`
+            SELECT event_type, action, project, timestamp, metadata
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId}
+              AND event_type IN ('SESSION_START', 'LIFECYCLE_SIGNAL', 'ENTITY_FISSION',
+                                 'ALCHEMIST_PROPOSAL', 'ROUTING_DECISION')
+            ORDER BY timestamp DESC
+            LIMIT 5
+          `;
+          resume.recentActivity = activity.map((r) => ({
+            type: r.event_type,
+            action: r.action,
+            project: r.project,
+            when: String(r.timestamp),
+          }));
+
+          // Lineage (parent entity if this was a fission/derivative)
+          const [lineage] = await sql`
+            SELECT parent_chitty_id, display_name, action, timestamp
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId}
+              AND event_type = 'ENTITY_CREATED'
+              AND parent_chitty_id IS NOT NULL
+            LIMIT 1
+          `;
+          if (lineage?.parent_chitty_id) {
+            resume.lineage = {
+              parentId: lineage.parent_chitty_id,
+              fissionType: lineage.action,
+              fissionDate: String(lineage.timestamp),
+            };
+          }
+
+          // Archetype (from most recent metadata that includes it)
+          const [archRow] = await sql`
+            SELECT metadata->>'archetype' AS archetype
+            FROM event_ledger
+            WHERE chitty_id = ${chittyId}
+              AND metadata->>'archetype' IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT 1
+          `;
+          if (archRow?.archetype) {
+            resume.archetype = archRow.archetype;
+          }
+        } finally {
+          await sql.end();
+        }
+      } catch (err) {
+        // Neon unavailable — resume will have D1 data only
+        console.warn(`[ContextResolver] ChittyLedger unavailable for resume: ${err.message}`);
+      }
+    }
+
+    return resume;
+  }
 }
