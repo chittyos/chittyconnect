@@ -541,3 +541,68 @@ export class OnePasswordConnectClient {
 }
 
 export default OnePasswordConnectClient;
+
+/**
+ * Store a credential in 1Password via Connect API.
+ * Creates a new item or updates an existing field.
+ *
+ * @param {string} credentialPath - "vault/item/field"
+ * @param {string} value - Credential value
+ * @param {object} [options]
+ * @param {string} [options.notes] - Item notes
+ * @returns {Promise<{stored: boolean, action: string, item: string}>}
+ */
+OnePasswordConnectClient.prototype.put = async function (credentialPath, value, options = {}) {
+  const parsed = this.parseCredentialPath(credentialPath);
+  if (!parsed) throw new Error(`Invalid credential path: ${credentialPath}`);
+  if (!this.connectUrl || !this.connectToken) throw new Error("1Password Connect not configured");
+
+  const headers = { Authorization: `Bearer ${this.connectToken}`, "Content-Type": "application/json" };
+
+  // List items in vault
+  const itemsResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`, { headers });
+  if (!itemsResp.ok) throw new Error(`Failed to list items: ${itemsResp.status}`);
+  const items = await itemsResp.json();
+  const existing = items.find(i => i.title.toLowerCase() === parsed.item.toLowerCase());
+
+  if (existing) {
+    // Update existing item
+    const detailResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${existing.id}`, { headers });
+    if (!detailResp.ok) throw new Error(`Failed to get item: ${detailResp.status}`);
+    const itemDetails = await detailResp.json();
+
+    let fieldFound = false;
+    for (const f of itemDetails.fields || []) {
+      if (f.label?.toLowerCase() === parsed.field.toLowerCase()) { f.value = value; fieldFound = true; break; }
+    }
+    if (!fieldFound) {
+      itemDetails.fields = itemDetails.fields || [];
+      itemDetails.fields.push({ id: parsed.field, type: "CONCEALED", label: parsed.field, value });
+    }
+    if (options.notes) {
+      const nf = itemDetails.fields.find(f => f.purpose === "NOTES");
+      if (nf) nf.value = options.notes;
+    }
+
+    const updateResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${existing.id}`, {
+      method: "PUT", headers, body: JSON.stringify(itemDetails),
+    });
+    if (!updateResp.ok) { const err = await updateResp.text(); throw new Error(`Update failed: ${updateResp.status} ${err}`); }
+    await this.invalidateCache(credentialPath);
+    return { stored: true, action: "updated", item: parsed.item };
+  } else {
+    // Create new item
+    const newItem = {
+      vaultId: parsed.vaultId, title: parsed.item, category: "API_CREDENTIAL",
+      fields: [
+        { id: "notesPlain", type: "STRING", purpose: "NOTES", label: "notesPlain", value: options.notes || `Stored via ChittyConnect ${new Date().toISOString()}` },
+        { id: parsed.field, type: "CONCEALED", label: parsed.field, value },
+      ],
+    };
+    const createResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`, {
+      method: "POST", headers, body: JSON.stringify(newItem),
+    });
+    if (!createResp.ok) { const err = await createResp.text(); throw new Error(`Create failed: ${createResp.status} ${err}`); }
+    return { stored: true, action: "created", item: parsed.item };
+  }
+};
