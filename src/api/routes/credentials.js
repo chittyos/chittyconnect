@@ -718,6 +718,7 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
   }
 });
+/**
  * GET /api/credentials/health
  *
  * Check credential provisioning service health

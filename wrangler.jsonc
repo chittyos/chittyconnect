@@ -148,9 +148,8 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-      ],
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -239,9 +238,8 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-      ],
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -334,9 +332,8 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        { "binding": "SVC_DISPUTES", "service": "chittydisputes", "environment": "production" },
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-      ],
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     }
