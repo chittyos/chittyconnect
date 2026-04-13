@@ -141,7 +141,21 @@ sessionRoutes.get("/", async (c) => {
  */
 sessionRoutes.post("/sync", async (c) => {
   try {
-    const body = await c.req.json();
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "INVALID_JSON",
+            message: "Request body must be valid JSON",
+          },
+        },
+        400,
+      );
+    }
     const {
       event,
       chittyId,
@@ -316,6 +330,7 @@ sessionRoutes.post("/sync", async (c) => {
         sessionService
           .updateSession(chittyId, sessionId, {
             status: "ended",
+            state: "ended",
             endedAt: timestamp,
           })
           .then(() => "session_ended")
@@ -324,7 +339,7 @@ sessionRoutes.post("/sync", async (c) => {
               "[Sessions/Sync] Session end update failed:",
               err.message,
             );
-            return null;
+            return "session_end_failed";
           }),
 
         // 2. Unbind session in D1 ledger
@@ -389,35 +404,18 @@ sessionRoutes.post("/sync", async (c) => {
       }
     }
 
-    // Notion update (both events, independent of everything above)
+    // Fire-and-forget Notion update via waitUntil — doesn't block response
     if (notion?.projectPageId) {
-      try {
-        const notionToken = await getCredential(
-          c.env,
-          "integrations/notion/api_key",
-          "NOTION_TOKEN",
-        );
-        if (notionToken) {
-          const notionProperties = {
-            properties: {
-              "Session Status": {
-                select: {
-                  name: event === "session_start" ? "Active" : "Ended",
-                },
-              },
-              "Last Session": {
-                rich_text: [
-                  {
-                    text: {
-                      content: `${sessionId} | ${channel?.type || "unknown"} | ${channel?.machine || "unknown"} | ${timestamp}`,
-                    },
-                  },
-                ],
-              },
-            },
-          };
+      const notionUpdate = async () => {
+        try {
+          const notionToken = await getCredential(
+            c.env,
+            "integrations/notion/api_key",
+            "NOTION_TOKEN",
+          );
+          if (!notionToken) return;
 
-          const notionResp = await fetch(
+          const resp = await fetch(
             `https://api.notion.com/v1/pages/${notion.projectPageId}`,
             {
               method: "PATCH",
@@ -426,23 +424,42 @@ sessionRoutes.post("/sync", async (c) => {
                 "Notion-Version": "2022-06-28",
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify(notionProperties),
+              body: JSON.stringify({
+                properties: {
+                  "Session Status": {
+                    select: {
+                      name: event === "session_start" ? "Active" : "Ended",
+                    },
+                  },
+                  "Last Session": {
+                    rich_text: [
+                      {
+                        text: {
+                          content: `${sessionId} | ${channel?.type || "unknown"} | ${channel?.machine || "unknown"} | ${timestamp}`,
+                        },
+                      },
+                    ],
+                  },
+                },
+              }),
             },
           );
-
-          if (notionResp.ok) {
-            result.actions.push("notion_updated");
-          } else {
+          if (!resp.ok) {
             console.error(
               "[Sessions/Sync] Notion update failed:",
-              notionResp.status,
+              resp.status,
             );
-            result.actions.push("notion_update_failed");
           }
+        } catch (err) {
+          console.error("[Sessions/Sync] Notion error:", err.message);
         }
-      } catch (err) {
-        console.error("[Sessions/Sync] Notion error:", err.message);
+      };
+      if (c.executionCtx?.waitUntil) {
+        c.executionCtx.waitUntil(notionUpdate());
+      } else {
+        notionUpdate();
       }
+      result.actions.push("notion_queued");
     }
 
     return c.json({ success: true, data: result });
