@@ -39,6 +39,7 @@ import { authKeysRoutes } from "./routes/auth-keys.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
+import { sessionRoutes } from "./routes/sessions.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -125,6 +126,7 @@ api.get("/api/health", (c) => {
       connections: "/api/connections",
       prompts: "/api/v1/context/prompts",
       tenants: "/api/v1/tenants",
+      sessions: "/api/v1/sessions",
       mcp: "/mcp",
       chatgptMcp: "/chatgpt/mcp",
     },
@@ -185,5 +187,6 @@ api.route("/api/auth/keys", authKeysRoutes);
 api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
+api.route("/api/v1/sessions", sessionRoutes);
 
 export { api };

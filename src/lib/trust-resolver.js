@@ -24,9 +24,9 @@ const CACHE_TTL = 300; // 5 minutes
  * Derive trust_level (0-5) from TY/VY/RY reckoning.
  * Uses floor of the average, scaled to 0-5.
  *
- * @param {number} ty - Identity Substrate (0-1)
- * @param {number} vy - Verified Yesterday (0-1)
- * @param {number} ry - Reach and Authority (0-1)
+ * @param {number} ty - idenTitY (0-1)
+ * @param {number} vy - connectiVitY (0-1)
+ * @param {number} ry - authoRitY (0-1)
  * @returns {number} trust_level 0-5
  */
 function deriveTrustLevel(ty, vy, ry) {
