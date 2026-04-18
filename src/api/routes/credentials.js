@@ -670,12 +670,10 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
 });
 
 /**
-
-/**
  * PUT /api/credentials/:vault/:item/:field
  *
  * Store or update a credential in 1Password via ChittyConnect.
- * Source of truth: value → 1Password → cached in KV.
+ * Source of truth: value -> 1Password -> cached in KV.
  *
  * Body: { "value": "secret", "notes": "optional context" }
  */
@@ -706,8 +704,8 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
 
     try {
       await c.env.DB.prepare(
-        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (1password_store, ?, ?, ?, datetime(now))`
-      ).bind(item, field, requestingService).run();
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      ).bind("1password_store", item, field, requestingService).run();
     } catch (dbErr) {
       console.warn("[Credentials] Audit log failed:", dbErr.message);
     }
@@ -718,6 +716,7 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
   }
 });
+
 /**
  * GET /api/credentials/health
  *
