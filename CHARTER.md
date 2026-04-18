@@ -2,7 +2,7 @@
 uri: chittycanon://docs/ops/policy/chittyconnect-charter
 namespace: chittycanon://docs/ops
 type: policy
-version: 1.0.0
+version: 1.1.0
 status: CERTIFIED
 registered_with: chittycanon://core/services/canon
 title: "ChittyConnect Charter"
@@ -36,6 +36,9 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - ChittyID minting coordination
 - Legal case management via ChittyCases
 - Evidence ingestion via ChittyEvidence
+- User identity and profile management via `neon_auth.user` and `neon_auth.account` on ChittyOS-Core
+- User session management via `neon_auth.session` (when stateful sessions required)
+- Organization/membership management via `neon_auth.organization`, `neon_auth.member`
 
 ### IS NOT Responsible For
 - Direct identity generation (ChittyID)
@@ -78,6 +81,30 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | External | OpenAI API | Chat completions |
 | External | Google Calendar | Event management |
 | External | Neon Database | SQL queries |
+
+## Neon Auth Ownership
+
+ChittyConnect is the **canonical owner of user identity and session data** within the Neon Auth schema on ChittyOS-Core (`neon_auth` schema, Neon project `restless-grass-40598426`).
+
+### Schema Ownership Split
+
+| `neon_auth` Table | Owner | Rationale |
+|-------------------|-------|-----------|
+| `user`, `account`, `verification` | **ChittyConnect** | User profiles and credentials — per this charter's scope |
+| `session` | **ChittyConnect** | User session management |
+| `organization`, `member`, `invitation` | **ChittyConnect** | Multi-tenant org membership |
+| `jwks` | **ChittyAuth** | JWT signing keys — per ChittyAuth charter scope |
+| `project_config` | **ChittyAuth** | JWKS URL, issuer configuration |
+
+### User Identity Flow
+
+1. **ChittyID** mints the canonical identity (DID format `VV-G-LLL-SSSS-T-YM-C-X`)
+2. **ChittyConnect** writes the user profile to `neon_auth.user` (linked via ChittyID)
+3. **ChittyAuth** signs JWTs with keys from `neon_auth.jwks`, embedding the ChittyID as a claim
+4. **Downstream services** validate JWTs against ChittyAuth's JWKS and use RLS policies referencing `auth.jwt() ->> 'chitty_id'` for per-user data scoping
+
+### Migration Note (2026-04)
+The `neon_auth.user` table on ChittyOS-Core currently has 0 rows. ChittyAuth's existing user data lives in `public.users` (2 rows) and `public.identities` (73 rows). ChittyConnect will migrate user profile data to `neon_auth.user` as part of the Neon Auth unification initiative. See companion amendment: [chittyfoundation/chittyauth#4](https://github.com/chittyfoundation/chittyauth/pull/4).
 
 ## API Contract
 
@@ -186,4 +213,4 @@ This charter is part of a synchronized documentation triad. Changes to shared fi
 - [x] GitHub App webhook verified
 
 ---
-*Charter Version: 1.0.0 | Last Updated: 2026-02-23*
+*Charter Version: 1.1.0 | Last Updated: 2026-04-13*
