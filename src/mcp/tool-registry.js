@@ -1445,6 +1445,34 @@ const MCP_TOOLS = [
       required: ["tenant_id", "query"],
     },
   },
+  // ── Agent Context ──────────────────────────────────────────────────
+  {
+    name: "agent_context",
+    description:
+      "Fetch the current versioned system prompt for a ChittyOS governance agent from the Prompt Registry. Returns the composed prompt reflecting current architecture, canonical ontology, and approved patterns. Use this on agent invocation to hydrate context instead of relying on static local definitions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: {
+          type: "string",
+          description:
+            "Agent identifier (e.g., 'chittyschema-overlord', 'chittycanon-code-cardinal', 'chittyconnect-concierge', 'chittyregister-compliance-sergeant', 'claude-integration-architect', 'chittystorage-sasquatch')",
+        },
+        additional_layers: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional additional prompt layer IDs to compose on top of the agent's base prompt",
+        },
+        variables: {
+          type: "object",
+          description:
+            "Optional variable substitutions for {{variable}} placeholders in the prompt",
+        },
+      },
+      required: ["agent_id"],
+    },
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1495,6 +1523,8 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_tenant_list",
   "chitty_tenant_export",
   "chitty_tenant_query",
+  // Agent Context — read-only prompt resolution
+  "agent_context",
 ]);
 
 /**

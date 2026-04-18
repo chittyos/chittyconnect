@@ -578,6 +578,7 @@ function resolveDispatchTarget(domain, env) {
     scrape: { agent: "scrape-agent", path: "/agents/scrape/process" },
     triage: { agent: "triage-agent", path: "/agents/triage/classify" },
     intelligence: { agent: "intelligence-agent", path: "/agents/intelligence/analyze" },
+    agents: { agent: "agent-executor", path: "/agents/executor/run" },
   };
 
   const target = domainAgentMap[domain];

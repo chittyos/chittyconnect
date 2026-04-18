@@ -1795,6 +1795,84 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
     }
 
+    // ── Agent Context (Prompt Registry) ─────────────────────────────
+    else if (name === "agent_context") {
+      const agentId = args.agent_id;
+      if (!agentId) {
+        return {
+          content: [{ type: "text", text: "Missing required parameter: agent_id" }],
+          isError: true,
+        };
+      }
+
+      const promptId = `agent:${agentId}`;
+      const db = env.DB;
+      if (!db) {
+        return {
+          content: [{ type: "text", text: "D1 not available — cannot resolve agent context" }],
+          isError: true,
+        };
+      }
+
+      const prompt = await db
+        .prepare("SELECT * FROM prompt_registry WHERE id = ?")
+        .bind(promptId)
+        .first();
+
+      if (!prompt) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Agent prompt not found: ${promptId}. Available agent prompts can be listed via the prompts API with domain=agents.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Compose base + layers (reuses prompt registry composition logic)
+      let layers = [];
+      try {
+        layers = JSON.parse(prompt.layers || "[]");
+      } catch { /* empty */ }
+
+      const additionalLayerIds = args.additional_layers || [];
+      for (const layerId of additionalLayerIds) {
+        const layerPrompt = await db
+          .prepare("SELECT base FROM prompt_registry WHERE id = ?")
+          .bind(layerId)
+          .first();
+        if (layerPrompt) {
+          layers.push({ id: layerId, content: layerPrompt.base, order: layers.length + 1 });
+        }
+      }
+
+      layers.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      let composed = prompt.base || "";
+      for (const layer of layers) {
+        if (layer.content) composed += "\n\n" + layer.content;
+      }
+
+      // Variable substitution
+      if (args.variables && typeof args.variables === "object") {
+        for (const [key, value] of Object.entries(args.variables)) {
+          composed = composed.replaceAll(`{{${key}}}`, String(value));
+        }
+      }
+
+      result = {
+        systemPrompt: composed,
+        agentId,
+        promptId,
+        version: prompt.version,
+        domain: prompt.domain,
+        resolvedLayers: layers.map((l) => l.id).filter(Boolean),
+        updatedAt: prompt.updated_at,
+      };
+    }
+
     // ── Unknown tool ────────────────────────────────────────────────
     else {
       return {
