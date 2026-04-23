@@ -1008,4 +1008,137 @@ thirdpartyRoutes.post("/mercury/refresh", async (c, next) => {
   });
 }));
 
+// ── Gmail API Proxy ─────────────────────────────────────────────────
+// Proxies Gmail REST API calls using the same Google OAuth2 token
+// that powers Google Calendar. Requires gmail.readonly scope on the
+// OAuth app (same refresh token rotated by SecretRotationService).
+
+/**
+ * GET /api/thirdparty/gmail/messages
+ * List Gmail messages (metadata only)
+ */
+thirdpartyRoutes.get("/gmail/messages", async (c) => {
+  try {
+    const { q, maxResults = "10", pageToken } = c.req.query();
+
+    const googleToken = await getCredential(
+      c.env,
+      "integrations/google/access_token",
+      "GOOGLE_ACCESS_TOKEN",
+    );
+
+    if (!googleToken) {
+      return c.json({ error: "Google access token not configured" }, 503);
+    }
+
+    const params = new URLSearchParams({ maxResults });
+    if (q) params.append("q", q);
+    if (pageToken) params.append("pageToken", pageToken);
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${googleToken}` } },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    }
+
+    return c.json(await response.json());
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/thirdparty/gmail/message/:messageId
+ * Get a single Gmail message (full metadata + snippet)
+ */
+thirdpartyRoutes.get("/gmail/message/:messageId", async (c) => {
+  try {
+    const { messageId } = c.req.param();
+    const { format = "metadata" } = c.req.query();
+
+    const googleToken = await getCredential(
+      c.env,
+      "integrations/google/access_token",
+      "GOOGLE_ACCESS_TOKEN",
+    );
+
+    if (!googleToken) {
+      return c.json({ error: "Google access token not configured" }, 503);
+    }
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=${format}`,
+      { headers: { Authorization: `Bearer ${googleToken}` } },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    }
+
+    return c.json(await response.json());
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+/**
+ * GET /api/thirdparty/gmail/message/:messageId/raw
+ * Get raw RFC 2822 .eml bytes for a Gmail message.
+ * Returns the decoded binary (not base64url) with Content-Type: message/rfc822.
+ * This is what chittyevidence-db's backfill endpoint calls.
+ */
+thirdpartyRoutes.get("/gmail/message/:messageId/raw", async (c) => {
+  try {
+    const { messageId } = c.req.param();
+
+    const googleToken = await getCredential(
+      c.env,
+      "integrations/google/access_token",
+      "GOOGLE_ACCESS_TOKEN",
+    );
+
+    if (!googleToken) {
+      return c.json({ error: "Google access token not configured" }, 503);
+    }
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=raw`,
+      { headers: { Authorization: `Bearer ${googleToken}` } },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    }
+
+    const data = await response.json();
+    if (!data.raw) {
+      return c.json({ error: "No raw content in response" }, 404);
+    }
+
+    // Gmail returns base64url-encoded RFC 2822 message
+    // Convert base64url → base64 → binary
+    const base64 = data.raw.replace(/-/g, "+").replace(/_/g, "/");
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": "message/rfc822",
+        "Content-Disposition": `attachment; filename="${messageId}.eml"`,
+      },
+    });
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 export { thirdpartyRoutes };
