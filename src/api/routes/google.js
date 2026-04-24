@@ -15,21 +15,29 @@
 
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const googleRoutes = new Hono();
+googleRoutes.use("*", requireServiceToken("google"));
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
 /**
  * Obtain a Google access token using the configured priority: KV rotation cache, 1Password broker, then environment variable.
- * @returns {string|undefined} The Google access token string if available, otherwise `undefined`.
+ *
+ * @param {object} env - Cloudflare Workers environment bindings.
+ * @returns {Promise<string|undefined>} The Google access token string if available, otherwise `undefined`.
  */
 async function getGoogleToken(env) {
   // Fast path: KV-cached rotated token (updated every 50 min)
   if (env.CREDENTIAL_CACHE) {
-    const kvToken = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
-    if (kvToken) return kvToken;
+    try {
+      const kvToken = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
+      if (kvToken) return kvToken;
+    } catch {
+      console.warn("Google token KV cache read failed; falling back to broker/env token source");
+    }
   }
 
   // Fallback: 1Password broker or env var
@@ -39,25 +47,35 @@ async function getGoogleToken(env) {
 /**
  * Proxy a Google API request using an available access token.
  *
- * @param {Object} env - Runtime environment used to retrieve the Google access token (e.g., KV and credential helpers).
+ * @param {object} env - Runtime environment used to retrieve the Google access token (e.g., KV and credential helpers).
  * @param {string} googleUrl - Full Google API URL to fetch.
- * @returns {Promise<Object>} An object with either `{ ok: true, data }` when the upstream request succeeds, or `{ ok: false, status, error }` when a token is unavailable or the upstream request fails.
+ * @returns {Promise<{ok: true, data: object}|{ok: false, status: number, error: string}>} An object with either `{ ok: true, data }` when the upstream request succeeds, or `{ ok: false, status, error }` when a token is unavailable or the upstream request fails.
+ */
 async function googleProxy(env, googleUrl) {
   const token = await getGoogleToken(env);
   if (!token) {
     return { ok: false, status: 503, error: "Google access token not available" };
   }
 
-  const response = await fetch(googleUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let response;
+  try {
+    response = await fetch(googleUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { ok: false, status: 502, error: "Google API request failed" };
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     return { ok: false, status: response.status, error: `Google API ${response.status}: ${body.slice(0, 200)}` };
   }
 
-  return { ok: true, data: await response.json() };
+  try {
+    return { ok: true, data: await response.json() };
+  } catch {
+    return { ok: false, status: 502, error: "Google API returned an invalid JSON response" };
+  }
 }
 
 // ============================================
@@ -149,11 +167,20 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
     return c.json({ error: `Drive download failed: ${response.status}` }, response.status);
   }
 
+  const headers = {
+    "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
+  };
+  const contentLength = response.headers.get("Content-Length");
+  if (contentLength !== null) {
+    headers["Content-Length"] = contentLength;
+  }
+  const contentDisposition = response.headers.get("Content-Disposition");
+  if (contentDisposition) {
+    headers["Content-Disposition"] = contentDisposition;
+  }
+
   return new Response(response.body, {
-    headers: {
-      "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
-      "Content-Length": response.headers.get("Content-Length") || "",
-    },
+    headers,
   });
 });
 

@@ -222,12 +222,36 @@ export class SecretRotationService {
       return { ok: false, error: 'Invalid service_account JSON in KV' };
     }
 
+    // Validate and normalize service account fields
+    if (!sa.client_email || !sa.private_key) {
+      return { ok: false, error: 'missing service-account field: client_email or private_key' };
+    }
+
+    let normalizedScopes;
+    if (!sa.scopes) {
+      return { ok: false, error: 'missing service-account field: scopes' };
+    }
+    if (typeof sa.scopes === 'string') {
+      normalizedScopes = sa.scopes;
+    } else if (Array.isArray(sa.scopes)) {
+      if (sa.scopes.length === 0 || !sa.scopes.every((s) => typeof s === 'string')) {
+        return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+      }
+      normalizedScopes = sa.scopes.join(' ');
+    } else {
+      return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+    }
+
+    if (!sa.impersonate || typeof sa.impersonate !== 'string' || !sa.impersonate.trim()) {
+      return { ok: false, error: 'missing or invalid service-account field: impersonate (required for domain-wide delegation)' };
+    }
+
     const { createJwt } = await import('./jwt-helper.js');
     const now = Math.floor(Date.now() / 1000);
     const claims = {
       iss: sa.client_email,
       sub: sa.impersonate,
-      scope: sa.scopes,
+      scope: normalizedScopes,
       aud: 'https://oauth2.googleapis.com/token',
       iat: now,
       exp: now + 3600,
