@@ -223,8 +223,8 @@ export class SecretRotationService {
     }
 
     // Validate and normalize service account fields
-    if (!sa.impersonate || typeof sa.impersonate !== 'string' || sa.impersonate.trim() === '') {
-      return { ok: false, error: 'missing service-account field: impersonate' };
+    if (!sa.client_email || !sa.private_key) {
+      return { ok: false, error: 'missing service-account field: client_email or private_key' };
     }
 
     let normalizedScopes;
@@ -246,12 +246,14 @@ export class SecretRotationService {
     const now = Math.floor(Date.now() / 1000);
     const claims = {
       iss: sa.client_email,
-      sub: sa.impersonate,
       scope: normalizedScopes,
       aud: 'https://oauth2.googleapis.com/token',
       iat: now,
       exp: now + 3600,
     };
+    if (sa.impersonate) {
+      claims.sub = sa.impersonate;
+    }
 
     const signedJwt = await createJwt(claims, sa.private_key);
 
