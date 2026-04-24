@@ -86,7 +86,7 @@ describe("getGoogleToken token resolution", () => {
   });
 
   it("falls back to getCredential when KV returns null", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
+    env.CREDENTIAL_CACHE.get.mockResolvedValue(null);
     mockGetCredential.mockResolvedValueOnce("broker-token");
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
 
@@ -94,6 +94,53 @@ describe("getGoogleToken token resolution", () => {
 
     const [, init] = globalThis.fetch.mock.calls[0];
     expect(init.headers.Authorization).toBe("Bearer broker-token");
+  });
+
+  it("Drive routes fall back to the app-only KV token when delegated is missing", async () => {
+    env.CREDENTIAL_CACHE.get.mockImplementation((key) => {
+      if (key === "secret:gdrive:access_token") return Promise.resolve(null);
+      if (key === "secret:gdrive:access_token:app_only") return Promise.resolve("app-only-tok");
+      return Promise.resolve(null);
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+
+    await get("/gdrive/files", env);
+
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Bearer app-only-tok");
+    expect(mockGetCredential).not.toHaveBeenCalled();
+  });
+
+  it("Gmail routes do NOT use the app-only KV token; they fall through to broker/env", async () => {
+    env.CREDENTIAL_CACHE.get.mockImplementation((key) => {
+      if (key === "secret:gdrive:access_token") return Promise.resolve(null);
+      if (key === "secret:gdrive:access_token:app_only") return Promise.resolve("app-only-tok");
+      return Promise.resolve(null);
+    });
+    mockGetCredential.mockResolvedValueOnce("broker-token");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ messages: [] }));
+
+    await get("/email/messages", env);
+
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Bearer broker-token");
+    expect(mockGetCredential).toHaveBeenCalled();
+    // Ensure the app-only cached token was NOT used.
+    expect(init.headers.Authorization).not.toBe("Bearer app-only-tok");
+  });
+
+  it("Gmail routes prefer the delegated KV token over broker/env", async () => {
+    env.CREDENTIAL_CACHE.get.mockImplementation((key) => {
+      if (key === "secret:gdrive:access_token") return Promise.resolve("delegated-tok");
+      return Promise.resolve(null);
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ messages: [] }));
+
+    await get("/email/messages", env);
+
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Bearer delegated-tok");
+    expect(mockGetCredential).not.toHaveBeenCalled();
   });
 
   it("falls back to getCredential when CREDENTIAL_CACHE is absent from env", async () => {
@@ -170,7 +217,9 @@ describe("GET /gdrive/files", () => {
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
     await get("/gdrive/files", env, "q=name+contains+'report'");
     const [url] = globalThis.fetch.mock.calls[0];
-    expect(decodeURIComponent(url)).toContain("name contains 'report'");
+    // URLSearchParams serializes spaces as '+', so use form-encoded parsing to read q.
+    const qParam = new URL(url).searchParams.get("q");
+    expect(qParam).toBe("name contains 'report'");
   });
 
   it("forwards fields, pageSize, and pageToken parameters", async () => {

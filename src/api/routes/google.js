@@ -15,6 +15,7 @@
 
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
+import { getCachedGDriveToken } from "../../services/secret-rotation.js";
 import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const googleRoutes = new Hono();
@@ -34,12 +35,10 @@ async function getGoogleToken(env, { scope = "gmail" } = {}) {
   // Fast path: KV-cached rotated token (updated every 50 min)
   if (env.CREDENTIAL_CACHE) {
     try {
-      const delegated = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
-      if (delegated) return delegated;
-      if (scope === "drive") {
-        const appOnly = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token:app_only");
-        if (appOnly) return appOnly;
-      }
+      const cached = await getCachedGDriveToken(env.CREDENTIAL_CACHE, {
+        allowAppOnly: scope === "drive",
+      });
+      if (cached) return cached;
     } catch {
       console.warn("Google token KV cache read failed; falling back to broker/env token source");
     }

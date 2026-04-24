@@ -199,6 +199,27 @@ describe("SecretRotationService._rotateViaServiceAccount", () => {
     expect(result.error).toContain("private_key");
   });
 
+  it("returns error when impersonate is an empty string", async () => {
+    const sa = { ...VALID_SA, impersonate: "" };
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("impersonate");
+  });
+
+  it("returns error when impersonate is whitespace-only", async () => {
+    const sa = { ...VALID_SA, impersonate: "   " };
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("impersonate");
+  });
+
+  it("returns error when impersonate is not a string", async () => {
+    const sa = { ...VALID_SA, impersonate: 42 };
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("impersonate");
+  });
+
   it("omits sub claim when impersonate is absent (app-only token)", async () => {
     globalThis.fetch = makeFetchOk();
     const sa = { ...VALID_SA };
@@ -334,6 +355,24 @@ describe("SecretRotationService._rotateViaServiceAccount", () => {
       "secret:gdrive:access_token",
       expect.anything(),
       expect.anything(),
+    );
+  });
+
+  it("evicts the sibling app-only key when rotating a delegated token", async () => {
+    globalThis.fetch = makeFetchOk();
+    await service._rotateViaServiceAccount(JSON.stringify(VALID_SA));
+    expect(env.CREDENTIAL_CACHE.delete).toHaveBeenCalledWith(
+      "secret:gdrive:access_token:app_only",
+    );
+  });
+
+  it("evicts the sibling delegated key when rotating an app-only token", async () => {
+    globalThis.fetch = makeFetchOk();
+    const sa = { ...VALID_SA };
+    delete sa.impersonate;
+    await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(env.CREDENTIAL_CACHE.delete).toHaveBeenCalledWith(
+      "secret:gdrive:access_token",
     );
   });
 

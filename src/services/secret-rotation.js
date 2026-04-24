@@ -227,6 +227,14 @@ export class SecretRotationService {
       return { ok: false, error: 'missing service-account field: client_email or private_key' };
     }
 
+    // If impersonate is provided at all, it must be a non-empty string —
+    // an empty/whitespace value would silently cache as app-only and surprise callers.
+    if (sa.impersonate !== undefined && sa.impersonate !== null) {
+      if (typeof sa.impersonate !== 'string' || sa.impersonate.trim() === '') {
+        return { ok: false, error: 'invalid service-account field: impersonate must be a non-empty string when provided' };
+      }
+    }
+
     let normalizedScopes;
     if (!sa.scopes) {
       return { ok: false, error: 'missing service-account field: scopes' };
@@ -282,9 +290,15 @@ export class SecretRotationService {
     const cacheKey = delegated
       ? 'secret:gdrive:access_token'
       : 'secret:gdrive:access_token:app_only';
+    const staleKey = delegated
+      ? 'secret:gdrive:access_token:app_only'
+      : 'secret:gdrive:access_token';
     await this.kv.put(cacheKey, accessToken, {
       expirationTtl: Math.max(expiresIn - 120, 300),
     });
+    // Evict the sibling key so a mode transition (adding/removing impersonate)
+    // doesn't leave a stale token of the other flavor lingering until TTL expiry.
+    await this.kv.delete(staleKey).catch(() => {});
 
     console.log(
       `[SecretRotation] GDrive access token rotated via service_account JWT (${delegated ? 'delegated' : 'app-only'}), expires in ${expiresIn}s`,
