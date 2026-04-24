@@ -1123,7 +1123,8 @@ thirdpartyRoutes.get("/gmail/message/:messageId/raw", async (c) => {
 
     // Gmail returns base64url-encoded RFC 2822 message
     // Convert base64url → base64 → binary
-    const base64 = data.raw.replace(/-/g, "+").replace(/_/g, "/");
+    let base64 = data.raw.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += '=';
     const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
