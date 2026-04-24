@@ -29,6 +29,12 @@ export async function createJwt(claims, privateKeyPem) {
   return `${signingInput}.${signatureB64}`;
 }
 
+/**
+ * Encode binary or text input into base64url format.
+ *
+ * @param {string|ArrayBuffer|Uint8Array|ArrayLike<number>} input - The data to encode. If a string is provided it is UTF-8 encoded; if an ArrayBuffer or byte-like array is provided its bytes are used directly.
+ * @returns {string} The base64url-encoded string (uses '-' and '_' instead of '+' and '/', and omits padding).
+ */
 function base64url(input) {
   let data;
   if (typeof input === "string") {
@@ -42,6 +48,12 @@ function base64url(input) {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/**
+ * Imports a PEM-encoded RSA private key and returns a CryptoKey configured for RSASSA-PKCS1-v1_5 (SHA-256) signing.
+ *
+ * @param {string} pem - PEM string containing a PKCS#8 private key; PEM headers and whitespace are ignored.
+ * @returns {CryptoKey} The imported private key usable for the "sign" operation.
+ */
 async function importPrivateKey(pem) {
   const pemBody = pem
     .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, "")

@@ -22,8 +22,8 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
 /**
- * Get a valid Google access token — tries KV rotation cache first (fastest),
- * falls back to 1Password broker, then env var.
+ * Obtain a Google access token using the configured priority: KV rotation cache, 1Password broker, then environment variable.
+ * @returns {string|undefined} The Google access token string if available, otherwise `undefined`.
  */
 async function getGoogleToken(env) {
   // Fast path: KV-cached rotated token (updated every 50 min)
@@ -37,8 +37,11 @@ async function getGoogleToken(env) {
 }
 
 /**
- * Proxy a request to a Google API, injecting the access token.
- */
+ * Proxy a Google API request using an available access token.
+ *
+ * @param {Object} env - Runtime environment used to retrieve the Google access token (e.g., KV and credential helpers).
+ * @param {string} googleUrl - Full Google API URL to fetch.
+ * @returns {Promise<Object>} An object with either `{ ok: true, data }` when the upstream request succeeds, or `{ ok: false, status, error }` when a token is unavailable or the upstream request fails.
 async function googleProxy(env, googleUrl) {
   const token = await getGoogleToken(env);
   if (!token) {
