@@ -159,11 +159,16 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
     return c.json({ error: `Drive download failed: ${response.status}` }, response.status);
   }
 
+  const headers = {
+    "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
+  };
+  const contentLength = response.headers.get("Content-Length");
+  if (contentLength !== null) {
+    headers["Content-Length"] = contentLength;
+  }
+
   return new Response(response.body, {
-    headers: {
-      "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
-      "Content-Length": response.headers.get("Content-Length") || "",
-    },
+    headers,
   });
 });
 
