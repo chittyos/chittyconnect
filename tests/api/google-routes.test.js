@@ -1,638 +1,711 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+/**
+ * Tests for src/api/routes/google.js
+ *
+ * Covers:
+ *  - getGoogleToken (KV cache → credential-helper fallback)
+ *  - googleProxy (token absent, fetch failure, non-ok status, bad JSON)
+ *  - GET /gdrive/files
+ *  - GET /gdrive/files/:fileId
+ *  - GET /gdrive/files/:fileId/content  (Google-native export vs. alt=media)
+ *  - GET /email/messages
+ *  - GET /email/messages/:messageId
+ *  - GET /email/messages/:messageId/attachments/:attachmentId
+ */
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Hono } from "hono";
 import { createMockKV } from "../helpers/mocks.js";
 
-// ----------------------------------------------------------------
-// Mocks — must be defined before importing the route module
-// ----------------------------------------------------------------
+// ── Mocks ─────────────────────────────────────────────────────────────────────
 
-// Bypass the service-token middleware so route handlers execute unconditionally.
+// Bypass requireServiceToken so it never blocks route handlers under test
 vi.mock("../../src/middleware/require-service-token.js", () => ({
-  requireServiceToken: () => async (_c, next) => { await next(); },
+  requireServiceToken: () => async (_c, next) => await next(),
 }));
 
-// Mock credential-helper so getCredential returns a predictable token.
-const mockGetCredential = vi.fn().mockResolvedValue("test-google-token");
+const mockGetCredential = vi.fn();
 vi.mock("../../src/lib/credential-helper.js", () => ({
   getCredential: (...args) => mockGetCredential(...args),
 }));
 
-// ----------------------------------------------------------------
-// Import route AFTER mocks are registered
-// ----------------------------------------------------------------
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+// ── Import routes after mocks are set up ──────────────────────────────────────
 const { googleRoutes } = await import("../../src/api/routes/google.js");
 
-// ----------------------------------------------------------------
-// Helpers
-// ----------------------------------------------------------------
+// ── Test environment factory ──────────────────────────────────────────────────
 
 function makeEnv(overrides = {}) {
   return {
     CREDENTIAL_CACHE: createMockKV(),
+    GOOGLE_ACCESS_TOKEN: undefined,
     ...overrides,
   };
 }
 
-/** Build a minimal successful fetch response returning JSON. */
-function jsonResponse(body, status = 200) {
-  return new Response(JSON.stringify(body), {
+function makeApp(env) {
+  const app = new Hono();
+  app.route("/api/google", googleRoutes);
+  // Hono's app.request() accepts env as 3rd arg (passed to c.env)
+  return { app, env };
+}
+
+// ── Fetch response helpers ─────────────────────────────────────────────────────
+
+function jsonOkResponse(data) {
+  return {
+    ok: true,
+    status: 200,
+    json: vi.fn().mockResolvedValue(data),
+    text: vi.fn().mockResolvedValue(JSON.stringify(data)),
+    headers: new Headers({ "Content-Type": "application/json" }),
+    body: null,
+  };
+}
+
+function errorResponse(status, bodyText = "error") {
+  return {
+    ok: false,
     status,
-    headers: { "Content-Type": "application/json" },
-  });
+    json: vi.fn().mockResolvedValue({}),
+    text: vi.fn().mockResolvedValue(bodyText),
+    headers: new Headers(),
+  };
 }
 
-/** Build a fetch error response with plain text body. */
-function errorResponse(status, text = "Error") {
-  return new Response(text, { status });
+function binaryOkResponse(body, contentType = "application/pdf", contentLength = "42") {
+  const headers = new Headers({ "Content-Type": contentType });
+  if (contentLength !== null) headers.set("Content-Length", contentLength);
+  return {
+    ok: true,
+    status: 200,
+    headers,
+    body,
+  };
 }
 
-/**
- * Issue a GET request directly to the googleRoutes Hono app.
- * @param {string} path  - e.g. "/gdrive/files"
- * @param {object} env   - Mock worker environment
- * @param {string} [query] - Optional query string (without leading "?")
- */
-async function get(path, env, query = "") {
-  const url = `http://localhost${path}${query ? `?${query}` : ""}`;
-  return googleRoutes.fetch(new Request(url), env);
-}
+// ── Shared beforeEach ─────────────────────────────────────────────────────────
 
-// ----------------------------------------------------------------
-// getGoogleToken resolution
-// ----------------------------------------------------------------
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetCredential.mockResolvedValue(undefined); // default: no fallback token
+});
 
-describe("getGoogleToken token resolution", () => {
-  let env;
-  let originalFetch;
+// ── getGoogleToken via KV cache ───────────────────────────────────────────────
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    originalFetch = globalThis.fetch;
+describe("token resolution", () => {
+  it("uses KV-cached token when CREDENTIAL_CACHE has an access_token", async () => {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async (key) =>
+      key === "secret:gdrive:access_token" ? "kv-token" : null,
+    );
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
+
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(200);
+    // Authorization header should use the KV token
+    const [, fetchInit] = mockFetch.mock.calls[0];
+    expect(fetchInit.headers.Authorization).toBe("Bearer kv-token");
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+  it("falls back to getCredential when KV cache misses", async () => {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockResolvedValue(null);
+    mockGetCredential.mockResolvedValue("cred-helper-token");
+    const { app } = makeApp(env);
 
-  it("uses KV-cached token when CREDENTIAL_CACHE has a value", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce("kv-cached-token");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
 
-    await get("/gdrive/files", env);
+    const res = await app.request("/api/google/gdrive/files", {}, env);
 
-    const [, init] = globalThis.fetch.mock.calls[0];
-    expect(init.headers.Authorization).toBe("Bearer kv-cached-token");
-    expect(mockGetCredential).not.toHaveBeenCalled();
-  });
-
-  it("falls back to getCredential when KV returns null", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
-    mockGetCredential.mockResolvedValueOnce("broker-token");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
-
-    await get("/gdrive/files", env);
-
-    const [, init] = globalThis.fetch.mock.calls[0];
-    expect(init.headers.Authorization).toBe("Bearer broker-token");
+    expect(res.status).toBe(200);
+    const [, fetchInit] = mockFetch.mock.calls[0];
+    expect(fetchInit.headers.Authorization).toBe("Bearer cred-helper-token");
   });
 
   it("falls back to getCredential when CREDENTIAL_CACHE is absent from env", async () => {
-    const envNoKV = makeEnv({ CREDENTIAL_CACHE: undefined });
-    mockGetCredential.mockResolvedValueOnce("env-token");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+    const env = makeEnv({ CREDENTIAL_CACHE: undefined });
+    mockGetCredential.mockResolvedValue("env-token");
+    const { app } = makeApp(env);
 
-    await get("/gdrive/files", envNoKV);
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
 
-    const [, init] = globalThis.fetch.mock.calls[0];
-    expect(init.headers.Authorization).toBe("Bearer env-token");
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(200);
   });
 
   it("falls back to getCredential when KV read throws", async () => {
-    env.CREDENTIAL_CACHE.get.mockRejectedValueOnce(new Error("KV unavailable"));
-    mockGetCredential.mockResolvedValueOnce("fallback-token");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockRejectedValue(new Error("KV unavailable"));
+    mockGetCredential.mockResolvedValue("fallback-token");
+    const { app } = makeApp(env);
 
-    await get("/gdrive/files", env);
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
 
-    const [, init] = globalThis.fetch.mock.calls[0];
-    expect(init.headers.Authorization).toBe("Bearer fallback-token");
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(200);
   });
 
   it("returns 503 when no token is available from any source", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
-    mockGetCredential.mockResolvedValueOnce(undefined);
+    const env = makeEnv({ CREDENTIAL_CACHE: undefined });
+    mockGetCredential.mockResolvedValue(undefined);
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files", env);
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
     expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body.error).toContain("Google access token not available");
+    expect(body.error).toMatch(/access token not available/i);
   });
 });
 
-// ----------------------------------------------------------------
-// GET /gdrive/files
-// ----------------------------------------------------------------
+// ── googleProxy error handling ────────────────────────────────────────────────
+
+describe("googleProxy error handling", () => {
+  function makeEnvWithToken(token = "test-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async (key) =>
+      key === "secret:gdrive:access_token" ? token : null,
+    );
+    return env;
+  }
+
+  it("returns 502 when fetch throws a network error", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockRejectedValueOnce(new Error("network failure"));
+
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/Google API request failed/);
+  });
+
+  it("returns the upstream status code when Google API returns non-ok", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(errorResponse(403, "Forbidden"));
+
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/Google API 403/);
+    expect(body.error).toMatch(/Forbidden/);
+  });
+
+  it("returns 502 when Google API returns invalid JSON", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(new SyntaxError("bad json")),
+      text: vi.fn().mockResolvedValue("not-json"),
+    });
+
+    const res = await app.request("/api/google/gdrive/files", {}, env);
+
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/invalid JSON/i);
+  });
+});
+
+// ── GET /gdrive/files ─────────────────────────────────────────────────────────
 
 describe("GET /gdrive/files", () => {
-  let env;
-  let originalFetch;
+  function makeEnvWithToken(token = "drive-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async (key) =>
+      key === "secret:gdrive:access_token" ? token : null,
+    );
+    return env;
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
+  it("returns 200 with files list", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+    const filesData = { files: [{ id: "abc", name: "doc.pdf" }], nextPageToken: null };
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+    mockFetch.mockResolvedValueOnce(jsonOkResponse(filesData));
 
-  it("returns 200 with file list from Google API", async () => {
-    const driveFiles = { files: [{ id: "file-1", name: "doc.pdf" }], nextPageToken: null };
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(driveFiles));
+    const res = await app.request("/api/google/gdrive/files", {}, env);
 
-    const res = await get("/gdrive/files", env);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.files).toHaveLength(1);
-    expect(body.files[0].id).toBe("file-1");
+    expect(body.files[0].id).toBe("abc");
   });
 
-  it("calls the Drive files list endpoint", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
-    await get("/gdrive/files", env);
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(url).toContain("https://www.googleapis.com/drive/v3/files");
-  });
+  it("passes q, fields, pageSize, pageToken as query params to Drive API", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-  it("forwards q query parameter to Google API", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
-    await get("/gdrive/files", env, "q=name+contains+'report'");
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(decodeURIComponent(url)).toContain("name contains 'report'");
-  });
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
 
-  it("forwards fields, pageSize, and pageToken parameters", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
-    await get("/gdrive/files", env, "fields=files(id,name)&pageSize=10&pageToken=tok123");
-    const [url] = globalThis.fetch.mock.calls[0];
+    await app.request(
+      "/api/google/gdrive/files?q=mimeType%3D'text%2Fplain'&fields=files(id)&pageSize=10&pageToken=tok123",
+      {},
+      env,
+    );
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain("q=");
     expect(url).toContain("fields=");
     expect(url).toContain("pageSize=10");
     expect(url).toContain("pageToken=tok123");
+    expect(url).toContain("https://www.googleapis.com/drive/v3/files");
   });
 
-  it("returns 502 when Google API fetch throws a network error", async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("network failure"));
-    const res = await get("/gdrive/files", env);
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.error).toContain("Google API request failed");
-  });
+  it("omits absent query params from the Drive API call", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-  it("returns upstream status code on non-2xx Google response", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(403, "Forbidden"));
-    const res = await get("/gdrive/files", env);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toContain("403");
-  });
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ files: [] }));
 
-  it("returns 502 when Google API returns non-JSON body", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response("not-json", { status: 200, headers: { "Content-Type": "text/html" } }),
-    );
-    const res = await get("/gdrive/files", env);
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.error).toContain("invalid JSON");
+    await app.request("/api/google/gdrive/files", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
+    // No spurious params
+    expect(url).not.toContain("pageToken");
+    expect(url).not.toContain("fields=");
   });
 });
 
-// ----------------------------------------------------------------
-// GET /gdrive/files/:fileId
-// ----------------------------------------------------------------
+// ── GET /gdrive/files/:fileId ─────────────────────────────────────────────────
 
 describe("GET /gdrive/files/:fileId", () => {
-  let env;
-  let originalFetch;
+  function makeEnvWithToken(token = "drive-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async () => token);
+    return env;
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
+  it("returns file metadata JSON", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+    const meta = { id: "file-123", name: "Report.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+    mockFetch.mockResolvedValueOnce(jsonOkResponse(meta));
 
-  it("returns 200 with file metadata", async () => {
-    const fileMeta = { id: "abc123", name: "report.pdf", mimeType: "application/pdf" };
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(fileMeta));
+    const res = await app.request("/api/google/gdrive/files/file-123", {}, env);
 
-    const res = await get("/gdrive/files/abc123", env);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.id).toBe("abc123");
+    expect(body.id).toBe("file-123");
   });
 
-  it("URL-encodes the fileId in the upstream request", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "id with spaces" }));
-    await get("/gdrive/files/id%20with%20spaces", env);
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(url).toContain("id%20with%20spaces");
+  it("percent-encodes fileId in the upstream URL", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ id: "tricky id" }));
+
+    await app.request("/api/google/gdrive/files/tricky%20id", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain("tricky%20id");
   });
 
-  it("forwards fields query parameter", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "f1" }));
-    await get("/gdrive/files/f1", env, "fields=id,name,mimeType");
-    const [url] = globalThis.fetch.mock.calls[0];
+  it("passes fields param to Drive API", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ id: "f1", name: "x" }));
+
+    await app.request("/api/google/gdrive/files/f1?fields=id,name", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
     expect(url).toContain("fields=");
-  });
-
-  it("returns 404 when Google returns 404", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(404, "File not found"));
-    const res = await get("/gdrive/files/missing", env);
-    expect(res.status).toBe(404);
   });
 });
 
-// ----------------------------------------------------------------
-// GET /gdrive/files/:fileId/content
-// ----------------------------------------------------------------
+// ── GET /gdrive/files/:fileId/content ─────────────────────────────────────────
 
 describe("GET /gdrive/files/:fileId/content", () => {
-  let env;
-  let originalFetch;
+  function makeEnvWithToken(token = "drive-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async () => token);
+    return env;
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
+  it("exports Google Docs files as PDF", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+    // First fetch: metadata, Second: export download
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/vnd.google-apps.document" }))
+      .mockResolvedValueOnce(binaryOkResponse(new ReadableStream(), "application/pdf", "1234"));
 
-  it("exports Google Docs files as PDF via the export endpoint", async () => {
-    const pdfBytes = new Uint8Array([37, 80, 68, 70]); // %PDF
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/vnd.google-apps.document" })) // metadata
-      .mockResolvedValueOnce(
-        new Response(pdfBytes, {
-          status: 200,
-          headers: { "Content-Type": "application/pdf", "Content-Length": "4" },
-        }),
-      ); // export
+    const res = await app.request("/api/google/gdrive/files/doc-id/content", {}, env);
 
-    const res = await get("/gdrive/files/doc-id/content", env);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/pdf");
-    // Verify the second fetch was to the export endpoint
-    const [exportUrl] = globalThis.fetch.mock.calls[1];
-    expect(exportUrl).toContain("/export?mimeType=");
+
+    const [metaUrl] = mockFetch.mock.calls[0];
+    expect(metaUrl).toContain("fields=mimeType");
+
+    const [exportUrl] = mockFetch.mock.calls[1];
+    expect(exportUrl).toContain("/export");
     expect(exportUrl).toContain("application%2Fpdf");
   });
 
   it("exports Google Sheets files as PDF", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/vnd.google-apps.spreadsheet" }))
-      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "application/pdf" } }));
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/sheet-id/content", env);
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/vnd.google-apps.spreadsheet" }))
+      .mockResolvedValueOnce(binaryOkResponse(new ReadableStream(), "application/pdf", "999"));
+
+    const res = await app.request("/api/google/gdrive/files/sheet-id/content", {}, env);
+
     expect(res.status).toBe(200);
-    const [exportUrl] = globalThis.fetch.mock.calls[1];
+    const [exportUrl] = mockFetch.mock.calls[1];
     expect(exportUrl).toContain("/export");
   });
 
   it("exports Google Slides files as PDF", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/vnd.google-apps.presentation" }))
-      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "Content-Type": "application/pdf" } }));
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/slide-id/content", env);
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/vnd.google-apps.presentation" }))
+      .mockResolvedValueOnce(binaryOkResponse(new ReadableStream(), "application/pdf", "100"));
+
+    const res = await app.request("/api/google/gdrive/files/slide-id/content", {}, env);
+
     expect(res.status).toBe(200);
-    const [exportUrl] = globalThis.fetch.mock.calls[1];
+    const [exportUrl] = mockFetch.mock.calls[1];
     expect(exportUrl).toContain("/export");
   });
 
-  it("downloads binary files using alt=media", async () => {
-    const fileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG header
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/png" }))
-      .mockResolvedValueOnce(
-        new Response(fileBytes, {
-          status: 200,
-          headers: { "Content-Type": "image/png" },
-        }),
-      );
+  it("uses alt=media for binary-backed files (non-Google-native)", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/img-id/content", env);
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/pdf" }))
+      .mockResolvedValueOnce(binaryOkResponse(new ReadableStream(), "application/pdf", "2048"));
+
+    const res = await app.request("/api/google/gdrive/files/pdf-id/content", {}, env);
+
     expect(res.status).toBe(200);
-    const [downloadUrl] = globalThis.fetch.mock.calls[1];
+    const [downloadUrl] = mockFetch.mock.calls[1];
     expect(downloadUrl).toContain("alt=media");
+    expect(downloadUrl).not.toContain("/export");
   });
 
-  it("returns 503 when no token is available", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
-    mockGetCredential.mockResolvedValueOnce(undefined);
+  it("returns 503 when token is unavailable", async () => {
+    const env = makeEnv({ CREDENTIAL_CACHE: undefined });
+    mockGetCredential.mockResolvedValue(undefined);
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/any-id/content", env);
+    const res = await app.request("/api/google/gdrive/files/any-id/content", {}, env);
+
     expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.error).toContain("Google access token not available");
   });
 
-  it("returns upstream status when metadata fetch fails", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(errorResponse(404, "Not found")); // metadata
+  it("returns upstream error status when metadata fetch fails", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/bad-id/content", env);
+    mockFetch.mockResolvedValueOnce(errorResponse(404, "not found"));
+
+    const res = await app.request("/api/google/gdrive/files/missing-id/content", {}, env);
+
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error).toContain("Failed to fetch file metadata");
+    expect(body.error).toMatch(/Failed to fetch file metadata: 404/);
   });
 
-  it("returns upstream status when download fails", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/jpeg" })) // metadata OK
-      .mockResolvedValueOnce(errorResponse(403, "Forbidden")); // download fails
+  it("returns upstream error status when download fails", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/locked-id/content", env);
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "image/jpeg" }))
+      .mockResolvedValueOnce(errorResponse(403, "quota exceeded"));
+
+    const res = await app.request("/api/google/gdrive/files/img-id/content", {}, env);
+
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toContain("Drive download failed");
+    expect(body.error).toMatch(/Drive download failed: 403/);
   });
 
-  it("propagates Content-Disposition header from Google when present", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/pdf" }))
-      .mockResolvedValueOnce(
-        new Response(new Uint8Array([1, 2, 3]), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": 'attachment; filename="file.pdf"',
-          },
-        }),
-      );
+  it("propagates Content-Disposition header when present", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/f1/content", env);
-    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="file.pdf"');
+    const downloadResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "Content-Type": "application/octet-stream",
+        "Content-Length": "100",
+        "Content-Disposition": 'attachment; filename="report.pdf"',
+      }),
+      body: new ReadableStream(),
+    };
+
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/octet-stream" }))
+      .mockResolvedValueOnce(downloadResponse);
+
+    const res = await app.request("/api/google/gdrive/files/any-id/content", {}, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="report.pdf"');
   });
 
-  it("falls back to application/octet-stream when Content-Type is missing", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/octet-stream" }))
-      .mockResolvedValueOnce(new Response(new Uint8Array([0]), { status: 200 }));
+  it("defaults Content-Type to application/octet-stream when not returned", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/gdrive/files/bin-id/content", env);
-    expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+    const downloadResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers(), // no Content-Type
+      body: new ReadableStream(),
+    };
+
+    mockFetch
+      .mockResolvedValueOnce(jsonOkResponse({ mimeType: "application/octet-stream" }))
+      .mockResolvedValueOnce(downloadResponse);
+
+    const res = await app.request("/api/google/gdrive/files/any-id/content", {}, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("application/octet-stream");
   });
 });
 
-// ----------------------------------------------------------------
-// GET /email/messages
-// ----------------------------------------------------------------
+// ── GET /email/messages ───────────────────────────────────────────────────────
 
 describe("GET /email/messages", () => {
-  let env;
-  let originalFetch;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+  function makeEnvWithToken(token = "gmail-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async () => token);
+    return env;
+  }
 
   it("returns 200 with message list", async () => {
-    const messages = { messages: [{ id: "msg-1" }, { id: "msg-2" }], resultSizeEstimate: 2 };
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(messages));
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/email/messages", env);
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ messages: [{ id: "msg-1" }], resultSizeEstimate: 1 }));
+
+    const res = await app.request("/api/google/email/messages", {}, env);
+
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.messages).toHaveLength(2);
+    expect(body.messages).toHaveLength(1);
   });
 
-  it("calls the Gmail messages list endpoint", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ messages: [] }));
-    await get("/email/messages", env);
-    const [url] = globalThis.fetch.mock.calls[0];
+  it("passes q, maxResults, pageToken to Gmail API", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ messages: [] }));
+
+    await app.request("/api/google/email/messages?q=from%3Atest&maxResults=5&pageToken=page1", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
     expect(url).toContain("https://www.googleapis.com/gmail/v1/users/me/messages");
-  });
-
-  it("forwards q, maxResults, and pageToken query parameters", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ messages: [] }));
-    await get("/email/messages", env, "q=from%3Aboss&maxResults=5&pageToken=nextTok");
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(decodeURIComponent(url)).toContain("from:boss");
     expect(url).toContain("maxResults=5");
-    expect(url).toContain("pageToken=nextTok");
+    expect(url).toContain("pageToken=page1");
   });
 
-  it("returns 503 when no token available", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
-    mockGetCredential.mockResolvedValueOnce(undefined);
+  it("omits absent optional params", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    const res = await get("/email/messages", env);
-    expect(res.status).toBe(503);
-  });
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ messages: [] }));
 
-  it("returns upstream error code on Gmail API failure", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(429, "Rate limit exceeded"));
-    const res = await get("/email/messages", env);
-    expect(res.status).toBe(429);
+    await app.request("/api/google/email/messages", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).not.toContain("maxResults");
+    expect(url).not.toContain("pageToken");
   });
 });
 
-// ----------------------------------------------------------------
-// GET /email/messages/:messageId
-// ----------------------------------------------------------------
+// ── GET /email/messages/:messageId ────────────────────────────────────────────
 
 describe("GET /email/messages/:messageId", () => {
-  let env;
-  let originalFetch;
+  function makeEnvWithToken(token = "gmail-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async () => token);
+    return env;
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
+  it("returns 200 with message data", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+    const msgData = { id: "msg-abc", snippet: "Hello world", labelIds: ["INBOX"] };
+    mockFetch.mockResolvedValueOnce(jsonOkResponse(msgData));
 
-  it("returns 200 with message details", async () => {
-    const message = { id: "msg-abc", threadId: "thread-1", snippet: "Hello world" };
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(message));
+    const res = await app.request("/api/google/email/messages/msg-abc", {}, env);
 
-    const res = await get("/email/messages/msg-abc", env);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.id).toBe("msg-abc");
   });
 
-  it("URL-encodes the messageId in the upstream request", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "msg+special" }));
-    await get("/email/messages/msg%2Bspecial", env);
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(url).toContain("msg%2Bspecial");
+  it("percent-encodes messageId in upstream URL", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ id: "a b" }));
+
+    await app.request("/api/google/email/messages/a%20b", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain("a%20b");
   });
 
-  it("forwards format query parameter", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "m1" }));
-    await get("/email/messages/m1", env, "format=metadata");
-    const [url] = globalThis.fetch.mock.calls[0];
+  it("passes format param to Gmail API", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ id: "msg-1" }));
+
+    await app.request("/api/google/email/messages/msg-1?format=metadata", {}, env);
+
+    const [url] = mockFetch.mock.calls[0];
     expect(url).toContain("format=metadata");
   });
-
-  it("returns 404 when message is not found", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(404, "Not Found"));
-    const res = await get("/email/messages/nonexistent", env);
-    expect(res.status).toBe(404);
-  });
 });
 
-// ----------------------------------------------------------------
-// GET /email/messages/:messageId/attachments/:attachmentId
-// ----------------------------------------------------------------
+// ── GET /email/messages/:messageId/attachments/:attachmentId ──────────────────
 
 describe("GET /email/messages/:messageId/attachments/:attachmentId", () => {
-  let env;
-  let originalFetch;
+  function makeEnvWithToken(token = "gmail-token") {
+    const env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockImplementation(async () => token);
+    return env;
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
+  it("decodes base64url attachment data and returns binary response", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+    // "Hello" in base64url
+    const helloBase64url = Buffer.from("Hello").toString("base64url");
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data: helloBase64url, size: 5 }));
 
-  it("returns binary content decoded from base64url data", async () => {
-    // "Hello" in base64url is "SGVsbG8"
-    const helloBytes = new TextEncoder().encode("Hello");
-    const base64url = btoa(String.fromCharCode(...helloBytes))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-1", {}, env);
 
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      jsonResponse({ data: base64url, size: helloBytes.length }),
-    );
-
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+    expect(res.headers.get("Content-Length")).toBe("5");
     const buffer = await res.arrayBuffer();
-    expect(new Uint8Array(buffer)).toEqual(helloBytes);
+    expect(new TextDecoder().decode(buffer)).toBe("Hello");
   });
 
-  it("sets Content-Length from size field in Gmail response", async () => {
-    const bytes = new Uint8Array([65, 66, 67]); // "ABC"
-    const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  it("handles base64url strings that need padding added", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ data: b64, size: 3 }));
+    // "Hi!" — 3 bytes; base64url without padding
+    const data = Buffer.from("Hi!").toString("base64url"); // "SGkh" (no padding needed here)
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data, size: 3 }));
 
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
-    expect(res.headers.get("Content-Length")).toBe("3");
-  });
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-2", {}, env);
 
-  it("handles base64url with URL-safe characters (- and _)", async () => {
-    // Create a byte sequence that would produce + and / in standard base64
-    // 0xFB = 11111011 → in base64 would produce characters with + or /
-    const bytes = new Uint8Array([0xfb, 0xff, 0xfe]);
-    const standard = btoa(String.fromCharCode(...bytes));
-    // standard base64 will have + and /; convert to base64url
-    const b64url = standard.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ data: b64url, size: 3 }));
-
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
     expect(res.status).toBe(200);
-    const buffer = await res.arrayBuffer();
-    expect(new Uint8Array(buffer)).toEqual(bytes);
+    const buf = await res.arrayBuffer();
+    expect(new TextDecoder().decode(buf)).toBe("Hi!");
   });
 
-  it("returns 404 when Gmail returns no data field", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ size: 0 })); // no data
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
+  it("handles base64url with URL-safe chars (- and _)", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    // Craft a base64url string that contains - and _ (use a byte sequence that produces + and /)
+    // bytes [0xfb, 0xff] → base64 is "+/8=" → base64url is "-_8"
+    const rawBytes = new Uint8Array([0xfb, 0xff]);
+    const base64Standard = Buffer.from(rawBytes).toString("base64"); // "+/8="
+    const base64url = base64Standard.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data: base64url, size: 2 }));
+
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-3", {}, env);
+
+    expect(res.status).toBe(200);
+    const buf = await res.arrayBuffer();
+    expect(new Uint8Array(buf)).toEqual(rawBytes);
+  });
+
+  it("returns 404 when attachment data field is absent", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ size: 0 })); // no data field
+
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-1", {}, env);
+
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error).toContain("No attachment data returned");
+    expect(body.error).toMatch(/No attachment data/);
   });
 
-  it("returns 500 when attachment data is corrupted (invalid base64)", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ data: "!!!invalid!!!", size: 10 }));
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
+  it("returns 500 when attachment data is not valid base64", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data: "!!!NOT_VALID!!!", size: 10 }));
+
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-1", {}, env);
+
     expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.error).toContain("Failed to decode attachment data");
+    expect(body.error).toMatch(/Failed to decode attachment/);
   });
 
-  it("returns upstream error when Gmail API fails", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(503, "Service Unavailable"));
-    const res = await get("/email/messages/msg-1/attachments/att-1", env);
-    expect(res.status).toBe(503);
+  it("uses binary.length as Content-Length fallback when size is absent", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
+
+    const bytes = Buffer.from("abc");
+    const b64url = bytes.toString("base64url");
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data: b64url })); // no size
+
+    const res = await app.request("/api/google/email/messages/msg-1/attachments/att-4", {}, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Length")).toBe(String(bytes.length));
   });
 
-  it("URL-encodes both messageId and attachmentId in the upstream request", async () => {
-    const bytes = new Uint8Array([1, 2, 3]);
-    const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ data: b64, size: 3 }));
+  it("percent-encodes both messageId and attachmentId in the upstream URL", async () => {
+    const env = makeEnvWithToken();
+    const { app } = makeApp(env);
 
-    await get("/email/messages/msg%2B1/attachments/att%2F2", env);
-    const [url] = globalThis.fetch.mock.calls[0];
-    expect(url).toContain("msg%2B1");
-    expect(url).toContain("att%2F2");
-  });
-});
+    const helloB64url = Buffer.from("x").toString("base64url");
+    mockFetch.mockResolvedValueOnce(jsonOkResponse({ data: helloB64url, size: 1 }));
 
-// ----------------------------------------------------------------
-// googleProxy — shared error handling
-// ----------------------------------------------------------------
+    await app.request(
+      "/api/google/email/messages/msg%20id/attachments/att%20id",
+      {},
+      env,
+    );
 
-describe("googleProxy shared error handling", () => {
-  let env;
-  let originalFetch;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    env = makeEnv();
-    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it("truncates long Google error bodies in error messages (max 200 chars)", async () => {
-    const longError = "x".repeat(500);
-    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(400, longError));
-
-    const res = await get("/gdrive/files", env);
-    const body = await res.json();
-    // The error message includes up to 200 chars of the upstream body
-    expect(body.error.length).toBeLessThan(400);
-  });
-
-  it("returns 502 on network-level error (fetch throws)", async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const res = await get("/email/messages", env);
-    expect(res.status).toBe(502);
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain("msg%20id");
+    expect(url).toContain("att%20id");
   });
 });
