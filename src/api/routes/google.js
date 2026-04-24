@@ -166,6 +166,10 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   if (contentLength !== null) {
     headers["Content-Length"] = contentLength;
   }
+  const contentDisposition = response.headers.get("Content-Disposition");
+  if (contentDisposition) {
+    headers["Content-Disposition"] = contentDisposition;
+  }
 
   return new Response(response.body, {
     headers,
