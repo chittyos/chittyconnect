@@ -28,8 +28,12 @@ const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 async function getGoogleToken(env) {
   // Fast path: KV-cached rotated token (updated every 50 min)
   if (env.CREDENTIAL_CACHE) {
-    const kvToken = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
-    if (kvToken) return kvToken;
+    try {
+      const kvToken = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
+      if (kvToken) return kvToken;
+    } catch {
+      console.warn("Google token KV cache read failed; falling back to broker/env token source");
+    }
   }
 
   // Fallback: 1Password broker or env var
