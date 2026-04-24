@@ -49,16 +49,25 @@ async function googleProxy(env, googleUrl) {
     return { ok: false, status: 503, error: "Google access token not available" };
   }
 
-  const response = await fetch(googleUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let response;
+  try {
+    response = await fetch(googleUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { ok: false, status: 502, error: "Google API request failed" };
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     return { ok: false, status: response.status, error: `Google API ${response.status}: ${body.slice(0, 200)}` };
   }
 
-  return { ok: true, data: await response.json() };
+  try {
+    return { ok: true, data: await response.json() };
+  } catch {
+    return { ok: false, status: 502, error: "Google API returned an invalid JSON response" };
+  }
 }
 
 // ============================================
