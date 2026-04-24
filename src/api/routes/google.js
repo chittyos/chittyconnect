@@ -91,7 +91,8 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
   const params = new URLSearchParams();
   if (fields) params.set("fields", fields);
 
-  const result = await googleProxy(c.env, `${DRIVE_API}/files/${fileId}?${params.toString()}`);
+  const encodedFileId = encodeURIComponent(fileId);
+  const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -99,13 +100,45 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 /**
  * GET /gdrive/files/:fileId/content
  * Download file content (returns raw bytes).
+ * For Google-native files (Docs, Sheets, Slides), exports as PDF.
+ * For binary-backed files, downloads with alt=media.
  */
 googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   const fileId = c.req.param("fileId");
   const token = await getGoogleToken(c.env);
   if (!token) return c.json({ error: "Google access token not available" }, 503);
 
-  const response = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+  // First, fetch file metadata to determine mimeType
+  const encodedFileId = encodeURIComponent(fileId);
+  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!metadataResponse.ok) {
+    return c.json({ error: `Failed to fetch file metadata: ${metadataResponse.status}` }, metadataResponse.status);
+  }
+
+  const metadata = await metadataResponse.json();
+  const mimeType = metadata.mimeType;
+
+  // Check if it's a Google-native file type
+  const googleNativeTypes = [
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation",
+  ];
+
+  let downloadUrl;
+  if (googleNativeTypes.includes(mimeType)) {
+    // Use export endpoint for Google-native files (export as PDF by default)
+    const exportMimeType = encodeURIComponent("application/pdf");
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}/export?mimeType=${exportMimeType}`;
+  } else {
+    // Use alt=media for binary-backed files
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?alt=media`;
+  }
+
+  const response = await fetch(downloadUrl, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -153,7 +186,8 @@ googleRoutes.get("/email/messages/:messageId", async (c) => {
   const params = new URLSearchParams();
   if (format) params.set("format", format);
 
-  const result = await googleProxy(c.env, `${GMAIL_API}/messages/${messageId}?${params.toString()}`);
+  const encodedMessageId = encodeURIComponent(messageId);
+  const result = await googleProxy(c.env, `${GMAIL_API}/messages/${encodedMessageId}?${params.toString()}`);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -165,9 +199,12 @@ googleRoutes.get("/email/messages/:messageId", async (c) => {
 googleRoutes.get("/email/messages/:messageId/attachments/:attachmentId", async (c) => {
   const { messageId, attachmentId } = c.req.param();
 
+  const encodedMessageId = encodeURIComponent(messageId);
+  const encodedAttachmentId = encodeURIComponent(attachmentId);
+
   const result = await googleProxy(
     c.env,
-    `${GMAIL_API}/messages/${messageId}/attachments/${attachmentId}`,
+    `${GMAIL_API}/messages/${encodedMessageId}/attachments/${encodedAttachmentId}`,
   );
   if (!result.ok) return c.json({ error: result.error }, result.status);
 
@@ -176,8 +213,20 @@ googleRoutes.get("/email/messages/:messageId/attachments/:attachmentId", async (
   if (!data) return c.json({ error: "No attachment data returned" }, 404);
 
   // Decode base64url → binary
-  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+  // 1. Replace URL-safe chars with standard base64 chars
+  let base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+
+  // 2. Add padding if needed (length must be multiple of 4)
+  const paddingNeeded = (4 - (base64.length % 4)) % 4;
+  base64 += "=".repeat(paddingNeeded);
+
+  // 3. Decode with error handling
+  let binary;
+  try {
+    binary = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+  } catch (err) {
+    return c.json({ error: `Failed to decode attachment data: ${err.message}` }, 500);
+  }
 
   return new Response(binary, {
     headers: {
