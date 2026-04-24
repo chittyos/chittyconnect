@@ -164,6 +164,13 @@ export class SecretRotationService {
    * @returns {Promise<{ok: boolean, expiresIn?: number, error?: string}>}
    */
   async rotateGDriveToken() {
+    // Primary path: service account JWT flow (no refresh token needed)
+    const saJson = await this.kv.get('secret:gdrive:service_account');
+    if (saJson) {
+      return this._rotateViaServiceAccount(saJson);
+    }
+
+    // Fallback: OAuth2 refresh token flow
     const refreshToken = await this.kv.get('secret:gdrive:refresh_token');
     const clientId = this.env.GDRIVE_CLIENT_ID;
     const clientSecret = this.env.GDRIVE_CLIENT_SECRET;
@@ -171,7 +178,7 @@ export class SecretRotationService {
     if (!refreshToken || !clientId || !clientSecret) {
       return {
         ok: false,
-        error: 'Missing GDrive OAuth credentials (refresh_token, client_id, or client_secret)',
+        error: 'Missing GDrive credentials: neither service_account nor OAuth refresh_token configured in CREDENTIAL_CACHE KV',
       };
     }
 
@@ -195,13 +202,63 @@ export class SecretRotationService {
     const accessToken = data.access_token;
     const expiresIn = data.expires_in || 3600;
 
-    // Cache with TTL slightly shorter than actual expiry
     await this.kv.put('secret:gdrive:access_token', accessToken, {
-      expirationTtl: Math.max(expiresIn - 120, 300), // at least 5 min
+      expirationTtl: Math.max(expiresIn - 120, 300),
     });
 
-    console.log(`[SecretRotation] GDrive access token rotated, expires in ${expiresIn}s`);
-    return { ok: true, expiresIn };
+    console.log(`[SecretRotation] GDrive access token rotated via refresh_token, expires in ${expiresIn}s`);
+    return { ok: true, expiresIn, method: 'refresh_token' };
+  }
+
+  /**
+   * Rotate GDrive token using service account JWT assertion.
+   * No client_id/secret/refresh_token needed — uses domain-wide delegation.
+   */
+  async _rotateViaServiceAccount(saJson) {
+    let sa;
+    try {
+      sa = JSON.parse(saJson);
+    } catch {
+      return { ok: false, error: 'Invalid service_account JSON in KV' };
+    }
+
+    const { createJwt } = await import('./jwt-helper.js');
+    const now = Math.floor(Date.now() / 1000);
+    const claims = {
+      iss: sa.client_email,
+      sub: sa.impersonate,
+      scope: sa.scopes,
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600,
+    };
+
+    const signedJwt = await createJwt(claims, sa.private_key);
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: signedJwt,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      return { ok: false, error: `Service account JWT error: ${response.status} — ${body}` };
+    }
+
+    const data = await response.json();
+    const accessToken = data.access_token;
+    const expiresIn = data.expires_in || 3600;
+
+    await this.kv.put('secret:gdrive:access_token', accessToken, {
+      expirationTtl: Math.max(expiresIn - 120, 300),
+    });
+
+    console.log(`[SecretRotation] GDrive access token rotated via service_account JWT, expires in ${expiresIn}s`);
+    return { ok: true, expiresIn, method: 'service_account' };
   }
 
   /**
