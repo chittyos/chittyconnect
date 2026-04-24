@@ -15,8 +15,10 @@
 
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
+import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const googleRoutes = new Hono();
+googleRoutes.use("*", requireServiceToken("google"));
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
