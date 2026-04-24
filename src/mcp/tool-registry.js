@@ -80,6 +80,26 @@ function inputSchemaToZodShape(inputSchema) {
   for (const [key, prop] of Object.entries(inputSchema.properties)) {
     shape[key] = jsonSchemaToZod(prop, reqSet.has(key));
   }
+
+  // Handle anyOf: [{required: [key]}, ...] — enforce at least one key is present.
+  // Without this, all keys default to optional and {} passes Zod validation silently.
+  const anyOfKeys =
+    inputSchema.anyOf
+      ?.filter((b) => Array.isArray(b.required) && b.required.length >= 1)
+      .flatMap((b) => b.required) ?? [];
+
+  if (anyOfKeys.length > 0) {
+    const label = anyOfKeys.join(", ");
+    return z.object(shape).superRefine((data, ctx) => {
+      if (!anyOfKeys.some((k) => data[k] != null && data[k] !== "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Provide at least one of: ${label}`,
+        });
+      }
+    });
+  }
+
   return shape;
 }
 
