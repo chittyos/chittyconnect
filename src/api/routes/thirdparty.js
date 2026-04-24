@@ -1013,39 +1013,44 @@ thirdpartyRoutes.post("/mercury/refresh", async (c, next) => {
 // that powers Google Calendar. Requires gmail.readonly scope on the
 // OAuth app (same refresh token rotated by SecretRotationService).
 
+const GMAIL_ALLOWED_FORMATS = new Set(["minimal", "full", "raw", "metadata"]);
+
+async function gmailFetch(googleToken, path) {
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1${path}`,
+    { headers: { Authorization: `Bearer ${googleToken}` } },
+  );
+  if (!response.ok) {
+    return { ok: false, status: response.status, errorBody: await response.text() };
+  }
+  return { ok: true, response };
+}
+
 /**
  * GET /api/thirdparty/gmail/messages
  * List Gmail messages (metadata only)
  */
 thirdpartyRoutes.get("/gmail/messages", async (c) => {
   try {
-    const { q, maxResults = "10", pageToken } = c.req.query();
-
     const googleToken = await getCredential(
       c.env,
       "integrations/google/access_token",
       "GOOGLE_ACCESS_TOKEN",
     );
-
     if (!googleToken) {
       return c.json({ error: "Google access token not configured" }, 503);
     }
 
+    const { q, maxResults = "10", pageToken } = c.req.query();
     const params = new URLSearchParams({ maxResults });
     if (q) params.append("q", q);
     if (pageToken) params.append("pageToken", pageToken);
 
-    const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${googleToken}` } },
-    );
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    const result = await gmailFetch(googleToken, `/users/me/messages?${params.toString()}`);
+    if (!result.ok) {
+      return c.json({ error: `Gmail API error: ${result.status}` }, result.status);
     }
-
-    return c.json(await response.json());
+    return c.json(await result.response.json());
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
@@ -1057,30 +1062,27 @@ thirdpartyRoutes.get("/gmail/messages", async (c) => {
  */
 thirdpartyRoutes.get("/gmail/message/:messageId", async (c) => {
   try {
-    const { messageId } = c.req.param();
-    const { format = "metadata" } = c.req.query();
-
     const googleToken = await getCredential(
       c.env,
       "integrations/google/access_token",
       "GOOGLE_ACCESS_TOKEN",
     );
-
     if (!googleToken) {
       return c.json({ error: "Google access token not configured" }, 503);
     }
 
-    const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=${format}`,
-      { headers: { Authorization: `Bearer ${googleToken}` } },
+    const { messageId } = c.req.param();
+    const { format = "metadata" } = c.req.query();
+    const safeFormat = GMAIL_ALLOWED_FORMATS.has(format) ? format : "metadata";
+
+    const result = await gmailFetch(
+      googleToken,
+      `/users/me/messages/${encodeURIComponent(messageId)}?format=${safeFormat}`,
     );
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    if (!result.ok) {
+      return c.json({ error: `Gmail API error: ${result.status}` }, result.status);
     }
-
-    return c.json(await response.json());
+    return c.json(await result.response.json());
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
@@ -1094,47 +1096,46 @@ thirdpartyRoutes.get("/gmail/message/:messageId", async (c) => {
  */
 thirdpartyRoutes.get("/gmail/message/:messageId/raw", async (c) => {
   try {
-    const { messageId } = c.req.param();
-
     const googleToken = await getCredential(
       c.env,
       "integrations/google/access_token",
       "GOOGLE_ACCESS_TOKEN",
     );
-
     if (!googleToken) {
       return c.json({ error: "Google access token not configured" }, 503);
     }
 
-    const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=raw`,
-      { headers: { Authorization: `Bearer ${googleToken}` } },
-    );
+    const { messageId } = c.req.param();
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Gmail API error: ${response.status} — ${body}`);
+    const result = await gmailFetch(
+      googleToken,
+      `/users/me/messages/${encodeURIComponent(messageId)}?format=raw`,
+    );
+    if (!result.ok) {
+      return c.json({ error: `Gmail API error: ${result.status}` }, result.status);
     }
 
-    const data = await response.json();
+    const data = await result.response.json();
     if (!data.raw) {
       return c.json({ error: "No raw content in response" }, 404);
     }
 
-    // Gmail returns base64url-encoded RFC 2822 message
-    // Convert base64url → base64 → binary
-    let base64 = data.raw.replace(/-/g, "+").replace(/_/g, "/");
-    while (base64.length % 4) base64 += '=';
-    const binaryString = atob(base64);
+    // Gmail returns base64url-encoded RFC 2822 message (no padding per RFC 4648 §5)
+    // Convert base64url → base64 (+ pad) → binary
+    const b64 = data.raw.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const binaryString = atob(padded);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
+    // Strip non-filename-safe chars from messageId to prevent header injection
+    const safeFilename = messageId.replace(/[^a-zA-Z0-9_\-]/g, "_");
     return new Response(bytes, {
       headers: {
         "Content-Type": "message/rfc822",
-        "Content-Disposition": `attachment; filename="${messageId}.eml"`,
+        "Content-Disposition": `attachment; filename="${safeFilename}.eml"`,
       },
     });
   } catch (error) {
