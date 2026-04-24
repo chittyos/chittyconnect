@@ -11,6 +11,7 @@
  * @module mcp/server-factory
  */
 
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { dispatchToolCall } from "./tool-dispatcher.js";
 import { MCP_TOOL_DEFS } from "./tool-registry.js";
@@ -40,12 +41,24 @@ export function createMcpServer(env, opts = {}) {
   const baseUrl = opts.baseUrl || "https://connect.chitty.cc";
 
   for (const def of MCP_TOOL_DEFS) {
+    // schema is ZodRawShape (plain object) for most tools, or ZodEffects (from anyOf
+    // superRefine) for tools where at least one of several keys must be present.
+    const hasAnyOf = def.schema instanceof z.ZodType;
+    const rawShape = hasAnyOf ? def.schema._def.schema.shape : def.schema;
+
     server.tool(
       def.name,
       def.description,
-      def.schema,
+      rawShape,
       def.annotations,
       async (args) => {
+        if (hasAnyOf) {
+          const result = def.schema.safeParse(args);
+          if (!result.success) {
+            const msg = result.error.issues.map((i) => i.message).join("; ");
+            return { content: [{ type: "text", text: msg }], isError: true };
+          }
+        }
         return await dispatchToolCall(def.name, args, env, {
           baseUrl,
           authToken: opts.authToken,

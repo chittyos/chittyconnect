@@ -80,6 +80,26 @@ function inputSchemaToZodShape(inputSchema) {
   for (const [key, prop] of Object.entries(inputSchema.properties)) {
     shape[key] = jsonSchemaToZod(prop, reqSet.has(key));
   }
+
+  // Handle anyOf: [{required: [key]}, ...] — enforce at least one key is present.
+  // Without this, all keys default to optional and {} passes Zod validation silently.
+  const anyOfKeys =
+    inputSchema.anyOf
+      ?.filter((b) => Array.isArray(b.required) && b.required.length >= 1)
+      .flatMap((b) => b.required) ?? [];
+
+  if (anyOfKeys.length > 0) {
+    const label = anyOfKeys.join(", ");
+    return z.object(shape).superRefine((data, ctx) => {
+      if (!anyOfKeys.some((k) => data[k] != null && data[k] !== "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Provide at least one of: ${label}`,
+        });
+      }
+    });
+  }
+
   return shape;
 }
 
@@ -236,14 +256,23 @@ const MCP_TOOLS = [
   {
     name: "chitty_evidence_search",
     description:
-      "AI-powered semantic search over legal evidence documents. Searches the evidence R2 bucket using vector embeddings and returns ranked document chunks with relevance scores. Use for questions about case documents, financial records, correspondence, court filings.",
+      "Search indexed evidence documents through ChittyStorage. Returns matching document records with entity/doc-type tags, content hashes, and processing tier metadata.",
     inputSchema: {
       type: "object",
       properties: {
         query: {
           type: "string",
           description:
-            "Natural language search query (e.g. 'purchase price of 541 W Addison', 'closing disclosure SoFi', 'court order October 2024')",
+            "Filename or text query to match against indexed documents",
+        },
+        entity_slug: {
+          type: "string",
+          description: "Optional entity slug filter",
+        },
+        max_num_results: {
+          type: "number",
+          description: "Maximum number of document records to return (default: 10)",
+          default: 10,
         },
       },
       required: ["query"],
@@ -252,7 +281,7 @@ const MCP_TOOLS = [
   {
     name: "chitty_evidence_retrieve",
     description:
-      "Retrieve matching evidence documents by semantic similarity (no AI generation). Returns ranked document chunks with scores. Use when you need raw document matches without an AI-generated summary.",
+      "Retrieve a specific evidence document record from ChittyStorage by content hash, evidence ID, or query fallback. Returns document metadata plus a direct file URL.",
     inputSchema: {
       type: "object",
       properties: {
@@ -260,13 +289,20 @@ const MCP_TOOLS = [
           type: "string",
           description: "Natural language search query",
         },
-        max_num_results: {
-          type: "number",
-          description: "Maximum number of results (default: 10)",
-          default: 10,
+        content_hash: {
+          type: "string",
+          description: "Exact SHA-256 content hash for the document",
+        },
+        evidence_id: {
+          type: "string",
+          description: "Evidence/document identifier to resolve",
         },
       },
-      required: ["query"],
+      anyOf: [
+        { required: ["query"] },
+        { required: ["content_hash"] },
+        { required: ["evidence_id"] },
+      ],
     },
   },
 
