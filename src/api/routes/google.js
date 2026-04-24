@@ -15,6 +15,7 @@
 
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
+import { getCachedGDriveToken } from "../../services/secret-rotation.js";
 import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const googleRoutes = new Hono();
@@ -26,13 +27,18 @@ const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 /**
  * Get a valid Google access token — tries KV rotation cache first (fastest),
  * falls back to 1Password broker, then env var.
+ *
+ * scope: "gmail" (default, requires delegated token with a user sub) or "drive"
+ * (accepts a delegated token first, then a non-delegated app-only token).
  */
-async function getGoogleToken(env) {
+async function getGoogleToken(env, { scope = "gmail" } = {}) {
   // Fast path: KV-cached rotated token (updated every 50 min)
   if (env.CREDENTIAL_CACHE) {
     try {
-      const kvToken = await env.CREDENTIAL_CACHE.get("secret:gdrive:access_token");
-      if (kvToken) return kvToken;
+      const cached = await getCachedGDriveToken(env.CREDENTIAL_CACHE, {
+        allowAppOnly: scope === "drive",
+      });
+      if (cached) return cached;
     } catch {
       console.warn("Google token KV cache read failed; falling back to broker/env token source");
     }
@@ -45,8 +51,8 @@ async function getGoogleToken(env) {
 /**
  * Proxy a request to a Google API, injecting the access token.
  */
-async function googleProxy(env, googleUrl) {
-  const token = await getGoogleToken(env);
+async function googleProxy(env, googleUrl, opts = {}) {
+  const token = await getGoogleToken(env, opts);
   if (!token) {
     return { ok: false, status: 503, error: "Google access token not available" };
   }
@@ -90,7 +96,7 @@ googleRoutes.get("/gdrive/files", async (c) => {
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
 
-  const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`);
+  const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`, { scope: "drive" });
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -107,7 +113,7 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
   if (fields) params.set("fields", fields);
 
   const encodedFileId = encodeURIComponent(fileId);
-  const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`);
+  const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`, { scope: "drive" });
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -120,7 +126,7 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
  */
 googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   const fileId = c.req.param("fileId");
-  const token = await getGoogleToken(c.env);
+  const token = await getGoogleToken(c.env, { scope: "drive" });
   if (!token) return c.json({ error: "Google access token not available" }, 503);
 
   // First, fetch file metadata to determine mimeType
