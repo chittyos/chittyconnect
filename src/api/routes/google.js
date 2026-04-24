@@ -41,7 +41,16 @@ async function getGoogleToken(env) {
 }
 
 /**
- * Proxy a request to a Google API, injecting the access token.
+ * Call the given Google API URL with an injected Bearer token and normalize the response.
+ *
+ * Attempts to obtain an access token, performs a fetch to the provided Google API URL with
+ * an `Authorization: Bearer <token>` header, and returns a structured result describing
+ * success or failure.
+ *
+ * @param {string} googleUrl - The full Google API URL to call (including query string).
+ * @returns {{ok: true, data: any} | {ok: false, status: number, error: string}}
+ *          An object with either a successful `data` payload parsed from JSON, or an error
+ *          object containing an HTTP status code and a short error message.
  */
 async function googleProxy(env, googleUrl) {
   const token = await getGoogleToken(env);
