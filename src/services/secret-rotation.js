@@ -275,12 +275,21 @@ export class SecretRotationService {
     const accessToken = data.access_token;
     const expiresIn = data.expires_in || 3600;
 
-    await this.kv.put('secret:gdrive:access_token', accessToken, {
+    // Delegated tokens (with sub) work for Drive and Gmail; non-delegated tokens
+    // only work for Drive — cache them separately so Gmail callers don't pick up
+    // an app-only token and fail against users/me.
+    const delegated = Boolean(claims.sub);
+    const cacheKey = delegated
+      ? 'secret:gdrive:access_token'
+      : 'secret:gdrive:access_token:app_only';
+    await this.kv.put(cacheKey, accessToken, {
       expirationTtl: Math.max(expiresIn - 120, 300),
     });
 
-    console.log(`[SecretRotation] GDrive access token rotated via service_account JWT, expires in ${expiresIn}s`);
-    return { ok: true, expiresIn, method: 'service_account' };
+    console.log(
+      `[SecretRotation] GDrive access token rotated via service_account JWT (${delegated ? 'delegated' : 'app-only'}), expires in ${expiresIn}s`,
+    );
+    return { ok: true, expiresIn, method: 'service_account', delegated };
   }
 
   /**
@@ -366,10 +375,17 @@ export class SecretRotationService {
  * Get a cached GDrive access token (for use by other services).
  *
  * @param {KVNamespace} kv - CREDENTIAL_CACHE binding
+ * @param {{ allowAppOnly?: boolean }} [opts] - When true, falls back to a
+ *   non-delegated (app-only) token that works for Drive but not Gmail.
  * @returns {Promise<string|null>}
  */
-export async function getCachedGDriveToken(kv) {
-  return kv.get('secret:gdrive:access_token');
+export async function getCachedGDriveToken(kv, opts = {}) {
+  const delegated = await kv.get('secret:gdrive:access_token');
+  if (delegated) return delegated;
+  if (opts.allowAppOnly) {
+    return kv.get('secret:gdrive:access_token:app_only');
+  }
+  return null;
 }
 
 /**

@@ -183,33 +183,30 @@ describe("SecretRotationService._rotateViaServiceAccount", () => {
     expect(result.error).toContain("Invalid service_account JSON");
   });
 
-  it("returns error when impersonate field is missing", async () => {
+  it("returns error when client_email is missing", async () => {
+    const sa = { ...VALID_SA };
+    delete sa.client_email;
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("client_email");
+  });
+
+  it("returns error when private_key is missing", async () => {
+    const sa = { ...VALID_SA };
+    delete sa.private_key;
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("private_key");
+  });
+
+  it("omits sub claim when impersonate is absent (app-only token)", async () => {
+    globalThis.fetch = makeFetchOk();
     const sa = { ...VALID_SA };
     delete sa.impersonate;
     const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("impersonate");
-  });
-
-  it("returns error when impersonate is an empty string", async () => {
-    const sa = { ...VALID_SA, impersonate: "" };
-    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("impersonate");
-  });
-
-  it("returns error when impersonate is whitespace-only", async () => {
-    const sa = { ...VALID_SA, impersonate: "   " };
-    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("impersonate");
-  });
-
-  it("returns error when impersonate is not a string", async () => {
-    const sa = { ...VALID_SA, impersonate: 42 };
-    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("impersonate");
+    expect(result.ok).toBe(true);
+    const [[claimsArg]] = mockCreateJwt.mock.calls;
+    expect(claimsArg).not.toHaveProperty("sub");
   });
 
   it("returns error when scopes field is missing", async () => {
@@ -297,20 +294,47 @@ describe("SecretRotationService._rotateViaServiceAccount", () => {
   it("posts JWT-bearer grant_type to Google token endpoint", async () => {
     const mockFetch = makeFetchOk();
     globalThis.fetch = mockFetch;
-
     await service._rotateViaServiceAccount(JSON.stringify(VALID_SA));
-
-    const [url, init] = mockFetch.mock.calls[0];
+    const [[url, init]] = mockFetch.mock.calls;
     expect(url).toBe("https://oauth2.googleapis.com/token");
     expect(init.method).toBe("POST");
-    expect(init.body.toString()).toContain("urn:ietf:params:oauth:grant-type:jwt-bearer");
-    expect(init.body.toString()).toContain("mock.signed.jwt");
+    const params = new URLSearchParams(init.body.toString());
+    expect(params.get("grant_type")).toBe("urn:ietf:params:oauth:grant-type:jwt-bearer");
+    expect(params.get("assertion")).toBe("mock.signed.jwt");
   });
 
-  it("returns { ok: true, expiresIn, method:'service_account' } on success", async () => {
+  it("returns { ok: true, expiresIn, method:'service_account', delegated } on success", async () => {
     globalThis.fetch = makeFetchOk({ access_token: "new-tok", expires_in: 3600 });
     const result = await service._rotateViaServiceAccount(JSON.stringify(VALID_SA));
-    expect(result).toEqual({ ok: true, expiresIn: 3600, method: "service_account" });
+    expect(result).toEqual({ ok: true, expiresIn: 3600, method: "service_account", delegated: true });
+  });
+
+  it("caches delegated tokens under secret:gdrive:access_token", async () => {
+    globalThis.fetch = makeFetchOk({ access_token: "delegated-tok", expires_in: 3600 });
+    await service._rotateViaServiceAccount(JSON.stringify(VALID_SA));
+    expect(env.CREDENTIAL_CACHE.put).toHaveBeenCalledWith(
+      "secret:gdrive:access_token",
+      "delegated-tok",
+      { expirationTtl: 3480 },
+    );
+  });
+
+  it("caches app-only tokens under secret:gdrive:access_token:app_only when impersonate is absent", async () => {
+    globalThis.fetch = makeFetchOk({ access_token: "app-only-tok", expires_in: 3600 });
+    const sa = { ...VALID_SA };
+    delete sa.impersonate;
+    const result = await service._rotateViaServiceAccount(JSON.stringify(sa));
+    expect(result).toEqual({ ok: true, expiresIn: 3600, method: "service_account", delegated: false });
+    expect(env.CREDENTIAL_CACHE.put).toHaveBeenCalledWith(
+      "secret:gdrive:access_token:app_only",
+      "app-only-tok",
+      { expirationTtl: 3480 },
+    );
+    expect(env.CREDENTIAL_CACHE.put).not.toHaveBeenCalledWith(
+      "secret:gdrive:access_token",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("defaults expiresIn to 3600 when Google response omits expires_in", async () => {

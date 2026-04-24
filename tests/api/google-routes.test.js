@@ -338,7 +338,8 @@ describe("GET /gdrive/files/:fileId/content", () => {
   });
 
   it("returns 503 when no token is available", async () => {
-    env.CREDENTIAL_CACHE.get.mockResolvedValueOnce(null);
+    // Override the describe-level default so both delegated and app-only KV lookups miss.
+    env.CREDENTIAL_CACHE.get.mockResolvedValue(null);
     mockGetCredential.mockResolvedValueOnce(undefined);
 
     const res = await get("/gdrive/files/any-id/content", env);
