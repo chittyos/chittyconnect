@@ -97,6 +97,79 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 });
 
 /**
+ * PATCH /gdrive/files/:fileId
+ * Update file metadata (rename, move, set description).
+ * Body: { name?, addParents?, removeParents?, description? }
+ */
+googleRoutes.patch("/gdrive/files/:fileId", async (c) => {
+  const fileId = c.req.param("fileId");
+  const token = await getGoogleToken(c.env);
+  if (!token) return c.json({ error: "Google access token not available" }, 503);
+
+  const body = await c.req.json();
+  const { name, addParents, removeParents, description } = body;
+
+  const params = new URLSearchParams();
+  if (addParents) params.set("addParents", addParents);
+  if (removeParents) params.set("removeParents", removeParents);
+
+  const patchBody = {};
+  if (name) patchBody.name = name;
+  if (description !== undefined) patchBody.description = description;
+
+  const response = await fetch(`${DRIVE_API}/files/${fileId}?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patchBody),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    return c.json({ error: `Drive PATCH failed: ${response.status} ${err.slice(0, 200)}` }, response.status);
+  }
+
+  return c.json(await response.json());
+});
+
+/**
+ * POST /gdrive/folders
+ * Create a folder in Drive.
+ * Body: { name, parentId? }
+ */
+googleRoutes.post("/gdrive/folders", async (c) => {
+  const token = await getGoogleToken(c.env);
+  if (!token) return c.json({ error: "Google access token not available" }, 503);
+
+  const { name, parentId } = await c.req.json();
+  if (!name) return c.json({ error: "name required" }, 400);
+
+  const metadata = {
+    name,
+    mimeType: "application/vnd.google-apps.folder",
+  };
+  if (parentId) metadata.parents = [parentId];
+
+  const response = await fetch(`${DRIVE_API}/files`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(metadata),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    return c.json({ error: `Folder create failed: ${response.status} ${err.slice(0, 200)}` }, response.status);
+  }
+
+  return c.json(await response.json());
+});
+
+/**
  * GET /gdrive/files/:fileId/content
  * Download file content (returns raw bytes).
  */
