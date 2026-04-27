@@ -25,10 +25,27 @@ const SERVICE_ENTRIES = [
   { id: "chittyscore", sub: "score" },
   { id: "chittychain", sub: "chain" },
   { id: "chittyledger", sub: "ledger" },
-  { id: "chittydisputes", sub: "disputes" },
+  { id: "chittydispute", sub: "dispute" },
   { id: "chittytrack", sub: "track" },
   { id: "chittytask", sub: "tasks" },
 ];
+
+/**
+ * Get the full service catalog including subdomain prefixes.
+ *
+ * Useful for building gateway/proxy links like https://mcp.<domain>/{sub}/mcp.
+ *
+ * @param {object} env - Worker environment bindings
+ * @returns {Array<{id: string, sub: string, url: string}>}
+ */
+export function getServiceCatalogEntries(env = {}) {
+  const domain = env.CHITTYOS_DOMAIN || "chitty.cc";
+  return SERVICE_ENTRIES.map(({ id, sub }) => ({
+    id,
+    sub,
+    url: `https://${sub}.${domain}`,
+  }));
+}
 
 /**
  * Get the full service catalog with resolved URLs.

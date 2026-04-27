@@ -1971,7 +1971,7 @@ export default {
         const handler = McpConnectAgent.serve("/chatgpt/mcp", {
           binding: "MCP_AGENT",
         });
-        return handler.fetch(request, env, ctx);
+        return await handler.fetch(request, env, ctx);
       } catch (err) {
         console.error(
           `[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`,
@@ -1993,7 +1993,18 @@ export default {
     }
 
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
-    const agentResponse = await routeAgentRequest(request, env);
+    // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
+    // handler entirely (past the oauthProvider catch block below) and causes
+    // Cloudflare to return 530 (error 1101 — uncaught Worker exception).
+    let agentResponse;
+    try {
+      agentResponse = await routeAgentRequest(request, env);
+    } catch (err) {
+      console.error(
+        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${err.message}
+${err.stack}`,
+      );
+    }
     if (agentResponse) return agentResponse;
 
     let response;

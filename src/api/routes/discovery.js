@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { ChittyOSEcosystem } from "../../integrations/chittyos-ecosystem.js";
+import { MCP_TOOL_NAMES } from "../../mcp/tool-registry.js";
+import { getServiceCatalogEntries } from "../../lib/service-catalog.js";
 
 export const discoveryRoutes = new Hono();
 
@@ -47,13 +49,79 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       ? servicesData
       : servicesData?.services || [];
 
+    // Augment registry results with a local, always-available service catalog so
+    // discovery-driven clients don't end up showing only a couple entries.
+    // Registry remains the source of truth when populated, but this prevents
+    // "empty or tiny service list" regressions.
+    const catalogEntries = getServiceCatalogEntries(env);
+
+    // mcp base can be served from multiple hostnames (e.g. mcp.chitty.cc, mcp.ch1tty.com).
+    // Preserve canonical defaults, but emit self-consistent links for the host the client used.
+    const host = (c.req.header("host") || "").toLowerCase();
+    const mcpBase = host.endsWith("ch1tty.com")
+      ? "https://mcp.ch1tty.com"
+      : "https://mcp.chitty.cc";
+
+    function normalizeService(service) {
+      const name = service?.name || service?.id || "";
+      const url = service?.url || (name ? `https://${name}.chitty.cc` : "");
+
+      let sub = service?.sub || service?.subdomain;
+      if (!sub && url) {
+        try {
+          sub = new URL(url).hostname.split(".")[0];
+        } catch {
+          // ignore
+        }
+      }
+      if (!sub) sub = name;
+
+      return {
+        name,
+        url,
+        sub,
+        health_url: service?.health_url,
+        status: service?.status,
+      };
+    }
+
+    const normalized = [];
+    const seen = new Set();
+
+    for (const s of servicesArray) {
+      const n = normalizeService(s);
+      if (!n.name || !n.sub) continue;
+      const key = `${n.sub}|${n.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(n);
+    }
+
+    for (const entry of catalogEntries) {
+      const n = normalizeService({
+        name: entry.id,
+        url: entry.url,
+        sub: entry.sub,
+      });
+      const key = `${n.sub}|${n.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(n);
+    }
+
     // Map services to discovery format
-    const servicesFormatted = servicesArray.map((service) => ({
+    const servicesFormatted = normalized.map((service) => ({
       name: service.name,
-      url: service.url || `https://${service.name}.chitty.cc`,
-      mcp: `https://mcp.chitty.cc/${service.name}/mcp`,
-      api: `https://api.chitty.cc/${service.name}/api`,
-      health: service.health_url || `https://${service.name}.chitty.cc/health`,
+      url: service.url,
+      // Primary MCP link: through the mcpBase gateway/proxy
+      mcp: `${mcpBase}/${service.sub}/mcp`,
+      // Direct MCP link: useful for clients that prefer the origin service
+      direct_mcp: `${service.url.replace(/\/$/, "")}/mcp`,
+      // Legacy API field kept for backward compatibility
+      api: `https://api.chitty.cc/${service.sub}/api`,
+      direct_api: `${service.url.replace(/\/$/, "")}/api`,
+      health:
+        service.health_url || `${service.url.replace(/\/$/, "")}/health`,
       status: service.status || "unknown",
     }));
 
@@ -66,7 +134,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       endpoints: {
         connect_base: "https://connect.chitty.cc",
         api_base: "https://api.chitty.cc",
-        mcp_base: "https://mcp.chitty.cc",
+        mcp_base: mcpBase,
         sse: "https://connect.chitty.cc/sse",
         auth: "https://auth.chitty.cc",
         registry: "https://registry.chitty.cc",
@@ -76,11 +144,11 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       capabilities: {
         mcp: {
           protocol_version: "2025-06-18",
-          tools_count: 52,
+          tools_count: MCP_TOOL_NAMES.size,
           supports_streaming: true,
           session_management: true,
           oauth_discovery:
-            "https://mcp.chitty.cc/.well-known/oauth-authorization-server",
+            `${mcpBase}/.well-known/oauth-authorization-server`,
         },
         api: {
           openapi_spec: "https://connect.chitty.cc/openapi.json",
