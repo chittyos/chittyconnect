@@ -222,16 +222,46 @@ export class SecretRotationService {
       return { ok: false, error: 'Invalid service_account JSON in KV' };
     }
 
+    // Validate and normalize service account fields
+    if (!sa.client_email || !sa.private_key) {
+      return { ok: false, error: 'missing service-account field: client_email or private_key' };
+    }
+
+    // If impersonate is provided at all, it must be a non-empty string —
+    // an empty/whitespace value would silently cache as app-only and surprise callers.
+    if (sa.impersonate !== undefined && sa.impersonate !== null) {
+      if (typeof sa.impersonate !== 'string' || sa.impersonate.trim() === '') {
+        return { ok: false, error: 'invalid service-account field: impersonate must be a non-empty string when provided' };
+      }
+    }
+
+    let normalizedScopes;
+    if (!sa.scopes) {
+      return { ok: false, error: 'missing service-account field: scopes' };
+    }
+    if (typeof sa.scopes === 'string') {
+      normalizedScopes = sa.scopes;
+    } else if (Array.isArray(sa.scopes)) {
+      if (sa.scopes.length === 0 || !sa.scopes.every((s) => typeof s === 'string')) {
+        return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+      }
+      normalizedScopes = sa.scopes.join(' ');
+    } else {
+      return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+    }
+
     const { createJwt } = await import('./jwt-helper.js');
     const now = Math.floor(Date.now() / 1000);
     const claims = {
       iss: sa.client_email,
-      sub: sa.impersonate,
-      scope: sa.scopes,
+      scope: normalizedScopes,
       aud: 'https://oauth2.googleapis.com/token',
       iat: now,
       exp: now + 3600,
     };
+    if (sa.impersonate) {
+      claims.sub = sa.impersonate;
+    }
 
     const signedJwt = await createJwt(claims, sa.private_key);
 
@@ -253,12 +283,27 @@ export class SecretRotationService {
     const accessToken = data.access_token;
     const expiresIn = data.expires_in || 3600;
 
-    await this.kv.put('secret:gdrive:access_token', accessToken, {
+    // Delegated tokens (with sub) work for Drive and Gmail; non-delegated tokens
+    // only work for Drive — cache them separately so Gmail callers don't pick up
+    // an app-only token and fail against users/me.
+    const delegated = Boolean(claims.sub);
+    const cacheKey = delegated
+      ? 'secret:gdrive:access_token'
+      : 'secret:gdrive:access_token:app_only';
+    const staleKey = delegated
+      ? 'secret:gdrive:access_token:app_only'
+      : 'secret:gdrive:access_token';
+    await this.kv.put(cacheKey, accessToken, {
       expirationTtl: Math.max(expiresIn - 120, 300),
     });
+    // Evict the sibling key so a mode transition (adding/removing impersonate)
+    // doesn't leave a stale token of the other flavor lingering until TTL expiry.
+    await this.kv.delete(staleKey).catch(() => {});
 
-    console.log(`[SecretRotation] GDrive access token rotated via service_account JWT, expires in ${expiresIn}s`);
-    return { ok: true, expiresIn, method: 'service_account' };
+    console.log(
+      `[SecretRotation] GDrive access token rotated via service_account JWT (${delegated ? 'delegated' : 'app-only'}), expires in ${expiresIn}s`,
+    );
+    return { ok: true, expiresIn, method: 'service_account', delegated };
   }
 
   /**
@@ -344,10 +389,17 @@ export class SecretRotationService {
  * Get a cached GDrive access token (for use by other services).
  *
  * @param {KVNamespace} kv - CREDENTIAL_CACHE binding
+ * @param {{ allowAppOnly?: boolean }} [opts] - When true, falls back to a
+ *   non-delegated (app-only) token that works for Drive but not Gmail.
  * @returns {Promise<string|null>}
  */
-export async function getCachedGDriveToken(kv) {
-  return kv.get('secret:gdrive:access_token');
+export async function getCachedGDriveToken(kv, opts = {}) {
+  const delegated = await kv.get('secret:gdrive:access_token');
+  if (delegated) return delegated;
+  if (opts.allowAppOnly) {
+    return kv.get('secret:gdrive:access_token:app_only');
+  }
+  return null;
 }
 
 /**
