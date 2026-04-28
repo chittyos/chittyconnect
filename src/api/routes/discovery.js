@@ -62,7 +62,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       ? "https://mcp.ch1tty.com"
       : "https://mcp.chitty.cc";
 
-    function normalizeService(service) {
+    const normalizeService = function(service) {
       const name = service?.name || service?.id || "";
       const url = service?.url || (name ? `https://${name}.chitty.cc` : "");
 
