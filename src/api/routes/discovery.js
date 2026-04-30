@@ -23,12 +23,24 @@ const CACHE_TTL = 300000; // 5 minutes in milliseconds
 discoveryRoutes.get("/chitty.json", async (c) => {
   try {
     const now = Date.now();
-
-    // Build discovery document
     const env = c.env;
+
+    // Resolve mcpBase from request host first — needed for cache key.
+    const host = (c.req.header("host") || "").toLowerCase();
+    const isCh1ttyHost = host === "ch1tty.com" || host.endsWith(".ch1tty.com");
+    const mcpBase = isCh1ttyHost
+      ? "https://mcp.ch1tty.com"
+      : "https://mcp.chitty.cc";
+
+    // Per-host cache lookup — done BEFORE any expensive discovery call.
+    const cached = cachedDiscoveryByBase.get(mcpBase);
+    if (cached && now < cached.expiresAt) {
+      return c.json(cached.doc);
+    }
+
+    // Cache miss — build the doc.
     const ecosystem = new ChittyOSEcosystem(env);
 
-    // Discover services from ChittyRegistry (with ecosystem's built-in caching)
     let servicesData = { services: [] };
     try {
       servicesData = await ecosystem.discoverServices();
@@ -40,30 +52,11 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       // Continue with empty services array - not critical for discovery
     }
 
-    // Extract services array from response (handles both array and object formats)
     const servicesArray = Array.isArray(servicesData)
       ? servicesData
       : servicesData?.services || [];
 
-    // Augment registry results with a local, always-available service catalog so
-    // discovery-driven clients don't end up showing only a couple entries.
-    // Registry remains the source of truth when populated, but this prevents
-    // "empty or tiny service list" regressions.
     const catalogEntries = getServiceCatalogEntries(env);
-
-    // mcp base can be served from multiple hostnames (e.g. mcp.chitty.cc, mcp.ch1tty.com).
-    // Preserve canonical defaults, but emit self-consistent links for the host the client used.
-    const host = (c.req.header("host") || "").toLowerCase();
-    const isCh1ttyHost = host === "ch1tty.com" || host.endsWith(".ch1tty.com");
-    const mcpBase = isCh1ttyHost
-      ? "https://mcp.ch1tty.com"
-      : "https://mcp.chitty.cc";
-
-    // Per-host cache lookup
-    const cached = cachedDiscoveryByBase.get(mcpBase);
-    if (cached && now < cached.expiresAt) {
-      return c.json(cached.doc);
-    }
 
     const normalizeService = function(service) {
       const name = service?.name || service?.id || "";
@@ -86,7 +79,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
         health_url: service?.health_url,
         status: service?.status,
       };
-    }
+    };
 
     const normalized = [];
     const seen = new Set();
