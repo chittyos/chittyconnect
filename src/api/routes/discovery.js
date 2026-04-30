@@ -10,9 +10,10 @@ import { getServiceCatalogEntries } from "../../lib/service-catalog.js";
 
 export const discoveryRoutes = new Hono();
 
-// In-memory cache for discovery document (5 minute TTL)
-let cachedDiscovery = null;
-let cacheExpiry = 0;
+// In-memory cache for discovery document (5 minute TTL).
+// Keyed by mcpBase since the discovery doc varies per host
+// (e.g. mcp.chitty.cc vs mcp.ch1tty.com).
+const cachedDiscoveryByBase = new Map();
 const CACHE_TTL = 300000; // 5 minutes in milliseconds
 
 /**
@@ -22,11 +23,6 @@ const CACHE_TTL = 300000; // 5 minutes in milliseconds
 discoveryRoutes.get("/chitty.json", async (c) => {
   try {
     const now = Date.now();
-
-    // Return cached document if still valid
-    if (cachedDiscovery && now < cacheExpiry) {
-      return c.json(cachedDiscovery);
-    }
 
     // Build discovery document
     const env = c.env;
@@ -62,6 +58,12 @@ discoveryRoutes.get("/chitty.json", async (c) => {
     const mcpBase = isCh1ttyHost
       ? "https://mcp.ch1tty.com"
       : "https://mcp.chitty.cc";
+
+    // Per-host cache lookup
+    const cached = cachedDiscoveryByBase.get(mcpBase);
+    if (cached && now < cached.expiresAt) {
+      return c.json(cached.doc);
+    }
 
     const normalizeService = function(service) {
       const name = service?.name || service?.id || "";
@@ -190,9 +192,11 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       },
     };
 
-    // Cache the discovery document
-    cachedDiscovery = discoveryDoc;
-    cacheExpiry = now + CACHE_TTL;
+    // Cache the discovery document keyed by host-derived mcpBase
+    cachedDiscoveryByBase.set(mcpBase, {
+      doc: discoveryDoc,
+      expiresAt: now + CACHE_TTL,
+    });
 
     return c.json(discoveryDoc);
   } catch (error) {

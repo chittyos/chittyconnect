@@ -49,13 +49,34 @@ dynamicRoutes.post("/run", async (c) => {
       args = [],
       bindings = [],
       network = true,
+      timeout = 30000,
     } = body;
 
     if (!code) {
       return c.json({ error: "code required" }, 400);
     }
 
-    // Build the env to pass to the dynamic worker — only requested bindings
+    if (!Array.isArray(bindings)) {
+      return c.json({ error: "bindings must be an array of names" }, 400);
+    }
+
+    // Bindings allowlist guard. Operators MUST explicitly opt-in by setting
+    // ALLOWED_DYNAMIC_BINDINGS (comma-separated env var names) in the Worker
+    // config. Without it, callers cannot project any env binding into the
+    // sandbox — this prevents arbitrary secret/binding exfiltration.
+    const allowlistRaw = c.env.ALLOWED_DYNAMIC_BINDINGS || "";
+    const allowedBindings = new Set(
+      allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    for (const name of bindings) {
+      if (!allowedBindings.has(name)) {
+        return c.json(
+          { error: `binding '${name}' is not in ALLOWED_DYNAMIC_BINDINGS` },
+          403,
+        );
+      }
+    }
+
     const dynamicEnv = {};
     for (const name of bindings) {
       if (c.env[name] !== undefined) {
@@ -63,10 +84,8 @@ dynamicRoutes.post("/run", async (c) => {
       }
     }
 
-    // Generate a unique ID for this execution
     const execId = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Load the dynamic worker
     const worker = loader.load({
       compatibilityDate: "2026-04-24",
       mainModule: "index.js",
@@ -75,13 +94,25 @@ dynamicRoutes.post("/run", async (c) => {
       globalOutbound: network ? undefined : null, // null = block network
     });
 
-    // Call the entrypoint
     const ep = worker.getEntrypoint(entrypoint);
     if (typeof ep[method] !== "function") {
       return c.json({ error: `No method '${method}' on entrypoint '${entrypoint}'` }, 400);
     }
 
-    const result = await ep[method](...args);
+    const timeoutMs = Number.isFinite(Number(timeout)) ? Number(timeout) : 30000;
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Execution timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    let result;
+    try {
+      result = await Promise.race([ep[method](...args), timeoutPromise]);
+    } finally {
+      clearTimeout(timer);
+    }
 
     return c.json({
       success: true,
@@ -149,7 +180,7 @@ async function resolveDatabase(env, database) {
   const { getCredential } = await import("../../lib/credential-helper.js");
 
   const KNOWN = {
-    "chittyos-core": { path: "integrations/neon/chittyos-core", env: "NEON_DATABASE_URL", kv: "secret:neon:chittyos-core:connection_uri" },
+    "chittyos-core": { path: "integrations/neon/chittyos-core", env: "NEON_CHITTYOS_CORE_URL", kv: "secret:neon:chittyos-core:connection_uri" },
     "chittycommand": { path: "integrations/neon/chittycommand", env: "NEON_CHITTYCOMMAND_URL", kv: "secret:neon:chittycommand:connection_uri" },
     "chittycounsel": { path: "integrations/neon/chittycounsel", env: "NEON_CHITTYCOUNSEL_URL", kv: "secret:neon:chittycounsel:connection_uri" },
   };

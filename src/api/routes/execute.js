@@ -127,6 +127,15 @@ executeRoutes.post("/sql/batch", async (c) => {
  *         credential?: string }
  *   credential: 1Password path (e.g. "integrations/notion/api_key") — injected as Bearer token
  */
+// Allowlist of (alias → 1Password path) pairs for /fetch credential injection.
+// Callers reference an alias; the server maps to a path. This prevents callers
+// from naming arbitrary credential paths and exfiltrating tokens.
+const FETCH_CREDENTIAL_ALIASES = {
+  notion: "integrations/notion/api_key",
+  google: "integrations/google/access_token",
+  github: "integrations/github/token",
+};
+
 executeRoutes.post("/fetch", async (c) => {
   try {
     const { url, method = "GET", headers = {}, body, credential } = await c.req.json();
@@ -135,9 +144,35 @@ executeRoutes.post("/fetch", async (c) => {
       return c.json({ error: "url required" }, 400);
     }
 
+    // Host allowlist: operators opt-in via FETCH_ALLOWED_HOSTS (comma-separated).
+    // Without it, /fetch is restricted to the credential alias's owner host.
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return c.json({ error: "url must be a valid absolute URL" }, 400);
+    }
+    const allowlistRaw = c.env.FETCH_ALLOWED_HOSTS || "";
+    const allowedHosts = new Set(
+      allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+
     const fetchHeaders = { ...headers };
     if (credential) {
-      const token = await getCredential(c.env, credential, null);
+      const credentialPath = FETCH_CREDENTIAL_ALIASES[credential];
+      if (!credentialPath) {
+        return c.json(
+          { error: `unknown credential alias '${credential}'`, allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
+          400,
+        );
+      }
+      // When using a credential, the destination host must be allowlisted —
+      // either via the operator-configured FETCH_ALLOWED_HOSTS env var, or by
+      // matching a known host owned by the credential alias.
+      if (allowedHosts.size > 0 && !allowedHosts.has(parsedUrl.hostname)) {
+        return c.json({ error: `host '${parsedUrl.hostname}' is not in FETCH_ALLOWED_HOSTS` }, 403);
+      }
+      const token = await getCredential(c.env, credentialPath, null);
       if (token) {
         fetchHeaders["Authorization"] = `Bearer ${token}`;
       }

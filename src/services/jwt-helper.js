@@ -43,9 +43,18 @@ function base64url(input) {
 }
 
 async function importPrivateKey(pem) {
+  // crypto.subtle.importKey("pkcs8", ...) requires PKCS#8 PEM
+  // ("BEGIN PRIVATE KEY"). PKCS#1 ("BEGIN RSA PRIVATE KEY") is a different
+  // ASN.1 structure and would fail with DataError. Reject explicitly so
+  // callers get a clear error instead of an opaque crypto failure.
+  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
+    throw new Error(
+      "PKCS#1 keys are not supported. Convert to PKCS#8 (BEGIN PRIVATE KEY) — e.g. `openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in pkcs1.key -out pkcs8.key`.",
+    );
+  }
   const pemBody = pem
-    .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, "")
-    .replace(/-----END (RSA )?PRIVATE KEY-----/g, "")
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
     .replace(/\s/g, "");
 
   const binaryKey = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));

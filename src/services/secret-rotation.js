@@ -164,10 +164,22 @@ export class SecretRotationService {
    * @returns {Promise<{ok: boolean, expiresIn?: number, error?: string}>}
    */
   async rotateGDriveToken() {
-    // Primary path: service account JWT flow (no refresh token needed)
+    // Primary path: service account JWT flow (no refresh token needed).
+    // Service-account failure must NOT short-circuit the refresh-token
+    // fallback — otherwise a transient SA error causes an outage.
     const saJson = await this.kv.get('secret:gdrive:service_account');
     if (saJson) {
-      return this._rotateViaServiceAccount(saJson);
+      try {
+        const saResult = await this._rotateViaServiceAccount(saJson);
+        if (saResult && saResult.ok) return saResult;
+        console.warn(
+          `[SecretRotation] Service-account rotation failed, falling back to refresh_token: ${saResult && saResult.error}`,
+        );
+      } catch (err) {
+        console.warn(
+          `[SecretRotation] Service-account rotation threw, falling back to refresh_token: ${err && err.message}`,
+        );
+      }
     }
 
     // Fallback: OAuth2 refresh token flow

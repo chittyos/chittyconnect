@@ -34,9 +34,9 @@ chittydisputesRoutes.post("/create", async (c) => {
       property_unit,
       metadata,
     } = body;
-    const disputeType = dispute_type || type;
+    const rawType = dispute_type || type;
 
-    if (!disputeType || !title) {
+    if (!rawType || !title) {
       return c.json({ error: "dispute_type and title are required" }, 400);
     }
 
@@ -51,6 +51,9 @@ chittydisputesRoutes.post("/create", async (c) => {
       "HOA",
       "REGULATORY",
     ];
+    // Normalize legacy lowercase values (e.g. "billing", "service") to canonical uppercase
+    // before enum validation, preserving backward compatibility with prior callers.
+    const disputeType = typeof rawType === "string" ? rawType.toUpperCase() : rawType;
     if (!validTypes.includes(disputeType)) {
       return c.json(
         {
