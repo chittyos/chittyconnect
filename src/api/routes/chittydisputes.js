@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const chittydisputesRoutes = new Hono();
-chittydisputesRoutes.use("*", requireServiceToken("chittydisputes"));
+chittydisputesRoutes.use("*", requireServiceToken("chittydispute"));
 
 /**
  * POST /api/chittydisputes/create
@@ -22,17 +22,42 @@ chittydisputesRoutes.use("*", requireServiceToken("chittydisputes"));
 chittydisputesRoutes.post("/create", async (c) => {
   try {
     const body = await c.req.json();
-    const { type, title, description, metadata } = body;
+    // Accept legacy `type` for backward compat, but prefer `dispute_type` to match ChittyDispute API.
+    const {
+      dispute_type,
+      type,
+      title,
+      description,
+      severity,
+      domains,
+      property_address,
+      property_unit,
+      metadata,
+    } = body;
+    const rawType = dispute_type || type;
 
-    if (!type || !title) {
-      return c.json({ error: "type and title are required" }, 400);
+    if (!rawType || !title) {
+      return c.json({ error: "dispute_type and title are required" }, 400);
     }
 
-    const validTypes = ["billing", "service", "technical", "policy", "other"];
-    if (!validTypes.includes(type)) {
+    // Canonical dispute types per ChittyDispute enum (sql/001-create-disputes.sql).
+    const validTypes = [
+      "PROPERTY",
+      "INSURANCE",
+      "LEGAL",
+      "FINANCIAL",
+      "TENANT",
+      "VENDOR",
+      "HOA",
+      "REGULATORY",
+    ];
+    // Normalize legacy lowercase values (e.g. "billing", "service") to canonical uppercase
+    // before enum validation, preserving backward compatibility with prior callers.
+    const disputeType = typeof rawType === "string" ? rawType.toUpperCase() : rawType;
+    if (!validTypes.includes(disputeType)) {
       return c.json(
         {
-          error: "Invalid dispute type",
+          error: "Invalid dispute_type",
           validTypes,
         },
         400,
@@ -41,16 +66,20 @@ chittydisputesRoutes.post("/create", async (c) => {
 
     const serviceToken = c.get("serviceToken");
 
-    const response = await fetch("https://disputes.chitty.cc/api/disputes", {
+    const response = await fetch("https://dispute.chitty.cc/api/disputes", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({
-        type,
+        dispute_type: disputeType,
         title,
         description,
+        severity,
+        domains,
+        property_address,
+        property_unit,
         metadata,
       }),
     });
@@ -80,7 +109,7 @@ chittydisputesRoutes.get("/:disputeId", async (c) => {
     const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}`,
+      `https://dispute.chitty.cc/api/disputes/${disputeId}`,
       {
         headers: {
           Authorization: `Bearer ${serviceToken}`,
@@ -120,7 +149,7 @@ chittydisputesRoutes.get("/", async (c) => {
     if (type) params.append("type", type);
     params.append("limit", limit);
 
-    const url = `https://disputes.chitty.cc/api/disputes?${params.toString()}`;
+    const url = `https://dispute.chitty.cc/api/disputes?${params.toString()}`;
 
     const response = await fetch(url, {
       headers: {
@@ -154,7 +183,7 @@ chittydisputesRoutes.patch("/:disputeId", async (c) => {
     const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}`,
+      `https://dispute.chitty.cc/api/disputes/${disputeId}`,
       {
         method: "PATCH",
         headers: {
@@ -191,7 +220,7 @@ chittydisputesRoutes.post("/:disputeId/events", async (c) => {
     const serviceToken = c.get("serviceToken");
 
     const response = await fetch(
-      `https://disputes.chitty.cc/api/disputes/${disputeId}/events`,
+      `https://dispute.chitty.cc/api/disputes/${disputeId}/events`,
       {
         method: "POST",
         headers: {

@@ -43,6 +43,12 @@ function base64url(input) {
 }
 
 async function importPrivateKey(pem) {
+  // Strip both "BEGIN PRIVATE KEY" (PKCS#8) and "BEGIN RSA PRIVATE KEY"
+  // (PKCS#1) header labels. Some tools emit the PKCS#1 label even when
+  // the body is PKCS#8 — covered by tests/services/jwt-helper.test.js.
+  // crypto.subtle.importKey("pkcs8", ...) will reject genuinely PKCS#1
+  // bodies at runtime with a clear DataError, which is the right failure
+  // surface for that case.
   const pemBody = pem
     .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, "")
     .replace(/-----END (RSA )?PRIVATE KEY-----/g, "")

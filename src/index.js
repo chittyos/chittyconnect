@@ -1971,7 +1971,7 @@ export default {
         const handler = McpConnectAgent.serve("/chatgpt/mcp", {
           binding: "MCP_AGENT",
         });
-        return handler.fetch(request, env, ctx);
+        return await handler.fetch(request, env, ctx);
       } catch (err) {
         console.error(
           `[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`,
@@ -1993,8 +1993,29 @@ export default {
     }
 
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
-    const agentResponse = await routeAgentRequest(request, env);
-    if (agentResponse) return agentResponse;
+    // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
+    // handler entirely (past the oauthProvider catch block below) and causes
+    // Cloudflare to return 530 (error 1101 — uncaught Worker exception).
+    let agentResponse;
+    let agentRouted = false;
+    try {
+      agentResponse = await routeAgentRequest(request, env);
+      // routeAgentRequest returning undefined means "not an agent path" and we
+      // should fall through to the next handler. Throwing means the agent path
+      // matched but the DO/fetch failed — return a 500 instead of masking the
+      // failure as an unrelated 404 from oauthProvider.
+      agentRouted = agentResponse !== undefined;
+    } catch (err) {
+      console.error(
+        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${err.message}
+${err.stack}`,
+      );
+      return new Response(
+        JSON.stringify({ error: "agent_routing_failed", error_description: err.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (agentRouted) return agentResponse;
 
     let response;
     try {
