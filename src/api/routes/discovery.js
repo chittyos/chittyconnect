@@ -58,7 +58,8 @@ discoveryRoutes.get("/chitty.json", async (c) => {
     // mcp base can be served from multiple hostnames (e.g. mcp.chitty.cc, mcp.ch1tty.com).
     // Preserve canonical defaults, but emit self-consistent links for the host the client used.
     const host = (c.req.header("host") || "").toLowerCase();
-    const mcpBase = host.endsWith("ch1tty.com")
+    const isCh1ttyHost = host === "ch1tty.com" || host.endsWith(".ch1tty.com");
+    const mcpBase = isCh1ttyHost
       ? "https://mcp.ch1tty.com"
       : "https://mcp.chitty.cc";
 
