@@ -269,6 +269,10 @@
     // ════════════════════════════════════════════════════════════════
     "production": {
       "name": "chittyconnect",
+      // workers.dev URL is enabled so post-deploy CI can probe /health without
+      // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
+      // public surface remains the connect.chitty.cc / mcp.chitty.cc routes.
+      "workers_dev": true,
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -363,9 +367,6 @@
           { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
       },
-      "worker_loaders": [
-        { "binding": "LOADER" }
-      ],
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
