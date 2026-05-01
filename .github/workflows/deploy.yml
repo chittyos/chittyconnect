@@ -138,7 +138,7 @@ jobs:
           echo "Active deployment version: $VERSION"
           [ "$VERSION" != "none" ] && echo "Deployment verified" || {
             echo "::error::No active deployment found — rolling back..."
-            npx wrangler@latest rollback -y
+            npx wrangler@latest rollback -y --env production
             exit 1
           }
 
@@ -177,7 +177,7 @@ jobs:
             if [ "$HTTP_CODE" -ge 500 ] 2>/dev/null && [ "$HTTP_CODE" -lt 600 ] 2>/dev/null; then
               echo "::error::/health returned $HTTP_CODE on attempt $attempt — Worker is broken"
               echo "Rolling back deployment..."
-              npx wrangler@latest rollback -y --name chittyconnect || echo "::warning::rollback command failed; rollback manually with 'wrangler rollback --name chittyconnect'"
+              npx wrangler@latest rollback -y --env production || echo "::warning::rollback command failed; rollback manually with 'wrangler rollback --env production'"
               exit 1
             fi
             if [ $attempt -lt 5 ]; then sleep 5; fi
