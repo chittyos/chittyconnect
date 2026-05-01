@@ -140,11 +140,12 @@ credentialsRoutes.get("/types", async (c) => {
       type: "cloudflare_workers_deploy",
       description: "Cloudflare Workers deployment token with write permissions",
       required_context: ["service"],
-      optional_context: ["purpose"],
+      optional_context: ["purpose", "zones"],
       scopes: [
         "Workers Scripts Write",
         "Workers KV Storage Write",
         "Account Settings Read",
+        "Workers Routes Write (zone-scoped — pass context.zones: [<zone_id>, ...] to include)",
       ],
       ttl: "365 days",
       status: "available",

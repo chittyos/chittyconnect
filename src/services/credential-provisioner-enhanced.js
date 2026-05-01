@@ -29,36 +29,61 @@ export class EnhancedCredentialProvisioner {
     this.onePassword = this.broker;
 
     // Cloudflare permissions will be fetched dynamically
-    // These are fallback IDs if API fetch fails
+    // These are fallback IDs if API fetch fails.
+    //
+    // `scope: "account"` (default) → goes in a policy block whose
+    //   resources key is `com.cloudflare.api.account.{accountId}`.
+    // `scope: "zone"` → must be emitted in a SEPARATE policy block per
+    //   zone with resources key `com.cloudflare.api.account.zone.{zoneId}`.
+    //   Callers that need a zone-scoped permission must pass
+    //   `context.zones: [<zone_id>, ...]`. Without `context.zones`, any
+    //   zone-scoped permission is dropped from the token (logged) so
+    //   account-scoped permissions still issue cleanly.
     this.cloudflarePermissions = null;
     this.cloudflarePermissionsFallback = {
       workersScriptsWrite: {
         id: "c8fed203ed3043cba015a93ad1616f1f",
         name: "Workers Scripts Write",
+        scope: "account",
       },
       workersScriptsRead: {
         id: "e086da7e2179491d91ee5f35b3ca210a",
         name: "Workers Scripts Read",
+        scope: "account",
       },
       workersKVWrite: {
         id: "f7f0eda5697f475c90846e879bab8666",
         name: "Workers KV Storage Write",
+        scope: "account",
       },
       accountSettingsRead: {
         id: "82e64a83756745bbbb1c9c2701bf816b",
         name: "Account Settings Read",
+        scope: "account",
       },
       workersR2Write: {
         id: "e4a0e7ae101d4057abc990af58022017",
         name: "Workers R2 Storage Write",
+        scope: "account",
       },
       workersDurableObjectsWrite: {
         id: "2fc0424ac60b42e0b849d4d99bdcd1e5",
         name: "Workers Durable Objects Write",
+        scope: "account",
       },
       d1DatabaseWrite: {
         id: "5e2c30acd1434ea2adfb8442c3cbbbea",
         name: "D1 Database Write",
+        scope: "account",
+      },
+      // Zone-scoped. Required for `wrangler deploy` against a worker
+      // with a `routes` block — without this permission group, deploy
+      // fails post-upload at PUT /zones/{zid}/workers/routes with
+      // Authentication error code 10000.
+      workersRoutesWrite: {
+        id: "09b2857d1c31407795e75e3fce8e4d9e",
+        name: "Workers Routes Write",
+        scope: "zone",
       },
     };
 
@@ -70,10 +95,15 @@ export class EnhancedCredentialProvisioner {
     // Expanded credential type mappings
     this.credentialTypes = {
       cloudflare_workers_deploy: {
+        // `workersRoutesWrite` is zone-scoped — only takes effect when
+        // the caller passes `context.zones`. Without zones it is
+        // dropped at policy-build time (logged) so existing callers
+        // that don't manage routes via wrangler keep working.
         permissions: [
           "workersScriptsWrite",
           "workersKVWrite",
           "accountSettingsRead",
+          "workersRoutesWrite",
         ],
         ttl: 365 * 24 * 60 * 60 * 1000, // 1 year
         requiresContext: ["service"],
@@ -409,12 +439,22 @@ export class EnhancedCredentialProvisioner {
           normalizedName.includes("Write")
         ) {
           key = "d1DatabaseWrite";
+        } else if (
+          normalizedName.includes("workersRoutes") &&
+          normalizedName.includes("Write")
+        ) {
+          key = "workersRoutesWrite";
         }
 
         if (key) {
+          // Preserve the scope from the static fallback; the Cloudflare
+          // permission-groups API doesn't always echo a stable scope
+          // identifier, so fallback is the source of truth for scope.
+          const fallback = this.cloudflarePermissionsFallback[key];
           permissions[key] = {
             id: group.id,
             name: group.name,
+            scope: fallback?.scope || "account",
           };
         }
       }
@@ -519,21 +559,67 @@ export class EnhancedCredentialProvisioner {
       );
     }
 
+    // Partition permissions by scope. Account-scoped permissions go in
+    // a single policy block keyed by the account; zone-scoped ones
+    // need a separate policy block per zone with a zone-keyed
+    // resources object — Cloudflare rejects mixing scopes in one block.
+    const accountPermissions = permissions.filter(
+      (p) => (p.scope || "account") === "account",
+    );
+    const zonePermissions = permissions.filter((p) => p.scope === "zone");
+
+    const requestedZones = Array.isArray(context.zones)
+      ? context.zones.filter((z) => typeof z === "string" && z.length > 0)
+      : [];
+
+    if (zonePermissions.length > 0 && requestedZones.length === 0) {
+      // Drop zone-scoped perms when no zones provided. Caller still
+      // gets the account-scoped subset. If the dropped perms are load-
+      // bearing (e.g. wrangler deploy of a worker with `routes`), the
+      // resulting deploy will fail with code 10000 — which is the
+      // existing behavior, so no regression.
+      console.warn(
+        `[EnhancedCredentialProvisioner] Dropping zone-scoped permissions ${zonePermissions.map((p) => p.name).join(", ")} from token for ${type} — caller did not provide context.zones`,
+      );
+    }
+
     // Create token name with context
     const tokenName = `${service} ${purpose || type} (${new Date().toISOString().split("T")[0]}) [via ChittyConnect]`;
+
+    // Build the policy list: one account-scoped block (if any account
+    // perms requested) plus one block per zone for zone-scoped perms.
+    const policies = [];
+    if (accountPermissions.length > 0) {
+      policies.push({
+        effect: "allow",
+        resources: {
+          [`com.cloudflare.api.account.${accountId}`]: "*",
+        },
+        permission_groups: accountPermissions,
+      });
+    }
+    if (zonePermissions.length > 0 && requestedZones.length > 0) {
+      for (const zoneId of requestedZones) {
+        policies.push({
+          effect: "allow",
+          resources: {
+            [`com.cloudflare.api.account.zone.${zoneId}`]: "*",
+          },
+          permission_groups: zonePermissions,
+        });
+      }
+    }
+
+    if (policies.length === 0) {
+      throw new Error(
+        `No policies to issue for ${type} — both account and zone permission sets resolved empty`,
+      );
+    }
 
     // Build token request
     const tokenRequest = {
       name: tokenName,
-      policies: [
-        {
-          effect: "allow",
-          resources: {
-            [`com.cloudflare.api.account.${accountId}`]: "*",
-          },
-          permission_groups: permissions,
-        },
-      ],
+      policies,
       expires_on: new Date(Date.now() + typeConfig.ttl).toISOString(),
     };
 
