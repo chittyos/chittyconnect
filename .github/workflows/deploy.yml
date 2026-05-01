@@ -142,6 +142,43 @@ jobs:
             exit 1
           }
 
+      # Smoke-test that /health actually responds 200. The deployments API only
+      # confirms a deployment record exists — it does NOT detect runtime
+      # instantiation failures (e.g., a binding the account isn't entitled to,
+      # which surfaces as Cloudflare error 1101 on every request even though
+      # the deploy "succeeded"). Probe via workers.dev to bypass the zone WAF.
+      - name: Smoke check /health
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # Resolve the workers.dev subdomain for the account
+          SUBDOMAIN=$(curl -sf \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['subdomain'])") || {
+            echo "::warning::Could not resolve workers.dev subdomain — skipping smoke check"
+            exit 0
+          }
+
+          URL="https://chittyconnect.${SUBDOMAIN}.workers.dev/health"
+          echo "Probing $URL"
+
+          # Allow a few seconds for global propagation, then poll.
+          for attempt in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /tmp/health.body -w "%{http_code}" --max-time 8 "$URL" || echo "000")
+            BODY=$(head -c 200 /tmp/health.body 2>/dev/null || true)
+            echo "Attempt $attempt: HTTP $HTTP_CODE — $BODY"
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"status"'; then
+              echo "✅ /health returned 200 with status field"
+              exit 0
+            fi
+            if [ $attempt -lt 5 ]; then sleep 5; fi
+          done
+
+          echo "::error::/health did not return 200 after 5 attempts (last: $HTTP_CODE) — Worker is broken, rolling back"
+          npx wrangler@latest rollback -y || echo "::warning::rollback command failed"
+          exit 1
+
       - name: Register with ChittyRegistry
         run: |
           curl -sf -X POST https://registry.chitty.cc/api/services/chittyconnect/heartbeat \
