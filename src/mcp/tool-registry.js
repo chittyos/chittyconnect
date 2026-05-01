@@ -536,7 +536,7 @@ const MCP_TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
-    name: "chitty_ledger_chain_of_custody",
+    name: "chitty_ledger_custody",
     description:
       "Retrieve the full chain of custody for a specific entity from the ledger.",
     inputSchema: {
@@ -659,7 +659,7 @@ const MCP_TOOLS = [
     },
   },
   {
-    name: "chitty_finance_detect_transfers",
+    name: "chitty_finance_xfer_detect",
     description:
       "Auto-detect potential inter-entity transfers using amount matching and date proximity.",
     inputSchema: {
@@ -1504,7 +1504,7 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_ledger_query",
   "chitty_ledger_verify",
   "chitty_ledger_statistics",
-  "chitty_ledger_chain_of_custody",
+  "chitty_ledger_custody",
   "chitty_finance_entities",
   "chitty_finance_balances",
   "chitty_finance_transactions",
