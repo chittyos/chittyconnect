@@ -15,6 +15,39 @@ import { requireServiceToken } from "../../middleware/require-service-token.js";
 const chittydisputesRoutes = new Hono();
 chittydisputesRoutes.use("*", requireServiceToken("chittydispute"));
 
+const VALID_DISPUTE_TYPES = [
+  "PROPERTY",
+  "INSURANCE",
+  "LEGAL",
+  "FINANCIAL",
+  "TENANT",
+  "VENDOR",
+  "HOA",
+  "REGULATORY",
+];
+
+const LEGACY_DISPUTE_TYPE_MAP = {
+  billing: "FINANCIAL",
+  service: "VENDOR",
+  technical: "REGULATORY",
+  policy: "LEGAL",
+  other: "LEGAL",
+};
+
+function normalizeDisputeType(rawType) {
+  if (!rawType || typeof rawType !== "string") return null;
+
+  const trimmedType = rawType.trim();
+  if (!trimmedType) return null;
+
+  const upperType = trimmedType.toUpperCase();
+  if (VALID_DISPUTE_TYPES.includes(upperType)) {
+    return upperType;
+  }
+
+  return LEGACY_DISPUTE_TYPE_MAP[trimmedType.toLowerCase()] || null;
+}
+
 /**
  * POST /api/chittydisputes/create
  * Create a new dispute
@@ -35,30 +68,17 @@ chittydisputesRoutes.post("/create", async (c) => {
       metadata,
     } = body;
     const rawType = dispute_type || type;
+    const disputeType = normalizeDisputeType(rawType);
 
     if (!rawType || !title) {
       return c.json({ error: "dispute_type and title are required" }, 400);
     }
 
-    // Canonical dispute types per ChittyDispute enum (sql/001-create-disputes.sql).
-    const validTypes = [
-      "PROPERTY",
-      "INSURANCE",
-      "LEGAL",
-      "FINANCIAL",
-      "TENANT",
-      "VENDOR",
-      "HOA",
-      "REGULATORY",
-    ];
-    // Normalize legacy lowercase values (e.g. "billing", "service") to canonical uppercase
-    // before enum validation, preserving backward compatibility with prior callers.
-    const disputeType = typeof rawType === "string" ? rawType.toUpperCase() : rawType;
-    if (!validTypes.includes(disputeType)) {
+    if (!VALID_DISPUTE_TYPES.includes(disputeType)) {
       return c.json(
         {
           error: "Invalid dispute_type",
-          validTypes,
+          validTypes: VALID_DISPUTE_TYPES,
         },
         400,
       );
@@ -146,7 +166,9 @@ chittydisputesRoutes.get("/", async (c) => {
     // Build query parameters
     const params = new URLSearchParams();
     if (status) params.append("status", status);
-    if (type) params.append("type", type);
+    if (type) {
+      params.append("type", normalizeDisputeType(type) || type);
+    }
     params.append("limit", limit);
 
     const url = `https://dispute.chitty.cc/api/disputes?${params.toString()}`;

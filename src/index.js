@@ -43,6 +43,20 @@ let ecosystemInitialized = false;
 let intelligenceModules = null;
 let streamingManager = null;
 
+function formatCaughtError(error) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack || "",
+    };
+  }
+
+  return {
+    message: String(error),
+    stack: "",
+  };
+}
+
 async function ensureEcosystemInitialized(env) {
   if (ecosystemInitialized) return intelligenceModules;
 
@@ -1804,6 +1818,24 @@ app.get("/integrations/github/callback", async (c) => {
  *   /register — Dynamic client registration
  */
 const oauthProvider = createOAuthProvider(app);
+const mcpAgentHandler = McpConnectAgent.serve("/mcp", {
+  binding: "MCP_AGENT",
+});
+
+function isOAuthProviderRoute(url) {
+  if (
+    url.pathname === "/authorize" ||
+    url.pathname === "/token" ||
+    url.pathname === "/register" ||
+    url.pathname === "/.well-known/oauth-authorization-server" ||
+    url.pathname === "/.well-known/oauth-protected-resource" ||
+    url.pathname.startsWith("/.well-known/oauth-protected-resource/")
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Strip query-string parameters from the redirect_uri OAuth param.
@@ -1879,6 +1911,7 @@ async function stripRedirectUriFromTokenBody(request) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const host = (url.hostname || "").toLowerCase();
 
     // Debug: log all OAuth-related requests to diagnose Notion integration
     if (
@@ -1973,13 +2006,40 @@ export default {
         });
         return await handler.fetch(request, env, ctx);
       } catch (err) {
+        const errorInfo = formatCaughtError(err);
         console.error(
-          `[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`,
+          `[MCP-Agent] /chatgpt/mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
         );
         return new Response(
           JSON.stringify({
             error: "internal_error",
-            error_description: err.message,
+            error_description: errorInfo.message,
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
+      }
+    }
+
+    // When mcp.chitty.cc is fronted by Cloudflare Managed OAuth, Access owns
+    // the OAuth exchange and the origin should behave like a plain MCP server.
+    if (host === "mcp.chitty.cc" && url.pathname === "/mcp") {
+      try {
+        return mcpAgentHandler.fetch(request, env, ctx);
+      } catch (err) {
+        const errorInfo = formatCaughtError(err);
+        console.error(
+          `[MCP-Agent] /mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: errorInfo.message,
           }),
           {
             status: 500,
@@ -2006,9 +2066,10 @@ export default {
       // failure as an unrelated 404 from oauthProvider.
       agentRouted = agentResponse !== undefined;
     } catch (err) {
+      const errorInfo = formatCaughtError(err);
       console.error(
-        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${err.message}
-${err.stack}`,
+        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${errorInfo.message}
+${errorInfo.stack}`,
       );
       return new Response(
         JSON.stringify({ error: "agent_routing_failed", error_description: err.message }),
@@ -2019,14 +2080,19 @@ ${err.stack}`,
 
     let response;
     try {
-      response = await oauthProvider.fetch(request, env, ctx);
+      if (isOAuthProviderRoute(url)) {
+        response = await oauthProvider.fetch(request, env, ctx);
+      } else {
+        response = await app.fetch(request, env, ctx);
+      }
     } catch (err) {
-      console.error(`[OAuth-Fatal] ${request.method} ${url.pathname} threw: ${err.message}
-${err.stack}`);
+      const errorInfo = formatCaughtError(err);
+      console.error(`[Fetch-Fatal] ${request.method} ${url.pathname} threw: ${errorInfo.message}
+${errorInfo.stack}`);
       return new Response(
         JSON.stringify({
           error: "internal_error",
-          error_description: err.message,
+          error_description: errorInfo.message,
         }),
         {
           status: 500,

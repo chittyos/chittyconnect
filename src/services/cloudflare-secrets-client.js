@@ -63,6 +63,7 @@ const PATH_TO_ENV = {
   "services/chittyfinance/token": "CHITTY_FINANCE_TOKEN",
   "services/chittycases/token": "CHITTY_CASES_TOKEN",
   "services/chittychronicle/token": "CHITTY_CHRONICLE_TOKEN",
+  "services/chittydispute/service_token": "DISPUTES_API_TOKEN",
   "services/chittydispute/token": "DISPUTES_API_TOKEN",
   "services/chittydispute/service_token": "DISPUTES_API_TOKEN",
   "services/chittytrack/api_token": "API_TOKEN",

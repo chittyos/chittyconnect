@@ -817,6 +817,43 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: "experience_migrate",
+    description:
+      "Records-only migration of identity experience between two existing ChittyConnect contexts. Strictly downstream — does NOT mint identities, does NOT recalc trust, does NOT write events. Refuses without a ChittyID-issued supersession manifest. The composing saga (experience_reassign) lives at the Ch1tty gateway.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        manifest: {
+          type: "object",
+          description:
+            "Supersession manifest issued by ChittyID via /api/v2/chittyid/mint with supersedes metadata. Contains from_chitty_id, to_chitty_id, mint_audit_id, signature, issued_at, reason.",
+          properties: {
+            from_chitty_id: { type: "string" },
+            to_chitty_id: { type: "string" },
+            mint_audit_id: { type: "string" },
+            signature: { type: "string" },
+            issued_at: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: [
+            "from_chitty_id",
+            "to_chitty_id",
+            "mint_audit_id",
+            "signature",
+            "issued_at",
+            "reason",
+          ],
+        },
+        metrics_transferred: {
+          type: "object",
+          description:
+            "Optional metrics summary describing what's being transferred (sessions, interactions, decisions, expertise domains).",
+        },
+      },
+      required: ["manifest"],
+    },
+  },
+  {
     name: "chitty_contextual_timeline",
     description:
       "Get unified communication timeline from ChittyContextual. Aggregates iMessage, WhatsApp, Email, DocuSign, and OpenPhone into a chronological view.",
