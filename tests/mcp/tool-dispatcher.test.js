@@ -1105,7 +1105,7 @@ describe("dispatchToolCall", () => {
     });
   });
 
-  describe("chitty_finance_detect_transfers", () => {
+  describe("chitty_finance_xfer_detect", () => {
     it("whitelists args — does not forward arbitrary fields", async () => {
       getServiceToken.mockResolvedValue("finance-svc-token");
       mockFetch.mockResolvedValue({
@@ -1114,7 +1114,7 @@ describe("dispatchToolCall", () => {
       });
 
       await dispatchToolCall(
-        "chitty_finance_detect_transfers",
+        "chitty_finance_xfer_detect",
         {
           entity: "arias-llc",
           start: "2025-01-01",

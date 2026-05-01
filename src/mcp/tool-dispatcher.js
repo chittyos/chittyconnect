@@ -787,7 +787,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       if (respErr) return respErr;
       result = data;
-    } else if (name === "chitty_ledger_chain_of_custody") {
+    } else if (name === "chitty_ledger_custody") {
       if (!args.entity_id) {
         return {
           content: [
@@ -970,7 +970,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    } else if (name === "chitty_finance_detect_transfers") {
+    } else if (name === "chitty_finance_xfer_detect") {
       const response = await serviceFetch(
         env,
         "finance",
