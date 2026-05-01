@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createJwt } from "../../src/services/jwt-helper.js";
 
@@ -24,37 +25,11 @@ function parseJwtParts(jwt) {
   };
 }
 
-// A real 2048-bit RSA PKCS#8 private key for testing.
-// Generated via: openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
-// Safe to commit — test fixture only, not used in production.
-const TEST_PEM = `-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDXjunqbuaQ94VR
-UqfREUDQhkxaUcRTXV/bWDdp93Va4FW0mU+zKxUtrJsQCS8pBOqWosVWMQ1mcVGK
-+g1hU7yKKii7GsKWCg8tKK9JL8ecdPEWRFBn3m8fwPT6di7itjPcnWh9jptyRnL+
-gCXTb7gePnz2flWPq72eAr19CeFXPIGZBTaHK85pRX+/n/bcp4QbuXkieXkOdmN1
-+YSqiIcQd+v8jt/TYI1SZqiwWCni31MK+XVAVU2SUWr9Jq3sCtPvjckags62THEN
-S2qNP5zfiMECmTyWMFIJsPgLJRnugXXsTNkD+qfRjRYzm+NyLMaZR6Ns4Qf8yJzD
-4ktLnR7RAgMBAAECggEAB7q6LIvZfK1DfI0IM3j46AFIz5xK++pHO6hIJGaZMK8G
-o7kzoGsVEVQ1IzgRFtl0R/6CMPsFTf0WPXOF8017X0DvwPXOsG6f6LCiyG8MK1IO
-Kww8Dd1uAqd6oViHid2asnh6fLYWYNyh1vplYNWKtprrBDO3gbVY0Uer38Xw7J3P
-88Uy7ADsn3lxsT56xzILhUJ3evPUvQhPRCzSJVhNEXPtWNYxYrjlS1um54usQdN7
-oBGtwLwlgGDZaDXmM9rJxf71SUg5S3U1DfVT5MrJp62t1eSA39BqG/VXsi8Lxo/3
-ys7py9MGboBSLOTHXutDcy+J+PlL1LpHsm+Ayg1PWQKBgQD0PuHgAQkq/U87xCwl
-kuaacesO/Ns0ZqdpoNbILW+8wylFoN03ft97z7gAOu38A7NBBRg4rD9im+lTD0iY
-nhwgn2GHKhj30POaSCLAOAITH9PPPIDOFpi9R9Io/X8ikfk0wQEPbzoH4tMhrhMm
-OcBnKIpklPSnImowkOTOJucxmwKBgQDh7poAxOY4L2LbVBuTqmYzKXsbVyZ42c4S
-Zjqq0qwG5bWdxye4WlsoJD2Nv22vxzwI68+bvl0i5gcp5an3e5PjYKbHr8I7lmws
-fCFGGUBSW8alISEQIAYM+3LIIgwnHj+qGVqJcj04RuH4T52gRrvbJJgUvPyhjvkQ
-1SyiOuw+AwKBgQCI+eMPD0Wm+FzBNelUQShWoWCkDSaaIp/s2yjZJrIteH3i8K5f
-eyW2d+3HI0VoOmMDKepFjkQV9z5JOJ8MCE/Z88hsVy2dfW/ArIfgqQhw1T6iUFok
-OgP60xaHqnLsXlUWQs9naodu+MRTdR6EJ4tBzzid4/O479IB3qCTBLpP1QKBgD0/
-+UIyHxOmTQ+W2q8KqBBAs54y3zwuF/7G9iqvWHG6PqVag3soC8RzJrjR58OaqLzm
-aO8ZCZjXcaO7Hnv4ZZxj7HMARBDxc7wPntmpKNXrCYxk0djURa+pT3HQQSktuya7
-Ht9aOByUotg1hU8ZPf5oCk68+WQ3JXCZyjLk9HzPAoGAS89CVDZtBt2iE3KCiOgK
-YcVX4v0TABfDZAXyHUGYLbXpRBTn+aunZLZswRMrhNTk7o7LUC0d2QCfNF0nHMpr
-UyfSnFIFfxg5OcqA+uXpgktIjgCc4b6bcUyen75sRg8OxrxFnUMlULEUVqHY0EVv
-K+8E2ejLjSA/MTABCBhY62c=
------END PRIVATE KEY-----`;
+const TEST_PEM = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+}).privateKey
+  .export({ type: "pkcs8", format: "pem" })
+  .toString();
 
 // ----------------------------------------------------------------
 // Tests
