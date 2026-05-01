@@ -14,6 +14,12 @@ The AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for the 
 
 ChittyConnect packages an HTTP API server (Cloudflare Workers/Hono) and an MCP server binary (`chittyconnect-mcp`) for model integrations. This package is intended to be used either as a deployed Worker or as a dependency to integrate with ChittyOS services.
 
+## MCP Host Standard
+
+ChittyConnect currently owns the dumb aggregate MCP semantics for `mcp.chitty.cc` and the service catalog that feeds the public Chitty discovery document.
+
+For the canonical external host matrix, alias rules, and Cloudflare-managed OAuth pattern, see [../ch1tty/docs/MCP_HOST_STANDARD.md](../ch1tty/docs/MCP_HOST_STANDARD.md).
+
 ## Installation
 
 ```bash
