@@ -1119,6 +1119,21 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
       if (fetchErr) return fetchErr;
       result = await response.json();
+    } else if (name === "experience_migrate") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/experience/migrate`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manifest: args.manifest,
+            metrics_transferred: args.metrics_transferred,
+          }),
+        },
+      );
+      const fetchErr = await checkFetchError(response, "ExperienceMigrate");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
     }
 
     // ── Memory tools (MemoryCloude) ──────────────────────────────────
