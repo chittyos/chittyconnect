@@ -9,7 +9,9 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env production",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
     "kv:seed": "./scripts/seed-kv.sh",
     "test": "vitest",
     "test:watch": "vitest --watch",
