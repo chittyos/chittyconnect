@@ -96,13 +96,13 @@ CHITTYCONNECT_URL=${CHITTYCONNECT_URL:-https://connect.chitty.cc}
 
 # Prompt for auth token
 echo ""
-echo "You need a ChittyAuth token to connect to ChittyConnect."
+echo "You need a ChittyAuth-issued token to connect to ChittyConnect."
 echo "To get a token, visit: https://auth.chitty.cc/register"
 echo ""
-read -sp "ChittyAuth Token: " CHITTY_AUTH_TOKEN
+read -sp "ChittyAuth Service Token: " CHITTYAUTH_ISSUED_CONNECT_SERVICE_TOKEN
 echo ""
 
-if [ -z "$CHITTY_AUTH_TOKEN" ]; then
+if [ -z "$CHITTYAUTH_ISSUED_CONNECT_SERVICE_TOKEN" ]; then
     echo -e "${RED}✗ ChittyAuth token is required${NC}"
     exit 1
 fi
@@ -118,7 +118,7 @@ echo -e "${YELLOW}[Step 4/6]${NC} Testing ChittyConnect connection..."
 
 # Test API connection
 HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer $CHITTY_AUTH_TOKEN" \
+    -H "Authorization: Bearer $CHITTYAUTH_ISSUED_CONNECT_SERVICE_TOKEN" \
     "$CHITTYCONNECT_URL/health")
 
 if [ "$HEALTH_CHECK" != "200" ]; then
@@ -168,7 +168,7 @@ MCP_CONFIG=$(cat <<EOF
       "args": ["$PROJECT_DIR/mcp-server.js"],
       "env": {
         "CHITTYCONNECT_URL": "$CHITTYCONNECT_URL",
-        "CHITTY_AUTH_TOKEN": "$CHITTY_AUTH_TOKEN",
+        "CHITTY_AUTH_SERVICE_TOKEN": "$CHITTYAUTH_ISSUED_CONNECT_SERVICE_TOKEN",
         "ENABLE_STREAMING": "true",
         "SESSION_PERSISTENCE": "true",
         "PLATFORM": "$PLATFORM",
@@ -239,7 +239,7 @@ echo -e "${GREEN}✓ Created test-mcp.sh${NC}"
 cat > "$PROJECT_DIR/.env.example" <<EOF
 # ChittyConnect MCP Configuration
 CHITTYCONNECT_URL=https://connect.chitty.cc
-CHITTY_AUTH_TOKEN=your_token_here
+CHITTY_AUTH_SERVICE_TOKEN=your_token_here
 ENABLE_STREAMING=true
 SESSION_PERSISTENCE=true
 PLATFORM=desktop

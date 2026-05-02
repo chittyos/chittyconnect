@@ -145,6 +145,8 @@ discoveryRoutes.get("/chitty.json", async (c) => {
           session_management: true,
           oauth_discovery:
             `${mcpBase}/.well-known/oauth-authorization-server`,
+          oauth_authority: "https://auth.chitty.cc",
+          oauth_backend: "neon (via chittyauth facade)",
         },
         api: {
           openapi_spec: "https://connect.chitty.cc/openapi.json",
