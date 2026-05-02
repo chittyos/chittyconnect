@@ -7,7 +7,7 @@ import {
 describe("getServiceCatalog", () => {
   it("returns all services with default domain", () => {
     const catalog = getServiceCatalog({});
-    expect(catalog.length).toBe(19);
+    expect(catalog.length).toBe(20);
     expect(catalog[0]).toHaveProperty("id");
     expect(catalog[0]).toHaveProperty("url");
     expect(catalog[0].url).toMatch(/^https:\/\/.+\.chitty\.cc$/);

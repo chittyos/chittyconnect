@@ -21,6 +21,18 @@ Canonical source: `wrangler.jsonc` secrets manifest comments.
 | **KV** | Short-lived rotated values only. Never long-lived secrets. | Ephemeral cache with TTL |
 | **`[vars]`** | Non-secret configuration only. | Per-environment in wrangler.jsonc |
 
+## Ownership Matrix (Normative)
+
+| Capability | Owner | Notes |
+|------------|-------|-------|
+| API key/token issuance + rotation | `chittyauth` | Canonical issuer for service credentials |
+| Certificate issuance/revocation | `chittycert` | CA role |
+| Trust decisioning + cert proxy | `chittytrust` | Policy + proxy, not token issuer |
+| Identity issuance policy | `chittyid` | Pipeline and format governance |
+| Evidence/ID mint operations | `chittymint` | Consumes auth credentials; not issuer |
+
+Reference: [Credential Ownership Law](./CREDENTIAL_OWNERSHIP_LAW.md)
+
 ## Environments
 
 | Environment | Deploy Command | Worker Name |
@@ -71,6 +83,14 @@ Pattern: `CHITTY_<SERVICE>_TOKEN`
 | `CHITTY_ID_SERVICE_TOKEN` | ChittyID generic service token |
 | `CHITTYCONNECT_SERVICE_TOKEN` | ChittyConnect self-service token |
 | `CHITTYMINT_SECRET` | ChittyMint webhook secret |
+| `CHITTYAUTH_ISSUED_MINT_TOKEN` | Preferred auth-issued token for ChittyMint API calls |
+| `MINT_API_KEY` | Transitional alias for ChittyMint API auth token |
+
+Policy:
+- Preferred global pattern: `CHITTYAUTH_ISSUED_<SERVICE>_TOKEN`
+- `CHITTYAUTH_ISSUED_MINT_TOKEN` is preferred.
+- `MINT_API_KEY` is allowed during migration.
+- `CHITTYMINT_SECRET` is legacy and should not be primary API auth.
 
 ### Third-Party Integrations (10)
 

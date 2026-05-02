@@ -60,11 +60,59 @@ export async function getCredential(
  * @returns {Promise<string|undefined>} Service token or undefined
  */
 export async function getServiceToken(env, serviceName) {
-  const tokenEnvVar = `CHITTY_${serviceName.toUpperCase().replace("CHITTY", "")}_TOKEN`;
+  const normalized = serviceName.toUpperCase().replace("CHITTY", "");
+  const authIssuedEnvVar = `CHITTYAUTH_ISSUED_${normalized}_TOKEN`;
+  const legacyEnvVar = `CHITTY_${normalized}_TOKEN`;
+
+  // Prefer ChittyAuth-issued token naming across all services.
+  if (env[authIssuedEnvVar]) {
+    return env[authIssuedEnvVar];
+  }
+
+  // Transitional aliases (service-specific).
+  if (normalized === "MINT" && env.MINT_API_KEY) {
+    return env.MINT_API_KEY;
+  }
+
   return getCredential(
     env,
     `services/${serviceName}/service_token`,
-    tokenEnvVar,
+    legacyEnvVar,
     serviceName,
   );
+}
+
+/**
+ * Resolve auth credential used for ChittyMint API calls.
+ *
+ * Policy:
+ * 1) Prefer ChittyAuth-issued mint token
+ * 2) Fall back to service token for chittymint
+ * 3) Last resort legacy webhook secret (deprecated for API auth)
+ */
+export async function getMintAuthToken(env) {
+  const authIssued =
+    env.CHITTYAUTH_ISSUED_MINT_TOKEN ||
+    env.MINT_API_KEY ||
+    await getCredential(
+      env,
+      "services/chittymint/service_token",
+      "MINT_API_KEY",
+      "chittymint",
+    );
+
+  if (authIssued) {
+    return { token: authIssued, source: "auth-issued" };
+  }
+
+  const serviceToken = await getServiceToken(env, "chittymint");
+  if (serviceToken) {
+    return { token: serviceToken, source: "service-token-fallback" };
+  }
+
+  if (env.CHITTYMINT_SECRET) {
+    return { token: env.CHITTYMINT_SECRET, source: "legacy-webhook-secret" };
+  }
+
+  return { token: undefined, source: "none" };
 }
