@@ -70,6 +70,15 @@ export async function getServiceToken(env, serviceName) {
   }
 
   // Transitional aliases (service-specific).
+  if (normalized === "MINT" && env.CHITTYAUTH_ISSUED_MINT_API_KEY) {
+    return env.CHITTYAUTH_ISSUED_MINT_API_KEY;
+  }
+  if (normalized === "MINT" && env.CHITTYAUTH_ISSUED_MINT_TOKEN) {
+    return env.CHITTYAUTH_ISSUED_MINT_TOKEN;
+  }
+  if (normalized === "MINT" && env.CHITTYEVIDENCE_MINT_API_KEY) {
+    return env.CHITTYEVIDENCE_MINT_API_KEY;
+  }
   if (normalized === "MINT" && env.MINT_API_KEY) {
     return env.MINT_API_KEY;
   }
@@ -92,8 +101,28 @@ export async function getServiceToken(env, serviceName) {
  */
 export async function getMintAuthToken(env) {
   const authIssued =
+    env.CHITTYAUTH_ISSUED_MINT_API_KEY ||
     env.CHITTYAUTH_ISSUED_MINT_TOKEN ||
     env.MINT_API_KEY ||
+    env.CHITTYEVIDENCE_MINT_API_KEY ||
+    await getCredential(
+      env,
+      "services/chittymint/service_token",
+      "CHITTYAUTH_ISSUED_MINT_API_KEY",
+      "chittymint",
+    ) ||
+    await getCredential(
+      env,
+      "services/chittymint/service_token",
+      "CHITTYEVIDENCE_MINT_API_KEY",
+      "chittymint",
+    ) ||
+    await getCredential(
+      env,
+      "services/chittymint/service_token",
+      "CHITTYAUTH_ISSUED_MINT_TOKEN",
+      "chittymint",
+    ) ||
     await getCredential(
       env,
       "services/chittymint/service_token",

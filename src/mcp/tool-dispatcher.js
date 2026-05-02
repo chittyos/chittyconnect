@@ -228,7 +228,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
       if (mintTokenSource === "legacy-webhook-secret") {
         console.warn(
-          "[policy] chitty_id_mint using deprecated CHITTYMINT_SECRET; migrate to CHITTYAUTH_ISSUED_MINT_TOKEN/MINT_API_KEY",
+          "[policy] chitty_id_mint using deprecated CHITTYMINT_SECRET; migrate to CHITTYAUTH_ISSUED_MINT_API_KEY (aliases: CHITTYAUTH_ISSUED_MINT_TOKEN, MINT_API_KEY)",
         );
       }
       const response = await serviceFetch(env, "mint", "/api/mint", {

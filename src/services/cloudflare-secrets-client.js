@@ -67,7 +67,8 @@ const PATH_TO_ENV = {
   "services/chittydispute/token": "DISPUTES_API_TOKEN",
   "services/chittytrack/api_token": "API_TOKEN",
   "services/chittytrack/webhook_secret": "GITHUB_WEBHOOK_SECRET",
-  "services/chittymint/secret": "CHITTYMINT_SECRET",
+  "services/chittymint/secret": "CHITTYAUTH_ISSUED_MINT_API_KEY",
+  "services/chittymint/service_token": "CHITTYAUTH_ISSUED_MINT_API_KEY",
 };
 
 export class CloudflareSecretsClient {

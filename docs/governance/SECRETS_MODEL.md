@@ -25,7 +25,7 @@ Canonical source: `wrangler.jsonc` secrets manifest comments.
 
 | Capability | Owner | Notes |
 |------------|-------|-------|
-| API key/token issuance + rotation | `chittyauth` | Canonical issuer for service credentials |
+| API key/token issuance + rotation | `chittyauth` + `chittycypher` | Canonical issuer and custody authority for service credentials |
 | Certificate issuance/revocation | `chittycert` | CA role |
 | Trust decisioning + cert proxy | `chittytrust` | Policy + proxy, not token issuer |
 | Identity issuance policy | `chittyid` | Pipeline and format governance |
@@ -82,13 +82,15 @@ Pattern: `CHITTY_<SERVICE>_TOKEN`
 | `CHITTY_LEDGER_TOKEN` | ChittyLedger |
 | `CHITTY_ID_SERVICE_TOKEN` | ChittyID generic service token |
 | `CHITTYCONNECT_SERVICE_TOKEN` | ChittyConnect self-service token |
-| `CHITTYMINT_SECRET` | ChittyMint webhook secret |
-| `CHITTYAUTH_ISSUED_MINT_TOKEN` | Preferred auth-issued token for ChittyMint API calls |
+| `CHITTYAUTH_ISSUED_MINT_API_KEY` | Canonical mint API auth token for runtime consumption |
+| `CHITTYAUTH_ISSUED_MINT_TOKEN` | Transitional auth-issued mint alias (one-release shim) |
 | `MINT_API_KEY` | Transitional alias for ChittyMint API auth token |
+| `CHITTYMINT_SECRET` | Legacy ChittyMint webhook secret (not primary API auth) |
 
 Policy:
 - Preferred global pattern: `CHITTYAUTH_ISSUED_<SERVICE>_TOKEN`
-- `CHITTYAUTH_ISSUED_MINT_TOKEN` is preferred.
+- `CHITTYAUTH_ISSUED_MINT_API_KEY` is the canonical runtime binding.
+- `CHITTYAUTH_ISSUED_MINT_TOKEN` is a one-release migration alias.
 - `MINT_API_KEY` is allowed during migration.
 - `CHITTYMINT_SECRET` is legacy and should not be primary API auth.
 
