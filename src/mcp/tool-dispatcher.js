@@ -7,7 +7,7 @@
  * @module mcp/tool-dispatcher
  */
 
-import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import { getCredential, getServiceToken, getMintAuthToken } from "../lib/credential-helper.js";
 import { serviceFetch } from "../lib/service-switch.js";
 import {
   getCloudflareApiCredentials,
@@ -213,10 +213,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Identity tools ──────────────────────────────────────────────
     if (name === "chitty_id_mint") {
-      const serviceToken =
-        env.CHITTYMINT_SECRET ||
-        (await getServiceToken(env, "chittymint")) ||
-        (await getServiceToken(env, "chittyid"));
+      const { token: serviceToken, source: mintTokenSource } =
+        await getMintAuthToken(env);
       if (!serviceToken) {
         return {
           content: [
@@ -227,6 +225,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           ],
           isError: true,
         };
+      }
+      if (mintTokenSource === "legacy-webhook-secret") {
+        console.warn(
+          "[policy] chitty_id_mint using deprecated CHITTYMINT_SECRET; migrate to CHITTYAUTH_ISSUED_MINT_API_KEY (aliases: CHITTYAUTH_ISSUED_MINT_TOKEN, MINT_API_KEY)",
+        );
       }
       const response = await serviceFetch(env, "mint", "/api/mint", {
         method: "POST",

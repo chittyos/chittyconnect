@@ -26,6 +26,7 @@ const SERVICE_ENTRIES = [
   { id: "chittychain", sub: "chain" },
   { id: "chittyledger", sub: "ledger" },
   { id: "chittydispute", sub: "dispute" },
+  { id: "chittyconcierge", sub: "concierge" },
   { id: "chittytrack", sub: "track" },
   { id: "chittytask", sub: "tasks" },
 ];

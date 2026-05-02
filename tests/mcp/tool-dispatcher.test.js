@@ -30,11 +30,13 @@ import { Client } from "@neondatabase/serverless";
 vi.mock("../../src/lib/credential-helper.js", () => ({
   getCredential: vi.fn(),
   getServiceToken: vi.fn(),
+  getMintAuthToken: vi.fn(),
 }));
 
 import {
   getCredential,
   getServiceToken,
+  getMintAuthToken,
 } from "../../src/lib/credential-helper.js";
 
 // Mock global fetch
@@ -109,6 +111,7 @@ const mockEnv = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getMintAuthToken.mockResolvedValue({ token: null, source: "none" });
   neonMocks.connect.mockReset();
   neonMocks.query.mockReset();
   neonMocks.end.mockReset();
@@ -120,7 +123,7 @@ describe("dispatchToolCall", () => {
 
   describe("chitty_id_mint", () => {
     it("returns error when no service token available", async () => {
-      getServiceToken.mockResolvedValue(null);
+      getMintAuthToken.mockResolvedValue({ token: null, source: "none" });
 
       const result = await dispatchToolCall(
         "chitty_id_mint",
@@ -133,6 +136,10 @@ describe("dispatchToolCall", () => {
     });
 
     it("calls ChittyMint service and returns result", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "svc-token-123",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: true,
@@ -163,6 +170,10 @@ describe("dispatchToolCall", () => {
     });
 
     it("returns error on upstream failure", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "svc-token-123",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: false,
@@ -918,6 +929,10 @@ describe("dispatchToolCall", () => {
 
   describe("error handling", () => {
     it("catches fetch exceptions and returns MCP error", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "token",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("token");
       mockFetch.mockRejectedValue(new Error("Network timeout"));
 

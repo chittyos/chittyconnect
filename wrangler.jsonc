@@ -61,8 +61,11 @@
     // Mercury OIDC (CF Access SaaS app — programmatic token exchange for write operations)
     { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
     { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-    { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
-  ],
+    { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+    { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+      ],
 
   // ──────────────────────────────────────────────────────────────────
   // ENVIRONMENTS — one worker, three declared environments
@@ -82,6 +85,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "http://localhost:8787",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -144,6 +149,7 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
@@ -177,7 +183,10 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
         { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ],
       "vars": {
         "ENVIRONMENT": "staging",
@@ -186,6 +195,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "https://chittyconnect-staging.chittyos.workers.dev",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -254,6 +265,7 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
@@ -287,7 +299,10 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
         { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ],
 
       "routes": [
@@ -301,6 +316,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "https://connect.chitty.cc",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -372,6 +389,7 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },

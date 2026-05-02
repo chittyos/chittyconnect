@@ -19,6 +19,7 @@ const DEFAULTS = {
   id:          { enabled: true, mode: "binding", binding: "SVC_ID" },
   mint:        { enabled: true, mode: "binding", binding: "SVC_ID" },
   evidence:    { enabled: true, mode: "binding", binding: "SVC_EVIDENCE" },
+  concierge:   { enabled: true, mode: "binding", binding: "SVC_CONCIERGE" },
   chronicle:   { enabled: true, mode: "binding", binding: "SVC_CHRONICLE" },
   disputes:    { enabled: true, mode: "binding", binding: "SVC_DISPUTES" },
   score:       { enabled: true, mode: "binding", binding: "SVC_SCORE" },
