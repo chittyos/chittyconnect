@@ -23,7 +23,7 @@
   "name": "chittyconnect",
   "main": "src/index.js",
   "compatibility_date": "2026-03-02",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "compatibility_flags": ["nodejs_compat"],
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
   "observability": { "enabled": true },
@@ -148,7 +148,7 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
@@ -159,26 +159,6 @@
     // ════════════════════════════════════════════════════════════════
     "staging": {
       "name": "chittyconnect-staging",
-      // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
-      "secrets_store_secrets": [
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" },
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" },
-        { "binding": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" },
-        { "binding": "MERCURY_TOKEN_IT_CAN_BE_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_IT_CAN_BE_LLC" },
-        { "binding": "MERCURY_TOKEN_CHITTY_SERVICES", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHITTY_SERVICES" },
-        { "binding": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" },
-        { "binding": "CH1TTY_MCP_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "ch1tty_mcp_token" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
-        { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
-        { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
-      ],
       "vars": {
         "ENVIRONMENT": "staging",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -258,7 +238,7 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
@@ -269,27 +249,6 @@
     // ════════════════════════════════════════════════════════════════
     "production": {
       "name": "chittyconnect",
-      // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
-      "secrets_store_secrets": [
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" },
-        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" },
-        { "binding": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" },
-        { "binding": "MERCURY_TOKEN_IT_CAN_BE_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_IT_CAN_BE_LLC" },
-        { "binding": "MERCURY_TOKEN_CHITTY_SERVICES", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHITTY_SERVICES" },
-        { "binding": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" },
-        { "binding": "CH1TTY_MCP_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "ch1tty_mcp_token" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
-        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
-        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
-        { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
-        { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
-      ],
-
       "routes": [
         { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
         { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
@@ -363,9 +322,6 @@
           { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
       },
-      "worker_loaders": [
-        { "binding": "LOADER" }
-      ],
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
@@ -376,7 +332,7 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
+        // { "binding": "SVC_DISPUTES", "service": "chittydisputes" },  // TODO: uncomment when chittydisputes worker is deployed
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
