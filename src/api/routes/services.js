@@ -3,7 +3,7 @@
  */
 
 import { Hono } from "hono";
-import { getServiceCatalog } from "../../lib/service-catalog.js";
+import { getServiceCatalogEntriesDynamic } from "../../lib/service-catalog.js";
 
 const servicesRoutes = new Hono();
 
@@ -13,7 +13,8 @@ const servicesRoutes = new Hono();
  */
 servicesRoutes.get("/status", async (c) => {
   try {
-    const statusChecks = getServiceCatalog(c.env).map(async (service) => {
+    const catalog = await getServiceCatalogEntriesDynamic(c.env);
+    const statusChecks = catalog.map(async (service) => {
       try {
         const response = await fetch(`${service.url}/health`, {
           method: "GET",
@@ -60,7 +61,8 @@ servicesRoutes.get("/status", async (c) => {
 servicesRoutes.get("/:serviceId/status", async (c) => {
   try {
     const serviceId = c.req.param("serviceId");
-    const service = getServiceCatalog(c.env).find((s) => s.id === serviceId);
+    const catalog = await getServiceCatalogEntriesDynamic(c.env);
+    const service = catalog.find((s) => s.id === serviceId || s.sub === serviceId);
 
     if (!service) {
       return c.json({ error: "Service not found" }, 404);

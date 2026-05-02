@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { ChittyOSEcosystem } from "../../integrations/chittyos-ecosystem.js";
 import { MCP_TOOL_NAMES } from "../../mcp/tool-registry.js";
-import { getServiceCatalogEntries } from "../../lib/service-catalog.js";
+import { getServiceCatalogEntriesDynamic } from "../../lib/service-catalog.js";
 
 export const discoveryRoutes = new Hono();
 
@@ -56,7 +56,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       ? servicesData
       : servicesData?.services || [];
 
-    const catalogEntries = getServiceCatalogEntries(env);
+    const catalogEntries = await getServiceCatalogEntriesDynamic(env);
 
     const normalizeService = function(service) {
       const name = service?.name || service?.id || "";
@@ -113,6 +113,8 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       mcp: `${mcpBase}/${service.sub}/mcp`,
       // Direct MCP link: useful for clients that prefer the origin service
       direct_mcp: `${service.url.replace(/\/$/, "")}/mcp`,
+      // Explicit service endpoint MCP (e.g., dispute.chitty.cc/mcp)
+      service_endpoint_mcp: `${service.url.replace(/\/$/, "")}/mcp`,
       // Legacy API field kept for backward compatibility
       api: `https://api.chitty.cc/${service.sub}/api`,
       direct_api: `${service.url.replace(/\/$/, "")}/api`,
