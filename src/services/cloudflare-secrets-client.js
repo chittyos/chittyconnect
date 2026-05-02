@@ -49,7 +49,7 @@ const PATH_TO_ENV = {
   // Services
   "services/chittyauth/jwt_secret": "JWT_SECRET",
   "services/chittyauth/encryption_key": "ENCRYPTION_KEY",
-  "services/chittyauth/token_signing_key": "TOKEN_SIGNING_KEY",
+  "services/chittyauth/token_signing_key": "CHITTYAUTH_ISSUED_MINT_API_KEY",
   "services/chittyauth/auth_salt": "AUTH_SALT",
   "services/chittyconnect/service_token": "CHITTYCONNECT_SERVICE_TOKEN",
   "services/chittyconnect/mcp_token": "CHITTYCONNECT_TOKEN",
@@ -69,6 +69,9 @@ const PATH_TO_ENV = {
   "services/chittytrack/webhook_secret": "GITHUB_WEBHOOK_SECRET",
   "services/chittymint/secret": "CHITTYAUTH_ISSUED_MINT_API_KEY",
   "services/chittymint/service_token": "CHITTYAUTH_ISSUED_MINT_API_KEY",
+  "services/ch1tty-smart-mcp/token": "CHITTYAUTH_ISSUED_CH1TTY_SMART_MCP_TOKEN",
+  "services/chittymcp/token": "CHITTYAUTH_ISSUED_CHITTYMCP_TOKEN",
+  "integrations/npm/token": "CHITTYAUTH_ISSUED_NPM_TOKEN",
 };
 
 export class CloudflareSecretsClient {
