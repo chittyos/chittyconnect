@@ -1782,4 +1782,209 @@ contextIntelligence.post("/context/checkpoint", async (c) => {
   }
 });
 
+/**
+ * POST /api/v1/intelligence/context/experience/migrate
+ *
+ * Records-only migration of identity experience between two existing
+ * contexts. Strictly downstream — does NOT mint identities, does NOT recalc
+ * trust, does NOT write to event-storage. Refuses without a ChittyID-issued
+ * supersession manifest (the manifest is the authority that this migration
+ * is allowed; ChittyID owns the decision, ChittyConnect only owns the
+ * records on its D1 tables).
+ *
+ * Body: {
+ *   manifest: {
+ *     from_chitty_id, to_chitty_id, mint_audit_id, signature,
+ *     issued_at, reason
+ *   },
+ *   metrics_transferred?: object
+ * }
+ *
+ * The composing saga lives in Ch1tty (experience_reassign), which:
+ *   1. Calls ChittyID.mint(supersedes=...) to get the manifest
+ *   2. Calls THIS endpoint to migrate the records
+ *   3. Calls ChittyChronicle.append for event storage
+ *   4. Calls ChittyTrust.reckon to refresh trust on the new ID
+ *
+ * Backbone: ~/.claude/chittycontext/scripts/experience-reassign.py
+ * (offline-only twin; does not pretend to be authoritative).
+ */
+contextIntelligence.post("/context/experience/migrate", async (c) => {
+  try {
+    const body = await c.req.json();
+    const manifest = body?.manifest;
+    const metrics_transferred = body?.metrics_transferred;
+
+    if (!manifest || typeof manifest !== "object") {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_MANIFEST",
+            message:
+              "ChittyID-issued supersession manifest is required. " +
+              "Records-only migration cannot run without identity authority.",
+          },
+        },
+        400,
+      );
+    }
+
+    const {
+      from_chitty_id,
+      to_chitty_id,
+      mint_audit_id,
+      signature,
+      issued_at,
+      reason,
+    } = manifest;
+
+    const missing = [
+      ["from_chitty_id", from_chitty_id],
+      ["to_chitty_id", to_chitty_id],
+      ["mint_audit_id", mint_audit_id],
+      ["signature", signature],
+      ["issued_at", issued_at],
+      ["reason", reason],
+    ]
+      .filter(([, v]) => !v || (typeof v === "string" && !v.trim()))
+      .map(([k]) => k);
+
+    if (missing.length > 0) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MANIFEST_INCOMPLETE",
+            message: `manifest missing required fields: ${missing.join(", ")}`,
+          },
+        },
+        400,
+      );
+    }
+
+    if (from_chitty_id === to_chitty_id) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "SAME_ENTITY",
+            message: "manifest from/to are identical",
+          },
+        },
+        400,
+      );
+    }
+
+    // TODO: verify Ed25519 signature against ChittyID public key + replay-check
+    // mint_audit_id against ChittyID audit endpoint. For now, this is a TRUST
+    // boundary that requires the manifest's existence; full crypto verification
+    // is the follow-up before production deploy.
+
+    const resolver = new ContextResolver(c.env);
+    const [src, tgt] = await Promise.all([
+      resolver.loadContextByChittyId(from_chitty_id),
+      resolver.loadContextByChittyId(to_chitty_id),
+    ]);
+
+    if (!src) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "SOURCE_NOT_FOUND",
+            message: `Source context ${from_chitty_id} not found in ChittyConnect records`,
+          },
+        },
+        404,
+      );
+    }
+    if (!tgt) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "TARGET_NOT_FOUND",
+            message: `Target context ${to_chitty_id} not found in ChittyConnect records`,
+          },
+        },
+        404,
+      );
+    }
+
+    const transferred =
+      metrics_transferred && typeof metrics_transferred === "object"
+        ? metrics_transferred
+        : {};
+    const timestamp = Date.now();
+
+    // Order: target receives first (acquires the experience), then source closes.
+    const tgtEntry = await resolver.logToLedger(
+      tgt.id,
+      to_chitty_id,
+      "experience_migrate",
+      "experience_received",
+      {
+        type: "experience_received",
+        fromChittyId: from_chitty_id,
+        mintAuditId: mint_audit_id,
+        reason,
+        metricsTransferred: transferred,
+        receivedAt: timestamp,
+      },
+    );
+
+    const srcEntry = await resolver.logToLedger(
+      src.id,
+      from_chitty_id,
+      "experience_migrate",
+      "experience_migrated",
+      {
+        type: "experience_migrated",
+        toChittyId: to_chitty_id,
+        mintAuditId: mint_audit_id,
+        reason,
+        metricsTransferred: transferred,
+        linkedTargetEntryId: tgtEntry.entryId,
+        linkedTargetHash: tgtEntry.hash,
+        migratedAt: timestamp,
+      },
+    );
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        migrated: true,
+        from: from_chitty_id,
+        to: to_chitty_id,
+        mintAuditId: mint_audit_id,
+        timestamp,
+        sourceLedger: { entryId: srcEntry.entryId, hash: srcEntry.hash },
+        targetLedger: { entryId: tgtEntry.entryId, hash: tgtEntry.hash },
+        nextSteps: {
+          chronicle:
+            "Caller (Ch1tty saga) must POST identity_supersession event to ChittyChronicle",
+          trust:
+            "Caller (Ch1tty saga) must call ChittyTrust.reckon(to_chitty_id) to refresh trust",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("[Intelligence] Experience migrate error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: { code: "MIGRATE_FAILED", message: error.message },
+      },
+      500,
+    );
+  }
+});
+
 export default contextIntelligence;

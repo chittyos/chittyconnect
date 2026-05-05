@@ -23,7 +23,7 @@
   "name": "chittyconnect",
   "main": "src/index.js",
   "compatibility_date": "2026-03-02",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
   "observability": { "enabled": true },
@@ -62,7 +62,11 @@
     // Mercury OIDC (CF Access SaaS app — programmatic token exchange for write operations)
     { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
     { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-    { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+    { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+    // ChittyAuth-issued Mint tokens (standardized ownership — #178)
+    { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
   ],
 
   // ──────────────────────────────────────────────────────────────────
@@ -83,6 +87,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "http://localhost:8787",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -145,12 +151,14 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -169,7 +177,10 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
         { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ]
     },
 
@@ -178,6 +189,29 @@
     // ════════════════════════════════════════════════════════════════
     "staging": {
       "name": "chittyconnect-staging",
+      // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
+      "secrets_store_secrets": [
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" },
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" },
+        { "binding": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" },
+        { "binding": "MERCURY_TOKEN_IT_CAN_BE_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_IT_CAN_BE_LLC" },
+        { "binding": "MERCURY_TOKEN_CHITTY_SERVICES", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHITTY_SERVICES" },
+        { "binding": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" },
+        { "binding": "CH1TTY_MCP_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "ch1tty_mcp_token" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+        { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
+        { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+      ],
       "vars": {
         "ENVIRONMENT": "staging",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -185,6 +219,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "https://chittyconnect-staging.chittyos.workers.dev",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -253,12 +289,14 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -277,7 +315,10 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
         { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ]
     },
 
@@ -286,6 +327,30 @@
     // ════════════════════════════════════════════════════════════════
     "production": {
       "name": "chittyconnect",
+      // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
+      "secrets_store_secrets": [
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" },
+        { "binding": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" },
+        { "binding": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" },
+        { "binding": "MERCURY_TOKEN_IT_CAN_BE_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_IT_CAN_BE_LLC" },
+        { "binding": "MERCURY_TOKEN_CHITTY_SERVICES", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_CHITTY_SERVICES" },
+        { "binding": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" },
+        { "binding": "CH1TTY_MCP_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "ch1tty_mcp_token" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYCOMMAND" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYCOMMAND" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYAGENT" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
+        { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
+        { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+        { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
+        { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+      ],
+
       "routes": [
         { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
         { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
@@ -297,6 +362,8 @@
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
         "CHITTYCHRONICLE_SERVICE_URL": "https://chronicle.chitty.cc",
         "CHITTYMINT_URL": "https://mint.chitty.cc",
+        "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
+        "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
         "CHITTYCONNECT_URL": "https://connect.chitty.cc",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
@@ -359,18 +426,23 @@
           { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
       },
+      "worker_loaders": [
+        { "binding": "LOADER" }
+      ],
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
+        { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
+        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -389,7 +461,10 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "MERCURY_OIDC_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_ID" },
         { "binding": "MERCURY_OIDC_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_CLIENT_SECRET" },
-        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" }
+        { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ]
     }
   }

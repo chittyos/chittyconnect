@@ -12,6 +12,7 @@ Service-specific domains
 Aggregated endpoints (cross-service discovery)
 - api.chitty.cc/{name} → {name}.chitty.cc/api
 - mcp.chitty.cc/{name} → {name}.chitty.cc/mcp
+- mcp.ch1tty.com/{name} → {name}.chitty.cc/mcp (alias; same gateway)
 - charter.chitty.cc/{name} → Foundation CHARTER.md
 - schema.chitty.cc/{topic} → Schema definitions
 - git.chitty.cc/{name} → GitHub repository shortcut
@@ -25,4 +26,3 @@ Governance
 References
 - docs/onboarding/SERVICE_TEMPLATE.md
 - docs/architecture/ARCHITECTURE_MAGNET_BOARD.md
-

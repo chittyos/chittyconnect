@@ -208,6 +208,9 @@ git push origin main  # Triggers their CI/CD
 After all services deployed:
 
 ```bash
+# DNS sanity (if this fails, monitors will surface mcp.chitty.cc as unhealthy)
+dig +short mcp.chitty.cc
+
 # Verify ChittyConnect handles unified routes
 curl https://mcp.chitty.cc/health  # Should return ChittyConnect
 curl https://api.chitty.cc/api/health  # Should return ChittyConnect

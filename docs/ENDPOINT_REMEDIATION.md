@@ -180,6 +180,10 @@ const response = await fetch('https://api.chitty.cc/api/context/files', ...)
 ### Step 1: Route Assignment Verification
 
 ```bash
+# DNS sanity (if these do not resolve, route fixes won't matter)
+dig +short mcp.chitty.cc
+dig +short api.chitty.cc
+
 # Check that routes are correctly assigned
 curl https://mcp.chitty.cc/health
 # Should return ChittyConnect health

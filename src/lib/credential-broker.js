@@ -2,16 +2,24 @@
  * Credential Broker — Unified abstraction over credential backends
  *
  * Supports multiple backends:
- *   - "chittyserv" → ChittyServ API at CHITTYSERV_URL/v1/
- *   - "1password"  → 1Password Connect API (legacy)
+ *   - "cloudflare-secrets" → Direct env binding reads (zero latency, default)
+ *   - "chittyserv"         → ChittyServ API at CHITTYSERV_URL/v1/
+ *   - "1password"          → 1Password Connect API (legacy, deprecated)
+ *   - "auto"               → cloudflare-secrets → chittyserv → 1password
  *
- * Selection via env.CREDENTIAL_BROKER_TYPE (default: "1password" for backward compat)
+ * Portal Pattern: Secrets are synced from 1Password synthetic-shared vault
+ * to Cloudflare Secrets Store at deploy time. The broker reads from env
+ * bindings first (zero network, zero latency), falling back to runtime
+ * credential fetching only when env bindings are missing.
+ *
+ * Selection via env.CREDENTIAL_BROKER_TYPE (default: "cloudflare-secrets")
  *
  * @module lib/credential-broker
  */
 
 import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
 import { ChittyServClient } from "../services/chittyserv-client.js";
+import { CloudflareSecretsClient } from "../services/cloudflare-secrets-client.js";
 
 /**
  * Create a credential broker based on environment configuration
@@ -20,9 +28,14 @@ import { ChittyServClient } from "../services/chittyserv-client.js";
  * @returns {CredentialBrokerInterface} Broker instance
  */
 export function createCredentialBroker(env) {
-  const brokerType = (env.CREDENTIAL_BROKER_TYPE || "1password").toLowerCase();
+  const brokerType = (env.CREDENTIAL_BROKER_TYPE || "cloudflare-secrets").toLowerCase();
 
   switch (brokerType) {
+    case "cloudflare-secrets":
+    case "cf-secrets":
+    case "env":
+      return new CloudflareSecretsBroker(env);
+
     case "chittyserv":
       return new ChittyServBroker(env);
 
@@ -30,26 +43,40 @@ export function createCredentialBroker(env) {
       return new OnePasswordBroker(env);
 
     case "auto":
-      // Try chittyserv first, fall back to 1password
       return new AutoBroker(env);
 
     default:
       console.warn(
-        `[CredentialBroker] Unknown broker type: ${brokerType}, falling back to 1password`,
+        `[CredentialBroker] Unknown broker type: ${brokerType}, using cloudflare-secrets`,
       );
-      return new OnePasswordBroker(env);
+      return new CloudflareSecretsBroker(env);
   }
 }
 
-// ─── Broker Interface ─────────────────────────────────────────────────────────
+// ─── Cloudflare Secrets Broker (Default — Portal Pattern) ────────────────────
 
-/**
- * @typedef {object} CredentialBrokerInterface
- * @property {function(string, object): Promise<string>} get - Retrieve credential by path
- * @property {function(string[]): Promise<Map<string, string>>} prefetch - Bulk fetch
- * @property {function(): Promise<object>} healthCheck - Check backend health
- * @property {string} type - Backend type identifier
- */
+class CloudflareSecretsBroker {
+  constructor(env) {
+    this.client = new CloudflareSecretsClient(env);
+    this.type = "cloudflare-secrets";
+  }
+
+  async get(credentialPath, options = {}) {
+    return this.client.get(credentialPath, options);
+  }
+
+  async prefetch(credentialPaths) {
+    return this.client.prefetch(credentialPaths);
+  }
+
+  async invalidateCache() {
+    // No-op — env bindings have no cache
+  }
+
+  async healthCheck() {
+    return this.client.healthCheck();
+  }
+}
 
 // ─── ChittyServ Broker ───────────────────────────────────────────────────────
 
@@ -76,7 +103,7 @@ class ChittyServBroker {
   }
 }
 
-// ─── 1Password Broker (Legacy) ───────────────────────────────────────────────
+// ─── 1Password Broker (Legacy — Deprecated) ─────────────────────────────────
 
 class OnePasswordBroker {
   constructor(env) {
@@ -101,69 +128,45 @@ class OnePasswordBroker {
   }
 }
 
-// ─── Auto Broker (chittyserv → 1password fallback) ──────────────────────────
+// ─── Auto Broker (cloudflare-secrets → chittyserv → 1password) ──────────────
 
 class AutoBroker {
   constructor(env) {
     this.env = env;
+    this.cfSecrets = new CloudflareSecretsBroker(env);
     this.chittyserv = new ChittyServBroker(env);
     this.onePassword = new OnePasswordBroker(env);
     this.type = "auto";
-    this._activeBackend = null;
-    this._lastHealthCheck = 0;
-    this._healthCheckInterval = 60_000; // Re-check every 60s
-  }
-
-  async _resolveBackend() {
-    const now = Date.now();
-    if (
-      this._activeBackend &&
-      now - this._lastHealthCheck < this._healthCheckInterval
-    ) {
-      return this._activeBackend;
-    }
-
-    try {
-      const health = await this.chittyserv.healthCheck();
-      if (health.status === "healthy" || health.status === "ok") {
-        this._activeBackend = this.chittyserv;
-        this._lastHealthCheck = now;
-        return this._activeBackend;
-      }
-    } catch {
-      // chittyserv unavailable
-    }
-
-    this._activeBackend = this.onePassword;
-    this._lastHealthCheck = now;
-    return this._activeBackend;
   }
 
   async get(credentialPath, options = {}) {
-    const backend = await this._resolveBackend();
+    // 1. Try env bindings first (zero latency)
     try {
-      return await backend.get(credentialPath, options);
-    } catch (error) {
-      // If primary failed, try the other
-      if (backend === this.chittyserv) {
-        console.warn(
-          `[CredentialBroker:auto] ChittyServ failed for ${credentialPath}, falling back to 1Password:`,
-          error.message,
-        );
-        this._activeBackend = this.onePassword;
-        return this.onePassword.get(credentialPath, options);
-      }
-      throw error;
+      return await this.cfSecrets.get(credentialPath, options);
+    } catch {
+      // Not in env bindings
     }
+
+    // 2. Try ChittyServ
+    try {
+      return await this.chittyserv.get(credentialPath, options);
+    } catch (err) {
+      console.warn(
+        `[CredentialBroker:auto] ChittyServ failed for ${credentialPath}:`,
+        err.message,
+      );
+    }
+
+    // 3. Fall back to 1Password Connect
+    return this.onePassword.get(credentialPath, options);
   }
 
   async prefetch(credentialPaths) {
-    const backend = await this._resolveBackend();
-    return backend.prefetch(credentialPaths);
+    // Env bindings are instant — prefetch everything from there
+    return this.cfSecrets.prefetch(credentialPaths);
   }
 
   async invalidateCache(credentialPath) {
-    // Invalidate on both backends
     await Promise.allSettled([
       this.chittyserv.invalidateCache(credentialPath),
       this.onePassword.invalidateCache(credentialPath),
@@ -171,27 +174,23 @@ class AutoBroker {
   }
 
   async healthCheck() {
-    const [csHealth, opHealth] = await Promise.allSettled([
+    const [cfHealth, csHealth, opHealth] = await Promise.allSettled([
+      this.cfSecrets.healthCheck(),
       this.chittyserv.healthCheck(),
       this.onePassword.healthCheck(),
     ]);
 
+    const cfOk = cfHealth.status === "fulfilled" &&
+      (cfHealth.value.status === "healthy" || cfHealth.value.status === "ok");
+
     return {
-      status:
-        csHealth.status === "fulfilled" &&
-        (csHealth.value.status === "healthy" || csHealth.value.status === "ok")
-          ? "healthy"
-          : opHealth.status === "fulfilled" &&
-              opHealth.value.status === "healthy"
-            ? "degraded"
-            : "down",
+      status: cfOk ? "healthy" : "degraded",
       backends: {
-        chittyserv:
-          csHealth.status === "fulfilled" ? csHealth.value : { status: "down" },
-        onePassword:
-          opHealth.status === "fulfilled" ? opHealth.value : { status: "down" },
+        "cloudflare-secrets": cfHealth.status === "fulfilled" ? cfHealth.value : { status: "down" },
+        chittyserv: csHealth.status === "fulfilled" ? csHealth.value : { status: "down" },
+        onePassword: opHealth.status === "fulfilled" ? opHealth.value : { status: "down" },
       },
-      activeBackend: this._activeBackend?.type || "none",
+      activeBackend: cfOk ? "cloudflare-secrets" : "fallback",
       timestamp: Date.now(),
     };
   }

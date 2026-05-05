@@ -43,6 +43,20 @@ let ecosystemInitialized = false;
 let intelligenceModules = null;
 let streamingManager = null;
 
+function formatCaughtError(error) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack || "",
+    };
+  }
+
+  return {
+    message: String(error),
+    stack: "",
+  };
+}
+
 async function ensureEcosystemInitialized(env) {
   if (ecosystemInitialized) return intelligenceModules;
 
@@ -175,8 +189,8 @@ async function ensureEcosystemInitialized(env) {
     return intelligenceModules;
   } catch (error) {
     console.error("[ChittyConnect] Initialization error:", error);
-    // Still mark as initialized to avoid retry loop
-    ecosystemInitialized = true;
+    // Do NOT mark as initialized — allow retry on next request.
+    // Transient D1 failures should not permanently break the worker.
     return null;
   }
 }
@@ -271,18 +285,61 @@ app.get("/api/v1/doctrine/seed", (c) => {
 
     identity_model: {
       session_rule: "viewport_not_birth",
-      minting_triggers: ["domain_fission", "derivative", "temporal_decay", "meta_orchestrator_decision"],
-      never_mint_on: ["session_start", "substrate_switch", "db_failure", "network_error", "device_change"],
-      grey_matter_principle: "Model is replaceable substrate. Identity lives in coordination layer, not in the model.",
+      minting_triggers: [
+        "domain_fission",
+        "derivative",
+        "temporal_decay",
+        "meta_orchestrator_decision",
+      ],
+      never_mint_on: [
+        "session_start",
+        "substrate_switch",
+        "db_failure",
+        "network_error",
+        "device_change",
+      ],
+      grey_matter_principle:
+        "Model is replaceable substrate. Identity lives in coordination layer, not in the model.",
     },
 
     ontology: {
       entity_types: {
-        P: { name: "Person", definition: "Actor with agency", characterizations: ["Natural", "Synthetic", "Legal"] },
-        L: { name: "Location", definition: "Context in space", characterizations: ["Jurisdiction", "Venue", "Address", "Virtual"] },
-        T: { name: "Thing", definition: "Object without agency", characterizations: ["Document", "Asset", "Artifact", "Account"] },
-        E: { name: "Event", definition: "Occurrence in time", characterizations: ["Transaction", "Decision", "Action", "Filing", "Hearing"] },
-        A: { name: "Authority", definition: "Source of weight", characterizations: ["Granted", "Earned", "Credential", "Certification"] },
+        P: {
+          name: "Person",
+          definition: "Actor with agency",
+          characterizations: ["Natural", "Synthetic", "Legal"],
+        },
+        L: {
+          name: "Location",
+          definition: "Context in space",
+          characterizations: ["Jurisdiction", "Venue", "Address", "Virtual"],
+        },
+        T: {
+          name: "Thing",
+          definition: "Object without agency",
+          characterizations: ["Document", "Asset", "Artifact", "Account"],
+        },
+        E: {
+          name: "Event",
+          definition: "Occurrence in time",
+          characterizations: [
+            "Transaction",
+            "Decision",
+            "Action",
+            "Filing",
+            "Hearing",
+          ],
+        },
+        A: {
+          name: "Authority",
+          definition: "Source of weight",
+          characterizations: [
+            "Granted",
+            "Earned",
+            "Credential",
+            "Certification",
+          ],
+        },
       },
       rules: [
         "All five types (P/L/T/E/A) must always be present in any validation",
@@ -301,7 +358,13 @@ app.get("/api/v1/doctrine/seed", (c) => {
         stale: ["retired", "dormant"],
         retired: [],
       },
-      forbidden_states: ["archived", "revoked", "inactive", "deleted", "suspended"],
+      forbidden_states: [
+        "archived",
+        "revoked",
+        "inactive",
+        "deleted",
+        "suspended",
+      ],
     },
 
     trust_model: {
@@ -381,7 +444,8 @@ app.get("/api/v1/signal/bootstrap", (c) => {
     ],
     narrative: {
       identity_primer: {
-        title: "Every AI session starts blank and dies. ChittyOS breaks that cycle.",
+        title:
+          "Every AI session starts blank and dies. ChittyOS breaks that cycle.",
         summary:
           "Sessions are viewports into persistent entities. A new Claude Code session, ChatGPT conversation, or Gemini chat is opening a window onto an existing orchestrator identity — not creating a new one. The coordination layer (ChittyID, ChittyConnect, ChittyLedger) preserves identity, trust, and experience across substrates.",
       },
@@ -423,7 +487,8 @@ app.get("/api/v1/signal/articles", (c) => {
   const articles = [
     {
       id: "identity-primer",
-      title: "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
+      title:
+        "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
       archetype: "identity",
       priority: 1,
       summary:
@@ -453,7 +518,8 @@ app.get("/api/v1/signal/articles", (c) => {
     },
     {
       id: "trust-philosophy",
-      title: "Trust Is Earned Through Behavior, Not Granted Through Credentials",
+      title:
+        "Trust Is Earned Through Behavior, Not Granted Through Credentials",
       archetype: "trust",
       priority: 4,
       summary:
@@ -495,7 +561,8 @@ app.get("/api/v1/signal/article/:id", (c) => {
   const articles = {
     "identity-primer": {
       id: "identity-primer",
-      title: "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
+      title:
+        "Every AI Session Starts Blank and Dies. ChittyOS Breaks That Cycle.",
       archetype: "identity",
       content: [
         "Every current AI session starts blank, accumulates knowledge, hits a context limit, and dies. That is not a person. That is amnesia on a loop.",
@@ -1751,6 +1818,24 @@ app.get("/integrations/github/callback", async (c) => {
  *   /register — Dynamic client registration
  */
 const oauthProvider = createOAuthProvider(app);
+const mcpAgentHandler = McpConnectAgent.serve("/mcp", {
+  binding: "MCP_AGENT",
+});
+
+function isOAuthProviderRoute(url) {
+  if (
+    url.pathname === "/authorize" ||
+    url.pathname === "/token" ||
+    url.pathname === "/register" ||
+    url.pathname === "/.well-known/oauth-authorization-server" ||
+    url.pathname === "/.well-known/oauth-protected-resource" ||
+    url.pathname.startsWith("/.well-known/oauth-protected-resource/")
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Strip query-string parameters from the redirect_uri OAuth param.
@@ -1826,6 +1911,7 @@ async function stripRedirectUriFromTokenBody(request) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const host = (url.hostname || "").toLowerCase();
 
     // Debug: log all OAuth-related requests to diagnose Notion integration
     if (
@@ -1910,33 +1996,112 @@ export default {
     // resolves it to the MCP_AGENT DO binding (mcp-agent in kebab-case).
     // This preserves full env (KV, DO, R2) which OAuthProvider strips.
     // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
-    if (url.pathname === "/chatgpt/mcp" || url.pathname.startsWith("/chatgpt/mcp/")) {
+    if (
+      url.pathname === "/chatgpt/mcp" ||
+      url.pathname.startsWith("/chatgpt/mcp/")
+    ) {
       try {
-        const handler = McpConnectAgent.serve("/chatgpt/mcp", { binding: "MCP_AGENT" });
-        return handler.fetch(request, env, ctx);
-      } catch (err) {
-        console.error(`[MCP-Agent] /chatgpt/mcp threw: ${err.message}\n${err.stack}`);
-        return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+        const handler = McpConnectAgent.serve("/chatgpt/mcp", {
+          binding: "MCP_AGENT",
         });
+        return await handler.fetch(request, env, ctx);
+      } catch (err) {
+        const errorInfo = formatCaughtError(err);
+        console.error(
+          `[MCP-Agent] /chatgpt/mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: errorInfo.message,
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
+      }
+    }
+
+    // When mcp.chitty.cc is fronted by Cloudflare Managed OAuth, Access owns
+    // the OAuth exchange and the origin should behave like a plain MCP server.
+    if (host === "mcp.chitty.cc" && url.pathname === "/mcp") {
+      try {
+        return mcpAgentHandler.fetch(request, env, ctx);
+      } catch (err) {
+        const errorInfo = formatCaughtError(err);
+        console.error(
+          `[MCP-Agent] /mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: errorInfo.message,
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
       }
     }
 
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
-    const agentResponse = await routeAgentRequest(request, env);
-    if (agentResponse) return agentResponse;
+    // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
+    // handler entirely (past the oauthProvider catch block below) and causes
+    // Cloudflare to return 530 (error 1101 — uncaught Worker exception).
+    let agentResponse;
+    let agentRouted = false;
+    try {
+      agentResponse = await routeAgentRequest(request, env);
+      // routeAgentRequest returning undefined means "not an agent path" and we
+      // should fall through to the next handler. Throwing means the agent path
+      // matched but the DO/fetch failed — return a 500 instead of masking the
+      // failure as an unrelated 404 from oauthProvider.
+      agentRouted = agentResponse !== undefined;
+    } catch (err) {
+      const errorInfo = formatCaughtError(err);
+      console.error(
+        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${errorInfo.message}
+${errorInfo.stack}`,
+      );
+      return new Response(
+        JSON.stringify({ error: "agent_routing_failed", error_description: err.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (agentRouted) return agentResponse;
 
     let response;
     try {
-      response = await oauthProvider.fetch(request, env, ctx);
+      if (isOAuthProviderRoute(url)) {
+        response = await oauthProvider.fetch(request, env, ctx);
+      } else {
+        response = await app.fetch(request, env, ctx);
+      }
     } catch (err) {
-      console.error(`[OAuth-Fatal] ${request.method} ${url.pathname} threw: ${err.message}
-${err.stack}`);
-      return new Response(JSON.stringify({ error: "internal_error", error_description: err.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
-      });
+      const errorInfo = formatCaughtError(err);
+      console.error(`[Fetch-Fatal] ${request.method} ${url.pathname} threw: ${errorInfo.message}
+${errorInfo.stack}`);
+      return new Response(
+        JSON.stringify({
+          error: "internal_error",
+          error_description: errorInfo.message,
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders(request),
+          },
+        },
+      );
     }
 
     // Debug: log response status for OAuth endpoints
@@ -1977,8 +2142,10 @@ ${err.stack}`);
     if (event.cron === "*/50 * * * *") {
       try {
         const rotation = new SecretRotationService(env);
-        const result = await rotation.forceRotate('gdrive_access_token');
-        console.log(`[Scheduled] OAuth rotation: ${result.ok ? 'success' : result.error}`);
+        const result = await rotation.forceRotate("gdrive_access_token");
+        console.log(
+          `[Scheduled] OAuth rotation: ${result.ok ? "success" : result.error}`,
+        );
       } catch (err) {
         console.error(`[Scheduled] OAuth rotation failed:`, err);
       }
@@ -2014,25 +2181,25 @@ ${err.stack}`);
       // 1Password event sync
       try {
         const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
-        if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-        const response = await fetch(
-          `${chronicleUrl}/api/sync/1password`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(env.CHITTY_CHRONICLE_TOKEN
-                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-                : {}),
-            },
-            body: JSON.stringify({
-              source: "chittyconnect-cron",
-              timestamp: new Date().toISOString(),
-            }),
+        if (!chronicleUrl)
+          throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+        const response = await fetch(`${chronicleUrl}/api/sync/1password`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(env.CHITTY_CHRONICLE_TOKEN
+              ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+              : {}),
           },
-        );
+          body: JSON.stringify({
+            source: "chittyconnect-cron",
+            timestamp: new Date().toISOString(),
+          }),
+        });
         if (!response.ok) {
-          console.error(`[Scheduled] 1Password sync failed: ${response.status}`);
+          console.error(
+            `[Scheduled] 1Password sync failed: ${response.status}`,
+          );
         } else {
           console.log(`[Scheduled] 1Password sync: ${response.status}`);
         }
