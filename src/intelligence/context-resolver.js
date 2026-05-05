@@ -946,13 +946,14 @@ export class ContextResolver {
   async buildProvisioningRecommendation(chittyId, context, hints = {}) {
     const trustLevel = Number(context?.trust_level || 0);
     const project = hints.projectPath?.split("/").pop() || context?.project_path?.split("/").pop();
+    const neonUrl = this.env.NEON_DATABASE_URL;
 
     // Derive service needs from entity's ledger history
     const usedServices = new Set();
-    if (this.env.HYPERDRIVE) {
+    if (neonUrl) {
       try {
         const { neon } = await import("@neondatabase/serverless");
-        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        const sql = neon(neonUrl);
         const rows = await sql`
             SELECT DISTINCT
               CASE
@@ -987,10 +988,10 @@ export class ContextResolver {
     // @canon chittycanon://gov/governance#drl
     let trustScores = { ty: 0, vy: 0, ry: 0, signalCount: 0, composite: 0 };
 
-    if (this.env.HYPERDRIVE) {
+    if (neonUrl) {
       try {
         const { neon } = await import("@neondatabase/serverless");
-        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        const sql = neon(neonUrl);
         // Latest trust scores from DRL service cache (trust_scores table)
           const [scores] = await sql`
             SELECT ty_score, vy_score, ry_score, signal_count, composite_score,
@@ -1031,10 +1032,10 @@ export class ContextResolver {
     let classServices = [];
     let identityClass = "advocate";
 
-    if (this.env.HYPERDRIVE) {
+    if (neonUrl) {
       try {
         const { neon } = await import("@neondatabase/serverless");
-        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        const sql = neon(neonUrl);
         // Resolve identity class from DRL trust level
           const [classRow] = await sql`
             SELECT id FROM canon.identity_classes
@@ -1125,11 +1126,12 @@ export class ContextResolver {
   async computeDomainTrust(chittyId) {
     const domains = {};
 
-    if (!this.env.HYPERDRIVE) return domains;
+    const neonUrl = this.env.NEON_DATABASE_URL;
+    if (!neonUrl) return domains;
 
     try {
       const { neon } = await import("@neondatabase/serverless");
-      const sql = neon(this.env.HYPERDRIVE.connectionString);
+      const sql = neon(neonUrl);
       // Load trust taxonomy from ChittyCanon
       const trustDomains = await sql`
           SELECT id, parent_id, name, core, niche_threshold, action_patterns
@@ -1222,7 +1224,7 @@ export class ContextResolver {
    * Presented during context resolution so the user can confirm:
    * "Yes, that's the right entity to bind this session to."
    *
-   * Reads from event_ledger (Neon via HYPERDRIVE), NOT from D1.
+   * Reads from event_ledger (Neon via NEON_DATABASE_URL), NOT from D1.
    * D1 has context_entities/context_dna. Neon has the full event history.
    *
    * @param {string} chittyId - The entity's ChittyID
@@ -1259,11 +1261,12 @@ export class ContextResolver {
     // Compute domain-scoped trust — what to trust this entity WITH
     resume.domainTrust = await this.computeDomainTrust(chittyId);
 
-    // Read from ChittyLedger (Neon) via Hyperdrive if available
-    if (this.env.HYPERDRIVE) {
+    // Read from ChittyLedger (Neon via NEON_DATABASE_URL) if available
+    const neonUrl = this.env.NEON_DATABASE_URL;
+    if (neonUrl) {
       try {
         const { neon } = await import("@neondatabase/serverless");
-        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        const sql = neon(neonUrl);
 
         // Session and tool call counts
         const [stats] = await sql`
