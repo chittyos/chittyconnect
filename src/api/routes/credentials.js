@@ -669,8 +669,8 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
   }
 });
 
-/**
-
+ /**
+  * PUT /api/credentials/:vault/:item/:field
 /**
  * PUT /api/credentials/:vault/:item/:field
  *
