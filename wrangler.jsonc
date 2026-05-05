@@ -120,15 +120,15 @@
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
-        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
-        { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
-        { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
-        { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
-        { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
-        { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks" },
+        { "binding": "SVC_LEDGER", "service": "chittyledger" },
+        { "binding": "SVC_FINANCE", "service": "chittyfinance" },
+        { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual" },
+        { "binding": "SVC_ID", "service": "chittyid" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyevidence" },
+        { "binding": "SVC_CHRONICLE", "service": "chittychronicle" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute" },
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_SCORE", "service": "chittyscore" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
