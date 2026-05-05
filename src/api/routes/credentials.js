@@ -685,7 +685,7 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     const item = c.req.param("item");
     const field = c.req.param("field");
 
-    const validVaults = ["infrastructure", "services", "integrations", "emergency"];
+    const validVaults = ["infrastructure", "services", "integrations"];
     if (!validVaults.includes(vault)) {
       return c.json({ success: false, error: { code: "INVALID_VAULT", message: `Invalid vault: ${vault}` } }, 400);
     }
