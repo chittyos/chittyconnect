@@ -706,7 +706,7 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
 
     try {
       await c.env.DB.prepare(
-        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (1password_store, ?, ?, ?, datetime(now))`
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES ('1password_store', ?, ?, ?, datetime('now'))`
       ).bind(item, field, requestingService).run();
     } catch (dbErr) {
       console.warn("[Credentials] Audit log failed:", dbErr.message);
