@@ -100,7 +100,7 @@ ChittyConnect is the **canonical owner of user identity and session data** withi
 4. **Downstream services** validate JWTs against ChittyAuth's JWKS and use RLS policies referencing `auth.jwt() ->> 'chitty_id'` for per-user data scoping
 
 ### Migration Note (2026-04)
-The `neon_auth.user` table on ChittyOS-Core currently has 0 rows. ChittyAuth's existing user data lives in `public.users` (2 rows) and `public.identities` (73 rows). ChittyConnect will migrate user profile data to `neon_auth.user` as part of the Neon Auth unification initiative. See companion amendment: [chittyfoundation/chittyauth#4](https://github.com/chittyfoundation/chittyauth/pull/4).
+The `neon_auth.user` table on ChittyOS-Core is currently empty. ChittyAuth's existing user data remains in a small legacy dataset within `public.users` and `public.identities`. ChittyConnect will migrate user profile data to `neon_auth.user` as part of the Neon Auth unification initiative. See companion amendment: [chittyfoundation/chittyauth#4](https://github.com/chittyfoundation/chittyauth/pull/4).
 
 ## API Contract
 
