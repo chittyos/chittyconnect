@@ -117,7 +117,6 @@ contextResolution.post("/resolve", async (c) => {
 
       // Proposed provisioning: what this entity would have access to
       // Based on its identity class, trust level, and existing connections
-      const trustLevel = Number(resolution.context.trust_level || 0);
 
       // TY-VY-RY describes what the entity can PERCEIVE and INFLUENCE
       // at each plane — not database permissions.

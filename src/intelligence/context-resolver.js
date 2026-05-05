@@ -951,10 +951,9 @@ export class ContextResolver {
     const usedServices = new Set();
     if (this.env.HYPERDRIVE) {
       try {
-        const { default: postgres } = await import("postgres");
-        const sql = postgres(this.env.HYPERDRIVE.connectionString);
-        try {
-          const rows = await sql`
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        const rows = await sql`
             SELECT DISTINCT
               CASE
                 WHEN action LIKE '%neon%' OR action LIKE '%hyperdrive%' THEN 'neon'
@@ -976,26 +975,23 @@ export class ContextResolver {
           for (const r of rows) {
             if (r.service) usedServices.add(r.service);
           }
-        } finally {
-          await sql.end();
-        }
       } catch {
         // Best effort — proceed with empty history
       }
     }
 
-    // ── DRL Reckoning: compute fresh trust scores from ledger ──────────
-    // The DRL is "reckoning, not record" — computed at query time from
-    // ledger entries. We call it NOW at provisioning time, not use cached.
+    // ── DRL Reckoning: read latest trust scores from DRL service cache ──
+    // The DRL service continuously recalculates scores from event_ledger and
+    // writes results to trust_scores. We read the latest reckoned values here
+    // at provisioning time. For live recalculation, call the DRL service directly.
     // @canon chittycanon://gov/governance#drl
     let trustScores = { ty: 0, vy: 0, ry: 0, signalCount: 0, composite: 0 };
 
     if (this.env.HYPERDRIVE) {
       try {
-        const { default: postgres } = await import("postgres");
-        const sql = postgres(this.env.HYPERDRIVE.connectionString);
-        try {
-          // Fresh reckoning from trust_scores cache (updated by DRL service)
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        // Latest trust scores from DRL service cache (trust_scores table)
           const [scores] = await sql`
             SELECT ty_score, vy_score, ry_score, signal_count, composite_score,
                    trust_level, confidence, reckoned_at
@@ -1019,9 +1015,6 @@ export class ContextResolver {
               reckonedAt: scores.reckoned_at ? String(scores.reckoned_at) : null,
             };
           }
-        } finally {
-          await sql.end();
-        }
       } catch {
         // DRL unavailable — use basic trust level from context
       }
@@ -1040,10 +1033,9 @@ export class ContextResolver {
 
     if (this.env.HYPERDRIVE) {
       try {
-        const { default: postgres } = await import("postgres");
-        const sql = postgres(this.env.HYPERDRIVE.connectionString);
-        try {
-          // Resolve identity class from DRL trust level
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(this.env.HYPERDRIVE.connectionString);
+        // Resolve identity class from DRL trust level
           const [classRow] = await sql`
             SELECT id FROM canon.identity_classes
             WHERE min_trust_level <= ${effectiveTrustLevel}
@@ -1066,9 +1058,6 @@ export class ContextResolver {
             WHERE identity_class = ${identityClass}
             ORDER BY service
           `;
-        } finally {
-          await sql.end();
-        }
       } catch {
         // Fallback: hardcoded minimums
         identityClass =
@@ -1139,11 +1128,10 @@ export class ContextResolver {
     if (!this.env.HYPERDRIVE) return domains;
 
     try {
-      const { default: postgres } = await import("postgres");
-      const sql = postgres(this.env.HYPERDRIVE.connectionString);
-      try {
-        // Load trust taxonomy from ChittyCanon
-        const trustDomains = await sql`
+      const { neon } = await import("@neondatabase/serverless");
+      const sql = neon(this.env.HYPERDRIVE.connectionString);
+      // Load trust taxonomy from ChittyCanon
+      const trustDomains = await sql`
           SELECT id, parent_id, name, core, niche_threshold, action_patterns
           FROM canon.trust_domains
           ORDER BY core DESC, parent_id NULLS FIRST, id
@@ -1220,9 +1208,6 @@ export class ContextResolver {
             lastActive: row.lastActive,
           };
         }
-      } finally {
-        await sql.end();
-      }
     } catch {
       // Best effort
     }
@@ -1274,16 +1259,14 @@ export class ContextResolver {
     // Compute domain-scoped trust — what to trust this entity WITH
     resume.domainTrust = await this.computeDomainTrust(chittyId);
 
-    // Read from ChittyLedger (Neon) if HYPERDRIVE is available
+    // Read from ChittyLedger (Neon) via Hyperdrive if available
     if (this.env.HYPERDRIVE) {
       try {
-        // Dynamic import — postgres may not be available in all envs
-        const { default: postgres } = await import("postgres");
-        const sql = postgres(this.env.HYPERDRIVE.connectionString);
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(this.env.HYPERDRIVE.connectionString);
 
-        try {
-          // Session and tool call counts
-          const [stats] = await sql`
+        // Session and tool call counts
+        const [stats] = await sql`
             SELECT
               count(*) FILTER (WHERE event_type = 'SESSION_START') AS total_sessions,
               count(*) FILTER (WHERE event_type = 'TOOL_CALL') AS total_tool_calls,
@@ -1360,9 +1343,6 @@ export class ContextResolver {
           if (archRow?.archetype) {
             resume.archetype = archRow.archetype;
           }
-        } finally {
-          await sql.end();
-        }
       } catch (err) {
         // Neon unavailable — resume will have D1 data only
         console.warn(`[ContextResolver] ChittyLedger unavailable for resume: ${err.message}`);
