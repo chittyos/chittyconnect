@@ -36,7 +36,7 @@
   ],
 
   // ──────────────────────────────────────────────────────────────────
-  // CLOUDFLARE SECRETS STORE — reference list (NOT inherited)
+// CLOUDFLARE SECRETS STORE — reference list (NOT inherited)
   // Store: default_secrets_store (e914522471964c3c8cf1e601770edcc3)
   // NOTE: Per this repo's Wrangler pattern, env blocks are self-contained.
   // `secrets_store_secrets` must be declared inside each env.* block.
@@ -287,8 +287,8 @@
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
-        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
-        { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
+        { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "staging" },
+        { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "staging" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "staging" },
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "staging" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "staging" },
