@@ -282,8 +282,6 @@ export class OnePasswordConnectClient {
       await this.env.CREDENTIAL_CACHE.put(cacheKey, encrypted, {
         expirationTtl: ttl,
       });
-
-      console.log(`[1Password] Cached ${credentialPath} for ${ttl}s`);
     } catch (error) {
       console.error(`[1Password] Cache write error:`, error);
       // Don't throw - cache failure shouldn't break credential retrieval

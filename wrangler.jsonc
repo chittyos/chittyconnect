@@ -158,7 +158,7 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage", "environment": "production" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -296,7 +296,7 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage", "environment": "production" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -442,7 +442,7 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage", "environment": "production" }
       ],
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
