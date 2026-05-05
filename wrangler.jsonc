@@ -38,7 +38,8 @@
   // ──────────────────────────────────────────────────────────────────
   // CLOUDFLARE SECRETS STORE — shared secrets across workers
   // Store: default_secrets_store (e914522471964c3c8cf1e601770edcc3)
-  // Declared per-env (dev/staging/production) — bindings are NOT inherited.
+  // Explicitly declared per-env (dev/staging/production) to ensure
+  // each environment has the required bindings configured.
   // ──────────────────────────────────────────────────────────────────
   "secrets_store_secrets": [
     // Mercury API tokens (7 orgs)

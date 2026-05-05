@@ -569,11 +569,12 @@ export class OnePasswordConnectClient {
       const itemDetails = await detailResp.json();
 
       // Match field by label OR id (case-insensitive) to avoid duplicates
+      const fieldLower = parsed.field.toLowerCase();
       let fieldFound = false;
       for (const f of itemDetails.fields || []) {
         if (
-          f.label?.toLowerCase() === parsed.field.toLowerCase() ||
-          f.id?.toLowerCase() === parsed.field.toLowerCase()
+          f.label?.toLowerCase() === fieldLower ||
+          f.id?.toLowerCase() === fieldLower
         ) {
           f.value = value;
           fieldFound = true;
