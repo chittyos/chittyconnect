@@ -82,7 +82,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 
 ## Neon Auth Ownership
 
-ChittyConnect is the **canonical owner of user identity and session data** within the Neon Auth schema on ChittyOS-Core (`neon_auth` schema, Neon project `restless-grass-40598426`).
+ChittyConnect is the **canonical owner of user identity and session data** within the Neon Auth schema on ChittyOS-Core (`neon_auth` schema).
 
 ### Schema Ownership Split
 
