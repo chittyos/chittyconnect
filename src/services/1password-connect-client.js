@@ -572,8 +572,11 @@ OnePasswordConnectClient.prototype.put = async function (credentialPath, value, 
     const itemDetails = await detailResp.json();
 
     let fieldFound = false;
+    const normalizedField = parsed.field.toLowerCase();
     for (const f of itemDetails.fields || []) {
-      if (f.label?.toLowerCase() === parsed.field.toLowerCase()) { f.value = value; fieldFound = true; break; }
+      const matchesLabel = f.label?.toLowerCase() === normalizedField;
+      const matchesId = f.id?.toLowerCase() === normalizedField;
+      if (matchesLabel || matchesId) { f.value = value; fieldFound = true; break; }
     }
     if (!fieldFound) {
       itemDetails.fields = itemDetails.fields || [];
