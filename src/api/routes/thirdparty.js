@@ -892,6 +892,7 @@ async function getMercuryToken(c, integrationSlug) {
     if (typeof envVal === "object" && typeof envVal.get === "function") {
       const secret = await envVal.get();
       if (secret) return secret;
+      // secret is null (not provisioned in Secrets Store) — fall through to next fallback
     } else {
       return envVal;
     }
