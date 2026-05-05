@@ -150,7 +150,7 @@ contextResolution.post("/resolve", async (c) => {
         resolution.context.chitty_id,
         resolution.context,
         hints,
-      )
+      );
 
       // Add TY-VY-RY plane access for the identity class
       proposedProvisioning.planes = planes[proposedProvisioning.identityClass] || planes.advocate;
