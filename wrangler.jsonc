@@ -38,7 +38,8 @@
   // ──────────────────────────────────────────────────────────────────
   // CLOUDFLARE SECRETS STORE — shared secrets across workers
   // Store: default_secrets_store (e914522471964c3c8cf1e601770edcc3)
-  // Top-level binding — inherited by all environments
+  // NOTE: Wrangler does NOT inherit this block into env.*. Each env
+  // must declare its own `secrets_store_secrets` if it needs these bindings.
   // ──────────────────────────────────────────────────────────────────
   "secrets_store_secrets": [
     // Mercury API tokens (7 orgs)
