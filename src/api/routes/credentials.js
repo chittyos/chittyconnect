@@ -669,8 +669,6 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
   }
 });
 
- /**
-  * PUT /api/credentials/:vault/:item/:field
 /**
  * PUT /api/credentials/:vault/:item/:field
  *
@@ -761,6 +759,8 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     );
   }
 });
+
+/**
  * GET /api/credentials/health
  *
  * Check credential provisioning service health
