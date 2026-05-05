@@ -14,11 +14,14 @@ const migrationRoutes = new Hono();
 
 // Require admin scope for all migration endpoints
 migrationRoutes.use("*", async (c, next) => {
-  const keyInfo = c.get("apiKey") || c.get("auth");
-  const role = keyInfo?.role || keyInfo?.scopes?.[0];
-  const scopes = keyInfo?.scopes || [];
+  const keyInfo = c.get("apiKey") || c.get("auth") || {};
+  const role = keyInfo.role || keyInfo.scopes?.[0];
+  const scopes = keyInfo.scopes || [];
   if (role !== "admin" && !scopes.includes("admin")) {
-    return c.json({ error: "Admin scope required for migration endpoints" }, 403);
+    return c.json(
+      { error: "Admin scope required for migration endpoints" },
+      403,
+    );
   }
   return next();
 });

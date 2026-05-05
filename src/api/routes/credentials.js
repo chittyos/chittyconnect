@@ -140,11 +140,12 @@ credentialsRoutes.get("/types", async (c) => {
       type: "cloudflare_workers_deploy",
       description: "Cloudflare Workers deployment token with write permissions",
       required_context: ["service"],
-      optional_context: ["purpose"],
+      optional_context: ["purpose", "zones"],
       scopes: [
         "Workers Scripts Write",
         "Workers KV Storage Write",
         "Account Settings Read",
+        "Workers Routes Write (zone-scoped — pass context.zones: [<zone_id>, ...] to include)",
       ],
       ttl: "365 days",
       status: "available",
@@ -551,7 +552,7 @@ credentialsRoutes.get("/twilio", async (c) => {
  * This is the secure way for ChittyOS services to access credentials.
  *
  * Path parameters:
- * - vault: The 1Password vault (infrastructure, services, integrations)
+ * - vault: The 1Password vault (infrastructure, services, integrations, emergency)
  * - item: The item name in the vault
  * - field: The field name within the item
  *
@@ -576,7 +577,7 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
     const field = c.req.param("field");
 
     // Validate vault name
-    const validVaults = ["infrastructure", "services", "integrations"];
+    const validVaults = ["infrastructure", "services", "integrations", "emergency"];
     if (!validVaults.includes(vault)) {
       return c.json(
         {
@@ -706,7 +707,7 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
 
     try {
       await c.env.DB.prepare(
-        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (1password_store, ?, ?, ?, datetime(now))`
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES ('1password_store', ?, ?, ?, datetime('now'))`
       ).bind(item, field, requestingService).run();
     } catch (dbErr) {
       console.warn("[Credentials] Audit log failed:", dbErr.message);
@@ -718,6 +719,8 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
   }
 });
+
+/**
  * GET /api/credentials/health
  *
  * Check credential provisioning service health

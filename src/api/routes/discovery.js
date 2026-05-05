@@ -5,12 +5,15 @@
 
 import { Hono } from "hono";
 import { ChittyOSEcosystem } from "../../integrations/chittyos-ecosystem.js";
+import { MCP_TOOL_NAMES } from "../../mcp/tool-registry.js";
+import { getServiceCatalogEntries } from "../../lib/service-catalog.js";
 
 export const discoveryRoutes = new Hono();
 
-// In-memory cache for discovery document (5 minute TTL)
-let cachedDiscovery = null;
-let cacheExpiry = 0;
+// In-memory cache for discovery document (5 minute TTL).
+// Keyed by mcpBase since the discovery doc varies per host
+// (e.g. mcp.chitty.cc vs mcp.ch1tty.com).
+const cachedDiscoveryByBase = new Map();
 const CACHE_TTL = 300000; // 5 minutes in milliseconds
 
 /**
@@ -20,17 +23,24 @@ const CACHE_TTL = 300000; // 5 minutes in milliseconds
 discoveryRoutes.get("/chitty.json", async (c) => {
   try {
     const now = Date.now();
+    const env = c.env;
 
-    // Return cached document if still valid
-    if (cachedDiscovery && now < cacheExpiry) {
-      return c.json(cachedDiscovery);
+    // Resolve mcpBase from request host first — needed for cache key.
+    const host = (c.req.header("host") || "").toLowerCase();
+    const isCh1ttyHost = host === "ch1tty.com" || host.endsWith(".ch1tty.com");
+    const mcpBase = isCh1ttyHost
+      ? "https://mcp.ch1tty.com"
+      : "https://mcp.chitty.cc";
+
+    // Per-host cache lookup — done BEFORE any expensive discovery call.
+    const cached = cachedDiscoveryByBase.get(mcpBase);
+    if (cached && now < cached.expiresAt) {
+      return c.json(cached.doc);
     }
 
-    // Build discovery document
-    const env = c.env;
+    // Cache miss — build the doc.
     const ecosystem = new ChittyOSEcosystem(env);
 
-    // Discover services from ChittyRegistry (with ecosystem's built-in caching)
     let servicesData = { services: [] };
     try {
       servicesData = await ecosystem.discoverServices();
@@ -42,18 +52,72 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       // Continue with empty services array - not critical for discovery
     }
 
-    // Extract services array from response (handles both array and object formats)
     const servicesArray = Array.isArray(servicesData)
       ? servicesData
       : servicesData?.services || [];
 
+    const catalogEntries = getServiceCatalogEntries(env);
+
+    const normalizeService = function(service) {
+      const name = service?.name || service?.id || "";
+      const url = service?.url || (name ? `https://${name}.chitty.cc` : "");
+
+      let sub = service?.sub || service?.subdomain;
+      if (!sub && url) {
+        try {
+          sub = new URL(url).hostname.split(".")[0];
+        } catch {
+          // ignore
+        }
+      }
+      if (!sub) sub = name;
+
+      return {
+        name,
+        url,
+        sub,
+        health_url: service?.health_url,
+        status: service?.status,
+      };
+    };
+
+    const normalized = [];
+    const seen = new Set();
+
+    for (const s of servicesArray) {
+      const n = normalizeService(s);
+      if (!n.name || !n.sub) continue;
+      const key = `${n.sub}|${n.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(n);
+    }
+
+    for (const entry of catalogEntries) {
+      const n = normalizeService({
+        name: entry.id,
+        url: entry.url,
+        sub: entry.sub,
+      });
+      const key = `${n.sub}|${n.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(n);
+    }
+
     // Map services to discovery format
-    const servicesFormatted = servicesArray.map((service) => ({
+    const servicesFormatted = normalized.map((service) => ({
       name: service.name,
-      url: service.url || `https://${service.name}.chitty.cc`,
-      mcp: `https://mcp.chitty.cc/${service.name}/mcp`,
-      api: `https://api.chitty.cc/${service.name}/api`,
-      health: service.health_url || `https://${service.name}.chitty.cc/health`,
+      url: service.url,
+      // Primary MCP link: through the mcpBase gateway/proxy
+      mcp: `${mcpBase}/${service.sub}/mcp`,
+      // Direct MCP link: useful for clients that prefer the origin service
+      direct_mcp: `${service.url.replace(/\/$/, "")}/mcp`,
+      // Legacy API field kept for backward compatibility
+      api: `https://api.chitty.cc/${service.sub}/api`,
+      direct_api: `${service.url.replace(/\/$/, "")}/api`,
+      health:
+        service.health_url || `${service.url.replace(/\/$/, "")}/health`,
       status: service.status || "unknown",
     }));
 
@@ -66,7 +130,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       endpoints: {
         connect_base: "https://connect.chitty.cc",
         api_base: "https://api.chitty.cc",
-        mcp_base: "https://mcp.chitty.cc",
+        mcp_base: mcpBase,
         sse: "https://connect.chitty.cc/sse",
         auth: "https://auth.chitty.cc",
         registry: "https://registry.chitty.cc",
@@ -76,11 +140,11 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       capabilities: {
         mcp: {
           protocol_version: "2025-06-18",
-          tools_count: 52,
+          tools_count: MCP_TOOL_NAMES.size,
           supports_streaming: true,
           session_management: true,
           oauth_discovery:
-            "https://mcp.chitty.cc/.well-known/oauth-authorization-server",
+            `${mcpBase}/.well-known/oauth-authorization-server`,
         },
         api: {
           openapi_spec: "https://connect.chitty.cc/openapi.json",
@@ -121,9 +185,11 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       },
     };
 
-    // Cache the discovery document
-    cachedDiscovery = discoveryDoc;
-    cacheExpiry = now + CACHE_TTL;
+    // Cache the discovery document keyed by host-derived mcpBase
+    cachedDiscoveryByBase.set(mcpBase, {
+      doc: discoveryDoc,
+      expiresAt: now + CACHE_TTL,
+    });
 
     return c.json(discoveryDoc);
   } catch (error) {
