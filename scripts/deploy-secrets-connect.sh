@@ -163,11 +163,19 @@ deploy_secret "CHITTY_PROOF_TOKEN"      "$VAULT_SERVICES" "sozaaemylfw3krabpyueq
 # NOTE: the chittyconnect-prod item (sozaaemylfw3krabpyueqwmytq) credential field is empty.
 # chittyagent-tasks validates against CHITTY_AUTH_SERVICE_TOKEN which was provisioned via
 # set-worker-secret.yml using the GitHub repo secret CHITTY_API_GATEWAY_SERVICE_TOKEN.
-# Until vault item 6pnxym6ke46wote7qwexaakni4 is populated, this line will fail. The secret
-# is currently set directly in Cloudflare. To re-provision:
+# Until vault item 6pnxym6ke46wote7qwexaakni4 is populated, deploying this secret from
+# Connect is expected to fail. By default this script skips it to avoid blocking unrelated
+# deployments. To enable deployment once the item is populated, set:
+#   DEPLOY_CHITTY_TASK_TOKEN=true ./scripts/deploy-secrets-connect.sh --env production
+# To re-provision manually:
 #   op read "op://ChittyOS/ChittyGateway API Token/credential" | \
 #     wrangler secret put CHITTY_TASK_TOKEN --env production
-deploy_secret "CHITTY_TASK_TOKEN"       "$VAULT_SERVICES" "6pnxym6ke46wote7qwexaakni4" "credential"
+if [[ "${DEPLOY_CHITTY_TASK_TOKEN:-false}" == "true" ]]; then
+  deploy_secret "CHITTY_TASK_TOKEN"       "$VAULT_SERVICES" "6pnxym6ke46wote7qwexaakni4" "credential"
+else
+  echo -e "  ${YELLOW}WARN${NC}   CHITTY_TASK_TOKEN skipped; set DEPLOY_CHITTY_TASK_TOKEN=true after vault item 6pnxym6ke46wote7qwexaakni4 is populated"
+  NOT_IN_VAULT=$((NOT_IN_VAULT + 1))
+fi
 deploy_secret "CHITTY_TRUST_TOKEN"      "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
 
 # GitHub App ID — from GitHub App PK item (Core vault)
