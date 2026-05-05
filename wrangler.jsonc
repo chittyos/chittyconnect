@@ -148,7 +148,7 @@
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
         { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
-        { "binding": "SVC_DISPUTES", "service": "chittydispute" },
+        { "binding": "SVC_DISPUTES", "service": "chittydispute", "environment": "production" },
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" }
       ]
     },
