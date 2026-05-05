@@ -715,7 +715,50 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     return c.json({ success: true, ...result, metadata: { vault, item, field, timestamp: new Date().toISOString() } }, result.action === "created" ? 201 : 200);
   } catch (error) {
     console.error("[Credentials] Store error:", error);
-    return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
+
+    const err = (error && typeof error === "object") ? error : new Error(String(error));
+    const errorCode = err.code || err.name;
+    const errorMessage = typeof err.message === "string" ? err.message : "";
+
+    let status = 500;
+    let responseCode = "STORE_FAILED";
+    let responseMessage = "Failed to store credential";
+
+    // Map known/likely error scenarios for better client handling
+    if (
+      errorCode === "CONNECT_NOT_CONFIGURED" ||
+      /connect.+(config|env)/i.test(errorMessage || "")
+    ) {
+      status = 503;
+      responseCode = "CONNECT_NOT_CONFIGURED";
+      responseMessage = "Credential store is not configured";
+    } else if (
+      errorCode === "FORBIDDEN" ||
+      errorCode === "AUTH_FORBIDDEN" ||
+      /forbidden|unauthori[sz]ed|auth/i.test(errorMessage || "")
+    ) {
+      status = 403;
+      responseCode = "FORBIDDEN";
+      responseMessage = "Forbidden to store credential";
+    } else if (
+      errorCode === "BAD_REQUEST" ||
+      /invalid|malformed|bad request/i.test(errorMessage || "")
+    ) {
+      status = 400;
+      responseCode = "INVALID_REQUEST";
+      responseMessage = "Invalid request for credential storage";
+    }
+
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: responseCode,
+          message: responseMessage,
+        },
+      },
+      status,
+    );
   }
 });
  * GET /api/credentials/health
