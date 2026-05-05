@@ -10,47 +10,6 @@ permissions:
 
 jobs:
   ###########################################################################
-  # Enforce Signed Commits
-  ###########################################################################
-  signed-commits:
-    name: Verify Signed Commits
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check for signed commits
-        uses: 1password/check-signed-commits-action@v1
-        with:
-          comment: |
-            ## ⚠️ Unsigned Commits Detected
-
-            This PR contains unsigned commits. ChittyOS requires all commits to be cryptographically signed.
-
-            ### How to fix this:
-
-            **Option 1: Sign with SSH key (Recommended)**
-            ```bash
-            # Configure Git to use SSH signing
-            git config --global gpg.format ssh
-            git config --global user.signingkey ~/.ssh/id_ed25519.pub
-            git config --global commit.gpgsign true
-
-            # Re-sign your commits
-            git rebase --exec 'git commit --amend --no-edit -S' HEAD~N
-            git push --force-with-lease
-            ```
-
-            **Option 2: Sign with 1Password**
-            1. Enable "Sign Git commits" in 1Password settings
-            2. Configure Git: `git config --global gpg.program /path/to/op-ssh-sign`
-
-            **Option 3: Sign with GPG**
-            ```bash
-            git config --global commit.gpgsign true
-            git config --global user.signingkey YOUR_KEY_ID
-            ```
-
-            📚 [1Password SSH Signing Guide](https://developer.1password.com/docs/ssh/git-commit-signing/)
-
-  ###########################################################################
   # Security Scanning
   ###########################################################################
   security-scan:

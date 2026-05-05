@@ -158,7 +158,16 @@ deploy_secret "CHITTY_DNA_TOKEN"        "$VAULT_SERVICES" "agd7l6vbolyn4rtoxrafm
 deploy_secret "CHITTY_VERIFY_TOKEN"     "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
 deploy_secret "CHITTY_SERV_TOKEN"       "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
 deploy_secret "CHITTY_PROOF_TOKEN"      "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
-deploy_secret "CHITTY_TASK_TOKEN"       "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
+# CHITTY_TASK_TOKEN — auth token chittyconnect sends to tasks.chitty.cc (chittyagent-tasks)
+# Source: CHITTY_API_GATEWAY_SERVICE_TOKEN (ChittyGateway API Token, item 6pnxym6ke46wote7qwexaakni4)
+# NOTE: the chittyconnect-prod item (sozaaemylfw3krabpyueqwmytq) credential field is empty.
+# chittyagent-tasks validates against CHITTY_AUTH_SERVICE_TOKEN which was provisioned via
+# set-worker-secret.yml using the GitHub repo secret CHITTY_API_GATEWAY_SERVICE_TOKEN.
+# Until vault item 6pnxym6ke46wote7qwexaakni4 is populated, this line will fail. The secret
+# is currently set directly in Cloudflare. To re-provision:
+#   op read "op://ChittyOS/ChittyGateway API Token/credential" | \
+#     wrangler secret put CHITTY_TASK_TOKEN --env production
+deploy_secret "CHITTY_TASK_TOKEN"       "$VAULT_SERVICES" "6pnxym6ke46wote7qwexaakni4" "credential"
 deploy_secret "CHITTY_TRUST_TOKEN"      "$VAULT_SERVICES" "sozaaemylfw3krabpyueqwmytq" "credential"
 
 # GitHub App ID — from GitHub App PK item (Core vault)

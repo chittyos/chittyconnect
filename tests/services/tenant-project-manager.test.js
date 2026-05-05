@@ -274,11 +274,12 @@ describe("TenantProjectManager", () => {
       expect(selectCall).toContain("WHERE status = ?");
     });
 
-    it("returns empty when DB is unavailable", async () => {
+    it("throws when DB is unavailable", async () => {
       const env = { ...createMockEnv(), DB: undefined };
       const manager = new TenantProjectManager(env);
-      const result = await manager.listTenants();
-      expect(result).toEqual({ tenants: [], total: 0 });
+      await expect(manager.listTenants()).rejects.toThrow(
+        "Platform DB (D1) not available",
+      );
     });
   });
 });

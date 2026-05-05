@@ -1225,7 +1225,7 @@
         "operationId": "listTenants",
         "tags": ["Tenant Management"],
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "deprovisioned", "deleted"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "suspended", "deprovisioned"] } },
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
           { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
         ],

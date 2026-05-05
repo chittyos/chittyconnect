@@ -19,16 +19,30 @@ import { getCredential } from "./credential-helper.js";
  * @returns {Promise<{client: Client, layer: string}>} Connected client and which layer it points to
  */
 export async function getTenantDb(env, tenantId) {
-  const manager = new TenantProjectManager(env);
-  const connectionUri = await manager.getTenantConnection(tenantId);
+  if (tenantId) {
+    const manager = new TenantProjectManager(env);
+    const connectionUri = await manager.getTenantConnection(tenantId);
 
-  if (connectionUri) {
-    const client = new Client({ connectionString: connectionUri });
-    await client.connect();
-    return { client, layer: "tenant" };
+    if (connectionUri) {
+      const client = new Client({ connectionString: connectionUri });
+      try {
+        await client.connect();
+      } catch (err) {
+        throw new Error(
+          `Failed to connect to tenant ${tenantId} database: ${err.message}`,
+        );
+      }
+      return { client, layer: "tenant" };
+    }
+
+    // Tenant was requested but has no connection — this is an error, not a fallback
+    throw new Error(
+      `Tenant ${tenantId} has no connection string. ` +
+        `The Neon project may not have been fully provisioned.`,
+    );
   }
 
-  // Fall back to platform DB (shared Neon)
+  // No tenantId provided — use platform DB (shared Neon)
   const platformUri = await getCredential(
     env,
     "integrations/neon/database_url",
@@ -37,7 +51,9 @@ export async function getTenantDb(env, tenantId) {
   );
 
   if (!platformUri) {
-    throw new Error("No database connection available for tenant or platform");
+    throw new Error(
+      "No database connection available — platform DB not configured",
+    );
   }
 
   const client = new Client({ connectionString: platformUri });
@@ -60,7 +76,9 @@ export async function queryTenantDb(env, tenantId, query, params = []) {
     const result = await client.query(query, params);
     return { rows: result.rows || [], layer };
   } finally {
-    await client.end().catch(() => {});
+    await client.end().catch((err) => {
+      console.warn("[TenantRouter] Connection cleanup failed:", err.message);
+    });
   }
 }
 

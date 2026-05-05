@@ -21,6 +21,7 @@ import { chittyevidenceRoutes } from "./routes/chittyevidence.js";
 import { registryRoutes } from "./routes/registry.js";
 import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
+import { googleRoutes } from "./routes/google.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
@@ -39,6 +40,7 @@ import { authKeysRoutes } from "./routes/auth-keys.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
+import { sessionRoutes } from "./routes/sessions.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -125,6 +127,7 @@ api.get("/api/health", (c) => {
       connections: "/api/connections",
       prompts: "/api/v1/context/prompts",
       tenants: "/api/v1/tenants",
+      sessions: "/api/v1/sessions",
       mcp: "/mcp",
       chatgptMcp: "/chatgpt/mcp",
     },
@@ -153,6 +156,7 @@ api.route("/api/registry", registryRoutes);
 api.route("/api/services", servicesRoutes);
 api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
+api.route("/api/google", googleRoutes);
 
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
 // Rewrites to /api/thirdparty/mercury/* so the thirdparty handler picks them up.
@@ -185,5 +189,6 @@ api.route("/api/auth/keys", authKeysRoutes);
 api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
+api.route("/api/v1/sessions", sessionRoutes);
 
 export { api };

@@ -7,7 +7,8 @@
  * @module mcp/tool-dispatcher
  */
 
-import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import { getCredential, getServiceToken, getMintAuthToken } from "../lib/credential-helper.js";
+import { serviceFetch } from "../lib/service-switch.js";
 import {
   getCloudflareApiCredentials,
   parseTimeframe,
@@ -212,10 +213,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Identity tools ──────────────────────────────────────────────
     if (name === "chitty_id_mint") {
-      const serviceToken =
-        env.CHITTYMINT_SECRET ||
-        (await getServiceToken(env, "chittymint")) ||
-        (await getServiceToken(env, "chittyid"));
+      const { token: serviceToken, source: mintTokenSource } =
+        await getMintAuthToken(env);
       if (!serviceToken) {
         return {
           content: [
@@ -227,16 +226,21 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           isError: true,
         };
       }
-      const response = await fetch("https://mint.chitty.cc/api/mint", {
+      if (mintTokenSource === "legacy-webhook-secret") {
+        console.warn(
+          "[policy] chitty_id_mint using deprecated CHITTYMINT_SECRET; migrate to CHITTYAUTH_ISSUED_MINT_API_KEY (aliases: CHITTYAUTH_ISSUED_MINT_TOKEN, MINT_API_KEY)",
+        );
+      }
+      const response = await serviceFetch(env, "mint", "/api/mint", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${serviceToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: {
           entity_type: args.entity_type,
           metadata: args.metadata,
-        }),
+        },
       });
       if (!response.ok) {
         const errorText = await response.text();
@@ -264,8 +268,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           isError: true,
         };
       }
-      const response = await fetch(
-        `https://id.chitty.cc/api/v2/chittyid/validate/${encodeURIComponent(args.chitty_id)}`,
+      const response = await serviceFetch(
+        env,
+        "id",
+        `/api/v2/chittyid/validate/${encodeURIComponent(args.chitty_id)}`,
         { headers: { Authorization: `Bearer ${serviceToken}` } },
       );
       if (!response.ok) {
@@ -303,13 +309,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
-        "https://ledger.chitty.cc/api/dashboard/stats",
-        { headers: ledgerAuth },
-      );
+      const response = await serviceFetch(env, "ledger", "/api/dashboard/stats");
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -317,13 +317,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_evidence") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       const url = args.case_id
-        ? `https://ledger.chitty.cc/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
-        : "https://ledger.chitty.cc/api/evidence";
-      const response = await fetch(url, { headers: ledgerAuth });
+        ? `/api/evidence?caseId=${encodeURIComponent(args.case_id)}`
+        : "/api/evidence";
+      const response = await serviceFetch(env, "ledger", url);
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -331,12 +328,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_facts") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
-        { headers: ledgerAuth },
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/evidence/${encodeURIComponent(args.evidence_id)}/facts`,
+        {},
       );
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -345,13 +341,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_mint") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       // Pre-flight: verify the cited evidence exists in ChittyLedger
-      const evidenceCheck = await fetch(
-        `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(args.evidence_id)}`,
-        { headers: ledgerAuth },
+      const evidenceCheck = await serviceFetch(
+        env,
+        "ledger",
+        `/api/evidence/${encodeURIComponent(args.evidence_id)}`,
+        {},
       );
       if (!evidenceCheck.ok) {
         return {
@@ -381,10 +376,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const evidenceHash =
         evidenceRecord?.file_hash || evidenceRecord?.thing?.file_hash || null;
 
-      const response = await fetch("https://ledger.chitty.cc/api/facts", {
+      const response = await serviceFetch(env, "ledger", "/api/facts", {
         method: "POST",
-        headers: { ...ledgerAuth, "Content-Type": "application/json" },
-        body: JSON.stringify({
+
+        body: {
           evidence_id: args.evidence_id,
           case_id: args.case_id,
           text: args.text,
@@ -393,7 +388,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           category: args.category,
           // Anchor fact to evidence integrity state at mint time
           evidence_hash_at_mint: evidenceHash,
-        }),
+        },
       });
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -402,16 +397,14 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_validate") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       // Pre-flight: verify all corroborating evidence IDs exist (parallel)
       if (args.corroborating_evidence?.length) {
         const checks = await Promise.all(
           args.corroborating_evidence.map(async (evId) => {
-            const resp = await fetch(
-              `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(evId)}`,
-              { headers: ledgerAuth },
+            const resp = await serviceFetch(
+              env,
+              "ledger",
+              `/api/evidence/${encodeURIComponent(evId)}`,
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -430,16 +423,18 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
       }
 
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/validate`,
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/facts/${encodeURIComponent(args.fact_id)}/validate`,
         {
           method: "POST",
-          headers: { ...ledgerAuth, "Content-Type": "application/json" },
-          body: JSON.stringify({
+
+          body: {
             validation_method: args.validation_method,
             corroborating_evidence: args.corroborating_evidence,
             notes: args.notes,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -449,9 +444,6 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_seal") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       if (!args.actor_chitty_id) {
         return {
           content: [
@@ -481,15 +473,17 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       }
 
       // Seal the fact in ChittyLedger
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/seal`,
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/facts/${encodeURIComponent(args.fact_id)}/seal`,
         {
           method: "POST",
-          headers: { ...ledgerAuth, "Content-Type": "application/json" },
-          body: JSON.stringify({
+
+          body: {
             sealed_by: args.actor_chitty_id,
             seal_reason: args.seal_reason,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -523,9 +517,6 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           "PROOF_Q binding not configured. Proof will not be minted.";
       }
     } else if (name === "chitty_fact_dispute") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       if (!args.actor_chitty_id) {
         return {
           content: [
@@ -558,9 +549,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.counter_evidence_ids?.length) {
         const checks = await Promise.all(
           args.counter_evidence_ids.map(async (evId) => {
-            const resp = await fetch(
-              `https://ledger.chitty.cc/api/evidence/${encodeURIComponent(evId)}`,
-              { headers: ledgerAuth },
+            const resp = await serviceFetch(
+              env,
+              "ledger",
+              `/api/evidence/${encodeURIComponent(evId)}`,
             );
             return { evId, ok: resp.ok, status: resp.status };
           }),
@@ -579,17 +571,19 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
       }
 
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/dispute`,
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/facts/${encodeURIComponent(args.fact_id)}/dispute`,
         {
           method: "POST",
-          headers: { ...ledgerAuth, "Content-Type": "application/json" },
-          body: JSON.stringify({
+
+          body: {
             reason: args.reason,
             challenger_chitty_id:
               args.challenger_chitty_id || args.actor_chitty_id,
             counter_evidence_ids: args.counter_evidence_ids,
-          }),
+          },
         },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -599,9 +593,6 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_fact_export") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       if (!args.actor_chitty_id) {
         return {
           content: [
@@ -628,9 +619,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
       if (args.format === "pdf") {
         // Fetch fact with proof data
-        const factResp = await fetch(
-          `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/export`,
-          { headers: ledgerAuth },
+        const factResp = await serviceFetch(
+          env,
+          "ledger",
+          `/api/facts/${encodeURIComponent(args.fact_id)}/export`,
+          {},
         );
         if (!factResp.ok) {
           return {
@@ -719,9 +712,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         };
       } else {
         // JSON export — fetch full fact with proof bundle
-        const response = await fetch(
-          `https://ledger.chitty.cc/api/facts/${encodeURIComponent(args.fact_id)}/export`,
-          { headers: ledgerAuth },
+        const response = await serviceFetch(
+          env,
+          "ledger",
+          `/api/facts/${encodeURIComponent(args.fact_id)}/export`,
+          {},
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -731,13 +726,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         result = data;
       }
     } else if (name === "chitty_ledger_contradictions") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       const url = args.case_id
-        ? `https://ledger.chitty.cc/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
-        : "https://ledger.chitty.cc/api/contradictions";
-      const response = await fetch(url, { headers: ledgerAuth });
+        ? `/api/contradictions?caseId=${encodeURIComponent(args.case_id)}`
+        : "/api/contradictions";
+      const response = await serviceFetch(env, "ledger", url);
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -748,12 +740,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger chain tools (record, query, verify, statistics, custody) ──
     else if (name === "chitty_ledger_record") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch("https://ledger.chitty.cc/api/ledger", {
+      const response = await serviceFetch(env, "ledger", "/api/ledger", {
         method: "POST",
-        headers: { ...ledgerAuth, "Content-Type": "application/json" },
+
         body: JSON.stringify(args),
       });
       const { data, error: respErr } = await checkAndParseJson(
@@ -763,18 +752,17 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_query") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
       const params = new URLSearchParams();
       if (args.record_type) params.set("type", args.record_type);
       if (args.entity_id) params.set("entity_id", args.entity_id);
       if (args.actor) params.set("actor", args.actor);
       if (args.status) params.set("status", args.status);
       if (args.limit) params.set("limit", String(args.limit));
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/ledger?${params}`,
-        { headers: ledgerAuth },
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/ledger?${params}`,
+        {},
       );
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -783,13 +771,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_verify") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
-        "https://ledger.chitty.cc/api/ledger/verify",
-        { headers: ledgerAuth },
-      );
+      const response = await serviceFetch(env, "ledger", "/api/ledger/verify");
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -797,12 +779,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (respErr) return respErr;
       result = data;
     } else if (name === "chitty_ledger_statistics") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
-      const response = await fetch(
-        "https://ledger.chitty.cc/api/ledger/statistics",
-        { headers: ledgerAuth },
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        "/api/ledger/statistics",
       );
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -810,10 +790,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       if (respErr) return respErr;
       result = data;
-    } else if (name === "chitty_ledger_chain_of_custody") {
-      const { error: ledgerErr, headers: ledgerAuth } =
-        await requireServiceAuth("chittyledger", "ChittyLedger");
-      if (ledgerErr) return ledgerErr;
+    } else if (name === "chitty_ledger_custody") {
       if (!args.entity_id) {
         return {
           content: [
@@ -822,9 +799,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           isError: true,
         };
       }
-      const response = await fetch(
-        `https://ledger.chitty.cc/api/ledger/${encodeURIComponent(args.entity_id)}/custody`,
-        { headers: ledgerAuth },
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        `/api/ledger/${encodeURIComponent(args.entity_id)}/custody`,
+        {},
       );
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -846,8 +825,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.start_date) params.set("start", args.start_date);
       if (args.end_date) params.set("end", args.end_date);
       if (args.source) params.set("source", args.source);
-      const response = await fetch(
-        `https://contextual.chitty.cc/api/messages?${params.toString()}`,
+      const response = await serviceFetch(
+        env,
+        "contextual",
+        `/api/messages?${params.toString()}`,
         { headers: ctxAuth },
       );
       const { data, error: respErr } = await checkAndParseJson(
@@ -862,10 +843,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         "ChittyContextual",
       );
       if (ctxErr) return ctxErr;
-      const response = await fetch("https://contextual.chitty.cc/api/topics", {
+      const response = await serviceFetch(env, "contextual", "/api/topics", {
         method: "POST",
         headers: { ...ctxAuth, "Content-Type": "application/json" },
-        body: JSON.stringify({ query: args.query }),
+        body: { query: args.query },
       });
       const { data, error: respErr } = await checkAndParseJson(
         response,
@@ -876,134 +857,50 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Evidence AI Search tools ────────────────────────────────────
+    // ── Evidence tools — delegated to ChittyStorage (search/retrieve/ingest) ──
     else if (name === "chitty_evidence_search") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID;
-      if (!accountId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
-            },
-          ],
-          isError: true,
-        };
+      if (!env.SVC_STORAGE) {
+        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
       }
-      const aiSearchToken = env.AI_SEARCH_TOKEN;
-      if (!aiSearchToken) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
-            },
-          ],
-          isError: true,
-        };
+      const params = new URLSearchParams({ q: args.query || "", limit: String(args.max_num_results || 10) });
+      if (args.entity_slug) params.set("entity", args.entity_slug);
+      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?${params}`);
+      const data = await response.json();
+      if (!data.docs || !data.docs.length) {
+        return { content: [{ type: "text", text: "No matching documents found." }] };
       }
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${aiSearchToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: args.query }],
-            max_num_results: 10,
-          }),
-        },
-      );
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
-      }
-      if (!data || !data.success) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `AI Search error (${response.status}): ${(text || "").slice(0, 300)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-      const chunks = data.result?.chunks || [];
-      const formatted = chunks
-        .slice(0, 5)
-        .map((d) => {
-          const fname = d.item?.key || d.filename || "unknown";
-          const score = (d.score || 0).toFixed(3);
-          const snippet = (d.text || "").slice(0, 200).replace(/\n/g, " ");
-          return `[${score}] ${fname}\n  ${snippet}`;
-        })
-        .join("\n\n");
-      return {
-        content: [
-          { type: "text", text: formatted || "No matching documents found." },
-        ],
-      };
+      const formatted = data.docs.slice(0, 10).map((d) => {
+        const tags = d.tags || {};
+        const entity = tags.primary_entity || "unlinked";
+        const docType = tags.doc_type || "unclassified";
+        return `[${entity}/${docType}] ${d.filename}\n  hash: ${d.content_hash}\n  tier: ${d.processing_tier} | created: ${d.created_at}`;
+      }).join("\n\n");
+      return { content: [{ type: "text", text: formatted }] };
     } else if (name === "chitty_evidence_retrieve") {
-      const accountId = env.CHITTYOS_ACCOUNT_ID;
-      if (!accountId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: CHITTYOS_ACCOUNT_ID not set.",
-            },
-          ],
-          isError: true,
-        };
+      if (!env.SVC_STORAGE) {
+        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
       }
-      const aiSearchToken = env.AI_SEARCH_TOKEN;
-      if (!aiSearchToken) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "AI Search not configured: AI_SEARCH_TOKEN secret not set.",
-            },
-          ],
-          isError: true,
-        };
+      const hash = args.content_hash || args.evidence_id || args.query;
+      if (!hash) {
+        return { content: [{ type: "text", text: "Provide content_hash, evidence_id, or query to retrieve." }], isError: true };
       }
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai-search/instances/chittyevidence-search/search`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${aiSearchToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: args.query }],
-            max_num_results: args.max_num_results || 10,
-          }),
-        },
-      );
-      const text = await response.text();
-      try {
-        result = JSON.parse(text);
-      } catch {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `AI Search retrieve error (${response.status}): ${(text || "").slice(0, 300)}`,
-            },
-          ],
-          isError: true,
-        };
+      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?q=${encodeURIComponent(hash)}&limit=1`);
+      const data = await response.json();
+      if (!data.docs?.length) {
+        return { content: [{ type: "text", text: `Document not found: ${hash}` }], isError: true };
       }
+      const doc = data.docs[0];
+      result = {
+        chitty_id: doc.chitty_id,
+        content_hash: doc.content_hash,
+        filename: doc.filename,
+        processing_tier: doc.processing_tier,
+        tags: doc.tags || {},
+        entities: doc.entities || [],
+        file_url: `https://storage.chitty.cc/api/files/${doc.content_hash}`,
+      };
     }
 
-    // ── Evidence CRUD tools (ingest/verify) ─────────────────────────
     else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
       const endpoint =
@@ -1022,114 +919,96 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch("https://finance.chitty.cc/api/entities", {
-        headers: financeAuth,
-      });
+      const response = await serviceFetch(env, "finance", "/api/entities", {});
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch(
-        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/balances`,
-        { headers: financeAuth },
+      const response = await serviceFetch(
+        env,
+        "finance",
+        `/api/entities/${encodeURIComponent(args.entity)}/balances`,
+        {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_transactions") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await fetch(
-        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
-        { headers: financeAuth },
+      const response = await serviceFetch(
+        env,
+        "finance",
+        `/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
+        {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_cash_flow") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await fetch(
-        `https://finance.chitty.cc/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
-        { headers: financeAuth },
+      const response = await serviceFetch(
+        env,
+        "finance",
+        `/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
+        {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_inter_entity") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await fetch(
-        `https://finance.chitty.cc/api/transfers/inter-entity?${params}`,
-        { headers: financeAuth },
+      const response = await serviceFetch(
+        env,
+        "finance",
+        `/api/transfers/inter-entity?${params}`,
+        {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    } else if (name === "chitty_finance_detect_transfers") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch(
-        "https://finance.chitty.cc/api/transfers/detect",
+    } else if (name === "chitty_finance_xfer_detect") {
+      const response = await serviceFetch(
+        env,
+        "finance",
+        "/api/transfers/detect",
         {
           method: "POST",
-          headers: { ...financeAuth, "Content-Type": "application/json" },
-          body: JSON.stringify({
+
+          body: {
             entity: args.entity,
             start: args.start,
             end: args.end,
             threshold: args.threshold,
-          }),
+          },
         },
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_flow_of_funds") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await fetch(
-        `https://finance.chitty.cc/api/reports/flow-of-funds?${params}`,
-        { headers: financeAuth },
+      const response = await serviceFetch(
+        env,
+        "finance",
+        `/api/reports/flow-of-funds?${params}`,
+        {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-      const { error: financeErr, headers: financeAuth } =
-        await requireServiceAuth("chittyfinance", "ChittyFinance");
-      if (financeErr) return financeErr;
-      const response = await fetch(
-        "https://finance.chitty.cc/api/sync/mercury",
-        {
-          method: "POST",
-          headers: { ...financeAuth, "Content-Type": "application/json" },
-        },
-      );
+      const response = await serviceFetch(env, "finance", "/api/sync/mercury", {
+        method: "POST",
+      });
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
@@ -1241,6 +1120,21 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "experience_migrate") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/experience/migrate`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manifest: args.manifest,
+            metrics_transferred: args.metrics_transferred,
+          }),
+        },
+      );
+      const fetchErr = await checkFetchError(response, "ExperienceMigrate");
       if (fetchErr) return fetchErr;
       result = await response.json();
     }
@@ -1617,14 +1511,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Task Management tools ────────────────────────────────────────
     // Proxies to tasks.chitty.cc — inter-agent task coordination
-    // Auth: CHITTY_TASK_TOKEN (service token for chittytask)
+    // Tasks — via service binding (no Bearer token needed)
     else if (name.startsWith("chitty_task_")) {
-      const { error: taskErr, headers: taskAuth } = await requireServiceAuth(
-        "chittytask",
-        "ChittyTask",
-      );
-      if (taskErr) return taskErr;
-      const taskHeaders = { ...taskAuth, "Content-Type": "application/json" };
+      let response;
 
       if (name === "chitty_task_create") {
         const body = {
@@ -1636,17 +1525,10 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         if (args.priority !== undefined) body.priority = args.priority;
         if (args.payload !== undefined) body.payload = args.payload;
         if (args.depends_on !== undefined) body.depends_on = args.depends_on;
-        const response = await fetch("https://tasks.chitty.cc/api/v1/tasks", {
+        response = await serviceFetch(env, "tasks", "/api/v1/tasks", {
           method: "POST",
-          headers: taskHeaders,
-          body: JSON.stringify(body),
+          body,
         });
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
       } else if (name === "chitty_task_list") {
         const params = new URLSearchParams();
         if (args.agent) params.set("agent", args.agent);
@@ -1655,146 +1537,112 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         if (args.limit !== undefined) params.set("limit", String(args.limit));
         if (args.offset !== undefined)
           params.set("offset", String(args.offset));
-        const url = `https://tasks.chitty.cc/api/v1/tasks${params.toString() ? `?${params}` : ""}`;
-        const response = await fetch(url, { headers: taskAuth });
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
+        const qs = params.toString() ? `?${params}` : "";
+        response = await serviceFetch(env, "tasks", `/api/v1/tasks${qs}`);
       } else if (name === "chitty_task_get") {
-        if (!args.task_id) {
+        if (!args.task_id)
           return {
             content: [
               { type: "text", text: "Missing required parameter: task_id" },
             ],
             isError: true,
           };
-        }
-        const response = await fetch(
-          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}`,
-          { headers: taskAuth },
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}`,
         );
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
       } else if (name === "chitty_task_claim") {
-        if (!args.task_id) {
+        if (!args.task_id)
           return {
             content: [
               { type: "text", text: "Missing required parameter: task_id" },
             ],
             isError: true,
           };
-        }
-        const claimHeaders = { ...taskAuth };
-        if (args.agent) claimHeaders["X-ChittyOS-Caller"] = args.agent;
-        const url = args.agent
-          ? `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim?agent=${encodeURIComponent(args.agent)}`
-          : `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: claimHeaders,
-        });
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
-      } else if (name === "chitty_task_complete") {
-        if (!args.task_id) {
-          return {
-            content: [
-              { type: "text", text: "Missing required parameter: task_id" },
-            ],
-            isError: true,
-          };
-        }
-        const body = {};
-        if (args.result !== undefined) body.result = args.result;
-        const response = await fetch(
-          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/complete`,
+        const qs = args.agent ? `?agent=${encodeURIComponent(args.agent)}` : "";
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/claim${qs}`,
           {
             method: "POST",
-            headers: taskHeaders,
-            body: JSON.stringify(body),
+            headers: args.agent ? { "X-ChittyOS-Caller": args.agent } : {},
           },
         );
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
-      } else if (name === "chitty_task_fail") {
-        if (!args.task_id) {
+      } else if (name === "chitty_task_complete") {
+        if (!args.task_id)
           return {
             content: [
               { type: "text", text: "Missing required parameter: task_id" },
             ],
             isError: true,
           };
-        }
-        if (!args.error) {
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/complete`,
+          {
+            method: "POST",
+            body: args.result ? { result: args.result } : {},
+          },
+        );
+      } else if (name === "chitty_task_fail") {
+        if (!args.task_id)
+          return {
+            content: [
+              { type: "text", text: "Missing required parameter: task_id" },
+            ],
+            isError: true,
+          };
+        if (!args.error)
           return {
             content: [
               { type: "text", text: "Missing required parameter: error" },
             ],
             isError: true,
           };
-        }
-        const response = await fetch(
-          `https://tasks.chitty.cc/api/v1/tasks/${encodeURIComponent(args.task_id)}/fail`,
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/${encodeURIComponent(args.task_id)}/fail`,
           {
             method: "POST",
-            headers: taskHeaders,
-            body: JSON.stringify({ error: args.error }),
+            body: { error: args.error },
           },
         );
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
       } else if (name === "chitty_task_my_tasks") {
-        if (!args.agent) {
+        if (!args.agent)
           return {
             content: [
               { type: "text", text: "Missing required parameter: agent" },
             ],
             isError: true,
           };
-        }
-        const response = await fetch(
-          `https://tasks.chitty.cc/api/v1/tasks/agent/${encodeURIComponent(args.agent)}`,
-          { headers: taskAuth },
+        response = await serviceFetch(
+          env,
+          "tasks",
+          `/api/v1/tasks/agent/${encodeURIComponent(args.agent)}`,
         );
-        const { data, error: respErr } = await checkAndParseJson(
-          response,
-          "ChittyTask",
-        );
-        if (respErr) return respErr;
-        result = data;
       } else {
         return {
           content: [{ type: "text", text: `Unknown task tool: ${name}` }],
           isError: true,
         };
       }
+
+      const { data, error: respErr } = await checkAndParseJson(
+        response,
+        "ChittyTask",
+      );
+      if (respErr) return respErr;
+      result = data;
     }
 
     // ── Tenant Management tools ─────────────────────────────────────
     // Project-per-tenant Neon isolation — provision, query, export
-    // Routes to local /api/v1/tenants endpoints (same worker, no service token)
+    // Routes to local /api/v1/tenants endpoints via authHeader (same worker)
     else if (name.startsWith("chitty_tenant_")) {
-      const baseUrl = env.CHITTYCONNECT_URL || "https://connect.chitty.cc";
-
       if (name === "chitty_tenant_provision") {
         if (!args.tenant_id) {
           return {
@@ -1806,7 +1654,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
         const response = await fetch(`${baseUrl}/api/v1/tenants/provision`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...authHeader, "Content-Type": "application/json" },
           body: JSON.stringify({
             tenantId: args.tenant_id,
             region: args.region,
@@ -1830,6 +1678,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
+          { headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1844,7 +1693,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         if (args.offset !== undefined)
           params.set("offset", String(args.offset));
         const qs = params.toString() ? `?${params}` : "";
-        const response = await fetch(`${baseUrl}/api/v1/tenants${qs}`);
+        const response = await fetch(`${baseUrl}/api/v1/tenants${qs}`, {
+          headers: authHeader,
+        });
         const { data, error: respErr } = await checkAndParseJson(
           response,
           "TenantList",
@@ -1862,7 +1713,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}`,
-          { method: "DELETE" },
+          { method: "DELETE", headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1881,7 +1732,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         }
         const response = await fetch(
           `${baseUrl}/api/v1/tenants/${encodeURIComponent(args.tenant_id)}/export`,
-          { method: "POST" },
+          { method: "POST", headers: authHeader },
         );
         const { data, error: respErr } = await checkAndParseJson(
           response,
@@ -1901,8 +1752,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
             isError: true,
           };
         }
-        // Safety: block mutations via MCP
-        const normalized = args.query.trim().toUpperCase();
+        // Safety: block mutations via MCP — check prefix, semicolons, and DML in CTEs
+        const trimmed = args.query.trim();
+        const normalized = trimmed.toUpperCase();
         if (
           !normalized.startsWith("SELECT") &&
           !normalized.startsWith("WITH")
@@ -1912,6 +1764,32 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
               {
                 type: "text",
                 text: "Only SELECT/WITH queries are allowed via MCP tenant_query. Use the REST API for mutations.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        // Block multi-statement injection (SELECT 1; DROP TABLE ...)
+        if (trimmed.includes(";")) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Multi-statement queries (semicolons) are not allowed via MCP tenant_query.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        // Block data-modifying CTEs (WITH deleted AS (DELETE FROM ...))
+        const dmlPattern =
+          /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE)\b/i;
+        if (normalized.startsWith("WITH") && dmlPattern.test(trimmed)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Data-modifying CTEs are not allowed via MCP tenant_query. Use the REST API for mutations.",
               },
             ],
             isError: true,
