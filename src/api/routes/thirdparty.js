@@ -886,7 +886,16 @@ async function getMercuryToken(c, integrationSlug) {
   if (headerToken) return headerToken;
 
   const envKey = `MERCURY_API_KEY_${slug.replace(/-/g, "_").toUpperCase()}`;
-  if (c.env[envKey]) return c.env[envKey];
+  const envVal = c.env[envKey];
+  if (envVal) {
+    // Secrets Store bindings are objects with a .get() method; plain secrets are strings.
+    if (typeof envVal === "object" && typeof envVal.get === "function") {
+      const secret = await envVal.get();
+      if (secret) return secret;
+    } else {
+      return envVal;
+    }
+  }
 
   if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
 
