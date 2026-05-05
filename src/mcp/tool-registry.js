@@ -536,7 +536,7 @@ const MCP_TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
-    name: "chitty_ledger_chain_of_custody",
+    name: "chitty_ledger_custody",
     description:
       "Retrieve the full chain of custody for a specific entity from the ledger.",
     inputSchema: {
@@ -659,7 +659,7 @@ const MCP_TOOLS = [
     },
   },
   {
-    name: "chitty_finance_detect_transfers",
+    name: "chitty_finance_xfer_detect",
     description:
       "Auto-detect potential inter-entity transfers using amount matching and date proximity.",
     inputSchema: {
@@ -814,6 +814,43 @@ const MCP_TOOLS = [
         state: { type: "object", description: "State snapshot to save" },
       },
       required: ["chitty_id", "name"],
+    },
+  },
+  {
+    name: "experience_migrate",
+    description:
+      "Records-only migration of identity experience between two existing ChittyConnect contexts. Strictly downstream — does NOT mint identities, does NOT recalc trust, does NOT write events. Refuses without a ChittyID-issued supersession manifest. The composing saga (experience_reassign) lives at the Ch1tty gateway.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        manifest: {
+          type: "object",
+          description:
+            "Supersession manifest issued by ChittyID via /api/v2/chittyid/mint with supersedes metadata. Contains from_chitty_id, to_chitty_id, mint_audit_id, signature, issued_at, reason.",
+          properties: {
+            from_chitty_id: { type: "string" },
+            to_chitty_id: { type: "string" },
+            mint_audit_id: { type: "string" },
+            signature: { type: "string" },
+            issued_at: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: [
+            "from_chitty_id",
+            "to_chitty_id",
+            "mint_audit_id",
+            "signature",
+            "issued_at",
+            "reason",
+          ],
+        },
+        metrics_transferred: {
+          type: "object",
+          description:
+            "Optional metrics summary describing what's being transferred (sessions, interactions, decisions, expertise domains).",
+        },
+      },
+      required: ["manifest"],
     },
   },
   {
@@ -1467,7 +1504,7 @@ const READ_ONLY_TOOLS = new Set([
   "chitty_ledger_query",
   "chitty_ledger_verify",
   "chitty_ledger_statistics",
-  "chitty_ledger_chain_of_custody",
+  "chitty_ledger_custody",
   "chitty_finance_entities",
   "chitty_finance_balances",
   "chitty_finance_transactions",

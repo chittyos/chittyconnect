@@ -194,10 +194,25 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 |--------|-----|---------|-----------|
 | `secret:gdrive:access_token` | ~58 min | OAuth2 access token | 50-min cron |
 | `secret:gdrive:refresh_token` | None | OAuth2 refresh token (seeded by provisioning bot) | Manual |
+| `secret:gdrive:service_account` | None | Service account JSON: `{ client_email, private_key, impersonate, scopes }` (seeded by provisioning bot) | Manual |
 | `secret:gdrive:meta` | None | Rotation metadata (lastRotatedAt, lastResult) | Automatic |
 | `secret:neon:connection_uri` | 8 days | Rotated connection string | Weekly cron |
 | `secret:neon:password_rotated_at` | None | Timestamp of last rotation | Weekly cron |
 | `secret:neon:meta` | None | Rotation metadata | Automatic |
+
+**Service Account Structure** for `secret:gdrive:service_account`:
+```json
+{
+  "client_email": "service-account@project.iam.gserviceaccount.com",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "impersonate": "user@example.com",
+  "scopes": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly"
+}
+```
+- `client_email`: Service account email address (issuer)
+- `private_key`: RSA private key for JWT signing
+- `impersonate`: User email to impersonate via domain-wide delegation (required)
+- `scopes`: Space-delimited string or array of OAuth2 scopes (required)
 
 ---
 

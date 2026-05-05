@@ -7,7 +7,7 @@
  * @module mcp/tool-dispatcher
  */
 
-import { getCredential, getServiceToken } from "../lib/credential-helper.js";
+import { getCredential, getServiceToken, getMintAuthToken } from "../lib/credential-helper.js";
 import { serviceFetch } from "../lib/service-switch.js";
 import {
   getCloudflareApiCredentials,
@@ -213,10 +213,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Identity tools ──────────────────────────────────────────────
     if (name === "chitty_id_mint") {
-      const serviceToken =
-        env.CHITTYMINT_SECRET ||
-        (await getServiceToken(env, "chittymint")) ||
-        (await getServiceToken(env, "chittyid"));
+      const { token: serviceToken, source: mintTokenSource } =
+        await getMintAuthToken(env);
       if (!serviceToken) {
         return {
           content: [
@@ -227,6 +225,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           ],
           isError: true,
         };
+      }
+      if (mintTokenSource === "legacy-webhook-secret") {
+        console.warn(
+          "[policy] chitty_id_mint using deprecated CHITTYMINT_SECRET; migrate to CHITTYAUTH_ISSUED_MINT_API_KEY (aliases: CHITTYAUTH_ISSUED_MINT_TOKEN, MINT_API_KEY)",
+        );
       }
       const response = await serviceFetch(env, "mint", "/api/mint", {
         method: "POST",
@@ -787,7 +790,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       );
       if (respErr) return respErr;
       result = data;
-    } else if (name === "chitty_ledger_chain_of_custody") {
+    } else if (name === "chitty_ledger_custody") {
       if (!args.entity_id) {
         return {
           content: [
@@ -970,7 +973,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
-    } else if (name === "chitty_finance_detect_transfers") {
+    } else if (name === "chitty_finance_xfer_detect") {
       const response = await serviceFetch(
         env,
         "finance",
@@ -1117,6 +1120,21 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         },
       );
       const fetchErr = await checkFetchError(response, "ContextCheckpoint");
+      if (fetchErr) return fetchErr;
+      result = await response.json();
+    } else if (name === "experience_migrate") {
+      const response = await fetch(
+        `${baseUrl}/api/v1/intelligence/context/experience/migrate`,
+        {
+          method: "POST",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manifest: args.manifest,
+            metrics_transferred: args.metrics_transferred,
+          }),
+        },
+      );
+      const fetchErr = await checkFetchError(response, "ExperienceMigrate");
       if (fetchErr) return fetchErr;
       result = await response.json();
     }

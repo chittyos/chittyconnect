@@ -30,16 +30,19 @@ import { Client } from "@neondatabase/serverless";
 vi.mock("../../src/lib/credential-helper.js", () => ({
   getCredential: vi.fn(),
   getServiceToken: vi.fn(),
+  getMintAuthToken: vi.fn(),
 }));
 
 import {
   getCredential,
   getServiceToken,
+  getMintAuthToken,
 } from "../../src/lib/credential-helper.js";
 
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+const mockStorageFetch = vi.fn();
 
 // Mock service-switch: serviceFetch delegates to global fetch so existing
 // mockFetch expectations continue to work. Reconstructs realistic URLs
@@ -53,7 +56,7 @@ const SERVICE_URL_MAP = {
   cases: "https://cases.chitty.cc",
   chronicle: "https://chronicle.chitty.cc",
   contextual: "https://contextual.chitty.cc",
-  disputes: "https://disputes.chitty.cc",
+  dispute: "https://dispute.chitty.cc",
   score: "https://score.chitty.cc",
   tasks: "https://tasks.chitty.cc",
 };
@@ -101,13 +104,18 @@ vi.mock("../../src/lib/service-switch.js", () => ({
 const mockEnv = {
   CHITTYOS_ACCOUNT_ID: "test-account-id",
   AI_SEARCH_TOKEN: "test-ai-token",
+  SVC_STORAGE: {
+    fetch: mockStorageFetch,
+  },
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getMintAuthToken.mockResolvedValue({ token: null, source: "none" });
   neonMocks.connect.mockReset();
   neonMocks.query.mockReset();
   neonMocks.end.mockReset();
+  mockStorageFetch.mockReset();
 });
 
 describe("dispatchToolCall", () => {
@@ -115,7 +123,7 @@ describe("dispatchToolCall", () => {
 
   describe("chitty_id_mint", () => {
     it("returns error when no service token available", async () => {
-      getServiceToken.mockResolvedValue(null);
+      getMintAuthToken.mockResolvedValue({ token: null, source: "none" });
 
       const result = await dispatchToolCall(
         "chitty_id_mint",
@@ -128,6 +136,10 @@ describe("dispatchToolCall", () => {
     });
 
     it("calls ChittyMint service and returns result", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "svc-token-123",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: true,
@@ -158,6 +170,10 @@ describe("dispatchToolCall", () => {
     });
 
     it("returns error on upstream failure", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "svc-token-123",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("svc-token-123");
       mockFetch.mockResolvedValue({
         ok: false,
@@ -669,61 +685,67 @@ describe("dispatchToolCall", () => {
     });
   });
 
-  // ── Evidence AI Search tools ───────────────────────────────────
+  // ── Evidence tools (delegated to ChittyStorage) ─────────────────
 
   describe("chitty_evidence_search", () => {
-    it("returns error when AI_SEARCH_TOKEN not set", async () => {
+    it("returns error when SVC_STORAGE binding is not set", async () => {
       const result = await dispatchToolCall(
         "chitty_evidence_search",
         { query: "closing disclosure" },
-        { CHITTYOS_ACCOUNT_ID: "test" }, // no AI_SEARCH_TOKEN
+        { CHITTYOS_ACCOUNT_ID: "test" },
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("AI Search not configured");
+      expect(result.content[0].text).toContain("SVC_STORAGE binding missing");
     });
 
-    it("formats search results with scores and filenames", async () => {
-      mockFetch.mockResolvedValue({
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            success: true,
-            result: {
-              chunks: [
-                {
-                  item: { key: "closing-disclosure.pdf" },
-                  score: 0.92,
-                  text: "Purchase price was $450,000",
-                },
-                {
-                  item: { key: "settlement-stmt.pdf" },
-                  score: 0.78,
-                  text: "Wire transfer of $112,500",
-                },
-              ],
+    it("formats storage document results with tags and hashes", async () => {
+      mockStorageFetch.mockResolvedValue({
+        json: async () => ({
+          docs: [
+            {
+              filename: "closing-disclosure.pdf",
+              content_hash: "abc123",
+              processing_tier: 2,
+              created_at: "2026-03-30T14:00:00.000Z",
+              tags: {
+                primary_entity: "arias-v-bianchi",
+                doc_type: "closing_disclosure",
+              },
             },
-          }),
+            {
+              filename: "settlement-stmt.pdf",
+              content_hash: "def456",
+              processing_tier: 1,
+              created_at: "2026-03-29T10:30:00.000Z",
+              tags: {},
+            },
+          ],
+        }),
       });
 
       const result = await dispatchToolCall(
         "chitty_evidence_search",
-        { query: "purchase price" },
+        { query: "closing", entity_slug: "arias-v-bianchi", max_num_results: 5 },
         mockEnv,
       );
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain(
-        "[0.920] closing-disclosure.pdf",
+        "[arias-v-bianchi/closing_disclosure] closing-disclosure.pdf",
       );
-      expect(result.content[0].text).toContain("Purchase price was $450,000");
+      expect(result.content[0].text).toContain("hash: abc123");
+      expect(result.content[0].text).toContain(
+        "[unlinked/unclassified] settlement-stmt.pdf",
+      );
+      expect(mockStorageFetch).toHaveBeenCalledWith(
+        "https://internal/api/docs?q=closing&limit=5&entity=arias-v-bianchi",
+      );
     });
 
     it("returns no matching documents message when empty", async () => {
-      mockFetch.mockResolvedValue({
-        status: 200,
-        text: async () =>
-          JSON.stringify({ success: true, result: { chunks: [] } }),
+      mockStorageFetch.mockResolvedValue({
+        json: async () => ({ docs: [] }),
       });
 
       const result = await dispatchToolCall(
@@ -735,15 +757,8 @@ describe("dispatchToolCall", () => {
       expect(result.content[0].text).toBe("No matching documents found.");
     });
 
-    it("returns error on API failure", async () => {
-      mockFetch.mockResolvedValue({
-        status: 403,
-        text: async () =>
-          JSON.stringify({
-            success: false,
-            errors: [{ message: "forbidden" }],
-          }),
-      });
+    it("returns error on storage binding failure", async () => {
+      mockStorageFetch.mockRejectedValue(new Error("storage unavailable"));
 
       const result = await dispatchToolCall(
         "chitty_evidence_search",
@@ -752,26 +767,56 @@ describe("dispatchToolCall", () => {
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("AI Search error (403)");
+      expect(result.content[0].text).toContain(
+        "Error executing chitty_evidence_search: storage unavailable",
+      );
     });
   });
 
   describe("chitty_evidence_retrieve", () => {
-    it("passes max_num_results to API", async () => {
-      mockFetch.mockResolvedValue({
-        status: 200,
-        text: async () =>
-          JSON.stringify({ success: true, result: { chunks: [] } }),
+    it("fetches a single document by content hash", async () => {
+      mockStorageFetch.mockResolvedValue({
+        json: async () => ({
+          docs: [
+            {
+              chitty_id: "doc-123",
+              content_hash: "a".repeat(64),
+              filename: "wire-transfer.pdf",
+              processing_tier: 3,
+              tags: { primary_entity: "arias-v-bianchi" },
+              entities: [{ slug: "arias-v-bianchi" }],
+            },
+          ],
+        }),
       });
 
-      await dispatchToolCall(
+      const raw = await dispatchToolCall(
         "chitty_evidence_retrieve",
-        { query: "wire transfer", max_num_results: 5 },
+        { content_hash: "a".repeat(64) },
+        mockEnv,
+      );
+      const result = JSON.parse(raw.content[0].text);
+
+      expect(result.content_hash).toBe("a".repeat(64));
+      expect(result.file_url).toBe(
+        `https://storage.chitty.cc/api/files/${"a".repeat(64)}`,
+      );
+      expect(mockStorageFetch).toHaveBeenCalledWith(
+        `https://internal/api/docs?q=${"a".repeat(64)}&limit=1`,
+      );
+    });
+
+    it("returns an error when no lookup key is provided", async () => {
+      const result = await dispatchToolCall(
+        "chitty_evidence_retrieve",
+        {},
         mockEnv,
       );
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.max_num_results).toBe(5);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        "Provide content_hash, evidence_id, or query to retrieve.",
+      );
     });
   });
 
@@ -884,6 +929,10 @@ describe("dispatchToolCall", () => {
 
   describe("error handling", () => {
     it("catches fetch exceptions and returns MCP error", async () => {
+      getMintAuthToken.mockResolvedValue({
+        token: "token",
+        source: "auth-issued",
+      });
       getServiceToken.mockResolvedValue("token");
       mockFetch.mockRejectedValue(new Error("Network timeout"));
 
@@ -1071,7 +1120,7 @@ describe("dispatchToolCall", () => {
     });
   });
 
-  describe("chitty_finance_detect_transfers", () => {
+  describe("chitty_finance_xfer_detect", () => {
     it("whitelists args — does not forward arbitrary fields", async () => {
       getServiceToken.mockResolvedValue("finance-svc-token");
       mockFetch.mockResolvedValue({
@@ -1080,7 +1129,7 @@ describe("dispatchToolCall", () => {
       });
 
       await dispatchToolCall(
-        "chitty_finance_detect_transfers",
+        "chitty_finance_xfer_detect",
         {
           entity: "arias-llc",
           start: "2025-01-01",
