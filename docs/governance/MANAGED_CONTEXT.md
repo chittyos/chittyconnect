@@ -1,6 +1,6 @@
 # Managed Context — Ecosystem Credential, Identity, and Entity-Context Standard (RFC)
 
-**Status:** DRAFT v0.3 — RFC for the ecosystem-wide credential, identity, and entity-context architecture, doctrine-validated against `chittycanon://gov/governance`.
+**Status:** PROPOSED v0.3 — RFC for the ecosystem-wide credential, identity, and entity-context architecture, doctrine-validated against `chittycanon://gov/governance`.
 **Term-lifecycle stage** (per `chittycanon://docs/tech/spec/ontology-lifecycle`): **PROPOSED**.
 **Canonical URI (target on promotion):** `chittycanon://docs/gov/spec/managed-context`
 **Promote-to-canon:** This RFC is drafted in `chittyconnect` for momentum; once accepted by the named reviewers, lift to `chittycanon` and follow the term-lifecycle gates (PROPOSED → SIMULATED → PROVISIONAL → PROVEN → CANONICAL). The chittyconnect-local doc remains as the implementation guide for this service after promotion.
