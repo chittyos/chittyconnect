@@ -2365,6 +2365,29 @@ ${errorInfo.stack}`);
       );
     }
 
+    // Hard guard: some downstream handlers/middleware may accidentally return
+    // undefined/non-Response, which causes Cloudflare to emit 1101
+    // ("Incorrect type for Promise: did not resolve to Response").
+    if (!(response instanceof Response)) {
+      console.error(
+        `[Fetch-Fatal] ${request.method} ${url.pathname} returned non-Response`,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "invalid_handler_response",
+          error_description:
+            "Request handler did not return a valid Response object",
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders(request),
+          },
+        },
+      );
+    }
+
     // Debug: log response status for OAuth endpoints
     if (
       url.pathname === "/token" ||
