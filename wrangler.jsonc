@@ -215,7 +215,9 @@
         "EVIDENCE_LEGACY_MODE": "false",
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
-        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
+        "SECRETS_PORTAL_ACCESS_ONLY": "true",
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
       },
       "triggers": {
         "crons": [
@@ -340,7 +342,9 @@
         "EVIDENCE_LEGACY_MODE": "false",
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
-        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX"
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
+        "SECRETS_PORTAL_ACCESS_ONLY": "true",
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
       },
       "triggers": {
         "crons": [

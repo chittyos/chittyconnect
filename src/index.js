@@ -1568,7 +1568,8 @@ app.get("/secrets-portal", (c) => {
     input, textarea { width: 100%; box-sizing: border-box; border:1px solid var(--border); border-radius: 8px; background:#0a1324; color: var(--text); padding: 10px; font-size: 14px; }
     textarea { min-height: 96px; resize: vertical; }
     button { margin-top: 14px; border:0; border-radius: 8px; background:#2a66f5; color:white; padding:10px 14px; font-size:14px; cursor:pointer; }
-    pre { margin-top: 14px; background:#0a1324; border:1px solid var(--border); border-radius:8px; padding: 10px; white-space: pre-wrap; word-break: break-word; }
+    pre { margin-top: 14px; background:#0a1324; border:1px solid var(--border); border-radius:8px; padding: 14px; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.5; color: #e5edf7; max-height: 400px; overflow-y: auto; }
+    textarea.secret { -webkit-text-security: disc; text-security: disc; font-family: monospace; }
     .ok { color: var(--ok); }
     .err { color: var(--err); }
   </style>
@@ -1578,58 +1579,19 @@ app.get("/secrets-portal", (c) => {
     <div class="panel">
       <h1>ChittyConnect Secret Portal</h1>
       <p>Securely pass a secret plus free-form instructions to ChittyConnect for orchestration.</p>
-      <form id="f">
-        <label>API Key (never persisted in browser storage)</label>
-        <input id="apiKey" type="password" autocomplete="off" required />
-        <label>Secret Path (example: integrations/openai/credential)</label>
-        <input id="path" placeholder="vault/item/field" required />
-        <label>Secret Value</label>
-        <textarea id="value" required></textarea>
+      <form action="/secrets-portal/upsert" method="POST">
+        <label>Secret Path (optional — ChittyConnect picks the vault path from your instructions)</label>
+        <input name="path" placeholder="leave blank to let ChittyConnect decide" />
+        <label>Secret Value (the secret you are sharing — obscured)</label>
+        <textarea name="value" class="secret" required autocomplete="off" spellcheck="false"></textarea>
         <label>Instructions (required)</label>
-        <textarea id="instructions" placeholder="Example: add/update this secret and distribute to prod+staging via configured providers" required></textarea>
+        <textarea name="instructions" placeholder="Example: add/update this secret and distribute to prod+staging via configured providers" required></textarea>
         <label>Context JSON (optional)</label>
-        <textarea id="contextJson" placeholder='{"environment":"production","ticket":"SEC-221"}'></textarea>
+        <textarea name="contextJson" placeholder='{"environment":"production","ticket":"SEC-221"}'></textarea>
         <button type="submit">Submit</button>
       </form>
-      <pre id="out">Ready.</pre>
     </div>
   </div>
-  <script>
-    const form = document.getElementById("f");
-    const out = document.getElementById("out");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      out.textContent = "Submitting...";
-      out.className = "";
-      try {
-        const payload = {
-          path: document.getElementById("path").value.trim(),
-          value: document.getElementById("value").value,
-          instructions: document.getElementById("instructions").value.trim(),
-          context: (() => {
-            const raw = document.getElementById("contextJson").value.trim();
-            if (!raw) return {};
-            return JSON.parse(raw);
-          })(),
-        };
-        const apiKey = document.getElementById("apiKey").value.trim();
-        const resp = await fetch("/api/v1/secrets/upsert", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-ChittyOS-API-Key": apiKey,
-          },
-          body: JSON.stringify(payload),
-        });
-        const data = await resp.json();
-        out.textContent = JSON.stringify(data, null, 2);
-        out.className = resp.ok ? "ok" : "err";
-      } catch (err) {
-        out.textContent = String(err && err.message ? err.message : err);
-        out.className = "err";
-      }
-    });
-  </script>
 </body>
 </html>`;
 
@@ -1637,9 +1599,42 @@ app.get("/secrets-portal", (c) => {
   return c.html(html);
 });
 
-app.post("/api/v1/secrets/upsert", async (c) => {
+app.use("/secrets-portal/upsert", async (c, next) => {
+  if (!isCloudflareAccessAllowed(c)) {
+    return c.json({ ok: false, error: "Cloudflare Access required for secrets portal" }, 401);
+  }
+  c.set("apiKey", {
+    type: "cloudflare-access",
+    name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+    service: "secrets-portal",
+    status: "active",
+  });
+  await next();
+});
+
+app.post("/secrets-portal/upsert", async (c) => secretsUpsertHandler(c));
+app.post("/api/v1/secrets/upsert", async (c) => secretsUpsertHandler(c));
+
+async function secretsUpsertHandler(c) {
   try {
-    const body = await c.req.json();
+    const ct = (c.req.header("content-type") || "").toLowerCase();
+    let body;
+    if (ct.includes("application/json")) {
+      body = await c.req.json();
+    } else {
+      const form = await c.req.parseBody();
+      let context = {};
+      const raw = String(form.contextJson || "").trim();
+      if (raw) {
+        try { context = JSON.parse(raw); } catch { context = { _raw: raw }; }
+      }
+      body = {
+        path: form.path,
+        value: form.value,
+        instructions: form.instructions,
+        context,
+      };
+    }
     const path = String(body.path || "").trim();
     const value = typeof body.value === "string" ? body.value : "";
     const instructions =
@@ -1648,13 +1643,14 @@ app.post("/api/v1/secrets/upsert", async (c) => {
       body.context && typeof body.context === "object" && !Array.isArray(body.context)
         ? body.context
         : {};
+    const wantsHtml = (c.req.header("accept") || "").includes("text/html") && !ct.includes("application/json");
 
-    if (!path || !/^[a-z0-9._-]+(\/[a-z0-9._-]+){2,}$/i.test(path)) {
+    if (path && !/^[a-z0-9._-]+(\/[a-z0-9._-]+){2,}$/i.test(path)) {
       return c.json(
         {
           ok: false,
           error:
-            "Invalid path. Use vault/item/field (letters, numbers, ., _, -).",
+            "Invalid path. Leave blank or use vault/item/field (letters, numbers, ., _, -).",
         },
         400,
       );
@@ -1675,10 +1671,31 @@ app.post("/api/v1/secrets/upsert", async (c) => {
     const now = new Date().toISOString();
     const by = c.get("apiKey")?.service || c.get("apiKey")?.name || "unknown";
     const requestId = crypto.randomUUID();
+
+    // Encrypt the value with AES-GCM using a worker-bound key. KV never
+    // sees plaintext. ChittyConnect's internal consumer decrypts on read,
+    // applies the secret to its target store, and deletes the KV record.
+    const aesKeyB64 = c.env.SECRETS_PORTAL_AES_KEY;
+    if (!aesKeyB64) {
+      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY is not configured." }, 503);
+    }
+    const aesKeyRaw = Uint8Array.from(atob(aesKeyB64), (ch) => ch.charCodeAt(0));
+    if (aesKeyRaw.byteLength !== 32) {
+      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY must be 32 bytes (base64-encoded)." }, 503);
+    }
+    const cryptoKey = await crypto.subtle.importKey("raw", aesKeyRaw, "AES-GCM", false, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipherBytes = new Uint8Array(
+      await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, new TextEncoder().encode(value)),
+    );
+    const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
+
     const envelope = {
       requestId,
       path,
-      value,
+      ciphertext: toB64(cipherBytes),
+      iv: toB64(iv),
+      alg: "AES-GCM-256",
       instructions,
       context,
       updatedAt: now,
@@ -1686,65 +1703,55 @@ app.post("/api/v1/secrets/upsert", async (c) => {
       source: "chittyconnect-secrets-portal",
     };
 
-    await c.env.CREDENTIAL_CACHE.put(`secret:intake:${requestId}`, JSON.stringify(envelope));
+    // 24h TTL — abandoned envelopes self-purge so plaintext never lingers.
+    await c.env.CREDENTIAL_CACHE.put(
+      `secret:intake:${requestId}`,
+      JSON.stringify(envelope),
+      { expirationTtl: 60 * 60 * 24 },
+    );
 
-    let distributionQueued = false;
-    let agentDispatch = { attempted: false, delivered: false, target: null };
-
-    const secretAgentUrl = c.env.SECRET_INSTRUCTION_AGENT_URL;
-    if (secretAgentUrl) {
-      agentDispatch = { attempted: true, delivered: false, target: secretAgentUrl };
-      const agentResp = await fetch(secretAgentUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(c.env.INTERNAL_WEBHOOK_SECRET
-            ? { "X-Webhook-Secret": c.env.INTERNAL_WEBHOOK_SECRET }
-            : {}),
-        },
-        body: JSON.stringify(envelope),
-      });
-      if (!agentResp.ok) {
-        const body = await agentResp.text();
-        return c.json(
-          {
-            ok: false,
-            requestId,
-            error: "Agent rejected secret instruction",
-            details: `${agentResp.status} ${agentResp.statusText}${body ? `: ${body}` : ""}`,
-          },
-          502,
-        );
-      }
-      agentDispatch.delivered = true;
-    }
-
-    if (c.env.SECRET_DISTRIBUTION_Q?.send) {
-      await c.env.SECRET_DISTRIBUTION_Q.send(envelope);
-      distributionQueued = true;
-    }
-
-    return c.json({
+    const result = {
       ok: true,
       requestId,
-      path,
-      stored: ["secret:intake:*"],
-      distributionQueued,
-      agentDispatch,
-      note: "Instruction envelope accepted and ready for downstream orchestration.",
+      path: path || "(picked by ChittyConnect)",
+      encrypted: true,
+      ttl: "24h",
+      note: "Encrypted envelope queued for ChittyConnect's internal consumer.",
       timestamp: now,
-    });
+    };
+    if (wantsHtml) {
+      c.header("Cache-Control", "no-store");
+      return c.html(renderResultPage(result, true));
+    }
+    return c.json(result);
   } catch (error) {
     console.error("[SecretsPortal] upsert failed:", error);
-    return c.json(
-      {
-        ok: false,
-        error: error?.message || "Secret upsert failed",
-      },
-      500,
-    );
+    const errResult = { ok: false, error: error?.message || "Secret upsert failed" };
+    if ((c.req.header("accept") || "").includes("text/html") && !(c.req.header("content-type") || "").includes("application/json")) {
+      c.header("Cache-Control", "no-store");
+      return c.html(renderResultPage(errResult, false), 500);
+    }
+    return c.json(errResult, 500);
   }
-});
+}
+
+function renderResultPage(result, ok) {
+  const status = ok ? "Accepted" : "Failed";
+  const color = ok ? "#13a66a" : "#d64545";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Secret ${status}</title>
+<style>body{margin:0;font-family:ui-sans-serif,system-ui;background:linear-gradient(160deg,#0b1220,#0f1a31);color:#e5edf7;}
+.wrap{max-width:760px;margin:40px auto;padding:0 16px;}
+.panel{background:#111a2b;border:1px solid #23324d;border-radius:12px;padding:20px;}
+h1{margin:0 0 12px;color:${color};}
+pre{background:#0a1324;border:1px solid #23324d;border-radius:8px;padding:14px;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5;}
+a{display:inline-block;margin-top:14px;color:#2a66f5;}
+</style></head><body><div class="wrap"><div class="panel">
+<h1>${status}</h1>
+${ok ? `<p>Request <code>${result.requestId}</code> accepted at ${result.timestamp}.</p>
+<p>Path: <code>${result.path}</code><br>Encrypted at rest (AES-GCM-256), TTL ${result.ttl}.<br>Awaiting ChittyConnect internal consumer.</p>` : `<p>${(result.error || "").replace(/[<>&"']/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[m]))}</p>`}
+<a href="/secrets-portal">← Submit another</a>
+</div></div></body></html>`;
+}
 
 /**
  * Mount API router for custom GPT integration
