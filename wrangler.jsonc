@@ -217,7 +217,8 @@
         "NEON_DATABASE": "neondb",
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
-        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
+        "SECRETS_PORTAL_CF_STORE_ID": "e914522471964c3c8cf1e601770edcc3"
       },
       "triggers": {
         "crons": [
@@ -344,7 +345,8 @@
         "NEON_DATABASE": "neondb",
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
-        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
+        "SECRETS_PORTAL_CF_STORE_ID": "e914522471964c3c8cf1e601770edcc3"
       },
       "triggers": {
         "crons": [

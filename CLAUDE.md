@@ -195,6 +195,17 @@ wrangler secret put AI_SEARCH_TOKEN          # Token for Cloudflare AI vector se
 wrangler secret list  # Verify all secrets
 ```
 
+### Secrets Portal — Server-Side Propagation
+
+Activated when all three are present as Worker secrets:
+- `OP_CONNECT_WRITE_TOKEN` — 1P Connect JWT (write-scoped; distinct from read-only `ONEPASSWORD_CONNECT_TOKEN`)
+- `SECRETS_PORTAL_CF_API_TOKEN` — CF API token with `Workers Secrets Store: Edit` on account `0bc21e3a5a9de1a4cc843be9c3e98121`
+- `OP_VAULT_ID_DEFAULT` — 1P vault ID for portal intake items
+
+Propagation step order: 1P write → CF Secrets Store write → Chronicle log → KV delete.
+KV envelope is retained (24h TTL self-purge) on any failure so the internal consumer can retry.
+See `docs/runbooks/secrets-portal-write-scope-provisioning.md`.
+
 ## API Endpoints
 
 ### Custom GPT Actions

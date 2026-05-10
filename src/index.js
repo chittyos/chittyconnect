@@ -1710,13 +1710,54 @@ async function secretsUpsertHandler(c) {
       { expirationTtl: 60 * 60 * 24 },
     );
 
+    // ── Server-side propagation (gated on config presence) ──────────────
+    // propagateSecret() decrypts the value once here, fans out to 1P + CF,
+    // logs to Chronicle, then deletes the KV record if all required steps
+    // succeeded. If propagation is not configured, the encrypted-KV-only
+    // path continues unchanged (result.note reflects current state).
+    let propagation = null;
+    try {
+      const { propagateSecret } = await import("./secrets/portal-propagator.js");
+      // Re-derive the plaintext for propagation — already validated above.
+      const decryptKey = await crypto.subtle.importKey("raw", aesKeyRaw, "AES-GCM", false, ["decrypt"]);
+      const plainBytes = new Uint8Array(
+        await crypto.subtle.decrypt({ name: "AES-GCM", iv }, decryptKey, cipherBytes),
+      );
+      const plaintext = new TextDecoder().decode(plainBytes);
+      propagation = await propagateSecret(c.env, envelope, plaintext);
+      // plaintext goes out of scope here; never assigned to envelope or result
+    } catch (propagationError) {
+      console.error("[SecretsPortal] propagation threw:", propagationError?.message);
+      propagation = { ok: false, error: "EXECUTION_FAILED_PROVIDER_ERROR" };
+    }
+
+    const propagated = propagation && !propagation.skipped && propagation.ok;
     const result = {
       ok: true,
       requestId,
       path: path || "(picked by ChittyConnect)",
       encrypted: true,
-      ttl: "24h",
-      note: "Encrypted envelope queued for ChittyConnect's internal consumer.",
+      ttl: propagated ? "deleted-after-propagation" : "24h",
+      note: propagation?.skipped
+        ? "Encrypted envelope queued for ChittyConnect's internal consumer."
+        : propagated
+          ? "Secret propagated to 1Password and Cloudflare Secrets Store."
+          : "Propagation partially failed; encrypted envelope retained for retry.",
+      propagation: propagation
+        ? {
+            ok: !!propagation.ok,
+            skipped: !!propagation.skipped,
+            error: propagation.error,
+            steps: propagation.steps
+              ? Object.fromEntries(
+                  Object.entries(propagation.steps).map(([k, v]) => [
+                    k,
+                    { ok: !!v.ok, skipped: v.skipped ?? false, error: v.error },
+                  ]),
+                )
+              : undefined,
+          }
+        : undefined,
       timestamp: now,
     };
     if (wantsHtml) {
