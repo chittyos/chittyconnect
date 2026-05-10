@@ -321,12 +321,18 @@ promptRoutes.post("/execute", async (c) => {
     const dispatchTarget = resolveDispatchTarget(prompt.domain, c.env);
 
     if (dispatchTarget.type === "chittyrouter") {
-      // Dispatch to ChittyRouter agent
+      // Dispatch to ChittyRouter agent (authenticated)
+      const { getServiceToken } = await import("../../lib/credential-helper.js");
+      const routerToken = await getServiceToken(c.env, "chittyrouter");
+      if (!routerToken) {
+        throw new Error("ChittyRouter dispatch unavailable: no service token");
+      }
       const agentUrl = `${dispatchTarget.url}${dispatchTarget.path}`;
       const res = await fetch(agentUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${routerToken}`,
           "X-Source-Service": "chittyconnect",
         },
         body: JSON.stringify({
