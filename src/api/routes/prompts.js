@@ -321,12 +321,18 @@ promptRoutes.post("/execute", async (c) => {
     const dispatchTarget = resolveDispatchTarget(prompt.domain, c.env);
 
     if (dispatchTarget.type === "chittyrouter") {
-      // Dispatch to ChittyRouter agent
+      // Dispatch to ChittyRouter agent (authenticated)
+      const { getServiceToken } = await import("../../lib/credential-helper.js");
+      const routerToken = await getServiceToken(c.env, "chittyrouter");
+      if (!routerToken) {
+        throw new Error("ChittyRouter dispatch unavailable: no service token");
+      }
       const agentUrl = `${dispatchTarget.url}${dispatchTarget.path}`;
       const res = await fetch(agentUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${routerToken}`,
           "X-Source-Service": "chittyconnect",
         },
         body: JSON.stringify({
@@ -578,6 +584,7 @@ function resolveDispatchTarget(domain, env) {
     scrape: { agent: "scrape-agent", path: "/agents/scrape/process" },
     triage: { agent: "triage-agent", path: "/agents/triage/classify" },
     intelligence: { agent: "intelligence-agent", path: "/agents/intelligence/analyze" },
+    agents: { agent: "agent-executor", path: "/agents/executor/run" },
   };
 
   const target = domainAgentMap[domain];
