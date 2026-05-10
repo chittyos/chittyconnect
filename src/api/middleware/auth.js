@@ -2,6 +2,30 @@
  * Authentication middleware for ChittyConnect API
  */
 
+function isContextSyncPath(c) {
+  try {
+    const url = new URL(c.req.raw?.url || "http://localhost");
+    return url.pathname === "/api/v1/context/sync";
+  } catch {
+    return false;
+  }
+}
+
+function cfAccessHeadersMatch(c) {
+  const incomingId = c.req.header("CF-Access-Client-Id") || "";
+  const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
+  const envId = c.env.CHITTY_CF_ACCESS_CLIENT_ID || "";
+  const envSecret = c.env.CHITTY_CF_ACCESS_CLIENT_SECRET || "";
+  return (
+    !!incomingId &&
+    !!incomingSecret &&
+    !!envId &&
+    !!envSecret &&
+    incomingId === envId &&
+    incomingSecret === envSecret
+  );
+}
+
 export async function authenticate(c, next) {
   const authorizationHeader = c.req.header("Authorization") || "";
   const bearerMatch = authorizationHeader.match(/^Bearer\s+(.+)$/i);
@@ -10,6 +34,16 @@ export async function authenticate(c, next) {
   const apiKey = c.req.header("X-ChittyOS-API-Key") || bearerToken;
 
   if (!apiKey) {
+    if (isContextSyncPath(c) && cfAccessHeadersMatch(c)) {
+      c.set("apiKey", {
+        type: "cloudflare-access",
+        name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+        service: "chittycontext-sync",
+        status: "active",
+      });
+      await next();
+      return;
+    }
     return c.json({ error: "Missing API key" }, 401);
   }
 
