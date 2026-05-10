@@ -49,8 +49,17 @@ const CONTRACT_ERRORS = {
  * @returns {Promise<PropagateResult>}
  */
 export async function propagateSecret(env, envelope, decryptedValue) {
-  const configured1P = !!(env.OP_CONNECT_WRITE_TOKEN && env.ONEPASSWORD_CONNECT_URL && env.OP_VAULT_ID_DEFAULT);
-  const configuredCF = !!(env.SECRETS_PORTAL_CF_API_TOKEN && env.CHITTYOS_ACCOUNT_ID);
+  // Resolve tokens — prefer propagator-specific names, fall back to existing
+  // worker bindings so we activate without extra provisioning. If a resolved
+  // token turns out to be read-only at runtime, the underlying writers return
+  // INSUFFICIENT_SCOPE and the encrypted-KV-only path holds.
+  const _opToken = env.OP_CONNECT_WRITE_TOKEN || env.ONEPASSWORD_CONNECT_TOKEN;
+  const _opVault = env.OP_VAULT_ID_DEFAULT || env.ONEPASSWORD_VAULT_INFRASTRUCTURE;
+  const _cfToken = env.SECRETS_PORTAL_CF_API_TOKEN || env.CLOUDFLARE_MAKE_API_KEY;
+  // Build a thin shim env so the helpers don't need to know about fallbacks.
+  env = { ...env, OP_CONNECT_WRITE_TOKEN: _opToken, OP_VAULT_ID_DEFAULT: _opVault, SECRETS_PORTAL_CF_API_TOKEN: _cfToken };
+  const configured1P = !!(_opToken && env.ONEPASSWORD_CONNECT_URL && _opVault);
+  const configuredCF = !!(_cfToken && env.CHITTYOS_ACCOUNT_ID);
 
   // Both configs absent → skip (encrypted-KV-only path continues)
   if (!configured1P && !configuredCF) {
