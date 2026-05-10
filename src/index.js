@@ -2325,7 +2325,7 @@ export default {
       // should fall through to the next handler. Throwing means the agent path
       // matched but the DO/fetch failed — return a 500 instead of masking the
       // failure as an unrelated 404 from oauthProvider.
-      agentRouted = agentResponse !== undefined;
+      agentRouted = agentResponse instanceof Response;
     } catch (err) {
       const errorInfo = formatCaughtError(err);
       console.error(
