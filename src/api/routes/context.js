@@ -6,6 +6,81 @@ import { Hono } from "hono";
 
 export const contextRoutes = new Hono();
 
+// Ingest a buffered session payload from local daemons (e.g., ch1tty sweep).
+// Body: { type: "SESSION_INGEST", session_id, chitty_id, project, event_count, events, ts, ... }
+contextRoutes.post("/sync", async (c) => {
+  try {
+    const body = await c.req.json();
+    const now = Math.floor(Date.now() / 1000);
+    const type = body?.type || "";
+    const sessionId = body?.session_id || body?.sessionId || null;
+    const chittyId = body?.chitty_id || body?.chittyId || null;
+    const project = body?.project || "unknown";
+    const eventCount = Number(body?.event_count || body?.eventCount || 0);
+
+    if (type !== "SESSION_INGEST" || !sessionId) {
+      return c.json(
+        {
+          ok: false,
+          error: "invalid_request",
+          code: "INVALID_SESSION_INGEST_PAYLOAD",
+        },
+        400,
+      );
+    }
+
+    let eventId = null;
+    if (c.env.DB) {
+      try {
+        eventId = crypto.randomUUID();
+        await c.env.DB.prepare(
+          `
+          INSERT INTO sync_events
+          (event_id, session_id, event_type, source, items_count, bytes_synced, status, synced_at)
+          VALUES (?, ?, 'session_ingest', ?, ?, ?, 'success', ?)
+        `,
+        )
+          .bind(
+            eventId,
+            sessionId,
+            "ch1tty-buffer-sync",
+            eventCount,
+            0,
+            now,
+          )
+          .run();
+      } catch (error) {
+        console.error("[context.sync] D1 sync_events write failed:", error.message);
+      }
+    }
+
+    const sm = c.get("streaming");
+    if (sm) {
+      await sm.broadcast({
+        type: "context.session.ingested",
+        sessionId,
+        chittyId,
+        project,
+        eventCount,
+        eventId,
+      });
+    }
+
+    return c.json({
+      ok: true,
+      accepted: true,
+      eventId,
+      sessionId,
+      eventCount,
+    });
+  } catch (err) {
+    return c.json(
+      { ok: false, error: "bad_json", message: String(err?.message || err) },
+      400,
+    );
+  }
+});
+
 // Set active files for a session
 // Body: { session_id: string, files: [{ uri, name?, size?, sha256?, mime?, metadata? }] }
 contextRoutes.post("/files/set-active", async (c) => {

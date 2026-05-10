@@ -118,4 +118,36 @@ describe("authenticate middleware", () => {
     expect(body.error).toBe("Invalid API key");
     expect(next).not.toHaveBeenCalled();
   });
+
+  it("accepts CF Access client headers for /api/v1/context/sync without API key", async () => {
+    const c = createMockContext({
+      req: {
+        header: headerMap({
+          "CF-Access-Client-Id": "cf-client-id",
+          "CF-Access-Client-Secret": "cf-client-secret",
+          "CF-Access-Authenticated-User-Email": "ops@chitty.cc",
+        }),
+        raw: new Request("http://localhost/api/v1/context/sync", {
+          method: "POST",
+        }),
+      },
+      env: {
+        ...createMockContext().env,
+        CHITTY_CF_ACCESS_CLIENT_ID: "cf-client-id",
+        CHITTY_CF_ACCESS_CLIENT_SECRET: "cf-client-secret",
+      },
+    });
+
+    const next = vi.fn(async () => {});
+    await authenticate(c, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(c.set).toHaveBeenCalledWith(
+      "apiKey",
+      expect.objectContaining({
+        type: "cloudflare-access",
+        status: "active",
+      }),
+    );
+  });
 });

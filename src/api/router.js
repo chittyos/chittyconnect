@@ -174,6 +174,7 @@ api.all("/api/mercury/*", async (c) => {
 api.route("/api/credentials", credentialsRoutes);
 api.route("/api/intelligence", intelligence);
 api.route("/api/context", contextRoutes);
+api.route("/api/v1/context", contextRoutes);
 api.route("/api/context/tasks", tasksRoutes);
 api.route("/api/files", filesRoutes);
 api.route("/api/dashboard", dashboard);
