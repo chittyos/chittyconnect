@@ -128,7 +128,7 @@
       ],
       "durable_objects": {
         "bindings": [
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
         ]
       },
       "d1_databases": [
@@ -246,6 +246,8 @@
       ],
       "durable_objects": {
         "bindings": [
+          // Staging worker (chittyconnect-staging) binds to the production worker's DO.
+          // Cross-worker DO binding: keep script_name pinned to the prod worker name.
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
         ]
       },
@@ -373,7 +375,7 @@
       ],
       "durable_objects": {
         "bindings": [
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
         ]
       },
       "d1_databases": [
