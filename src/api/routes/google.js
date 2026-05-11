@@ -16,10 +16,9 @@
 import { Hono } from "hono";
 import { getCredential } from "../../lib/credential-helper.js";
 import { getCachedGDriveToken } from "../../services/secret-rotation.js";
-import { requireServiceToken } from "../../middleware/require-service-token.js";
 
 const googleRoutes = new Hono();
-googleRoutes.use("*", requireServiceToken("google"));
+// Auth: covered by /api/* authenticate middleware in router.js
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
