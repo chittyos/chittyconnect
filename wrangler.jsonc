@@ -254,13 +254,11 @@
       "d1_databases": [
         { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
       ],
+      // staging never consumes documint-proofs — prod owns the sole consumer (CF Queues allows only one)
       "queues": {
         "producers": [
           { "binding": "EVENT_Q", "queue": "github-events" },
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
-        ],
-        "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
       },
       "ai": { "binding": "AI" },
