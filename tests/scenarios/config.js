@@ -70,6 +70,39 @@ export async function mcpCall(method, params = {}, extra = {}) {
 }
 
 /**
+ * Send a JSON-RPC 2.0 call to the API-key-authenticated MCP endpoint at connect.chitty.cc/mcp.
+ * @param {string} method - JSON-RPC method name
+ * @param {object} [params] - Method params
+ * @param {object} [extra] - Extra options (id override, sessionId header, apiKey override)
+ */
+export async function mcpConnectCall(method, params = {}, extra = {}) {
+  const id = extra.id ?? 1;
+  const body = {
+    jsonrpc: extra.jsonrpc ?? "2.0",
+    method,
+    id,
+    ...(Object.keys(params).length > 0 ? { params } : {}),
+  };
+
+  const hdrs = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+  };
+  if (extra.apiKey !== null) {
+    hdrs["X-ChittyOS-API-Key"] = extra.apiKey ?? API_KEY;
+  }
+  if (extra.sessionId) {
+    hdrs["Mcp-Session-Id"] = extra.sessionId;
+  }
+
+  return fetch(`${BASE_URL}/mcp`, {
+    method: "POST",
+    headers: hdrs,
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * Send a JSON-RPC 2.0 call to the OAuth-protected MCP gateway at mcp.chitty.cc/mcp.
  * Requires CHITTY_MCP_BEARER_TOKEN.
  * @param {string} method - JSON-RPC method name

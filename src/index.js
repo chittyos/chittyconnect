@@ -2320,6 +2320,55 @@ export default {
       }
     }
 
+    // connect.chitty.cc/mcp — same McpConnectAgent DO, validated by API key
+    // (backward-compat surface; mcp.chitty.cc/mcp uses Cloudflare-managed OAuth).
+    if (host === "connect.chitty.cc" && url.pathname === "/mcp") {
+      const authHeader = request.headers.get("Authorization") || "";
+      const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      const apiKey =
+        request.headers.get("X-ChittyOS-API-Key") ||
+        (bearerMatch ? bearerMatch[1].trim() : null);
+
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: "Missing API key" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+        });
+      }
+
+      const keyData = await env.API_KEYS.get(`key:${apiKey}`);
+      const keyInfo = keyData ? JSON.parse(keyData) : null;
+
+      if (!keyInfo || keyInfo.status !== "active") {
+        return new Response(
+          JSON.stringify({ error: keyInfo ? "API key is inactive" : "Invalid API key" }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+          },
+        );
+      }
+
+      try {
+        return mcpAgentHandler.fetch(request, env, ctx);
+      } catch (err) {
+        const errorInfo = formatCaughtError(err);
+        console.error(
+          `[MCP-Agent] connect.chitty.cc/mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: errorInfo.message,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+          },
+        );
+      }
+    }
+
     // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
     // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
     // handler entirely (past the oauthProvider catch block below) and causes
