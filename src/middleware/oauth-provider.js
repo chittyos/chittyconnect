@@ -26,9 +26,9 @@ import { McpConnectAgent } from "../mcp/agent.js";
  */
 export function createOAuthProvider(honoApp) {
   return new OAuthProvider({
-    // Hostname-specific: only mcp.chitty.cc/mcp is OAuth-protected.
-    // connect.chitty.cc/mcp/* falls through to defaultHandler (Hono + API key auth).
-    apiRoute: "https://mcp.chitty.cc/mcp",
+    // Host-agnostic route so OAuth MCP can operate behind Cloudflare gateway,
+    // portal, and custom MCP hostnames that terminate to this Worker.
+    apiRoute: "/mcp",
 
     apiHandler: McpConnectAgent.serve("/mcp", { binding: "MCP_AGENT" }),
 
@@ -128,13 +128,15 @@ async function handleAuthorize(request, env) {
   // @canon: chittycanon://gov/governance#core-types
   const safeClientId = (oauthReqInfo.clientId || "anonymous").replace(/:/g, "-");
   const actorId = `mcp-client-${safeClientId}`;
-  const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
-    request: oauthReqInfo,
-    userId: actorId,
-    metadata: {
-      client: clientInfo?.clientName || oauthReqInfo.clientId || "unknown",
-      authorizedAt: new Date().toISOString(),
-    },
+    const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
+      request: oauthReqInfo,
+      userId: actorId,
+      metadata: {
+        client: clientInfo?.clientName || oauthReqInfo.clientId || "unknown",
+        oauthAuthority: env.CHITTYAUTH_URL || "https://auth.chitty.cc",
+        authBackend: env.CHITTYAUTH_PROVIDER_BACKEND || "neon",
+        authorizedAt: new Date().toISOString(),
+      },
     scope: oauthReqInfo.scope || ["mcp:read", "mcp:write"],
     props: {
       userId: actorId,

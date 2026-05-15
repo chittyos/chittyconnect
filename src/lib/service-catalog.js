@@ -31,6 +31,54 @@ const SERVICE_ENTRIES = [
   { id: "chittytask", sub: "tasks" },
 ];
 
+function normalizeMcpServiceCatalog(payload) {
+  // chittymcp index returns:
+  // { services: { finance: { path: "/finance/mcp", ... }, ... } }
+  const servicesObj = payload?.services;
+  if (!servicesObj || typeof servicesObj !== "object") return [];
+
+  const out = [];
+  for (const [sub, meta] of Object.entries(servicesObj)) {
+    const id = `chitty${sub}`;
+    const domain = "chitty.cc";
+    out.push({
+      id,
+      sub,
+      url: `https://${sub}.${domain}`,
+      mcpPath: meta?.path || `/${sub}/mcp`,
+      label: meta?.label || id,
+    });
+  }
+  return out;
+}
+
+/**
+ * Resolve service catalog from chittymcp authority when configured.
+ * Falls back to local static catalog if unavailable.
+ */
+export async function getServiceCatalogEntriesDynamic(env = {}) {
+  const authorityUrl =
+    env.CHITTYMCP_AUTHORITY_URL || "https://mcp.chitty.cc";
+
+  try {
+    const response = await fetch(authorityUrl, {
+      method: "GET",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      const normalized = normalizeMcpServiceCatalog(payload);
+      if (normalized.length > 0) return normalized;
+    }
+  } catch (error) {
+    console.warn(
+      `[service-catalog] chittymcp authority unavailable (${authorityUrl}): ${error.message}`,
+    );
+  }
+
+  return getServiceCatalogEntries(env);
+}
+
 /**
  * Get the full service catalog including subdomain prefixes.
  *

@@ -141,15 +141,23 @@ wrangler queues create github-events
 
 ```bash
 # Set ChittyOS service tokens
-wrangler secret put CHITTY_ID_TOKEN
-wrangler secret put CHITTY_AUTH_TOKEN
-wrangler secret put CHITTY_CASES_TOKEN
-wrangler secret put CHITTY_FINANCE_TOKEN
-wrangler secret put CHITTY_EVIDENCE_TOKEN
-wrangler secret put CHITTY_SYNC_TOKEN
-wrangler secret put CHITTY_CHRONICLE_TOKEN
-wrangler secret put CHITTY_CONTEXTUAL_TOKEN
-wrangler secret put CHITTY_REGISTRY_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_ID_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_AUTH_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_CASES_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_FINANCE_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_EVIDENCE_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_SYNC_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_CHRONICLE_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_CONTEXTUAL_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_REGISTRY_TOKEN
+
+# MCP and package auth tokens (VM/runtime)
+wrangler secret put CHITTYAUTH_ISSUED_CH1TTY_SMART_MCP_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_CHITTYMCP_TOKEN
+wrangler secret put CHITTYAUTH_ISSUED_NPM_TOKEN
+
+# VM runtime injection (non-interactive auth handoff)
+bash scripts/inject-runtime-auth.sh
 
 # Set third-party API keys
 wrangler secret put NOTION_TOKEN
