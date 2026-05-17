@@ -23,6 +23,20 @@ const mcpHandler = McpConnectAgent.serve("/chatgpt/mcp", {
   binding: "MCP_AGENT",
 });
 
+// Deprecation headers — this route is being retired in favor of the canonical
+// mcp.chitty.cc aggregator. ChatGPT clients should re-register against
+// https://mcp.chitty.cc/ (unified OAuth, same scopes, same tools, unified audit).
+// Sunset window: 2026-08-15.
+chatgptMcp.use("*", async (c, next) => {
+  await next();
+  c.header("Deprecation", "true");
+  c.header("Sunset", "Sat, 15 Aug 2026 00:00:00 GMT");
+  c.header(
+    "Link",
+    '<https://mcp.chitty.cc/mcp>; rel="successor-version", <https://mcp.chitty.cc/sse>; rel="alternate"',
+  );
+});
+
 /**
  * Authentication middleware.
  * Extracts bearer token or API key. Validation is deferred to the DO layer
