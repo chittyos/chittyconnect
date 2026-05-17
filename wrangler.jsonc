@@ -287,7 +287,9 @@
       "name": "chittyconnect",
       // workers.dev URL is enabled so post-deploy CI can probe /health without
       // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
-      // public surface remains the connect.chitty.cc / mcp.chitty.cc routes.
+      // public surface is connect.chitty.cc. mcp.chitty.cc is owned by the
+      // chittymcp worker (canonical MCP aggregator); chittyconnect must not
+      // claim that route.
       "workers_dev": true,
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
@@ -314,8 +316,7 @@
       ],
 
       "routes": [
-        { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
-        { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
+        { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" }
       ],
       "vars": {
         "ENVIRONMENT": "production",
