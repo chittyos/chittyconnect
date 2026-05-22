@@ -314,8 +314,7 @@
       ],
 
       "routes": [
-        { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" },
-        { "pattern": "mcp.chitty.cc/*", "zone_name": "chitty.cc" }
+        { "pattern": "connect.chitty.cc/*", "zone_name": "chitty.cc" }
       ],
       "vars": {
         "ENVIRONMENT": "production",

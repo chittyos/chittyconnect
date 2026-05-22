@@ -2076,8 +2076,9 @@ app.get("/integrations/github/callback", async (c) => {
  * Export worker
  *
  * OAuthProvider wraps the Hono app to add OAuth 2.1 + PKCE for MCP clients
- * (Claude Desktop Cowork). Only mcp.chitty.cc/mcp requires OAuth;
- * connect.chitty.cc/mcp/* continues using API key auth (backward compatible).
+ * (Claude Desktop Cowork). The mcp.chitty.cc aggregator (standalone service)
+ * owns OAuth upstream; connect.chitty.cc/mcp is the slim per-service MCP
+ * exposed here without auth (gateway authenticates and proxies in).
  *
  * OAuth endpoints served automatically:
  *   /.well-known/oauth-authorization-server — RFC 8414 discovery
@@ -2294,15 +2295,16 @@ export default {
       }
     }
 
-    // When mcp.chitty.cc is fronted by Cloudflare Managed OAuth, Access owns
-    // the OAuth exchange and the origin should behave like a plain MCP server.
-    if (host === "mcp.chitty.cc" && url.pathname === "/mcp") {
+    // connect.chitty.cc/mcp — ChittyConnect's own slim MCP exposing only
+    // connect-specific tools. No auth: the upstream aggregator gateway
+    // (standalone mcp.chitty.cc service) authenticates and proxies in.
+    if (host === "connect.chitty.cc" && url.pathname === "/mcp") {
       try {
         return mcpAgentHandler.fetch(request, env, ctx);
       } catch (err) {
         const errorInfo = formatCaughtError(err);
         console.error(
-          `[MCP-Agent] /mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+          `[MCP-Agent] connect.chitty.cc/mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
         );
         return new Response(
           JSON.stringify({
