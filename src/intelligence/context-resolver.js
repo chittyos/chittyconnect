@@ -530,7 +530,6 @@ export class ContextResolver {
             this.env.CHITTYAUTH_ISSUED_MINT_API_KEY ||
             this.env.CHITTYAUTH_ISSUED_MINT_TOKEN ||
             this.env.MINT_API_KEY ||
-            this.env.CHITTYEVIDENCE_MINT_API_KEY ||
             this.env.CHITTYMINT_SECRET ||
             this.env.CHITTY_ID_TOKEN ||
             ""
