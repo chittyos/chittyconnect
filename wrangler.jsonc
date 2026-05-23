@@ -425,66 +425,69 @@
   //
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ CHITTYOS SERVICE TOKENS (pattern: CHITTY_<SERVICE>_TOKEN)     │
+  // │ Audit 2026-05-23: ✓ deployed, ⚠ declared-not-provisioned       │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ CHITTY_ID_TOKEN            ChittyID service auth               │
-  // │ CHITTY_AUTH_SERVICE_TOKEN  ChittyAuth service auth             │
-  // │ CHITTY_REGISTRY_TOKEN      ChittyRegistry service auth         │
-  // │ CHITTY_CHRONICLE_TOKEN     ChittyChronicle service auth        │
-  // │ CHITTY_DNA_TOKEN           ChittyDNA service auth              │
-  // │ CHITTY_VERIFY_TOKEN        ChittyVerify service auth           │
-  // │ CHITTY_CERTIFY_TOKEN       ChittyCertify service auth          │
-  // │ CHITTY_CASES_TOKEN         ChittyCases service auth            │
-  // │ CHITTY_FINANCE_TOKEN       ChittyFinance service auth          │
-  // │ CHITTY_EVIDENCE_TOKEN      ChittyEvidence service auth         │
-  // │ CHITTY_SYNC_TOKEN          ChittySync service auth             │
-  // │ CHITTY_PROOF_TOKEN         ChittyProof service auth            │
-  // │ CHITTY_TRUST_TOKEN         ChittyTrust service auth            │
-  // │ CHITTY_CONTEXTUAL_TOKEN    ChittyContextual service auth       │
-  // │ CHITTY_TASK_TOKEN          ChittyTask service auth             │
-  // │ CHITTY_SERV_TOKEN          ChittyServ homelab auth             │
-  // │ CHITTY_TRACK_TOKEN         ChittyTrack observability token     │
-  // │ CHITTY_DISPUTES_TOKEN      ChittyDisputes service auth        │
-  // │ CHITTY_LEDGER_TOKEN        ChittyLedger service auth          │
-  // │ CHITTY_ID_TOKEN            ChittyID service auth token          │
-  // │ CHITTYCONNECT_SERVICE_TOKEN ChittyConnect self-service token   │
-  // │ CHITTYMINT_SECRET          ChittyMint webhook secret           │
+  // │ ✓ CHITTY_ID_TOKEN            ChittyID service auth             │
+  // │ ✓ CHITTY_AUTH_TOKEN          ChittyAuth-issued auth token       │
+  // │ ✓ CHITTY_AUTH_SERVICE_TOKEN  ChittyAuth service auth           │
+  // │ ✓ CHITTY_REGISTRY_TOKEN      ChittyRegistry service auth       │
+  // │ ✓ CHITTY_CHRONICLE_TOKEN     ChittyChronicle service auth      │
+  // │ ✓ CHITTY_CASES_TOKEN         ChittyCases service auth          │
+  // │ ✓ CHITTY_FINANCE_TOKEN       ChittyFinance service auth        │
+  // │ ✓ CHITTY_EVIDENCE_TOKEN      ChittyEvidence service auth       │
+  // │ ✓ CHITTY_SYNC_TOKEN          ChittySync service auth           │
+  // │ ✓ CHITTY_PROOF_TOKEN         ChittyProof service auth          │
+  // │ ✓ CHITTY_CONTEXTUAL_TOKEN    ChittyContextual service auth     │
+  // │ ✓ CHITTY_TASK_TOKEN          ChittyTask service auth           │
+  // │ ✓ CHITTY_SERV_TOKEN          ChittyServ homelab auth           │
+  // │ ✓ CHITTY_TRACK_TOKEN         ChittyTrack observability token   │
+  // │ ✓ CHITTY_DISPUTES_TOKEN      ChittyDisputes service auth       │
+  // │ ✓ CHITTY_LEDGER_TOKEN        ChittyLedger service auth         │
+  // │ ✓ CHITTYCONNECT_SERVICE_TOKEN ChittyConnect self-service token │
+  // │ ✓ CHITTYMINT_SECRET          ChittyMint webhook secret         │
+  // │ ⚠ CHITTY_DNA_TOKEN           ChittyDNA service auth (not prov) │
+  // │ ⚠ CHITTY_VERIFY_TOKEN        ChittyVerify service auth (n/p)   │
+  // │ ⚠ CHITTY_CERTIFY_TOKEN       ChittyCertify service auth (n/p)  │
+  // │ ⚠ CHITTY_TRUST_TOKEN         ChittyTrust service auth (n/p)    │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ THIRD-PARTY INTEGRATIONS                                       │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ NOTION_TOKEN               Notion API integration              │
-  // │ OPENAI_API_KEY             OpenAI API key                      │
-  // │ GOOGLE_ACCESS_TOKEN        Google OAuth access token            │
-  // │ GDRIVE_CLIENT_ID           Google Drive OAuth client ID        │
-  // │ GDRIVE_CLIENT_SECRET       Google Drive OAuth client secret    │
-  // │ OLLAMA_CF_CLIENT_ID        CF Access client ID (Ollama tunnel) │
-  // │ OLLAMA_CF_CLIENT_SECRET    CF Access client secret (Ollama)    │
-  // │ TWILIO_ACCOUNT_SID         Twilio account SID                  │
-  // │ TWILIO_AUTH_TOKEN          Twilio auth token                   │
-  // │ AI_SEARCH_TOKEN            AI search integration token         │
+  // │ ✓ NOTION_TOKEN             Notion API integration              │
+  // │ ✓ OPENAI_API_KEY           OpenAI API key                      │
+  // │ ✓ GDRIVE_CLIENT_ID         Google Drive OAuth client ID        │
+  // │ ✓ GDRIVE_CLIENT_SECRET     Google Drive OAuth client secret    │
+  // │ ✓ OLLAMA_CF_CLIENT_ID      CF Access client ID (Ollama tunnel) │
+  // │ ✓ OLLAMA_CF_CLIENT_SECRET  CF Access client secret (Ollama)    │
+  // │ ✓ TWILIO_ACCOUNT_SID       Twilio account SID                  │
+  // │ ✓ TWILIO_AUTH_TOKEN        Twilio auth token                   │
+  // │ ✓ AI_SEARCH_TOKEN          AI search integration token         │
+  // │ ✓ QUO_API_KEY              Quo (calls/SMS) API key             │
+  // │ ⚠ GOOGLE_ACCESS_TOKEN      Google OAuth access token (n/p)     │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ NEON DATABASE                                                  │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ NEON_DATABASE_URL          Neon connection string (verify use) │
-  // │ NEON_API_KEY               Neon API key (secret rotation)     │
-  // │ NEON_PROJECT_ID            Neon project ID                     │
-  // │ NEON_BRANCH_ID             Neon branch ID                      │
-  // │ NEON_HOST                  Neon host                           │
+  // │ ✓ NEON_DATABASE_URL        Neon connection string              │
+  // │ ✓ NEON_API_KEY             Neon API key (secret rotation)      │
+  // │ ✓ NEON_ISSUED_MINTING_API_KEY  Neon-issued mint API key        │
+  // │ ⚠ NEON_PROJECT_ID          Neon project ID (n/p, in NEON_DATABASE_URL) │
+  // │ ⚠ NEON_BRANCH_ID           Neon branch ID (n/p, in NEON_DATABASE_URL)  │
+  // │ ⚠ NEON_HOST                Neon host (n/p, in NEON_DATABASE_URL)       │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ CREDENTIAL PROVISIONING & 1PASSWORD                            │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ ONEPASSWORD_CONNECT_TOKEN  1Password Connect JWT               │
-  // │ OP_EVENTS_API_TOKEN        1Password Events API token          │
-  // │ CLOUDFLARE_MAKE_API_KEY    CF API fallback (if 1Pass down)     │
-  // │ (removed — use CHITTYOS_ACCOUNT_ID var instead)                │
-  // │ EMERGENCY_REVOKE_TOKEN     Emergency credential revocation     │
-  // │ ENCRYPTION_KEY             32-byte key for KV cache encryption │
-  // │ INTERNAL_WEBHOOK_SECRET    Internal webhook verification       │
+  // │ ✓ ONEPASSWORD_CONNECT_TOKEN  1Password Connect JWT             │
+  // │ ✓ CLOUDFLARE_MAKE_API_KEY    CF API fallback (if 1Pass down)   │
+  // │ ✓ ENCRYPTION_KEY             32-byte key for KV cache encryption│
+  // │ ✓ INTERNAL_WEBHOOK_SECRET    Internal webhook verification     │
+  // │ ✓ SECRETS_PORTAL_AES_KEY     AES key for /secrets portal       │
+  // │ ⚠ OP_EVENTS_API_TOKEN        1Password Events API token (n/p)  │
+  // │ ⚠ EMERGENCY_REVOKE_TOKEN     Emergency credential revoke (n/p) │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
@@ -493,8 +496,13 @@
   // │ CF_ACCOUNT_ID              → removed, use CHITTYOS_ACCOUNT_ID  │
   // │ CLOUDFLARE_ACCOUNT_ID      → removed, use CHITTYOS_ACCOUNT_ID  │
   // │ CHITTY_SERVICE_TOKEN       → removed, use CHITTY_ID_TOKEN      │
-  // │ CHITTY_ID_SERVICE_TOKEN    → removed, use CHITTY_ID_TOKEN      │
+  // │ CHITTY_ID_SERVICE_TOKEN    → removed in PR #198, use CHITTY_ID_TOKEN │
+  // │                              (still provisioned as worker      │
+  // │                              secret 2026-05-23 — orphaned,     │
+  // │                              safe to delete after ecosystem    │
+  // │                              grep confirms no other consumers) │
   // │ CHITTY_API_KEY             → removed (dead code)               │
+  // │ CHITTYEVIDENCE_MINT_API_KEY → removed in PR #198 (never bound) │
   // └─────────────────────────────────────────────────────────────────┘
   //
   // ┌─────────────────────────────────────────────────────────────────┐
