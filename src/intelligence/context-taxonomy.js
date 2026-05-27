@@ -7,7 +7,7 @@
  * 3. Recommending compatible contexts for collaboration
  *
  * This is the canonical classification system for context types.
- * The over-engineered "periodic table" (context-periodic-table.js) is deprecated.
+ * This is the canonical classification system (the over-engineered context-periodic-table.js was removed in F-027).
  *
  * @canonical-uri chittycanon://core/services/chittyconnect/intelligence/context-taxonomy
  * @version 1.0.0
