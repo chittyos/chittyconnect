@@ -61,7 +61,7 @@ The intelligence layer provides decision-making capabilities based on accumulate
 | `context-taxonomy.js` | Context type classification (20 types, 10 categories) |
 | `alchemist-daemon.js` | Capability assessment, experiments, evolution observation |
 | `context-alchemy.js` | Chemistry-inspired naming for lifecycle operations |
-| `context-periodic-table.js` | Extended taxonomy (deprecated, use taxonomy.js) |
+| `context-periodic-table.js (REMOVED — F-027)` | Extended taxonomy (deprecated, use taxonomy.js) |
 
 #### Key Concepts
 
