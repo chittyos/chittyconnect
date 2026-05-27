@@ -102,6 +102,7 @@
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
+        "CHITTYSERV_URL": "http://chittyserv:8080",  // F-021: was dev-only; staging+prod added per SOP-080
         "EVIDENCE_LEGACY_MODE": "false",
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
@@ -210,6 +211,7 @@
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
+        "CHITTYSERV_URL": "http://chittyserv:8080",  // F-021: was dev-only; staging+prod added per SOP-080
         "EVIDENCE_LEGACY_MODE": "false",
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
@@ -339,6 +341,7 @@
         "ONEPASSWORD_VAULT_EMERGENCY": "shl646vf4snnrkx6linyk3yis4",
         "CREDENTIAL_FAILOVER_ENABLED": "true",
         "CREDENTIAL_BROKER_TYPE": "auto",
+        "CHITTYSERV_URL": "http://chittyserv:8080",  // F-021: was dev-only; staging+prod added per SOP-080
         "EVIDENCE_LEGACY_MODE": "false",
         "NEON_ROLE_NAME": "chittyos_app",
         "NEON_DATABASE": "neondb",
