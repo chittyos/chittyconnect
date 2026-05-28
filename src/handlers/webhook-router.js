@@ -108,7 +108,6 @@ async function logWebhook(env, event) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${env.CHITTYCONNECT_SERVICE_TOKEN}`,
         },
         body: JSON.stringify({
           event_type: "webhook.received",
