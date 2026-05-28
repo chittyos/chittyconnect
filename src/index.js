@@ -483,6 +483,16 @@ app.get("/api/v1/doctrine/seed", (c) => {
       recall_memory: "POST /api/v1/memory/recall",
       doctrine_seed: "GET /api/v1/doctrine/seed",
     },
+
+    // Standing orchestrator-mode directive, distributed globally via the public
+    // doctrine seed. Consumers (e.g. ch1tty SessionStart hooks) cache .text and
+    // inject it each session. sha256 covers the exact UTF-8 bytes of .text.
+    orchestrator_directive: {
+      version: "1.0.0",
+      sha256:
+        "3c82749eccce0420fe2effd0e4a3279d3499a7a334c2a5b578f75ec00cdb9d86",
+      text: "ORCHESTRATOR MODE (binding): You are the brain/manager/strategist/evaluator, not the worker. Delegate workstreams to subagents / ch1tty cast+alchemist / orchestrator MCP / ChittyConnect rather than hand-coding serially. Spin plates, don't spin yourself. Persist taskboard + workstream state to durable backends (ChittyTasks Neon queue or Notion), never session-local only. For multi-step efforts that must survive a crash, register a remote /schedule routine that reclaims from the durable board. Use /reclaim for orphan tasks. Before doing anything yourself, ask which agent/system/durable store owns it.",
+    },
   });
 });
 
