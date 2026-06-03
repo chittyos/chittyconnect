@@ -65,8 +65,25 @@ async function ensureEcosystemInitialized(env) {
       "[ChittyConnect] Initializing ChittyOS ecosystem integration...",
     );
 
-    // Initialize D1 database schema (critical)
-    await initializeDatabase(env.DB);
+    // Initialize D1 database schema. Non-fatal: if the DB binding is
+    // missing/broken (e.g. a deploy lag where the live worker pre-dates the
+    // current bindings) we must NOT poison the entire ecosystem init —
+    // otherwise every authenticated route returns a raw 500 instead of the
+    // 503/JSON envelope the handlers expect. See chittyos/chittyconnect#207.
+    if (env.DB && typeof env.DB.prepare === "function") {
+      try {
+        await initializeDatabase(env.DB);
+      } catch (err) {
+        console.warn(
+          "[ChittyConnect] initializeDatabase failed (continuing):",
+          err?.message || err,
+        );
+      }
+    } else {
+      console.warn(
+        "[ChittyConnect] env.DB binding missing or invalid; skipping schema init",
+      );
+    }
 
     // Initialize intelligence modules
     console.log("[ChittyConnect] Initializing intelligence modules...");
@@ -465,6 +482,16 @@ app.get("/api/v1/doctrine/seed", (c) => {
       persist_memory: "POST /api/v1/memory/persist",
       recall_memory: "POST /api/v1/memory/recall",
       doctrine_seed: "GET /api/v1/doctrine/seed",
+    },
+
+    // Standing orchestrator-mode directive, distributed globally via the public
+    // doctrine seed. Consumers (e.g. ch1tty SessionStart hooks) cache .text and
+    // inject it each session. sha256 covers the exact UTF-8 bytes of .text.
+    orchestrator_directive: {
+      version: "1.0.0",
+      sha256:
+        "3c82749eccce0420fe2effd0e4a3279d3499a7a334c2a5b578f75ec00cdb9d86",
+      text: "ORCHESTRATOR MODE (binding): You are the brain/manager/strategist/evaluator, not the worker. Delegate workstreams to subagents / ch1tty cast+alchemist / orchestrator MCP / ChittyConnect rather than hand-coding serially. Spin plates, don't spin yourself. Persist taskboard + workstream state to durable backends (ChittyTasks Neon queue or Notion), never session-local only. For multi-step efforts that must survive a crash, register a remote /schedule routine that reclaims from the durable board. Use /reclaim for orphan tasks. Before doing anything yourself, ask which agent/system/durable store owns it.",
     },
   });
 });

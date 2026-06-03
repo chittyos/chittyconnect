@@ -47,7 +47,17 @@ export async function authenticate(c, next) {
     return c.json({ error: "Missing API key" }, 401);
   }
 
-  // Validate API key against KV store
+  // Validate API key against KV store. Guard against a missing binding so a
+  // deploy-time binding drift surfaces as a clear 503 rather than a raw 500
+  // TypeError ("Cannot read properties of undefined (reading 'get')").
+  // See chittyos/chittyconnect#207.
+  if (!c.env.API_KEYS || typeof c.env.API_KEYS.get !== "function") {
+    console.error("[auth] API_KEYS KV binding is missing");
+    return c.json(
+      { error: "Auth backend unavailable", code: "API_KEYS_BINDING_MISSING" },
+      503,
+    );
+  }
   const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
 
   // OAuth MCP flow passes bearer access tokens (not API keys). For requests
