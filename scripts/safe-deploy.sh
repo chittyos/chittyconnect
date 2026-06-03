@@ -68,8 +68,10 @@ fi
 echo "[safe-deploy] env=$ENV worker=$DEPLOYED_NAME"
 
 # ── 1. Deploy with explicit --env ────────────────────────────────────────────
+# CHITTYCONNECT_SAFE_DEPLOY=1 is required by wrangler.jsonc's build.command
+# guard (#219). Without it, wrangler aborts before writing any binding.
 echo "[safe-deploy] running: npx wrangler deploy --env $ENV"
-npx wrangler deploy --env "$ENV"
+CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV"
 
 # ── 2. Audit declared vs attached bindings ───────────────────────────────────
 echo "[safe-deploy] auditing bindings on live worker $DEPLOYED_NAME ..."

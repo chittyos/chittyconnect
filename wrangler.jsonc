@@ -27,7 +27,20 @@
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
   "observability": { "enabled": true },
-  "build": { "command": "", "cwd": "." },
+
+  // ──────────────────────────────────────────────────────────────────
+  // BARE DEPLOY GUARD (#219)
+  // wrangler runs build.command before every deploy. We require a
+  // sentinel env var that scripts/safe-deploy.sh sets — so bare
+  // `wrangler deploy` invocations (no --env, no wrapper) abort here
+  // before any binding write happens. Catches: laptop shells with the
+  // Global API Key, wdeploy-style aliases, agent scripts, stray CI.
+  // The only sanctioned deploy path is `npm run deploy[:staging]`.
+  // ──────────────────────────────────────────────────────────────────
+  "build": {
+    "command": "case \"$WRANGLER_COMMAND\" in deploy|versions) [ \"$CHITTYCONNECT_SAFE_DEPLOY\" = \"1\" ] || { echo '::error::wrangler '\"$WRANGLER_COMMAND\"' was invoked outside scripts/safe-deploy.sh — refusing. Run `npm run deploy` (or `npm run deploy:staging`) instead. See chittyconnect#219.' >&2; exit 1; } ;; esac",
+    "cwd": "."
+  },
 
   // Migrations are global to the DO class, not per-env
   "migrations": [
