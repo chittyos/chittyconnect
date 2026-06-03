@@ -65,8 +65,25 @@ async function ensureEcosystemInitialized(env) {
       "[ChittyConnect] Initializing ChittyOS ecosystem integration...",
     );
 
-    // Initialize D1 database schema (critical)
-    await initializeDatabase(env.DB);
+    // Initialize D1 database schema. Non-fatal: if the DB binding is
+    // missing/broken (e.g. a deploy lag where the live worker pre-dates the
+    // current bindings) we must NOT poison the entire ecosystem init —
+    // otherwise every authenticated route returns a raw 500 instead of the
+    // 503/JSON envelope the handlers expect. See chittyos/chittyconnect#207.
+    if (env.DB && typeof env.DB.prepare === "function") {
+      try {
+        await initializeDatabase(env.DB);
+      } catch (err) {
+        console.warn(
+          "[ChittyConnect] initializeDatabase failed (continuing):",
+          err?.message || err,
+        );
+      }
+    } else {
+      console.warn(
+        "[ChittyConnect] env.DB binding missing or invalid; skipping schema init",
+      );
+    }
 
     // Initialize intelligence modules
     console.log("[ChittyConnect] Initializing intelligence modules...");

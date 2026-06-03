@@ -152,7 +152,7 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
@@ -272,7 +272,7 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
@@ -400,7 +400,7 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
