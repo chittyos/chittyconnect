@@ -44,7 +44,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 | Aspect | Abbrev | Answer |
 |--------|--------|--------|
 | **Identity** | TY | AI-intelligent spine — universal connector for GPTs, Claude, and third-party integrations |
-| **Connectivity** | VY | REST API + MCP Server + GitHub App; proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness cross-session state |
+| **Connectivity** | VY | REST API + MCP Server + GitHub App; proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness cross-session state; policy-gated git write tools (`git_commit`, `git_push`, `git_tag`) for non-shell channels (read-only git on chittymcp via `chittyagent-git`) |
 | **Authority** | RY | Tier 2 Platform — integration hub, not source of truth; delegates identity/auth/registration upstream |
 
 ## ChittyOS Ecosystem
