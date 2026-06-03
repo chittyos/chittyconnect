@@ -1,0 +1,73 @@
+name: Binding Drift Audit
+
+# Detects when the live chittyconnect worker is missing bindings declared in
+# wrangler.jsonc — i.e. someone (or some tool) ran `wrangler deploy` without
+# `--env production` and silently wiped prod bindings. See issue #216.
+
+on:
+  schedule:
+    # Every 15 minutes — fast detection of binding-strip incidents.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "wrangler.jsonc"
+      - "scripts/audit-bindings.sh"
+      - "scripts/safe-deploy.sh"
+      - "scripts/lib/extract-declared-bindings.mjs"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Audit production bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ./scripts/audit-bindings.sh production
+      - name: Notify on drift
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "binding drift detected on chittyconnect (production)";
+            const body = [
+              "Automated audit (`scripts/audit-bindings.sh production`) found bindings",
+              "declared in `wrangler.jsonc` env.production that are NOT attached to the",
+              "live worker. This usually means someone ran a bare `wrangler deploy`",
+              "(no `--env`) and silently stripped bindings. See issue #216.",
+              "",
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              "",
+              "Recover with `npm run deploy` from main.",
+            ].join("\n");
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "binding-drift",
+            });
+            if (open.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["binding-drift", "incident"],
+              });
+            }

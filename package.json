@@ -9,9 +9,10 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy --env production",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production",
+    "deploy": "./scripts/safe-deploy.sh production",
+    "deploy:staging": "./scripts/safe-deploy.sh staging",
+    "deploy:production": "./scripts/safe-deploy.sh production",
+    "deploy:audit": "./scripts/audit-bindings.sh production",
     "kv:seed": "./scripts/seed-kv.sh",
     "test": "vitest",
     "test:watch": "vitest --watch",
