@@ -479,8 +479,8 @@ app.get("/api/v1/doctrine/seed", (c) => {
 
     api_endpoints: {
       resolve_context: "POST /api/v1/context/resolve",
-      persist_memory: "POST /api/v1/memory/persist",
-      recall_memory: "POST /api/v1/memory/recall",
+      persist_memory: "POST /api/intelligence/memory/persist",
+      recall_memory: "POST /api/intelligence/memory/recall",
       doctrine_seed: "GET /api/v1/doctrine/seed",
     },
 
@@ -530,7 +530,7 @@ app.get("/api/v1/signal/bootstrap", (c) => {
         order: 3,
         title: "Coordination Layer",
         content:
-          "The Grey Matter Principle: the model is replaceable substrate. Identity lives in the coordination layer, not in the model. Key services: ChittyID (identity minting, Tier 0), ChittyConnect (connectivity spine, Tier 2), ChittyLedger (immutable record), ChittyTrust (behavioral trust). For ecosystem operations, use ChittyConnect at connect.chitty.cc. Fetch full doctrine: GET /api/v1/doctrine/seed. Resolve your identity: POST /api/v1/context/resolve. Persist memory cross-platform: POST /api/v1/memory/persist.",
+          "The Grey Matter Principle: the model is replaceable substrate. Identity lives in the coordination layer, not in the model. Key services: ChittyID (identity minting, Tier 0), ChittyConnect (connectivity spine, Tier 2), ChittyLedger (immutable record), ChittyTrust (behavioral trust). For ecosystem operations, use ChittyConnect at connect.chitty.cc. Fetch full doctrine: GET /api/v1/doctrine/seed. Resolve your identity: POST /api/v1/context/resolve. Persist memory cross-platform: POST /api/intelligence/memory/persist.",
         validates: ["grey_matter", "service_layer"],
       },
     ],
