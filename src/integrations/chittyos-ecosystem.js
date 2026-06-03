@@ -25,7 +25,6 @@ export class ChittyOSEcosystem {
       registry: env.REGISTRY_SERVICE_URL || "https://registry.chitty.cc",
       chittyid: env.CHITTYID_SERVICE_URL || "https://id.chitty.cc",
       auth: "https://auth.chitty.cc",
-      verify: "https://verify.chitty.cc",
       certify: "https://certify.chitty.cc",
       dna: "https://dna.chitty.cc",
     };
@@ -101,12 +100,12 @@ export class ChittyOSEcosystem {
       );
     }
 
-    // 2e. Verify context with ChittyVerify
-    const verification = await this.verifyContext(chittyid, {
-      chittyid,
-      dna: dna.id,
-      apiKeys: apiKeys.keyId,
-    });
+    // 2e. ChittyVerify backend retired (PR #37, 2026-04-23) — verify.chitty.cc is now
+    //     CF Pages SPA with no /api/verify/context route. Explicit skipped marker
+    //     (NOT silent verified:false/true). Restore real call here if verification
+    //     is revived with a real endpoint + per-service token.
+    //     Refs: F-CC-1, state/ecosystem-discovery/CHITTYCONNECT_TOKEN_AUDIT.md
+    const verification = { id: null, status: "skipped-backend-retired" };
 
     // 2f. Certify context with ChittyCertify
     const certification = await this.certifyContext(chittyid, {
@@ -333,45 +332,6 @@ export class ChittyOSEcosystem {
       console.error(`[ChittyRegistry] Registration error:`, error);
       // Registration failure is not critical
       return { registered: false, error: error.message };
-    }
-  }
-
-  /**
-   * Verify context with ChittyVerify
-   * Ensures context meets ChittyOS compliance standards
-   */
-  async verifyContext(chittyid, verificationData) {
-    console.log(`[ChittyVerify] Verifying context ${chittyid}...`);
-
-    try {
-      const response = await fetch(
-        `${this.baseUrls.verify}/api/verify/context`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.env.CHITTY_VERIFY_TOKEN}`,
-            "X-ChittyID": chittyid,
-          },
-          body: JSON.stringify(verificationData),
-        },
-      );
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(
-          `Context verification failed: ${response.status} - ${error}`,
-        );
-      }
-
-      const verification = await response.json();
-      console.log(
-        `[ChittyVerify] Verification complete: ${verification.status}`,
-      );
-      return verification;
-    } catch (error) {
-      console.error(`[ChittyVerify] Verification error:`, error);
-      return { verified: false, error: error.message };
     }
   }
 

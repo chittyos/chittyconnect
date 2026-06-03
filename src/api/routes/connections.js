@@ -792,7 +792,6 @@ const ALLOWED_HOSTS = new Set([
   "contextual.chitty.cc",
   "proof.chitty.cc",
   "trust.chitty.cc",
-  "verify.chitty.cc",
   "monitor.chitty.cc",
   "discovery.chitty.cc",
   "beacon.chitty.cc",
