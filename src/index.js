@@ -1500,6 +1500,7 @@ app.post("/intelligence/relationships/discover", async (c) => {
  */
 import { discoveryRoutes } from "./api/routes/discovery.js";
 import { githubActionsRoutes } from "./api/routes/github-actions.js";
+import { gitConfirmRoutes } from "./api/routes/git-confirm.js";
 
 app.route("/.well-known", discoveryRoutes);
 
@@ -1509,6 +1510,13 @@ app.route("/.well-known", discoveryRoutes);
  * Zero secrets stored in GitHub - just OIDC trust
  */
 app.route("/api/github-actions", githubActionsRoutes);
+
+/**
+ * Git second-factor confirmation endpoint (chittyos/chittyconnect#210).
+ * Issues short-TTL tokens redeemed by the sensitive `git_push --force`
+ * write tool. API-key authenticated via mcpAuthMiddleware inside the route.
+ */
+app.route("/api/git", gitConfirmRoutes);
 
 /**
  * SSE Health check endpoint
