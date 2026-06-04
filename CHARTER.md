@@ -146,9 +146,12 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 #### `[SPEC] POST /api/v1/capabilities/mint`
 
 Mint a short-TTL capability token scoped to a single caller × tenant × repo ×
-operation. Tokens are opaque to clients; their claims are obtained via
-`introspect`. For `operation = "write"` with `force_class != "none"`, a fresh
-confirmation token from `/api/v1/capabilities/confirm` is required.
+operation × ref. Tokens are opaque to clients; their claims are obtained via
+`introspect`. Capabilities are bound to a granular `operation`
+(`read | commit | tag | push`) and MAY NOT be reused for a different action —
+a `commit` capability cannot sign a tag or emit a push event. For
+`operation = "push"` with `force_class != "none"`, a fresh confirmation token
+from `/api/v1/capabilities/confirm` is required.
 
 ```json
 {
@@ -158,15 +161,30 @@ confirmation token from `/api/v1/capabilities/confirm` is required.
     "required": ["caller_chittyid", "tenant_id", "operation", "repo_path"],
     "additionalProperties": false,
     "properties": {
-      "caller_chittyid":    { "type": "string", "pattern": "^[A-Z0-9]{2}-[A-Z0-9]-[A-Z0-9]{3}-[A-Z0-9]{4}-[PLTEA]-[A-Z0-9]{2}-[A-Z0-9]-[A-Z0-9]$" },
+      "caller_chittyid":    { "type": "string", "pattern": "^[A-Z0-9]{2}-[A-Z0-9]-[A-Z0-9]{3}-[A-Z0-9]{4}-[PLTEA]-[0-9]{4}-[0-5]-[0-9]{2}$", "description": "Canonical ChittyID VV-G-LLL-SSSS-T-YYMM-C-XX per chittycanon://gov/governance. T in {P,L,T,E,A}; YYMM is year-month; C is trust level 0-5; XX is mod-97 checksum." },
       "tenant_id":          { "type": "string", "minLength": 1, "maxLength": 128 },
-      "operation":          { "type": "string", "enum": ["read", "write"] },
+      "operation":          { "type": "string", "enum": ["read", "commit", "tag", "push"] },
       "repo_path":          { "type": "string", "minLength": 1, "description": "Absolute path; validated against tenant repo allowlist." },
-      "remote":             { "type": "string", "description": "Required when operation=write and the downstream call is a push." },
+      "remote":             { "type": "string", "description": "Required when operation='push'." },
+      "ref":                { "type": "string", "description": "Required when operation ∈ {commit, tag, push}. Concrete ref (e.g. refs/heads/main, refs/tags/v1.2.3) the capability binds to." },
       "force_class":        { "type": "string", "enum": ["none", "force", "force_with_lease"], "default": "none" },
-      "confirmation_token": { "type": "string", "description": "Required when force_class != 'none'." }
+      "confirmation_token": { "type": "string", "description": "Required when operation='push' AND force_class != 'none'." }
     },
     "allOf": [
+      {
+        "if": {
+          "properties": { "operation": { "enum": ["commit", "tag", "push"] } },
+          "required": ["operation"]
+        },
+        "then": { "required": ["ref"] }
+      },
+      {
+        "if": {
+          "properties": { "operation": { "const": "push" } },
+          "required": ["operation"]
+        },
+        "then": { "required": ["remote"] }
+      },
       {
         "if": {
           "properties": { "force_class": { "enum": ["force", "force_with_lease"] } },
@@ -191,9 +209,10 @@ confirmation token from `/api/v1/capabilities/confirm` is required.
         "properties": {
           "caller_chittyid": { "type": "string" },
           "tenant_id":       { "type": "string" },
-          "operation":       { "type": "string", "enum": ["read", "write"] },
+          "operation":       { "type": "string", "enum": ["read", "commit", "tag", "push"] },
           "repo_path":       { "type": "string" },
           "remote":          { "type": "string" },
+          "ref":             { "type": "string" },
           "force_class":     { "type": "string", "enum": ["none", "force", "force_with_lease"] }
         }
       }
@@ -226,17 +245,21 @@ git operation. Fail-closed if unreachable.
       "expires_at": { "type": "string", "format": "date-time" },
       "scope": {
         "type": "object",
+        "required": ["caller_chittyid", "tenant_id", "operation", "repo_path", "remote", "force_class"],
         "additionalProperties": false,
         "properties": {
           "caller_chittyid": { "type": "string" },
           "tenant_id":       { "type": "string" },
-          "operation":       { "type": "string", "enum": ["read", "write"] },
+          "operation":       { "type": "string", "enum": ["read", "commit", "tag", "push"] },
           "repo_path":       { "type": "string" },
           "remote":          { "type": "string" },
+          "ref":             { "type": "string" },
           "force_class":     { "type": "string", "enum": ["none", "force", "force_with_lease"] }
         }
       }
-    }
+    },
+    "if":   { "properties": { "active": { "const": true } }, "required": ["active"] },
+    "then": { "required": ["scope"] }
   }
 }
 ```
@@ -245,29 +268,49 @@ git operation. Fail-closed if unreachable.
 
 Issue a short-TTL confirmation token. Required as a second factor before
 minting a capability with `force_class != "none"`. Confirmation tokens are
-single-use and bound to caller+tenant+repo+force_class.
+single-use and bound to caller+tenant+repo+remote+ref+force_class. A
+confirmation issued for one (`remote`, `ref`) pair (e.g. `origin` +
+`refs/heads/feature`) CANNOT be redeemed to force-push a different ref
+(e.g. `refs/heads/main`) — the resource server MUST reject scope-mismatched
+tokens with `POLICY_BLOCKED_CONFIRMATION_INVALID`.
 
 ```json
 {
   "name": "capabilities.confirm",
   "input_schema": {
     "type": "object",
-    "required": ["caller_chittyid", "tenant_id", "repo_path", "force_class"],
+    "required": ["caller_chittyid", "tenant_id", "repo_path", "remote", "ref", "force_class"],
     "additionalProperties": false,
     "properties": {
       "caller_chittyid": { "type": "string" },
       "tenant_id":       { "type": "string" },
       "repo_path":       { "type": "string" },
+      "remote":          { "type": "string", "description": "Remote the confirmation authorizes (e.g. 'origin')." },
+      "ref":             { "type": "string", "description": "Concrete ref the confirmation authorizes (e.g. refs/heads/feature). NOT interchangeable across refs." },
       "force_class":     { "type": "string", "enum": ["force", "force_with_lease"] }
     }
   },
   "output_schema": {
     "type": "object",
-    "required": ["confirmation_token", "expires_at"],
+    "required": ["confirmation_token", "expires_at", "bound_scope"],
     "additionalProperties": false,
     "properties": {
       "confirmation_token": { "type": "string" },
-      "expires_at":         { "type": "string", "format": "date-time", "description": "TTL <= 120s." }
+      "expires_at":         { "type": "string", "format": "date-time", "description": "TTL <= 120s." },
+      "bound_scope": {
+        "type": "object",
+        "required": ["caller_chittyid", "tenant_id", "repo_path", "remote", "ref", "force_class"],
+        "additionalProperties": false,
+        "properties": {
+          "caller_chittyid": { "type": "string" },
+          "tenant_id":       { "type": "string" },
+          "repo_path":       { "type": "string" },
+          "remote":          { "type": "string" },
+          "ref":             { "type": "string" },
+          "force_class":     { "type": "string", "enum": ["force", "force_with_lease"] }
+        },
+        "description": "Echo of the exact (caller, tenant, repo, remote, ref, force_class) tuple this token binds to. Mint MUST reject if any field differs."
+      }
     }
   }
 }
@@ -278,7 +321,7 @@ single-use and bound to caller+tenant+repo+force_class.
 Produce a detached signature over the canonical commit payload supplied by the
 resource server. The signing key (resolved from 1Password by the broker) never
 leaves ChittyConnect. The resource server MUST present a valid capability
-token whose scope satisfies `operation=write` and matches `repo_path`.
+token whose scope satisfies `operation="commit"` and matches `repo_path` and `ref`. A capability minted for `tag` or `push` is rejected.
 
 ```json
 {
@@ -295,12 +338,11 @@ token whose scope satisfies `operation=write` and matches `repo_path`.
   },
   "output_schema": {
     "type": "object",
-    "required": ["signature", "signing_key_op", "key_fingerprint"],
+    "required": ["signature", "key_fingerprint"],
     "additionalProperties": false,
     "properties": {
       "signature":       { "type": "string", "description": "ASCII-armored signature block." },
-      "signing_key_op":  { "type": "string", "description": "1Password op:// reference used (not the key)." },
-      "key_fingerprint": { "type": "string" }
+      "key_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 hex digest of the signing public key. Non-sensitive identifier; safe to log. The actual signing key reference (op:// path / 1Password UUID) is broker-internal and MUST NEVER appear in any response, ledger payload, or error envelope." }
     }
   }
 }
@@ -308,7 +350,7 @@ token whose scope satisfies `operation=write` and matches `repo_path`.
 
 #### `[SPEC] POST /api/v1/signing/sign-tag`
 
-Same shape as `sign-commit` but signs an annotated-tag object payload.
+Same shape as `sign-commit` but signs an annotated-tag object payload. The presented capability MUST have `operation="tag"` and matching `repo_path` + `ref`; capabilities for `commit` or `push` are rejected.
 
 ```json
 {
@@ -325,12 +367,11 @@ Same shape as `sign-commit` but signs an annotated-tag object payload.
   },
   "output_schema": {
     "type": "object",
-    "required": ["signature", "signing_key_op", "key_fingerprint"],
+    "required": ["signature", "key_fingerprint"],
     "additionalProperties": false,
     "properties": {
       "signature":       { "type": "string" },
-      "signing_key_op":  { "type": "string" },
-      "key_fingerprint": { "type": "string" }
+      "key_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 hex digest of the signing public key. Non-sensitive; safe to log." }
     }
   }
 }
@@ -351,7 +392,7 @@ default author identity. Called by the resource server during admission.
     "properties": {
       "tenant_id":       { "type": "string" },
       "caller_chittyid": { "type": "string" },
-      "operation":       { "type": "string", "enum": ["read", "write"] }
+      "operation":       { "type": "string", "enum": ["read", "commit", "tag", "push"] }
     }
   },
   "output_schema": {
@@ -415,7 +456,7 @@ client. Domain tag is fixed to `git` on this surface.
 7. **Credential redaction (binding contract)** — any string the resource server places in a `ledger.emit` payload or any error envelope it returns to the client MUST pass through a redaction filter:
    - URL userinfo: strip the `userinfo` component from any URL, rewriting `https?://[^@]+@` to scheme-only `https?://`. Applies to remote URLs and any URL in error messages.
    - CLI output: omit raw `git` stdout/stderr from error envelopes, or pass it through the userinfo strip plus a token-pattern scrub (`gh[pousr]_[A-Za-z0-9_]{20,}`, `github_pat_[A-Za-z0-9_]{20,}`, `xox[bpars]-[A-Za-z0-9-]{10,}`, 40+ char hex/base64 secrets adjacent to `://` or `Authorization:`). When in doubt, omit.
-   - Capability tokens, confirmation tokens, signatures, and signing-key references MUST NEVER appear in ledger payloads or error envelopes.
+   - Capability tokens, confirmation tokens, signatures, and signing-key references (op:// paths, 1Password UUIDs, secret names, env-var names referencing keys) MUST NEVER appear in any broker response (including `/signing/*` outputs), ledger payloads, or error envelopes. Only the non-sensitive `key_fingerprint` (sha256 of the public key) is exported.
 
 #### Error codes
 
