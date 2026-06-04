@@ -38,7 +38,7 @@
   // The only sanctioned deploy path is `npm run deploy[:staging]`.
   // ──────────────────────────────────────────────────────────────────
   "build": {
-    "command": "case \"$WRANGLER_COMMAND\" in deploy|versions) [ \"$CHITTYCONNECT_SAFE_DEPLOY\" = \"1\" ] || { echo '::error::wrangler '\"$WRANGLER_COMMAND\"' was invoked outside scripts/safe-deploy.sh — refusing. Run `npm run deploy` (or `npm run deploy:staging`) instead. See chittyconnect#219.' >&2; exit 1; } ;; esac",
+    "command": "[ \"${CHITTYCONNECT_SAFE_DEPLOY:-0}\" = \"1\" ] || { echo '::error::Direct wrangler deploy blocked. Run: npm run deploy (or deploy:staging). See chittyconnect#219.' >&2; exit 1; }",
     "cwd": "."
   },
 
