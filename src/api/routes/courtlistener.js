@@ -21,10 +21,15 @@
  *
  * Edge behaviors:
  *   - 15-minute Cache API wrap on GETs (bypass via `X-Bypass-Cache: 1`).
+ *     The cache key is the absolute upstream URL — intentionally NOT
+ *     tenant-scoped because CourtListener data is public Free Law Project
+ *     content and identical across tenants.
  *   - Fail-closed 503 POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE when no
  *     token is available from any source.
- *   - Upstream error bodies truncated to 200 chars; the API token is
- *     never echoed in errors or logs.
+ *   - Upstream error bodies are truncated to 200 chars AND scrubbed of
+ *     the resolved API token before being returned to clients.
+ *   - Unknown resources are rejected with 400 `path_not_allowed` (spec)
+ *     before any upstream call.
  *
  * Consumers: ChittyCounsel (counsel.chitty.cc).
  *
@@ -38,10 +43,9 @@ const courtlistenerRoutes = new Hono();
 // Auth: covered by /api/* authenticate middleware in router.js
 
 const CL_API = "https://www.courtlistener.com/api/rest/v4";
-const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 
 // Allowlist of resources reachable through this proxy. Unknown resources
-// are rejected with 404 before any upstream call is made.
+// are rejected with 400 path_not_allowed before any upstream call is made.
 const RESOURCE_ALLOWLIST = new Set([
   "search",
   "opinions",
@@ -74,12 +78,28 @@ async function getCourtListenerToken(env) {
       }
     }
   }
+  // Broker path (1Password) with env-var fallback. Signature mirrors
+  // google.js: (env, brokerPath, fallbackEnvVar, logPrefix). The fallback
+  // env var name matches the Secrets Store binding above so a single
+  // configured value works whether delivered as a Secrets Store binding
+  // or a plain Worker env var.
   return getCredential(
     env,
     "integrations/courtlistener/api_token",
-    "COURTLISTENER_API_TOKEN_FALLBACK",
+    "COURTLISTENER_API_TOKEN",
     "CourtListener",
   );
+}
+
+/**
+ * Scrub the resolved API token from an upstream body before it is
+ * surfaced to the client. Defense-in-depth: if CourtListener ever
+ * reflects the Authorization header value back in an error response,
+ * this prevents it from leaking through the proxy.
+ */
+function scrubToken(text, token) {
+  if (!text || !token) return text || "";
+  return text.split(token).join("[REDACTED]");
 }
 
 /**
@@ -134,9 +154,10 @@ async function clGet(c, upstreamUrl) {
   }
 
   if (!upstream.ok) {
-    const body = await upstream.text().catch(() => "");
+    const raw = await upstream.text().catch(() => "");
+    const safe = scrubToken(raw, token).slice(0, 200);
     return c.json(
-      { error: `CourtListener API ${upstream.status}: ${body.slice(0, 200)}` },
+      { error: `CourtListener API ${upstream.status}: ${safe}` },
       upstream.status,
     );
   }
@@ -148,11 +169,15 @@ async function clGet(c, upstreamUrl) {
     return c.json({ error: "CourtListener API returned invalid JSON" }, 502);
   }
 
+  // Cache-Control is intentionally omitted on the client-facing response.
+  // The Worker Cache API stores responses internally and does not require
+  // a Cache-Control header for HIT semantics; emitting `public, max-age=…`
+  // would also instruct downstream browsers/CDNs to cache responses from
+  // an authenticated proxy, which is undesirable. Matches google.js.
   const res = new Response(JSON.stringify(json), {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${CACHE_TTL_SECONDS}`,
       "X-Cache": "MISS",
     },
   });
@@ -212,7 +237,6 @@ courtlistenerRoutes.post("/citation-lookup", async (c) => {
   if (!token) return failClosedNoToken(c);
 
   const body = await c.req.text();
-  const contentType = c.req.header("Content-Type") || "application/json";
 
   let upstream;
   try {
@@ -221,7 +245,11 @@ courtlistenerRoutes.post("/citation-lookup", async (c) => {
       headers: {
         Authorization: `Token ${token}`,
         Accept: "application/json",
-        "Content-Type": contentType,
+        // Pin Content-Type to application/json. CourtListener's
+        // citation-lookup endpoint only accepts JSON; forwarding an
+        // arbitrary client-supplied Content-Type would let a caller
+        // confuse the upstream parser.
+        "Content-Type": "application/json",
       },
       body,
     });
@@ -230,9 +258,10 @@ courtlistenerRoutes.post("/citation-lookup", async (c) => {
   }
 
   if (!upstream.ok) {
-    const text = await upstream.text().catch(() => "");
+    const raw = await upstream.text().catch(() => "");
+    const safe = scrubToken(raw, token).slice(0, 200);
     return c.json(
-      { error: `CourtListener API ${upstream.status}: ${text.slice(0, 200)}` },
+      { error: `CourtListener API ${upstream.status}: ${safe}` },
       upstream.status,
     );
   }
@@ -253,15 +282,17 @@ courtlistenerRoutes.post("/citation-lookup", async (c) => {
 
 /**
  * GET /:resource and /:resource/:id
- * Generic allowlisted resource fetch. Rejects unknown resources with 404
- * before any upstream call. `id` is URL-encoded.
+ * Generic allowlisted resource fetch. Rejects unknown resources with
+ * 400 path_not_allowed before any upstream call. `id` is URL-encoded.
  */
 courtlistenerRoutes.get("/:resource/:id?", async (c) => {
   const resource = c.req.param("resource");
   const id = c.req.param("id");
 
   if (!RESOURCE_ALLOWLIST.has(resource)) {
-    return c.json({ error: `Unknown CourtListener resource: ${resource}` }, 404);
+    // Spec error code: 400 path_not_allowed. Includes the offending
+    // resource string for operator-side diagnostics.
+    return c.json({ error: "path_not_allowed", resource }, 400);
   }
 
   // citation-lookup is POST-only via this proxy

@@ -1119,7 +1119,9 @@
         "summary": "Provision Tenant Database",
         "description": "Provision an isolated Neon database project for a tenant. Creates physical data isolation with base migrations for evidence storage and client data.",
         "operationId": "provisionTenant",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1127,11 +1129,22 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "tenantId": { "type": "string", "description": "Unique tenant identifier (ChittyID, org slug, or case ID)" },
-                  "region": { "type": "string", "description": "Neon region (default: aws-us-east-2)" },
-                  "pgVersion": { "type": "string", "description": "PostgreSQL version (default: 16)" }
+                  "tenantId": {
+                    "type": "string",
+                    "description": "Unique tenant identifier (ChittyID, org slug, or case ID)"
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "Neon region (default: aws-us-east-2)"
+                  },
+                  "pgVersion": {
+                    "type": "string",
+                    "description": "PostgreSQL version (default: 16)"
+                  }
                 },
-                "required": ["tenantId"]
+                "required": [
+                  "tenantId"
+                ]
               }
             }
           }
@@ -1144,18 +1157,33 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": { "type": "string" },
-                    "neonProjectId": { "type": "string" },
-                    "region": { "type": "string" },
-                    "status": { "type": "string" },
-                    "migrationsApplied": { "type": "integer" },
-                    "createdAt": { "type": "string", "format": "date-time" }
+                    "tenantId": {
+                      "type": "string"
+                    },
+                    "neonProjectId": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "migrationsApplied": {
+                      "type": "integer"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "409": { "description": "Tenant already provisioned" }
+          "409": {
+            "description": "Tenant already provisioned"
+          }
         }
       }
     },
@@ -1164,9 +1192,18 @@
         "summary": "Get Tenant Details",
         "description": "Retrieve details of a provisioned tenant's Neon project including project ID, region, and status.",
         "operationId": "getTenant",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "parameters": [
-          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -1176,28 +1213,55 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": { "type": "string" },
-                    "neonProjectId": { "type": "string" },
-                    "region": { "type": "string" },
-                    "status": { "type": "string" },
-                    "pgVersion": { "type": "string" },
-                    "createdAt": { "type": "string", "format": "date-time" },
-                    "updatedAt": { "type": "string", "format": "date-time" }
+                    "tenantId": {
+                      "type": "string"
+                    },
+                    "neonProjectId": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "pgVersion": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "description": "Tenant not found" }
+          "404": {
+            "description": "Tenant not found"
+          }
         }
       },
       "delete": {
         "summary": "Deprovision Tenant",
         "description": "Deprovision a tenant's Neon project. Deletes the project and marks the tenant as deprovisioned. This is destructive.",
         "operationId": "deprovisionTenant",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "parameters": [
-          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -1207,14 +1271,20 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": { "type": "string" },
-                    "status": { "type": "string" }
+                    "tenantId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "description": "Tenant not found" }
+          "404": {
+            "description": "Tenant not found"
+          }
         }
       }
     },
@@ -1223,11 +1293,38 @@
         "summary": "List Tenant Projects",
         "description": "List all provisioned tenant Neon projects with pagination. Connection strings are never exposed.",
         "operationId": "listTenants",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "suspended", "deprovisioned"] } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "suspended",
+                "deprovisioned"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -1237,8 +1334,15 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenants": { "type": "array", "items": { "type": "object" } },
-                    "total": { "type": "integer" }
+                    "tenants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -1252,9 +1356,18 @@
         "summary": "Export Tenant Project",
         "description": "Export tenant Neon project metadata for portability review. Does not expose connection credentials.",
         "operationId": "exportTenant",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "parameters": [
-          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -1264,17 +1377,30 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": { "type": "string" },
-                    "neonProjectId": { "type": "string" },
-                    "region": { "type": "string" },
-                    "project": { "type": "object" },
-                    "exportedAt": { "type": "string", "format": "date-time" }
+                    "tenantId": {
+                      "type": "string"
+                    },
+                    "neonProjectId": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "project": {
+                      "type": "object"
+                    },
+                    "exportedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "description": "Tenant not found" }
+          "404": {
+            "description": "Tenant not found"
+          }
         }
       }
     },
@@ -1283,9 +1409,18 @@
         "summary": "Replicate Record to Tenant",
         "description": "Replicate a data record to a tenant's isolated Neon database. Supports evidence_documents, evidence_custody_log, document_families, client_documents, and financial_records tables. Column allowlists prevent SQL injection.",
         "operationId": "replicateToTenant",
-        "tags": ["Tenant Management"],
+        "tags": [
+          "Tenant Management"
+        ],
         "parameters": [
-          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1294,10 +1429,25 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "table": { "type": "string", "enum": ["evidence_documents", "evidence_custody_log", "document_families", "client_documents", "financial_records"] },
-                  "record": { "type": "object", "description": "Record data with column names as keys" }
+                  "table": {
+                    "type": "string",
+                    "enum": [
+                      "evidence_documents",
+                      "evidence_custody_log",
+                      "document_families",
+                      "client_documents",
+                      "financial_records"
+                    ]
+                  },
+                  "record": {
+                    "type": "object",
+                    "description": "Record data with column names as keys"
+                  }
                 },
-                "required": ["table", "record"]
+                "required": [
+                  "table",
+                  "record"
+                ]
               }
             }
           }
@@ -1310,10 +1460,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "replicated": { "type": "boolean" },
-                    "table": { "type": "string" },
-                    "recordId": { "type": "string" },
-                    "layer": { "type": "string" }
+                    "replicated": {
+                      "type": "boolean"
+                    },
+                    "table": {
+                      "type": "string"
+                    },
+                    "recordId": {
+                      "type": "string"
+                    },
+                    "layer": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -1324,63 +1482,258 @@
     },
     "/api/proxy/courtlistener/search": {
       "get": {
-        "tags": ["CourtListener"],
+        "tags": [
+          "CourtListener"
+        ],
         "summary": "CourtListener unified search (proxy)",
         "description": "Forwards to https://www.courtlistener.com/api/rest/v4/search/. 15-min Cache API wrap; bypass with header X-Bypass-Cache: 1. Fail-closed 503 POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE when token is not provisioned.",
         "parameters": [
-          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Full-text query" },
-          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["o", "r", "rd", "d", "oa", "p"] }, "description": "Result type: o=opinions, r=RECAP, rd=RECAP documents, d=dockets, oa=oral args, p=people" },
-          { "name": "page_size", "in": "query", "schema": { "type": "integer" } },
-          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Full-text query"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "o",
+                "r",
+                "rd",
+                "d",
+                "oa",
+                "p"
+              ]
+            },
+            "description": "Result type: o=opinions, r=RECAP, rd=RECAP documents, d=dockets, oa=oral args, p=people"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Search results", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "503": { "description": "CourtListener token not provisioned" }
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
+          }
         }
       }
     },
     "/api/proxy/courtlistener/citation-lookup": {
       "post": {
-        "tags": ["CourtListener"],
+        "tags": [
+          "CourtListener"
+        ],
         "summary": "Citation lookup (proxy)",
         "description": "Forwards JSON body to https://www.courtlistener.com/api/rest/v4/citation-lookup/. Not cached.",
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"] } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Resolved citations", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } } },
-          "503": { "description": "CourtListener token not provisioned" }
+          "200": {
+            "description": "Resolved citations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
+          }
         }
       }
     },
     "/api/proxy/courtlistener/{resource}": {
       "get": {
-        "tags": ["CourtListener"],
+        "tags": [
+          "CourtListener"
+        ],
         "summary": "Generic allowlisted resource fetch (proxy)",
-        "description": "Allowlist: opinions, clusters, dockets, docket-entries, recap-documents, audio, people, courts. Unknown resources → 404. 15-min Cache API wrap.",
+        "description": "Allowlist: opinions, clusters, dockets, docket-entries, recap-documents, audio, people, courts. Unknown resources are rejected with 400 path_not_allowed before any upstream call. 15-min Cache API wrap on the Worker side; Cache-Control header is not emitted to clients.",
         "parameters": [
-          { "name": "resource", "in": "path", "required": true, "schema": { "type": "string", "enum": ["opinions", "clusters", "dockets", "docket-entries", "recap-documents", "audio", "people", "courts"] } }
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "opinions",
+                "clusters",
+                "dockets",
+                "docket-entries",
+                "recap-documents",
+                "audio",
+                "people",
+                "courts"
+              ]
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Resource list", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "404": { "description": "Unknown resource" },
-          "503": { "description": "CourtListener token not provisioned" }
+          "200": {
+            "description": "Resource list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
+          },
+          "400": {
+            "description": "path_not_allowed \u2014 resource not in allowlist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "path_not_allowed"
+                      ]
+                    },
+                    "resource": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "resource"
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     },
     "/api/proxy/courtlistener/{resource}/{id}": {
       "get": {
-        "tags": ["CourtListener"],
+        "tags": [
+          "CourtListener"
+        ],
         "summary": "Allowlisted resource item fetch (proxy)",
         "parameters": [
-          { "name": "resource", "in": "path", "required": true, "schema": { "type": "string", "enum": ["opinions", "clusters", "dockets", "docket-entries", "recap-documents", "audio", "people", "courts"] } },
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "opinions",
+                "clusters",
+                "dockets",
+                "docket-entries",
+                "recap-documents",
+                "audio",
+                "people",
+                "courts"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Resource item", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "404": { "description": "Unknown resource or item not found" },
-          "503": { "description": "CourtListener token not provisioned" }
+          "200": {
+            "description": "Resource item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
+          },
+          "400": {
+            "description": "path_not_allowed \u2014 resource not in allowlist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "path_not_allowed"
+                      ]
+                    },
+                    "resource": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "resource"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item not found at upstream"
+          }
         }
       }
     }
@@ -1783,7 +2136,7 @@
     },
     {
       "name": "Tenant Management",
-      "description": "Project-per-tenant Neon database isolation — provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
+      "description": "Project-per-tenant Neon database isolation \u2014 provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
     }
   ]
 }

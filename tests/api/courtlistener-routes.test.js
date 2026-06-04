@@ -160,13 +160,28 @@ describe("GET /search", () => {
     expect(res.status).toBe(502);
   });
 
-  it("never echoes the API token in error bodies", async () => {
+  it("scrubs the resolved API token from error body (defense-in-depth)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(500, "boom test-cl-token boom"));
     const res = await get("/search", env, { query: "q=foo" });
     const body = await res.json();
-    // Truncation may still surface the token from upstream — but the proxy itself
-    // does not add it. Assert no extra header echo and the token isn't in error key path.
+    expect(body.error).not.toContain("test-cl-token");
+    expect(body.error).toContain("[REDACTED]");
     expect(body.error).not.toContain("Authorization");
+  });
+
+  it("does not leak the token in success-path response bodies", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ count: 0, results: [], note: "harmless" })
+    );
+    const res = await get("/search", env, { query: "q=ok" });
+    const text = await res.text();
+    expect(text).not.toContain("test-cl-token");
+  });
+
+  it("propagates upstream 429 rate-limit status to the client", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(429, "Too Many Requests"));
+    const res = await get("/search", env, { query: "q=foo" });
+    expect(res.status).toBe(429);
   });
 });
 
@@ -185,9 +200,21 @@ describe("GET /:resource allowlist", () => {
   });
   afterEach(() => { globalThis.fetch = originalFetch; });
 
-  it("404s unknown resource without calling upstream", async () => {
+  it("400 path_not_allowed for unknown resource without calling upstream", async () => {
     const res = await get("/not-a-real-resource", env);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("path_not_allowed");
+    expect(body.resource).toBe("not-a-real-resource");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("400 path_not_allowed includes the offending resource string", async () => {
+    const res = await get("/etc-passwd-style-injection", env);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("path_not_allowed");
+    expect(typeof body.resource).toBe("string");
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -276,6 +303,36 @@ describe("POST /citation-lookup", () => {
     const body = await res.json();
     expect(body.error.length).toBeLessThan(400);
   });
+
+  it("scrubs the API token from POST error bodies", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      errorResponse(500, "internal failure test-cl-token internal")
+    );
+    const res = await post("/citation-lookup", env, { body: { text: "x" } });
+    const body = await res.json();
+    expect(body.error).not.toContain("test-cl-token");
+    expect(body.error).toContain("[REDACTED]");
+  });
+
+  it("pins upstream Content-Type to application/json regardless of client header", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse([]));
+    await post("/citation-lookup", env, {
+      body: '{"text":"x"}',
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("never consults Cache API for POST (POST is not cached)", async () => {
+    const cacheMatch = vi.fn().mockResolvedValue(undefined);
+    const cachePut = vi.fn().mockResolvedValue(undefined);
+    globalThis.caches = { default: { match: cacheMatch, put: cachePut } };
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse([]));
+    await post("/citation-lookup", env, { body: { text: "x" } });
+    expect(cacheMatch).not.toHaveBeenCalled();
+    expect(cachePut).not.toHaveBeenCalled();
+  });
 });
 
 // ----------------------------------------------------------------
@@ -344,6 +401,9 @@ describe("Cache API wrap on GETs", () => {
     const res = await get("/search", env, { query: "q=miss" });
     expect(res.status).toBe(200);
     expect(res.headers.get("X-Cache")).toBe("MISS");
-    expect(res.headers.get("Cache-Control")).toContain("max-age=900");
+    // Cache-Control is intentionally NOT emitted on proxy responses
+    // (Worker Cache API stores internally; downstream CDNs/browsers
+    // must not cache authenticated-proxy responses).
+    expect(res.headers.get("Cache-Control")).toBeNull();
   });
 });
