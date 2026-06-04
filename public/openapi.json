@@ -1321,6 +1321,68 @@
           }
         }
       }
+    },
+    "/api/proxy/courtlistener/search": {
+      "get": {
+        "tags": ["CourtListener"],
+        "summary": "CourtListener unified search (proxy)",
+        "description": "Forwards to https://www.courtlistener.com/api/rest/v4/search/. 15-min Cache API wrap; bypass with header X-Bypass-Cache: 1. Fail-closed 503 POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE when token is not provisioned.",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Full-text query" },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["o", "r", "rd", "d", "oa", "p"] }, "description": "Result type: o=opinions, r=RECAP, rd=RECAP documents, d=dockets, oa=oral args, p=people" },
+          { "name": "page_size", "in": "query", "schema": { "type": "integer" } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Search results", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "503": { "description": "CourtListener token not provisioned" }
+        }
+      }
+    },
+    "/api/proxy/courtlistener/citation-lookup": {
+      "post": {
+        "tags": ["CourtListener"],
+        "summary": "Citation lookup (proxy)",
+        "description": "Forwards JSON body to https://www.courtlistener.com/api/rest/v4/citation-lookup/. Not cached.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"] } } }
+        },
+        "responses": {
+          "200": { "description": "Resolved citations", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } } },
+          "503": { "description": "CourtListener token not provisioned" }
+        }
+      }
+    },
+    "/api/proxy/courtlistener/{resource}": {
+      "get": {
+        "tags": ["CourtListener"],
+        "summary": "Generic allowlisted resource fetch (proxy)",
+        "description": "Allowlist: opinions, clusters, dockets, docket-entries, recap-documents, audio, people, courts. Unknown resources → 404. 15-min Cache API wrap.",
+        "parameters": [
+          { "name": "resource", "in": "path", "required": true, "schema": { "type": "string", "enum": ["opinions", "clusters", "dockets", "docket-entries", "recap-documents", "audio", "people", "courts"] } }
+        ],
+        "responses": {
+          "200": { "description": "Resource list", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "Unknown resource" },
+          "503": { "description": "CourtListener token not provisioned" }
+        }
+      }
+    },
+    "/api/proxy/courtlistener/{resource}/{id}": {
+      "get": {
+        "tags": ["CourtListener"],
+        "summary": "Allowlisted resource item fetch (proxy)",
+        "parameters": [
+          { "name": "resource", "in": "path", "required": true, "schema": { "type": "string", "enum": ["opinions", "clusters", "dockets", "docket-entries", "recap-documents", "audio", "people", "courts"] } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Resource item", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "Unknown resource or item not found" },
+          "503": { "description": "CourtListener token not provisioned" }
+        }
+      }
     }
   },
   "components": {

@@ -77,7 +77,8 @@
     { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
 
   // ──────────────────────────────────────────────────────────────────
@@ -203,7 +204,8 @@
         { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
       "vars": {
         "ENVIRONMENT": "staging",
@@ -331,7 +333,8 @@
         { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
 
       "routes": [
