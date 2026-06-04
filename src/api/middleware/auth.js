@@ -11,6 +11,24 @@ function isContextSyncPath(c) {
   }
 }
 
+/**
+ * Paths that perform their own JWT/JWKS-based authentication and must NOT
+ * be gated by the API-key `authenticate` middleware. The downstream router
+ * for these paths is responsible for rejecting unauthenticated requests.
+ *
+ * Currently: `/api/v1/neon-auth/*` runs `requireChittyAuthJWT` per-route
+ * (verifies Bearer tokens against auth.chitty.cc JWKS — see
+ * `src/auth/jwks-verify.js` and `src/auth/neon-user-store.js`).
+ */
+function isJwtAuthOwnedPath(c) {
+  try {
+    const url = new URL(c.req.raw?.url || "http://localhost");
+    return url.pathname.startsWith("/api/v1/neon-auth/");
+  } catch {
+    return false;
+  }
+}
+
 function cfAccessHeadersMatch(c) {
   const incomingId = c.req.header("CF-Access-Client-Id") || "";
   const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
@@ -27,6 +45,15 @@ function cfAccessHeadersMatch(c) {
 }
 
 export async function authenticate(c, next) {
+  // Skip API-key auth for routes that do their own JWT/JWKS verification.
+  // Those routes (see isJwtAuthOwnedPath) gate themselves; falling through
+  // here would otherwise reject any request that does not also carry an
+  // X-ChittyOS-API-Key.
+  if (isJwtAuthOwnedPath(c)) {
+    await next();
+    return;
+  }
+
   const authorizationHeader = c.req.header("Authorization") || "";
   const bearerMatch = authorizationHeader.match(/^Bearer\s+(.+)$/i);
   const bearerToken = bearerMatch ? bearerMatch[1].trim() : null;
