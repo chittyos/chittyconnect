@@ -178,6 +178,10 @@
     // ════════════════════════════════════════════════════════════════
     "staging": {
       "name": "chittyconnect-staging",
+      // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
+      // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
+      // is owned by the chittymcp worker). Closes #192.
+      "workers_dev": true,
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -271,10 +275,12 @@
         "producers": [
           { "binding": "EVENT_Q", "queue": "github-events" },
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
-        ],
-        "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
+        // No `consumers` block — `documint-proofs` is consumed by the
+        // production chittyconnect worker. A Cloudflare queue can have
+        // only one consumer worker, so staging must not register itself.
+        // Staging can still produce to the queue for end-to-end testing;
+        // prod will process the messages. Closes #193.
       },
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
