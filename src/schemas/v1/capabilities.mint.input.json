@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "chittycanon://core/services/chittyconnect/schemas/v1/capabilities.mint.input",
+  "type": "object",
+  "required": ["caller_chittyid", "tenant_id", "operation", "repo_path"],
+  "additionalProperties": false,
+  "properties": {
+    "caller_chittyid": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{2}-[A-Z0-9]-[A-Z0-9]{3}-[A-Z0-9]{4}-[PLTEA]-[0-9]{4}-[0-5]-[0-9]{2}$",
+      "description": "Canonical ChittyID VV-G-LLL-SSSS-T-YYMM-C-XX per chittycanon://gov/governance."
+    },
+    "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "operation": { "type": "string", "enum": ["read", "commit", "tag", "push"] },
+    "repo_path": { "type": "string", "minLength": 1 },
+    "remote": { "type": "string" },
+    "ref": { "type": "string" },
+    "force_class": {
+      "type": "string",
+      "enum": ["none", "force", "force_with_lease"],
+      "default": "none"
+    },
+    "confirmation_token": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "operation": { "enum": ["commit", "tag", "push"] } },
+        "required": ["operation"]
+      },
+      "then": { "required": ["ref"] }
+    },
+    {
+      "if": {
+        "properties": { "operation": { "const": "push" } },
+        "required": ["operation"]
+      },
+      "then": { "required": ["remote"] }
+    },
+    {
+      "if": {
+        "properties": { "force_class": { "enum": ["force", "force_with_lease"] } },
+        "required": ["force_class"]
+      },
+      "then": { "required": ["confirmation_token"] }
+    }
+  ]
+}

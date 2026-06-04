@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "chittycanon://core/services/chittyconnect/schemas/v1/capabilities.confirm.output",
+  "type": "object",
+  "required": ["confirmation_token", "expires_at", "bound_scope"],
+  "additionalProperties": false,
+  "properties": {
+    "confirmation_token": { "type": "string" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "bound_scope": {
+      "type": "object",
+      "required": ["caller_chittyid", "tenant_id", "repo_path", "remote", "ref", "force_class"],
+      "additionalProperties": false,
+      "properties": {
+        "caller_chittyid": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "repo_path": { "type": "string" },
+        "remote": { "type": "string" },
+        "ref": { "type": "string" },
+        "force_class": { "type": "string", "enum": ["force", "force_with_lease"] }
+      }
+    }
+  }
+}
