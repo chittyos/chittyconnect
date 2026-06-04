@@ -110,25 +110,37 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - `chitty_evidence_ingest` - Ingest evidence
 - `chitty_services_status` - Monitor ecosystem health
 - `chitty_finance_connect_bank` - Connect banking
-- `git_commit` - Create signed commit in an allowlisted repo (policy-gated, see Git Tool Surface)
-- `git_push` - Push to an allowlisted remote (policy-gated, force operations require second-factor)
-- `git_tag` - Create signed tag at a ref (policy-gated)
 
-### Git Tool Surface (write/sensitive)
+#### Planned (Spec)
+> The following tools are spec-only — not yet present in the `MCP_TOOLS` registry.
+> Implementation tracked in chittyos/chittyconnect#209. See "Git Tool Surface" below
+> for full schemas and policy gates.
 
-> Status: SPEC — implementation tracked in followup issue. Read-only git tools
-> (`git_status`, `git_log`, `git_diff`, `git_show`, `git_blame`, `git_branch_list`)
-> live on chittymcp via the `chittyagent-git` upstream. Write tools live here on
-> ChittyConnect because they fall under the sensitive-intent contract
-> (`~/.ch1tty/canon/system-wide-sensitive-intent-contract-v1.md`) and require
-> OAuth + 1Password-zerotrust + ChittyLedger audit.
+- `[SPEC] git_commit` - Create signed commit in an allowlisted repo (policy-gated)
+- `[SPEC] git_push` - Push to an allowlisted remote (policy-gated, force operations require second-factor)
+- `[SPEC] git_tag` - Create signed tag at a ref (policy-gated)
 
-#### `git_commit`
+### Git Tool Surface (write/sensitive) — SPEC
+
+> **Status: SPEC** — these tools are NOT YET IMPLEMENTED. They are not present in
+> the `MCP_TOOLS` registry. Implementation tracked in chittyos/chittyconnect#209.
+>
+> Read-only git tools (`git_status`, `git_log`, `git_diff`, `git_show`, `git_blame`,
+> `git_branch_list`) live on chittymcp via the `chittyagent-git` upstream. Write
+> tools are spec'd here on ChittyConnect because they fall under the sensitive-intent
+> contract (`~/.ch1tty/canon/system-wide-sensitive-intent-contract-v1.md`) and
+> require OAuth + 1Password-zerotrust + ChittyLedger audit.
+>
+> **Signing is mandatory and non-overridable** for `git_commit` and `git_tag` —
+> the input schema deliberately omits a `sign` field so clients cannot disable it.
+> The implementation MUST sign every commit and tag.
+
+#### `[SPEC] git_commit`
 
 ```json
 {
   "name": "git_commit",
-  "description": "Create a signed commit in an allowlisted local repo. Signing key resolved from 1Password; never from env or disk plaintext.",
+  "description": "Create a signed commit in an allowlisted local repo. Signing is mandatory and non-overridable. Signing key resolved from 1Password; never from env or disk plaintext.",
   "input_schema": {
     "type": "object",
     "required": ["repo_path", "message"],
@@ -137,7 +149,6 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
       "repo_path":  { "type": "string", "description": "Absolute path; must match CHITTYCONNECT_GIT_REPO_ROOTS allowlist." },
       "message":    { "type": "string", "minLength": 1, "maxLength": 4096 },
       "paths":      { "type": "array",  "items": { "type": "string" }, "description": "Optional explicit paths; defaults to all staged." },
-      "sign":       { "type": "boolean", "default": true },
       "author":     { "type": "string", "description": "Optional 'Name <email>' override; subject to author allowlist." }
     }
   },
@@ -146,7 +157,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
     "required": ["commit_sha", "signed", "ledger_event_id"],
     "properties": {
       "commit_sha":      { "type": "string" },
-      "signed":          { "type": "boolean" },
+      "signed":          { "type": "boolean", "const": true, "description": "Always true — signing is mandatory." },
       "signing_key_op":  { "type": "string", "description": "1Password op:// reference used (not the key)." },
       "ledger_event_id": { "type": "string" }
     }
@@ -154,12 +165,12 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 }
 ```
 
-#### `git_push`
+#### `[SPEC] git_push`
 
 ```json
 {
   "name": "git_push",
-  "description": "Push a ref to an allowlisted remote. Force operations require explicit second-factor confirmation. Force-push to main/master is hard-denied.",
+  "description": "Push a ref to an allowlisted remote. Force operations require explicit second-factor confirmation. force and force_with_lease are mutually exclusive; either one requires a confirmation_token. Force-push to main/master is hard-denied.",
   "input_schema": {
     "type": "object",
     "required": ["repo_path", "ref"],
@@ -170,14 +181,35 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
       "ref":               { "type": "string", "description": "Local ref or refspec." },
       "force":             { "type": "boolean", "default": false },
       "force_with_lease":  { "type": "boolean", "default": false },
-      "confirmation_token":{ "type": "string", "description": "Required when force=true. Short-lived token from ChittyConnect's confirm endpoint." }
-    }
+      "confirmation_token":{ "type": "string", "description": "Required when force=true OR force_with_lease=true. Short-lived token from ChittyConnect's confirm endpoint." }
+    },
+    "allOf": [
+      {
+        "not": {
+          "type": "object",
+          "properties": {
+            "force":            { "const": true },
+            "force_with_lease": { "const": true }
+          },
+          "required": ["force", "force_with_lease"]
+        }
+      },
+      {
+        "if": {
+          "anyOf": [
+            { "type": "object", "properties": { "force":            { "const": true } }, "required": ["force"] },
+            { "type": "object", "properties": { "force_with_lease": { "const": true } }, "required": ["force_with_lease"] }
+          ]
+        },
+        "then": { "required": ["confirmation_token"] }
+      }
+    ]
   },
   "output_schema": {
     "type": "object",
     "required": ["remote_url", "pushed_refs", "ledger_event_id"],
     "properties": {
-      "remote_url":      { "type": "string" },
+      "remote_url":      { "type": "string", "description": "REDACTED form of the remote URL — userinfo (any embedded credentials matching https?://[^@]+@) MUST be stripped before return. Example: https://github.com/owner/repo.git (never https://TOKEN@github.com/...)." },
       "pushed_refs":     { "type": "array", "items": { "type": "string" } },
       "ledger_event_id": { "type": "string" }
     }
@@ -185,22 +217,21 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 }
 ```
 
-#### `git_tag`
+#### `[SPEC] git_tag`
 
 ```json
 {
   "name": "git_tag",
-  "description": "Create a signed annotated tag at a ref.",
+  "description": "Create a signed annotated tag at a ref. Signing is mandatory and non-overridable.",
   "input_schema": {
     "type": "object",
     "required": ["repo_path", "name", "message"],
     "additionalProperties": false,
     "properties": {
       "repo_path": { "type": "string" },
-      "name":      { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+      "name":      { "type": "string", "pattern": "^(?!-)[A-Za-z0-9._/-]+$", "description": "Tag name. MUST NOT start with '-' to prevent option-injection if the implementation shells out to git." },
       "ref":       { "type": "string", "default": "HEAD" },
-      "message":   { "type": "string", "minLength": 1 },
-      "sign":      { "type": "boolean", "default": true }
+      "message":   { "type": "string", "minLength": 1 }
     }
   },
   "output_schema": {
@@ -209,7 +240,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
     "properties": {
       "tag_name":        { "type": "string" },
       "object_sha":      { "type": "string" },
-      "signed":          { "type": "boolean" },
+      "signed":          { "type": "boolean", "const": true, "description": "Always true — signing is mandatory." },
       "ledger_event_id": { "type": "string" }
     }
   }
@@ -218,12 +249,15 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 
 #### Policy gates (binding)
 
-1. **Signing key** — resolved from 1Password via `op://` reference per the sensitive-intent contract. Never read from env vars, disk, or chat. If 1Password is unreachable → fail closed.
+1. **Signing key** — resolved from 1Password via `op://` reference per the sensitive-intent contract. Never read from env vars, disk, or chat. Signing is mandatory for `git_commit` and `git_tag`; the input schemas omit any disable knob. If 1Password is unreachable → fail closed.
 2. **Remote allowlist** — per-tenant config. Default allowlist: `github.com/CHITTYOS/*`, `github.com/CHITTYFOUNDATION/*`. Pushes to non-allowlisted remotes → `POLICY_BLOCKED_REMOTE_NOT_ALLOWED`.
 3. **Repo allowlist** — `CHITTYCONNECT_GIT_REPO_ROOTS` env (cold-source: 1Password). Repos outside → `POLICY_BLOCKED_REPO_NOT_ALLOWED`.
-4. **Force-push guard** — `force=true` requires a fresh `confirmation_token` from `POST /api/git/confirm`. Force-push to `main` or `master` (or repo default branch) is hard-denied regardless of token → `POLICY_BLOCKED_FORCE_TO_PROTECTED`.
+4. **Force-push guard** — `force=true` OR `force_with_lease=true` requires a fresh `confirmation_token` from `POST /api/git/confirm` (same risk class — both can overwrite remote history). Setting both flags true is rejected at the schema layer. Force-push to `main` or `master` (or repo default branch) is hard-denied regardless of token → `POLICY_BLOCKED_FORCE_TO_PROTECTED`.
 5. **Audit** — every successful write emits a ChittyLedger event (domain-tagged `git`, hash-chained per the canonical projection model). The `ledger_event_id` is returned in the response.
 6. **Broker liveness** — if the policy broker is unreachable, fail closed with `POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE`. No local fallback.
+7. **Credential redaction (binding contract)** — any string returned to the caller that may have originated from a git remote URL or git CLI output MUST pass through a redaction filter before serialization:
+   - URL userinfo: the implementation MUST strip the `userinfo` component from any URL, rewriting `https?://[^@]+@` to the scheme-only prefix `https?://`. This applies to the `remote_url` output field and to any URL appearing in error messages.
+   - CLI output: the implementation MUST either omit raw `git` stdout/stderr from error envelopes or pass it through the same userinfo-stripping filter plus a token-pattern scrub (common Git provider PAT/OAuth patterns, e.g. `gh[pousr]_[A-Za-z0-9_]{20,}`, `github_pat_[A-Za-z0-9_]{20,}`, `xox[bpars]-[A-Za-z0-9-]{10,}`, generic 40+ char hex/base64 secrets adjacent to `://` or `Authorization:`). When in doubt, omit.
 
 #### Error codes
 
@@ -232,11 +266,12 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | `POLICY_BLOCKED_REPO_NOT_ALLOWED` | `repo_path` not in allowlist |
 | `POLICY_BLOCKED_REMOTE_NOT_ALLOWED` | Remote URL not in tenant allowlist |
 | `POLICY_BLOCKED_FORCE_TO_PROTECTED` | Force-push attempted against protected branch |
-| `POLICY_BLOCKED_CONFIRMATION_REQUIRED` | `force=true` without valid `confirmation_token` |
+| `POLICY_BLOCKED_CONFIRMATION_REQUIRED` | `force=true` or `force_with_lease=true` without valid `confirmation_token` |
+| `POLICY_BLOCKED_FORCE_FLAGS_CONFLICT` | Both `force` and `force_with_lease` set true (schema-level reject) |
 | `POLICY_BLOCKED_SIGNING_KEY_UNAVAILABLE` | 1Password unreachable or key missing |
 | `POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE` | Policy broker unreachable; fail closed |
 | `GIT_DIRTY_INDEX` | Commit attempted with no staged changes and no `paths` |
-| `GIT_REMOTE_REJECTED` | Underlying `git push` returned non-zero (output included) |
+| `GIT_REMOTE_REJECTED` | Underlying `git push` returned non-zero. Any embedded output MUST be redacted per the Credential redaction contract above (userinfo stripped, token patterns scrubbed); when in doubt, the implementation omits raw output and returns only the exit code. |
 
 ### Authentication
 ```

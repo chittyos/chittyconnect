@@ -65,8 +65,25 @@ async function ensureEcosystemInitialized(env) {
       "[ChittyConnect] Initializing ChittyOS ecosystem integration...",
     );
 
-    // Initialize D1 database schema (critical)
-    await initializeDatabase(env.DB);
+    // Initialize D1 database schema. Non-fatal: if the DB binding is
+    // missing/broken (e.g. a deploy lag where the live worker pre-dates the
+    // current bindings) we must NOT poison the entire ecosystem init —
+    // otherwise every authenticated route returns a raw 500 instead of the
+    // 503/JSON envelope the handlers expect. See chittyos/chittyconnect#207.
+    if (env.DB && typeof env.DB.prepare === "function") {
+      try {
+        await initializeDatabase(env.DB);
+      } catch (err) {
+        console.warn(
+          "[ChittyConnect] initializeDatabase failed (continuing):",
+          err?.message || err,
+        );
+      }
+    } else {
+      console.warn(
+        "[ChittyConnect] env.DB binding missing or invalid; skipping schema init",
+      );
+    }
 
     // Initialize intelligence modules
     console.log("[ChittyConnect] Initializing intelligence modules...");
@@ -462,8 +479,8 @@ app.get("/api/v1/doctrine/seed", (c) => {
 
     api_endpoints: {
       resolve_context: "POST /api/v1/context/resolve",
-      persist_memory: "POST /api/v1/memory/persist",
-      recall_memory: "POST /api/v1/memory/recall",
+      persist_memory: "POST /api/intelligence/memory/persist",
+      recall_memory: "POST /api/intelligence/memory/recall",
       doctrine_seed: "GET /api/v1/doctrine/seed",
     },
 
@@ -513,7 +530,7 @@ app.get("/api/v1/signal/bootstrap", (c) => {
         order: 3,
         title: "Coordination Layer",
         content:
-          "The Grey Matter Principle: the model is replaceable substrate. Identity lives in the coordination layer, not in the model. Key services: ChittyID (identity minting, Tier 0), ChittyConnect (connectivity spine, Tier 2), ChittyLedger (immutable record), ChittyTrust (behavioral trust). For ecosystem operations, use ChittyConnect at connect.chitty.cc. Fetch full doctrine: GET /api/v1/doctrine/seed. Resolve your identity: POST /api/v1/context/resolve. Persist memory cross-platform: POST /api/v1/memory/persist.",
+          "The Grey Matter Principle: the model is replaceable substrate. Identity lives in the coordination layer, not in the model. Key services: ChittyID (identity minting, Tier 0), ChittyConnect (connectivity spine, Tier 2), ChittyLedger (immutable record), ChittyTrust (behavioral trust). For ecosystem operations, use ChittyConnect at connect.chitty.cc. Fetch full doctrine: GET /api/v1/doctrine/seed. Resolve your identity: POST /api/v1/context/resolve. Persist memory cross-platform: POST /api/intelligence/memory/persist.",
         validates: ["grey_matter", "service_layer"],
       },
     ],
