@@ -53,7 +53,7 @@ VALUES
 -- only their sha256 fingerprint + scope claims.
 CREATE TABLE IF NOT EXISTS broker_capability_audit (
   id                   TEXT PRIMARY KEY,                -- random UUID
-  event_type           TEXT NOT NULL CHECK(event_type IN ('mint','introspect','confirm','ledger_emit')),
+  event_type           TEXT NOT NULL CHECK(event_type IN ('mint','introspect','confirm','ledger_emit','policy_resolve')),
   token_fingerprint    TEXT,                            -- sha256 hex of opaque token; NULL for ledger_emit
   caller_chittyid      TEXT NOT NULL,
   tenant_id            TEXT NOT NULL,
