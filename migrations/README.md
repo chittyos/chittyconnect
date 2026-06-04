@@ -38,6 +38,12 @@ wrangler d1 execute chittyconnect-production --env=production --file=migrations/
   - Tracks all credential provision operations
   - Supports revocation tracking
   - Indexes for common query patterns
+- **018_git_tenant_allowlists.sql** - Per-tenant policy for the Git Tool Surface
+  - `git_remote_allowlist` — which remote URL patterns a tenant may push to
+  - `git_repo_allowlist` — which absolute repo path prefixes are readable/writable
+  - `git_author_allowlist` — which commit identities a tenant may use
+  - `git_gateway_tags` — CF gateway membership tags for the `chittyagent-git` upstream
+  - Seeds `chittyos-default` tenant with the CHARTER.md default allowlists
 
 ## Creating New Migrations
 
