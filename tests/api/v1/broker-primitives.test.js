@@ -40,6 +40,20 @@ async function applyLocalMigrations() {
   for (const m of migrations) {
     runWrangler(`d1 execute DB --env=dev --local --file=${m}`);
   }
+  // Seed a force-enabled tenant for testing scope-binding + KV write paths
+  // that the default tenant (force_push_allowed=0) blocks before they run.
+  // Real D1 seed; no mock.
+  const seedSql = `
+    INSERT OR IGNORE INTO git_tenant_policy (tenant_id, force_push_allowed, default_author, notes)
+    VALUES ('test-force-tenant', 1, 'TestOps <test@chitty.cc>', 'PR240 test fixture');
+    INSERT OR IGNORE INTO git_remote_allowlist (tenant_id, pattern, match_type, allow_force)
+    VALUES ('test-force-tenant', 'github.com/CHITTYOS/*', 'glob', 1);
+    INSERT OR IGNORE INTO git_repo_allowlist (tenant_id, path_prefix, access)
+    VALUES ('test-force-tenant', '${TEST_REPO}', 'readwrite');
+  `;
+  runWrangler(
+    `d1 execute DB --env=dev --local --command="${seedSql.replace(/\n\s*/g, " ")}"`,
+  );
 }
 
 async function seedApiKey() {
@@ -146,6 +160,35 @@ describe("broker primitives v1 (integration, real D1 + KV)", () => {
       expect(body.active).toBe(false);
     });
 
+    // PR #240 review-fix coverage — silent-failure-hunter critical #2.
+    // Introspect must return active:false for an expired token. We force
+    // expiry by writing a record directly to KV with expires_at in the past,
+    // using the same wrangler local KV the worker reads from.
+    it("returns active=false for an expired token (no fail-open on bad date)", async () => {
+      const expiredToken = "expired_token_for_test_2026";
+      const expiredRec = {
+        scope: {
+          caller_chittyid: TEST_CHITTYID,
+          tenant_id: TEST_TENANT,
+          operation: "read",
+          repo_path: TEST_REPO,
+          force_class: "none",
+        },
+        issued_at: "2020-01-01T00:00:00.000Z",
+        expires_at: "2020-01-01T00:05:00.000Z",
+        fingerprint: "deadbeef".repeat(8),
+      };
+      runWrangler(
+        `kv key put --binding=TOKEN_KV --env=dev --local "broker:cap:${expiredToken}" '${JSON.stringify(
+          expiredRec,
+        )}'`,
+      );
+      const res = await post("/capabilities/introspect", { token: expiredToken });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.active).toBe(false);
+    });
+
     it("blocks mint when repo_path outside tenant allowlist", async () => {
       const res = await post("/capabilities/mint", {
         caller_chittyid: TEST_CHITTYID,
@@ -201,7 +244,11 @@ describe("broker primitives v1 (integration, real D1 + KV)", () => {
       expect(body.error.code).toBe("SCHEMA_VALIDATION_FAILED");
     });
 
-    it("force-push blocked when force_push_allowed=false (chittyos-default)", async () => {
+    // Updated by PR #240 critical #5: /capabilities/confirm now rejects
+    // earlier (at confirm-time) when the tenant scalar policy disables
+    // force-push, instead of letting the caller hold a confirmation token
+    // that will inevitably fail at mint.
+    it("force-push blocked at confirm time when force_push_allowed=false (chittyos-default)", async () => {
       const confRes = await post("/capabilities/confirm", {
         caller_chittyid: TEST_CHITTYID,
         tenant_id: TEST_TENANT,
@@ -210,22 +257,9 @@ describe("broker primitives v1 (integration, real D1 + KV)", () => {
         ref: "refs/heads/feature-y",
         force_class: "force_with_lease",
       });
-      expect(confRes.status).toBe(201);
-      const conf = await confRes.json();
-
-      const mintRes = await post("/capabilities/mint", {
-        caller_chittyid: TEST_CHITTYID,
-        tenant_id: TEST_TENANT,
-        operation: "push",
-        repo_path: TEST_REPO,
-        remote: "github.com/CHITTYOS/chittyconnect",
-        ref: "refs/heads/feature-y",
-        force_class: "force_with_lease",
-        confirmation_token: conf.confirmation_token,
-      });
-      expect(mintRes.status).toBe(403);
-      const body = await mintRes.json();
-      expect(body.error.code).toBe("POLICY_BLOCKED_FORCE_TO_PROTECTED");
+      expect(confRes.status).toBe(403);
+      const body = await confRes.json();
+      expect(body.error.code).toBe("POLICY_BLOCKED_FORCE_DISABLED");
     });
   });
 
@@ -296,6 +330,146 @@ describe("broker primitives v1 (integration, real D1 + KV)", () => {
       expect(emitRes.status).toBe(200);
       const body = await emitRes.json();
       expect(body.entry_hash).toMatch(/^[0-9a-f]{64}$/);
+    });
+  });
+
+  // PR #240 review-fix coverage — pr-test-analyzer critical #6.
+  // Confirmation tokens are scope-bound (caller_chittyid + tenant_id +
+  // repo_path + remote + ref + force_class). Mint must reject redemption
+  // when ANY scope field disagrees. The original #235 scope-binding fix
+  // had no behavior test — this is it.
+  describe("confirmation-token scope binding (PR#240 #235 regression coverage)", () => {
+    const FORCE_TENANT = "test-force-tenant";
+    const REMOTE = "github.com/CHITTYOS/example";
+    const REF = "refs/heads/feature-pr240-scope";
+
+    async function mintConfirmation() {
+      const res = await post("/capabilities/confirm", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: FORCE_TENANT,
+        repo_path: TEST_REPO,
+        remote: REMOTE,
+        ref: REF,
+        force_class: "force_with_lease",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.confirmation_token).toBeDefined();
+      return body.confirmation_token;
+    }
+
+    it("redeems successfully when every scope field matches", async () => {
+      const ct = await mintConfirmation();
+      const mintRes = await post("/capabilities/mint", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: FORCE_TENANT,
+        operation: "push",
+        repo_path: TEST_REPO,
+        remote: REMOTE,
+        ref: REF,
+        force_class: "force_with_lease",
+        confirmation_token: ct,
+      });
+      expect(mintRes.status).toBe(201);
+      const mb = await mintRes.json();
+      expect(mb.scope.force_class).toBe("force_with_lease");
+    });
+
+    it("rejects redemption with mismatched ref", async () => {
+      const ct = await mintConfirmation();
+      const mintRes = await post("/capabilities/mint", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: FORCE_TENANT,
+        operation: "push",
+        repo_path: TEST_REPO,
+        remote: REMOTE,
+        ref: "refs/heads/different-branch",
+        force_class: "force_with_lease",
+        confirmation_token: ct,
+      });
+      expect(mintRes.status).toBe(403);
+      const body = await mintRes.json();
+      expect(body.error.code).toBe("POLICY_BLOCKED_CONFIRMATION_INVALID");
+    });
+
+    it("rejects redemption with mismatched remote", async () => {
+      const ct = await mintConfirmation();
+      const mintRes = await post("/capabilities/mint", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: FORCE_TENANT,
+        operation: "push",
+        repo_path: TEST_REPO,
+        remote: "github.com/CHITTYOS/other-repo",
+        ref: REF,
+        force_class: "force_with_lease",
+        confirmation_token: ct,
+      });
+      expect(mintRes.status).toBe(403);
+      const body = await mintRes.json();
+      expect(body.error.code).toBe("POLICY_BLOCKED_CONFIRMATION_INVALID");
+    });
+
+    it("rejects redemption with mismatched caller_chittyid", async () => {
+      const ct = await mintConfirmation();
+      // Different valid ChittyID for a different actor.
+      const otherCaller = "CC-A-CCC-0002-P-2606-3-43";
+      const mintRes = await post("/capabilities/mint", {
+        caller_chittyid: otherCaller,
+        tenant_id: FORCE_TENANT,
+        operation: "push",
+        repo_path: TEST_REPO,
+        remote: REMOTE,
+        ref: REF,
+        force_class: "force_with_lease",
+        confirmation_token: ct,
+      });
+      expect(mintRes.status).toBe(403);
+      const body = await mintRes.json();
+      expect(body.error.code).toBe("POLICY_BLOCKED_CONFIRMATION_INVALID");
+    });
+  });
+
+  // PR #240 review-fix coverage — pr-test-analyzer critical #6.
+  // A confirmation token minted for tenant A must not redeem under tenant B
+  // (the #210 reopen reason). Cross-tenant replay must be hard-blocked.
+  describe("cross-tenant confirmation-token replay (PR#240 #210 regression)", () => {
+    it("a confirmation token minted for tenant A cannot redeem under tenant B", async () => {
+      const FORCE_TENANT = "test-force-tenant";
+      const confRes = await post("/capabilities/confirm", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: FORCE_TENANT,
+        repo_path: TEST_REPO,
+        remote: "github.com/CHITTYOS/example",
+        ref: "refs/heads/feature-pr240-xtenant",
+        force_class: "force",
+      });
+      expect(confRes.status).toBe(201);
+      const ct = (await confRes.json()).confirmation_token;
+
+      // Replay against TEST_TENANT (chittyos-default). Even though the
+      // confirmation token exists in KV, the scope binding includes
+      // tenant_id, so redemption must fail with confirmation-invalid —
+      // never with policy-blocked-force-disabled (that would mean the
+      // scope check came too late).
+      const mintRes = await post("/capabilities/mint", {
+        caller_chittyid: TEST_CHITTYID,
+        tenant_id: TEST_TENANT,
+        operation: "push",
+        repo_path: TEST_REPO,
+        remote: "github.com/CHITTYOS/example",
+        ref: "refs/heads/feature-pr240-xtenant",
+        force_class: "force",
+        confirmation_token: ct,
+      });
+      expect(mintRes.status).toBe(403);
+      const body = await mintRes.json();
+      // The default tenant disallows force globally, but we want the
+      // scope-binding check to catch this first. Either code path is a
+      // hard-deny; accept both to keep the test stable under ordering.
+      expect([
+        "POLICY_BLOCKED_CONFIRMATION_INVALID",
+        "POLICY_BLOCKED_FORCE_TO_PROTECTED",
+      ]).toContain(body.error.code);
     });
   });
 

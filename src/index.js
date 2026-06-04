@@ -1548,7 +1548,7 @@ app.all("/api/git/confirm/*", (c) =>
 /**
  * Broker primitives v1 — capability mint/introspect/confirm, policy resolve,
  * ledger emit. Closes chittyos/chittyconnect#210, #211. Partial of #209
- * (signing endpoints deferred to chittyos/chittyconnect#228).
+ * (signing endpoints deferred to chittyos/chittyconnect#242).
  */
 app.route("/api/v1", brokerPrimitivesRoutes);
 
