@@ -25,6 +25,9 @@ Cloudflare Worker deployed at connect.chitty.cc with Neon PostgreSQL, KV, and Du
 ### Stack
 - **Runtime**: Cloudflare Workers + Hono
 - **Database**: Neon PostgreSQL (context entities, DNA, ledger, sessions)
+  - `public.context_*`, `public.document_*`, `public.credential_*`, etc. — ChittyConnect application schema (migrations 001–018, D1 mirror)
+  - `neon_auth.{user,account,session,verification,organization,member,invitation}` — **ChittyConnect-owned** user identity surface, JWKS-federated from `auth.chitty.cc` with RLS bound to JWT `sub` (migration 019)
+  - `neon_auth.{jwks,project_config}` — owned by ChittyAuth (read-only here)
 - **Integrations**: Notion, OpenAI, Google Calendar, Neon, Cloudflare AI
 
 ### Three Interfaces

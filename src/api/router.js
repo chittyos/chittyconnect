@@ -42,6 +42,7 @@ import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
 import { sessionRoutes } from "./routes/sessions.js";
+import { neonUserStoreRoutes } from "../auth/neon-user-store.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -193,5 +194,12 @@ api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/sessions", sessionRoutes);
+
+// Neon Auth user store — JWKS-validated read/write surface for
+// neon_auth.{user,account,session,verification,organization,member,invitation}.
+// See src/auth/neon-user-store.js + migrations/019_neon_auth_user_store.sql.
+// Auth is per-route (Bearer JWT verified against auth.chitty.cc JWKS); the
+// API-key `authenticate` middleware skips this path (see middleware/auth.js).
+api.route("/api/v1/neon-auth", neonUserStoreRoutes);
 
 export { api };
