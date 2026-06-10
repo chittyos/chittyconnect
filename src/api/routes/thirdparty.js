@@ -876,8 +876,30 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
 const MERCURY_API = "https://api.mercury.com/api/v1";
 
 /**
+ * Read a Worker binding that may be a Cloudflare Secrets Store secret
+ * (an object exposing an async get()) or a plain string secret/var.
+ * Returns the string value, or undefined if the binding is absent.
+ */
+async function resolveBinding(binding) {
+  if (!binding) return undefined;
+  if (typeof binding === "string") return binding;
+  if (typeof binding.get === "function") {
+    try {
+      const value = await binding.get();
+      return value || undefined;
+    } catch {
+      // Store unreachable / secret missing — degrade to the next
+      // resolution layer (legacy env var → single fallback → broker).
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Resolve Mercury API token for a given integration.
- * Checks: request header > env secret > credential broker (1Password)
+ * Checks: request header > Secrets Store binding > legacy env var >
+ * single fallback > credential broker (1Password).
  */
 async function getMercuryToken(c, integrationSlug) {
   const slug = integrationSlug || "default";
@@ -885,7 +907,16 @@ async function getMercuryToken(c, integrationSlug) {
   const headerToken = c.req.header("X-Mercury-Token");
   if (headerToken) return headerToken;
 
-  const envKey = `MERCURY_API_KEY_${slug.replace(/-/g, "_").toUpperCase()}`;
+  const slugUpper = slug.replace(/-/g, "_").toUpperCase();
+
+  // Per-entity Secrets Store binding (canonical runtime delivery — wrangler.jsonc
+  // provisions one MERCURY_TOKEN_<SLUG> per Mercury business login). Secrets Store
+  // bindings expose an async get(); resolveBinding handles that vs plain strings.
+  const storeToken = await resolveBinding(c.env[`MERCURY_TOKEN_${slugUpper}`]);
+  if (storeToken) return storeToken;
+
+  // Legacy per-entity env var form, retained for backward compatibility.
+  const envKey = `MERCURY_API_KEY_${slugUpper}`;
   if (c.env[envKey]) return c.env[envKey];
 
   if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
@@ -1008,4 +1039,4 @@ thirdpartyRoutes.post("/mercury/refresh", async (c, next) => {
   });
 }));
 
-export { thirdpartyRoutes };
+export { thirdpartyRoutes, getMercuryToken, resolveBinding };
