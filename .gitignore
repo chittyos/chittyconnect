@@ -11,6 +11,10 @@ yarn.lock
 .env.*
 !.env.example
 
+# Wrangler local dev secrets (asserted gitignored in docs/governance/SECRETS_MODEL.md)
+.dev.vars
+.dev.vars.*
+
 # Wrangler
 .wrangler/
 .mf/
