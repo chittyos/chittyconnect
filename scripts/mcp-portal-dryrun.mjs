@@ -19,12 +19,15 @@ import {
   fetchDiscoveryServers,
   computePortalDiff,
   PORTAL_SERVER_CAP,
+  evaluateRemovalGuard,
 } from "../src/services/mcp-portal-projection.js";
 import { readFileSync } from "node:fs";
 
 const env = {
-  REGISTRY_SERVICE_URL: process.env.REGISTRY_SERVICE_URL || "https://registry.chitty.cc",
-  CHITTYOS_ACCOUNT_ID: process.env.CHITTYOS_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121",
+  REGISTRY_SERVICE_URL:
+    process.env.REGISTRY_SERVICE_URL || "https://registry.chitty.cc",
+  CHITTYOS_ACCOUNT_ID:
+    process.env.CHITTYOS_ACCOUNT_ID || "0bc21e3a5a9de1a4cc843be9c3e98121",
   CF_API_TOKEN: process.env.CF_API_TOKEN,
 };
 const portalId = process.env.MCP_PORTAL_ID || "chitty-mcp";
@@ -39,13 +42,24 @@ async function getPortalSnapshot() {
   if (fixture) {
     const j = JSON.parse(readFileSync(fixture, "utf8"));
     const p = j.result || j;
-    return { id: p.id, name: p.name, hostname: p.hostname, servers: p.servers || [] };
+    return {
+      id: p.id,
+      name: p.name,
+      hostname: p.hostname,
+      servers: p.servers || [],
+    };
   }
   // live read (read-only)
-  const { fetchPortal } = await import("../src/services/mcp-portal-projection.js");
+  const { fetchPortal } =
+    await import("../src/services/mcp-portal-projection.js");
   const p = await fetchPortal(env, portalId);
   if (!p) throw new Error(`portal ${portalId} not found`);
-  return { id: p.id, name: p.name, hostname: p.hostname, servers: p.servers || [] };
+  return {
+    id: p.id,
+    name: p.name,
+    hostname: p.hostname,
+    servers: p.servers || [],
+  };
 }
 
 const discovery = await fetchDiscoveryServers(env);
@@ -59,10 +73,12 @@ const report = {
   discovery_health: {
     registry_total_entries: discovery.total,
     entries_with_url: discovery.withUrl,
-    compliant_canonical_mcp: discovery.compliant.length,
+    desired_mcp_servers: (discovery.desired || discovery.compliant || [])
+      .length,
+    canonical_subset: discovery.canonicalCount,
     note:
-      "compliant = active + url matches https://{svc}.chitty.cc/mcp. " +
-      "Legacy {svc}.agent.chitty.cc/mcp and *.ccorp.workers.dev/mcp are NOT canonical-compliant.",
+      "desired = active + url ends in /mcp (ANY host: {svc}.chitty.cc, *.ccorp.workers.dev, third-party). " +
+      "Diff keys on normalized hostname, so portal-id vs URL-slug mismatch never churns.",
   },
   portal_current: {
     server_count: portal.servers.length,
@@ -70,18 +86,15 @@ const report = {
   },
   diff: {
     desired_count: diff.desired.length,
-    to_add: diff.toAdd.map((s) => ({ id: s.id, hostname: s.hostname })),
+    to_add: diff.toAdd.map((s) => ({ key: s.key, hostname: s.hostname })),
     to_remove: diff.toRemove,
-    keeps: diff.keeps,
+    keeps_count: diff.keeps.length,
   },
   cap_check: {
     cap: PORTAL_SERVER_CAP,
     desired_within_cap: diff.desired.length <= PORTAL_SERVER_CAP,
   },
-  guard: {
-    remove_all_brake_would_trip:
-      diff.desired.length === 0 && portal.servers.length > 0,
-  },
+  removal_guard: evaluateRemovalGuard(diff, portal.servers.length),
 };
 
 console.log(JSON.stringify(report, null, 2));

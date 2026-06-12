@@ -32,8 +32,37 @@ import {
   syncPortalServer,
   fetchDiscoveryServers,
   computePortalDiff,
+  evaluateRemovalGuard,
   PORTAL_SERVER_CAP,
 } from "../services/mcp-portal-projection.js";
+
+/**
+ * Emit a removal-guard alert to chittytrack (best-effort, never throws).
+ * The guard tripping is an operational signal — a sparse/broken discovery
+ * source nearly wiped the portal — so it must be observable even though we
+ * (correctly) refused the removals.
+ */
+async function alertChittytrack(env, payload) {
+  try {
+    const url = env.CHITTYTRACK_URL || "https://track.chitty.cc";
+    const headers = { "content-type": "application/json" };
+    if (env.CHITTYTRACK_TOKEN)
+      headers.authorization = `Bearer ${env.CHITTYTRACK_TOKEN}`;
+    await fetch(`${url}/api/v1/events`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        type: "mcp_portal.removal_guard_tripped",
+        severity: "warning",
+        source: "chittyconnect/MCPPortalProjection",
+        ...payload,
+      }),
+    });
+    return { emitted: true };
+  } catch (err) {
+    return { emitted: false, error: String(err?.message || err) };
+  }
+}
 
 export class MCPPortalProjection extends WorkflowEntrypoint {
   /**
@@ -42,8 +71,12 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
   async run(event, step) {
     const env = this.env;
     const enabled = env.MCP_PORTAL_PROJECTION_ENABLED === "true";
-    const portalId = event.payload?.portalId || env.MCP_PORTAL_ID || "chitty-mcp";
+    const portalId =
+      event.payload?.portalId || env.MCP_PORTAL_ID || "chitty-mcp";
     const trigger = event.payload?.trigger || "manual";
+    // Explicit operator override: bypasses the proportional / desired-collapse
+    // removal brakes (NEVER the empty-membership hard fail). Default false.
+    const removalOverride = event.payload?.overrideRemovalGuard === true;
 
     // 1. READ discovery (registry.chitty.cc/v0.1/servers) — never writes.
     const discovery = await step.do("read-discovery", async () =>
@@ -72,58 +105,154 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
       computePortalDiff(discovery, portal),
     );
 
-    // 4. GUARD/CAP — refuse to exceed the CF per-portal cap; refuse pathological
-    //    empties (remove-all) which signal a broken discovery source.
-    const guard = await step.do("guard-cap", async () => {
-      const desiredCount = diff.desired.length;
-      const issues = [];
-      if (desiredCount > PORTAL_SERVER_CAP) {
-        issues.push(`desired ${desiredCount} exceeds CF cap ${PORTAL_SERVER_CAP}`);
+    // 4. GUARD — cap check + removal-safety brake. Refuse to exceed the CF
+    //    per-portal cap; refuse suspiciously large removals / desired-set
+    //    collapse / empty-membership (all signal a broken discovery source).
+    //    Adds and keeps are ALWAYS safe; only the REMOVE path is gated.
+    const guard = await step.do("guard", async () => {
+      const removal = evaluateRemovalGuard(diff, portal.servers.length, {
+        override: removalOverride,
+      });
+      const issues = [...removal.reasons];
+      const capExceeded = diff.desired.length > PORTAL_SERVER_CAP;
+      if (capExceeded) {
+        issues.push(
+          `desired ${diff.desired.length} exceeds CF cap ${PORTAL_SERVER_CAP}`,
+        );
       }
-      // Safety brake: if discovery yields an empty desired set while the portal
-      // currently has servers, that is almost certainly a discovery outage —
-      // do NOT project a remove-all even when writes are enabled.
-      if (desiredCount === 0 && portal.servers.length > 0) {
-        issues.push("desired set empty but portal non-empty — refusing remove-all (likely discovery outage)");
-      }
-      return { ok: issues.length === 0, issues, desiredCount };
+      return {
+        // ok = safe to run the FULL projection (adds + removes).
+        ok: !removal.blocked && !capExceeded,
+        capExceeded,
+        removal,
+        removalsBlocked: removal.blocked,
+        overrideApplied: removal.overrideApplied,
+        issues,
+      };
     });
 
-    const writesAllowed = enabled && guard.ok;
+    // Adds may proceed even when removals are blocked (adds never wipe).
+    const addsAllowed = enabled && !guard.capExceeded;
+    // Removals require the removal guard to pass (or operator override).
+    const removalsAllowed =
+      enabled && !guard.capExceeded && !guard.removalsBlocked;
+    // Full convergence (the whole-array PUT that can drop members) requires
+    // removals to be allowed; otherwise we PUT an ADD-ONLY membership
+    // (current ∪ adds) so we never remove behind the guard's back.
+    const writesAllowed = addsAllowed;
+
+    // If the guard blocked removals while writes were enabled, that's a real
+    // operational signal — alert chittytrack (best-effort, read of the diff).
+    const alert =
+      enabled && guard.removalsBlocked
+        ? await step.do("alert-chittytrack", async () =>
+            alertChittytrack(env, {
+              portalId,
+              trigger,
+              metrics: guard.removal.metrics,
+              reasons: guard.removal.reasons,
+              to_remove: diff.toRemove,
+              override_offered:
+                "set payload.overrideRemovalGuard=true to force (cannot override empty-membership)",
+            }),
+          )
+        : { skipped: true };
 
     // 5. APPLY ADDS — create any missing account-level servers (POST-per-server).
     //    GATED: skipped entirely when writes are not allowed.
     const adds = await step.do("apply-adds", async () => {
-      if (!writesAllowed) return { skipped: true, reason: skipReason(enabled, guard), planned: diff.toAdd };
+      if (!addsAllowed)
+        return {
+          skipped: true,
+          reason: skipReason(enabled, guard, addsAllowed),
+          planned: diff.toAdd,
+        };
       const created = [];
       const failed = [];
       for (const s of diff.toAdd) {
-        const r = await createPortalServer(env, { id: s.id, name: s.name, hostname: s.hostname });
-        (r.ok ? created : failed).push(r.ok ? s.id : { id: s.id, error: r.error });
+        // Account-level server needs a portal-safe id. Discovery rows are
+        // hostname-keyed; fall back to a slug derived from the hostname when no
+        // explicit id is carried.
+        const id = s.id || serverIdFromHostname(s.hostname);
+        const r = await createPortalServer(env, {
+          id,
+          name: s.name,
+          hostname: s.hostname,
+        });
+        (r.ok ? created : failed).push(r.ok ? id : { id, error: r.error });
       }
       return { skipped: false, created, failed };
     });
 
-    // 6. APPLY MEMBERSHIP (adds + removes in one whole-array PUT).
-    //    GATED.
+    // 6. APPLY MEMBERSHIP — whole-array PUT.
+    //    - When removals are allowed: PUT the desired set (may drop members).
+    //    - When removals are BLOCKED but adds are allowed: PUT an ADD-ONLY
+    //      membership = current ∪ adds, so the guard's refusal to remove is
+    //      honored and the portal is never shrunk.
+    //    NEVER PUT an empty servers[] (guard.emptyMembership hard-fails above
+    //    and 400s on the API); the membership we build here is always ≥ current.
     const membership = await step.do("apply-membership", async () => {
-      if (!writesAllowed) return { skipped: true, reason: skipReason(enabled, guard), planned: { add: diff.toAdd.map((s) => s.id), remove: diff.toRemove } };
-      const desiredMembership = diff.desired.map((s) => ({
-        server_id: s.id,
-        default_disabled: s.default_disabled ?? false,
-      }));
-      const r = await putPortalServers(env, portalId, { name: portal.name, hostname: portal.hostname }, desiredMembership);
-      return { skipped: false, ...r };
+      if (!writesAllowed) {
+        return {
+          skipped: true,
+          reason: skipReason(enabled, guard, writesAllowed),
+          planned: { add: diff.toAdd.map((s) => s.id), remove: diff.toRemove },
+        };
+      }
+
+      let desiredMembership;
+      let mode;
+      if (removalsAllowed) {
+        mode = "converge";
+        desiredMembership = diff.desired.map((s) => ({
+          server_id: s.id || serverIdFromHostname(s.hostname),
+          default_disabled: s.default_disabled ?? false,
+        }));
+      } else {
+        // ADD-ONLY: keep every current member, append the new adds.
+        mode = "add-only (removals guarded)";
+        const keepIds = portal.servers.map((s) => ({
+          server_id: s.id,
+          default_disabled: s.default_disabled ?? false,
+        }));
+        const addIds = diff.toAdd.map((s) => ({
+          server_id: s.id || serverIdFromHostname(s.hostname),
+          default_disabled: false,
+        }));
+        desiredMembership = [...keepIds, ...addIds];
+      }
+
+      // Defense in depth: a whole-array PUT must never be empty.
+      if (desiredMembership.length === 0) {
+        return {
+          skipped: true,
+          mode,
+          reason: "refused: computed membership is empty (would 400)",
+        };
+      }
+
+      const r = await putPortalServers(
+        env,
+        portalId,
+        { name: portal.name, hostname: portal.hostname },
+        desiredMembership,
+      );
+      return { skipped: false, mode, count: desiredMembership.length, ...r };
     });
 
     // 7. SYNC — force capability re-pull for newly added servers.
     //    GATED.
     const sync = await step.do("sync", async () => {
-      if (!writesAllowed) return { skipped: true, reason: skipReason(enabled, guard) };
+      if (!addsAllowed)
+        return {
+          skipped: true,
+          reason: skipReason(enabled, guard, addsAllowed),
+        };
       const synced = [];
       for (const s of diff.toAdd) {
-        const r = await syncPortalServer(env, s.id);
-        if (r.ok) synced.push(s.id);
+        const id = s.id || serverIdFromHostname(s.hostname);
+        const r = await syncPortalServer(env, id);
+        if (r.ok) synced.push(id);
       }
       return { skipped: false, synced };
     });
@@ -131,7 +260,11 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
     // 8. TOGGLES — re-assert default_disabled flags (no-op placeholder until
     //    per-server disable policy is defined). GATED, currently inert.
     const toggles = await step.do("toggles", async () => {
-      if (!writesAllowed) return { skipped: true, reason: skipReason(enabled, guard) };
+      if (!writesAllowed)
+        return {
+          skipped: true,
+          reason: skipReason(enabled, guard, writesAllowed),
+        };
       return { skipped: false, applied: 0 };
     });
 
@@ -139,12 +272,15 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
     //    Read-only; runs in both modes.
     const verify = await step.do("verify", async () => {
       const p = await fetchPortal(env, portalId);
-      const present = new Set((p?.servers || []).map((s) => s.id));
-      const desiredIds = diff.desired.map((s) => s.id);
-      const missing = writesAllowed ? desiredIds.filter((id) => !present.has(id)) : [];
+      const presentHosts = new Set((p?.servers || []).map((s) => s.hostname));
+      // Verify by hostname (the diff key), independent of portal id mapping.
+      const desiredHosts = diff.desired.map((s) => s.hostname);
+      const missing = removalsAllowed
+        ? desiredHosts.filter((h) => !presentHosts.has(h))
+        : [];
       return {
         portal_server_count: p?.servers?.length ?? 0,
-        converged: writesAllowed ? missing.length === 0 : null,
+        converged: removalsAllowed ? missing.length === 0 : null,
         missing,
       };
     });
@@ -155,11 +291,14 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
       portalId,
       flag_enabled: enabled,
       writes_allowed: writesAllowed,
+      adds_allowed: addsAllowed,
+      removals_allowed: removalsAllowed,
       guard,
+      alert,
       diff_summary: {
         desired: diff.desired.length,
         current: portal.servers.length,
-        to_add: diff.toAdd.map((s) => s.id),
+        to_add: diff.toAdd.map((s) => s.id || s.hostname),
         to_remove: diff.toRemove,
         keeps: diff.keeps.length,
       },
@@ -175,8 +314,35 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
   }
 }
 
-function skipReason(enabled, guard) {
+function skipReason(enabled, guard, allowed) {
   if (!enabled) return "feature_flag_off";
-  if (!guard.ok) return `guard_blocked: ${guard.issues.join("; ")}`;
+  if (guard?.capExceeded) return `guard_blocked: ${guard.issues.join("; ")}`;
+  if (allowed === false && guard?.removalsBlocked) {
+    return `removals_guarded: ${guard.removal.reasons.join("; ")}`;
+  }
   return "unknown";
+}
+
+/**
+ * Derive a portal-safe account-level server id from an MCP hostname when
+ * discovery doesn't carry an explicit one. CF id pattern:
+ * `^[a-z0-9_]+(?:-[a-z0-9_]+)*$`, maxLen 32. NOTE: for the canonical
+ * `chitty-mcp` portal, existing members use `chittyagent-{svc}` ids that are
+ * NOT derivable from the hostname — that mapping lives portal-side and the
+ * diff keys on hostname precisely so we never need to reconstruct it. This
+ * fallback is only for genuinely NEW adds (servers not already in the portal).
+ */
+function serverIdFromHostname(url) {
+  try {
+    const host = new URL(url).host.toLowerCase();
+    const slug = host
+      .replace(/\.ccorp\.workers\.dev$/, "")
+      .replace(/\.chitty\.cc$/, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32);
+    return slug || "mcp-server";
+  } catch {
+    return "mcp-server";
+  }
 }
