@@ -16,7 +16,7 @@
 | D1 | Rewrite `CfPortalClient` (chittyagent-mcp-builder) → live ai-controls surface + two-level model | **DONE (PR)** | chittyos/chittyentity#489. tsc clean, 19/19 tests. Lib-only, no deploy. |
 | D2 | Scaffold `MCPPortalProjection` Workflow + `POST /api/v1/mcp-portal/build-event`, flag DEFAULT-OFF | **DONE (PR)** | chittyos/chittyconnect#248. Inertness proven via `--dry-run` binding summary; `MCP_PORTAL_PROJECTION_ENABLED="false"`. |
 | D3 | Dry-run read-only diff (registry vs live `chitty-mcp` 27 servers) | **DONE** | `scripts/mcp-portal-dryrun.mjs`. Result: discovery yields only **4** compliant; diff = add 4 / **remove ALL 27** / keep 0. **Blocker.** |
-| D4 | Confirm write verb on a scratch portal | **DONE** | Scratch portal+server round-trip: `POST /portals` & `POST /servers` (require `id`), portal membership = **whole-array `PUT /portals/{id}`** (servers[] returned `["scratch-probe-srv"]`), then DELETEd. Live portals untouched. |
+| D4 | Confirm write verb on a scratch portal | **DONE** | Scratch portal+server round-trip: `POST /portals` & `POST /servers` (require `id`), portal membership = **whole-array `PUT /portals/{id}`** (servers[] returned `["scratch-probe-srv"]`), then DELETEd. Live portals untouched. CAVEAT: PUT with empty `servers:[]` returned 400 — see Open risk. |
 | D5 | Enable projection for ONE server (first live mutation) | **NO-GO (BLOCKED)** | Gated on (a) discovery source reconcile, (b) `CF_API_TOKEN` provisioning on ChittyConnect. See blockers. |
 | D6 | Repoint post-deploy beacon to dual-write (register + enqueue Workflow) | TODO | Depends on D5. |
 | D7 | Wire CF Notification → webhook + build watch paths | TODO | Depends on D6. |
@@ -32,8 +32,15 @@
 
 ## BLOCKERS to D5 (first live mutation)
 
-1. **Discovery source is not usable.** `registry.chitty.cc/v0.1/servers` returns 16 sparse entries (only 8 with URLs); applying the spec's canonical filter (`https://{svc}.chitty.cc/mcp`) yields just 4, and their derived IDs (`mcp`, `ship`, `notes`, `connect`) don't match the portal's `chittyagent-*` IDs. A literal projection today = **remove all 27 portal servers**. The empty-set safety brake does NOT catch this (desired=4, not 0). **The registry must be backfilled to mirror the live 27-server set (with stable portal IDs and live `{svc}.agent.chitty.cc/mcp` endpoints) before any projection writes.**
+1. **The projection's desired-set is undefined — DESIGN gap, not just data backfill.** A literal projection today = **add 4 / remove all 27 / keep 0** (empty-set brake does NOT catch it; desired=4, not 0). Three sub-problems, all must be resolved before any write:
+   - **(1a) Registry is sparse.** `/v0.1/servers` has 16 entries, only 8 with URLs; the canonical filter (`https://{svc}.chitty.cc/mcp`) yields 4. Backfill it to mirror the portal's READY endpoints — e.g. `resolve.chitty.cc/mcp`, `tasks.chitty.cc/mcp` (live, `status:"ready"`, tools synced). **The canonical `{svc}.chitty.cc/mcp` form is correct** — the live portal proves it works. An earlier memory note claiming this form 404s and that `{svc}.agent.chitty.cc/mcp` is the live form is **STALE** (it referred to the constructed strings in `/v0.1/servers`, not the deployed services).
+   - **(1b) Endpoint-pattern coverage.** The 27 members span THREE patterns: `{svc}.chitty.cc/mcp`, `*.ccorp.workers.dev/mcp` (~12 direct-route: orchestrator, evidence, storage, scrape, twilio, dispute, notes, gam, bluebubbles, chatgpt, auth, ship), and third-party (`developers.openai.com/mcp`, `mcp.cloudflare.com/mcp`). A canonical-only filter would remove all direct-route + third-party members **even against a complete registry**. The model needs an explicit decision on how direct-route and third-party servers are represented in (or excluded from) projection scope.
+   - **(1c) ID mapping.** `portalIdFromUrl("ship.chitty.cc/mcp")` → `ship`, but the portal server id is `chittyagent-ship`. Desired-set IDs must be mapped to portal server IDs or every run churns spurious add/removes.
 2. **`CF_API_TOKEN` not provisioned on ChittyConnect.** The Workflow's write path needs a `CF_API_TOKEN` with the Zero-Trust **ai-controls** scope, sourced cold from 1Password → Cloudflare Secrets Store. Not yet bound on the worker. Route via ch1tty → ChittyConnect (no plaintext). (The ai-controls scope itself is proven working — the scratch round-trip succeeded — so this is a provisioning, not a capability, gap.)
+
+## Open risk (non-blocking, unproven)
+
+- **PUT-with-empty-`servers:[]` is unconfirmed (HTTP 400 observed).** The scratch round-trip proved PUT-add (membership returned `["scratch-probe-srv"]`), but a follow-up PUT with `servers:[]` returned **400**. `setPortalServers`/`removeServer` use a whole-array PUT, so removing the LAST member may 400. Must be confirmed and handled (portal-delete vs min-1 invariant) before the projection remove path can empty a portal. Flag-off D2 code, so non-blocking this run.
 
 ## Where this board lives
 
