@@ -42,6 +42,22 @@
 
 - **PUT-with-empty-`servers:[]` is unconfirmed (HTTP 400 observed).** The scratch round-trip proved PUT-add (membership returned `["scratch-probe-srv"]`), but a follow-up PUT with `servers:[]` returned **400**. `setPortalServers`/`removeServer` use a whole-array PUT, so removing the LAST member may 400. Must be confirmed and handled (portal-delete vs min-1 invariant) before the projection remove path can empty a portal. Flag-off D2 code, so non-blocking this run.
 
+## Backfill pass (2026-06-12) — guard shipped, seed BLOCKED by plumbing gap
+
+**Done (PR #248, commit `e2f54c8`, flag still default-OFF / inert):**
+- **Removal-safety guard** (`evaluateRemovalGuard`, pure fn): refuses removals exceeding `max(2, 20% of current)` OR desired-set collapse below 50% of portal; **empty membership is a non-overridable hard fail** (never PUT `servers:[]`→400); proportional/collapse brakes overridable via `payload.overrideRemovalGuard=true`; on trip → 0 removals, diff logged, **chittytrack alert** (`mcp_portal.removal_guard_tripped`), **adds still proceed** via add-only membership PUT (`current ∪ adds`, portal never shrinks).
+- **Hostname-keyed diff** — resolves blockers **1b + 1c**: `computePortalDiff` keys on normalized hostname (not URL-slug id), so `chittyagent-ship` vs `ship` never churns (1c); `fetchDiscoveryServers` widened past canonical filter to include `*.ccorp.workers.dev/mcp` + third-party (1b). 13 real tests, 455/455 suite green.
+- **Live audit of all 27 portal servers** (POST init probe): **25 READY (200)**, **2 READY-AUTH (401: chittyagent-market, cloudeflare-codemode)**, **0 GATED-302, 0 DEAD, 0 stale**. Every member is a live, valid MCP endpoint. No reconcile/drop needed.
+- **New live dry-run**: discovery yields **5** desired vs portal **27** → literal projection = remove-all-27; **the new guard BLOCKS it** (old `desired===0` brake did NOT — desired was 5).
+
+**NEW HARD BLOCKER (supersedes old blocker 1a as stated): the reverse-seed path does not exist.**
+The locked model says "ChittyRegister = WRITE, propagates to registry/discovery." **Empirically false for the MCP-server surface:**
+- `register.chitty.cc/openapi.json` exposes only service-registration paths (`/api/v1/register` requires `endpoints`+`schema.entities`+`/health`); **no MCP-server registration path**. Register writes its own Neon `service_registrations` table.
+- `registry.chitty.cc/v0.1/servers` is served from a **hardcoded seed + `mcp-servers:` KV** (`getAllMcpServers`). The **only writer** of that KV is registry's own **`POST /v0.1/servers`** (admin-token `MCP_REGISTRY_ADMIN_TOKEN`, OR a chittyregister service-binding carrying `X-Chitty-Internal-Binding: chittyregister`).
+- ChittyRegister has a `REGISTRY` service binding declared in wrangler but **`env.REGISTRY` is referenced nowhere in code**, and register has **no `/v0.1/servers` call**. The register→MCP-discovery bridge is **unimplemented**.
+
+⇒ Writing `register.chitty.cc/api/v1/register` will NOT populate discovery, so it cannot produce the no-op dry-run. Seeding was therefore **NOT performed** (it would 400 on schema or pollute the services catalog — a harmful no-value write). The surface that *would* feed discovery is **registry's admin `POST /v0.1/servers`** — outside this run's approved boundary (which named ChittyRegister only). **Operator decision required:** either (a) authorize seeding via registry's admin POST surface, or (b) implement the register→`mcp-servers:` KV propagation bridge so the locked CQRS model becomes real. Until then discovery stays sparse — but **the portal is now safe regardless**, because the guard blocks the wipe.
+
 ## Where this board lives
 
 Primary durable copy: this file (tracked in chittyos/chittyconnect, travels with PR #248). ChittyTasks (chittyagent-tasks) does not expose a create-task tool over the available connector surface this run; Notion mirror attempted as secondary.
