@@ -327,8 +327,12 @@ thirdpartyRoutes.post("/openai/chat", async (c) => {
  */
 thirdpartyRoutes.post("/ollama/chat", async (c) => {
   try {
-    const { messages, model = "llama3.2:3b", temperature, max_tokens } =
-      await c.req.json();
+    const {
+      messages,
+      model = "llama3.2:3b",
+      temperature,
+      max_tokens,
+    } = await c.req.json();
 
     if (!messages) {
       return c.json({ error: "messages is required" }, 400);
@@ -345,10 +349,11 @@ thirdpartyRoutes.post("/ollama/chat", async (c) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
-            "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
-            "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
-          }),
+          ...(c.env.OLLAMA_CF_CLIENT_ID &&
+            c.env.OLLAMA_CF_CLIENT_SECRET && {
+              "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+              "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+            }),
         },
         body: JSON.stringify({ messages, model, temperature, max_tokens }),
         signal: controller.signal,
@@ -469,10 +474,11 @@ thirdpartyRoutes.post("/ollama/embeddings", async (c) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
-          "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
-          "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
-        }),
+        ...(c.env.OLLAMA_CF_CLIENT_ID &&
+          c.env.OLLAMA_CF_CLIENT_SECRET && {
+            "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+            "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+          }),
       },
       body: JSON.stringify({ input, model }),
     });
@@ -518,10 +524,11 @@ thirdpartyRoutes.get("/ollama/models", async (c) => {
 
     const response = await fetch(`${ollamaBase}/api/tags`, {
       headers: {
-        ...(c.env.OLLAMA_CF_CLIENT_ID && c.env.OLLAMA_CF_CLIENT_SECRET && {
-          "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
-          "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
-        }),
+        ...(c.env.OLLAMA_CF_CLIENT_ID &&
+          c.env.OLLAMA_CF_CLIENT_SECRET && {
+            "CF-Access-Client-Id": c.env.OLLAMA_CF_CLIENT_ID,
+            "CF-Access-Client-Secret": c.env.OLLAMA_CF_CLIENT_SECRET,
+          }),
       },
     });
 
@@ -890,26 +897,152 @@ async function getMercuryToken(c, integrationSlug) {
 
   if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
 
-  return getCredential(c.env, `integrations/mercury/${slug}`, "MERCURY_API_TOKEN", "Mercury");
+  return getCredential(
+    c.env,
+    `integrations/mercury/${slug}`,
+    "MERCURY_API_TOKEN",
+    "Mercury",
+  );
 }
 
-async function mercuryFetch(token, path, options = {}) {
-  const res = await fetch(`${MERCURY_API}${path}`, {
-    ...options,
+// ── Mercury egress profile (static-IP relay indirection) ─────────────
+// Mercury per-token IP allowlisting requires that all calls leave from one
+// static IP. The `relay` profile routes the Mercury request through a
+// configurable relay endpoint (an Access-locked Worker / app-connector on a
+// reserved-IP node) that forwards to api.mercury.com from that static IP.
+// The `direct` profile (default) preserves today's behavior: hit
+// api.mercury.com directly from Cloudflare's shared egress.
+//
+// Keys NEVER move to the relay: the Mercury token is resolved from Secrets
+// here (Option A) and transits to the relay as a request header only.
+
+const EGRESS_DIRECT = "direct";
+const EGRESS_RELAY = "relay";
+
+/**
+ * Resolve the active egress profile for a slug.
+ * Per-slug override `MERCURY_EGRESS_PROFILE_<SLUG>` wins, else the global
+ * `MERCURY_EGRESS_PROFILE`, else the `direct` default.
+ * Mirrors the per-slug env convention used by getMercuryToken.
+ *
+ * @returns {{ profile: string, relayUrl?: string, accessClientId?: string, accessClientSecret?: string }}
+ */
+export function resolveEgressProfile(env, slug) {
+  const e = env || {};
+  let profile = e.MERCURY_EGRESS_PROFILE || EGRESS_DIRECT;
+  if (slug) {
+    const overrideKey = `MERCURY_EGRESS_PROFILE_${String(slug).replace(/-/g, "_").toUpperCase()}`;
+    if (e[overrideKey]) profile = e[overrideKey];
+  }
+  return {
+    profile,
+    relayUrl: e.MERCURY_EGRESS_URL,
+    accessClientId: e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
+    accessClientSecret: e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
+  };
+}
+
+/**
+ * Build the concrete fetch request (url, method, headers, body) for a Mercury
+ * call under the active egress profile. Pure function — no I/O — so the
+ * profile-selection / header-construction / fail-closed logic is unit-testable
+ * without mocking fetch.
+ *
+ * - `direct`: targets `${MERCURY_API}${path}` directly, Bearer token, exactly
+ *   as the legacy implementation did.
+ * - `relay`: POSTs `{ method, path, body }` to the relay URL with the Mercury
+ *   token as `X-Mercury-Token` plus Cloudflare Access service-token headers.
+ *   The relay only ever receives a relative `path` (never a caller-supplied
+ *   host), so api.mercury.com host-allowlisting is preserved structurally.
+ *   Fails closed (throws) if `relay` is selected but no relay URL is set.
+ *
+ * @returns {{ url: string, method: string, headers: Record<string,string>, body?: string }}
+ */
+export function buildEgressRequest({
+  profile = EGRESS_DIRECT,
+  relayUrl,
+  accessClientId,
+  accessClientSecret,
+  token,
+  path,
+  options = {},
+}) {
+  if (profile === EGRESS_RELAY) {
+    if (!relayUrl) {
+      // Fail closed — do NOT silently fall back to direct; that would mask an
+      // egress misconfiguration and leak Cloudflare's shared egress IP to
+      // Mercury, defeating the per-token IP allowlist this profile exists for.
+      throw new Error(
+        "Mercury egress profile is 'relay' but MERCURY_EGRESS_URL is not configured",
+      );
+    }
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Mercury-Token": token,
+    };
+    if (accessClientId) headers["CF-Access-Client-Id"] = accessClientId;
+    if (accessClientSecret)
+      headers["CF-Access-Client-Secret"] = accessClientSecret;
+    return {
+      url: relayUrl,
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        method: (options.method || "GET").toUpperCase(),
+        // Relative Mercury API path only — relay re-hosts onto api.mercury.com.
+        path,
+        body: options.body ?? null,
+      }),
+    };
+  }
+
+  // direct (default) — byte-for-byte the legacy request shape.
+  return {
+    url: `${MERCURY_API}${path}`,
+    method: options.method || "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
       ...options.headers,
     },
+    body: options.body,
+  };
+}
+
+async function mercuryFetch(
+  token,
+  path,
+  options = {},
+  egress = { profile: EGRESS_DIRECT },
+) {
+  const req = buildEgressRequest({
+    profile: egress.profile,
+    relayUrl: egress.relayUrl,
+    accessClientId: egress.accessClientId,
+    accessClientSecret: egress.accessClientSecret,
+    token,
+    path,
+    options,
   });
+
+  const isRelay = egress.profile === EGRESS_RELAY;
+  const fetchOptions = isRelay
+    ? { method: req.method, headers: req.headers, body: req.body }
+    : { ...options, method: req.method, headers: req.headers };
+
+  const res = await fetch(req.url, fetchOptions);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Mercury API ${res.status} on ${path}: ${body.slice(0, 200)}`);
+    throw new Error(
+      `Mercury API ${res.status} on ${path}: ${body.slice(0, 200)}`,
+    );
   }
   const ct = res.headers.get("content-type") || "";
   if (!ct.includes("application/json")) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Mercury API returned non-JSON (${ct}) on ${path}: ${body.slice(0, 100)}`);
+    throw new Error(
+      `Mercury API returned non-JSON (${ct}) on ${path}: ${body.slice(0, 100)}`,
+    );
   }
   return res.json();
 }
@@ -932,10 +1065,14 @@ async function requireMercuryToken(c, next) {
   const slug = c.get("mercurySlug") ?? getSlug(c);
   const token = await getMercuryToken(c, slug);
   if (!token) {
-    return c.json({ error: `Mercury API token not configured for ${slug || "default"}` }, 503);
+    return c.json(
+      { error: `Mercury API token not configured for ${slug || "default"}` },
+      503,
+    );
   }
   c.set("mercuryToken", token);
   c.set("mercurySlug", slug);
+  c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
   await next();
 }
 
@@ -959,53 +1096,95 @@ function mercuryHandler(operation, handler) {
       return await handler(c);
     } catch (error) {
       const slug = c.get("mercurySlug") || "default";
-      console.error(`[Mercury] ${operation} failed (slug=${slug}):`, error.message);
+      console.error(
+        `[Mercury] ${operation} failed (slug=${slug}):`,
+        error.message,
+      );
       return c.json({ error: error.message }, 500);
     }
   };
 }
 
 /** GET /api/thirdparty/mercury/accounts */
-thirdpartyRoutes.get("/mercury/accounts", requireMercuryToken, mercuryHandler("GET /accounts", async (c) => {
-  const data = await mercuryFetch(c.get("mercuryToken"), "/accounts");
-  return c.json(data);
-}));
+thirdpartyRoutes.get(
+  "/mercury/accounts",
+  requireMercuryToken,
+  mercuryHandler("GET /accounts", async (c) => {
+    const data = await mercuryFetch(
+      c.get("mercuryToken"),
+      "/accounts",
+      {},
+      c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
 
 /** GET /api/thirdparty/mercury/account/:accountId */
-thirdpartyRoutes.get("/mercury/account/:accountId", validateAccountId, requireMercuryToken, mercuryHandler("GET /account/:id", async (c) => {
-  const data = await mercuryFetch(c.get("mercuryToken"), `/account/${c.req.param("accountId")}`);
-  return c.json(data);
-}));
+thirdpartyRoutes.get(
+  "/mercury/account/:accountId",
+  validateAccountId,
+  requireMercuryToken,
+  mercuryHandler("GET /account/:id", async (c) => {
+    const data = await mercuryFetch(
+      c.get("mercuryToken"),
+      `/account/${c.req.param("accountId")}`,
+      {},
+      c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
 
 /** GET /api/thirdparty/mercury/account/:accountId/transactions */
-thirdpartyRoutes.get("/mercury/account/:accountId/transactions", validateAccountId, requireMercuryToken, mercuryHandler("GET /account/:id/transactions", async (c) => {
-  const params = new URLSearchParams();
-  for (const key of ["start", "end", "limit", "offset"]) {
-    const val = c.req.query(key);
-    if (val) params.set(key, val);
-  }
-  const qs = params.toString() ? `?${params}` : "";
-  const data = await mercuryFetch(c.get("mercuryToken"), `/account/${c.req.param("accountId")}/transactions${qs}`);
-  return c.json(data);
-}));
+thirdpartyRoutes.get(
+  "/mercury/account/:accountId/transactions",
+  validateAccountId,
+  requireMercuryToken,
+  mercuryHandler("GET /account/:id/transactions", async (c) => {
+    const params = new URLSearchParams();
+    for (const key of ["start", "end", "limit", "offset"]) {
+      const val = c.req.query(key);
+      if (val) params.set(key, val);
+    }
+    const qs = params.toString() ? `?${params}` : "";
+    const data = await mercuryFetch(
+      c.get("mercuryToken"),
+      `/account/${c.req.param("accountId")}/transactions${qs}`,
+      {},
+      c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
 
 /**
  * POST /api/thirdparty/mercury/refresh
  * Keepalive ping — any successful API call resets Mercury's 30-day inactivity timer.
  */
-thirdpartyRoutes.post("/mercury/refresh", async (c, next) => {
-  const body = await c.req.json().catch(() => ({}));
-  c.set("mercurySlug", body.slug || getSlug(c));
-  await next();
-}, requireMercuryToken, mercuryHandler("POST /refresh", async (c) => {
-  const slug = c.get("mercurySlug");
-  const data = await mercuryFetch(c.get("mercuryToken"), "/accounts");
-  return c.json({
-    ok: true,
-    slug,
-    accounts: data.accounts?.length || 0,
-    timestamp: new Date().toISOString(),
-  });
-}));
+thirdpartyRoutes.post(
+  "/mercury/refresh",
+  async (c, next) => {
+    const body = await c.req.json().catch(() => ({}));
+    c.set("mercurySlug", body.slug || getSlug(c));
+    await next();
+  },
+  requireMercuryToken,
+  mercuryHandler("POST /refresh", async (c) => {
+    const slug = c.get("mercurySlug");
+    const data = await mercuryFetch(
+      c.get("mercuryToken"),
+      "/accounts",
+      {},
+      c.get("mercuryEgress"),
+    );
+    return c.json({
+      ok: true,
+      slug,
+      accounts: data.accounts?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
+  }),
+);
 
 export { thirdpartyRoutes };
