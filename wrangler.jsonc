@@ -77,8 +77,6 @@
     { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
     { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
     { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
-    { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
-    { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
@@ -97,8 +95,6 @@
     "dev": {
       "vars": {
         "ENVIRONMENT": "development",
-        "MERCURY_EGRESS_PROFILE": "direct",
-        "MERCURY_EGRESS_URL": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -211,16 +207,12 @@
         { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
         { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
         { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
-        { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
-        { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
       ],
       "vars": {
         "ENVIRONMENT": "staging",
-        "MERCURY_EGRESS_PROFILE": "direct",
-        "MERCURY_EGRESS_URL": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -347,8 +339,6 @@
         { "binding": "MERCURY_OIDC_ISSUER", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_OIDC_ISSUER" },
         { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
         { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
-        { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_ID" },
-        { "binding": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_EGRESS_ACCESS_CLIENT_SECRET" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
@@ -359,8 +349,6 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        "MERCURY_EGRESS_PROFILE": "direct",
-        "MERCURY_EGRESS_URL": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
