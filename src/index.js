@@ -2543,3 +2543,10 @@ ${errorInfo.stack}`);
  * Export Durable Object classes
  */
 export { McpConnectAgent };
+
+/**
+ * Export Cloudflare Workflow classes.
+ * MCPPortalProjection: registry→CF-MCP-Portal projection (Model B).
+ * Write steps are gated by MCP_PORTAL_PROJECTION_ENABLED (default off).
+ */
+export { MCPPortalProjection } from "./workflows/mcp-portal-projection.js";
