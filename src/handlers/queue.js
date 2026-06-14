@@ -120,6 +120,15 @@ async function processEvent(message, env) {
       tenantId: mcpEvent.tenantId,
     });
 
+    // CONNECTION-ONLY hand-off to chittyagent-dispatch (routing layer).
+    // ChittyConnect owns the GitHub App, HMAC verify, App token, and webhook
+    // receipt — it does NOT own maintainer/Linear logic. For the PR-shaped
+    // event types below we forward the normalized event to the dispatcher,
+    // which fans it out to its consumers (autoassist gh_maintainer, linear_sync).
+    // Fail-safe: the webhook was already fast-acked upstream, so this hand-off
+    // must never throw — failures are logged and processing continues.
+    await forwardToDispatch(env, event, mcpEvent);
+
     // Execute v1 automations based on event type
     await runAutomations(env, event, payload, installationId);
 
@@ -143,6 +152,89 @@ async function processEvent(message, env) {
     // Mark as failed
     await env.IDEMP_KV.put(delivery, "failed", { expirationTtl: 86400 });
     throw error;
+  }
+}
+
+// GitHub event types eligible for the dispatch hand-off. Scoped to the
+// PR lifecycle surface the routing layer's consumers care about. Other
+// event types (push, issue_comment, …) stay on the internal v1 path only.
+const DISPATCH_EVENT_TYPES = new Set([
+  "pull_request",
+  "pull_request_review",
+  "pull_request_review_thread",
+  "check_suite",
+  "check_run",
+]);
+
+/**
+ * Connection-only hand-off of a normalized GitHub event to chittyagent-dispatch.
+ *
+ * This is the seam between the CONNECTION layer (ChittyConnect) and the ROUTING
+ * layer (chittyagent-dispatch). No maintainer or Linear logic lives here — we
+ * only forward the normalized event so the dispatcher can fan it out.
+ *
+ * Reachability: prefers the AGENT_DISPATCH service binding if present, else
+ * falls back to fetching env.DISPATCH_URL (default https://dispatch.chitty.cc).
+ * Mirrors webhook-router.js's X-Webhook-* header style and includes
+ * env.INTERNAL_WEBHOOK_SECRET when configured.
+ *
+ * Fail-safe: never throws. The webhook is already fast-acked, so a dispatch
+ * outage must not break event processing — we log and continue.
+ *
+ * @param {object} env - Worker environment
+ * @param {string} event - Raw GitHub event name (e.g. "pull_request")
+ * @param {object} mcpEvent - Normalized event from normalizeGitHubEvent
+ * @returns {Promise<void>}
+ */
+async function forwardToDispatch(env, event, mcpEvent) {
+  if (!DISPATCH_EVENT_TYPES.has(event)) return;
+
+  const timestamp = new Date().toISOString();
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Webhook-Source": "github",
+    "X-Webhook-Timestamp": timestamp,
+    "X-Forwarded-By": "chittyconnect",
+    ...(env.INTERNAL_WEBHOOK_SECRET && {
+      "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
+    }),
+  };
+  const body = JSON.stringify(mcpEvent);
+
+  try {
+    let response;
+    if (env.AGENT_DISPATCH && typeof env.AGENT_DISPATCH.fetch === "function") {
+      // Service binding: host is ignored, path is what matters.
+      response = await env.AGENT_DISPATCH.fetch(
+        new Request("https://internal/dispatch/github", {
+          method: "POST",
+          headers,
+          body,
+        }),
+      );
+    } else {
+      const base = env.DISPATCH_URL || "https://dispatch.chitty.cc";
+      response = await fetch(`${base}/dispatch/github`, {
+        method: "POST",
+        headers,
+        body,
+      });
+    }
+
+    console.log("Dispatch hand-off:", {
+      type: mcpEvent.type,
+      delivery: mcpEvent.delivery,
+      transport: env.AGENT_DISPATCH ? "binding" : "fetch",
+      status: response?.status,
+      ok: response?.ok,
+    });
+  } catch (error) {
+    // Fail-safe: log and continue. The webhook is already acked.
+    console.error("Dispatch hand-off failed (continuing):", {
+      type: mcpEvent.type,
+      delivery: mcpEvent.delivery,
+      error: error.message,
+    });
   }
 }
 
