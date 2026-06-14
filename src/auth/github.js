@@ -67,6 +67,49 @@ export async function getInstallationToken(installationId, appJwt) {
 }
 
 /**
+ * Resolve the App installation id that covers a given repository.
+ *
+ * Uses GitHub's native repo→installation resolver
+ * (`GET /repos/{owner}/{repo}/installation`) authenticated with the App JWT.
+ * This is schema-independent (no dependency on the local `installations`
+ * table) and is the canonical way to find which installation an action
+ * should be performed under when the caller only knows `owner/name`.
+ *
+ * @param {object} env - Worker env with GITHUB_APP_ID, GITHUB_APP_PK
+ * @param {string} owner - Repository owner (org or user login)
+ * @param {string} repo - Repository name
+ * @returns {Promise<number>} Installation id
+ */
+export async function getInstallationIdForRepo(env, owner, repo) {
+  const appJwt = await generateAppJWT(env.GITHUB_APP_ID, env.GITHUB_APP_PK);
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/installation`,
+    {
+      headers: {
+        Authorization: `Bearer ${appJwt}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(
+      `Installation lookup failed for ${owner}/${repo} (${response.status}): ${error}`,
+    );
+  }
+
+  const data = await response.json();
+  if (!data?.id) {
+    throw new Error(
+      `Installation lookup for ${owner}/${repo} returned no installation id`,
+    );
+  }
+  return data.id;
+}
+
+/**
  * Get cached installation token or mint a new one
  * @param {object} env - Worker environment with TOKEN_KV, GITHUB_APP_ID, GITHUB_APP_PK
  * @param {number} installationId - Installation ID
