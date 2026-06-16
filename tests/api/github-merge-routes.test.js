@@ -152,14 +152,21 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     const app = makeApp();
     const res = await app.request(
       req(
-        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: "headsha123" },
+        {
+          repo: "CHITTYOS/x",
+          pr_number: 7,
+          expected_head_sha: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+        },
         { "X-Webhook-Secret": SECRET },
       ),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ merged: true, sha: "mergesha" });
-    expect(mergeBody).toEqual({ merge_method: "squash", sha: "headsha123" });
+    expect(mergeBody).toEqual({
+      merge_method: "squash",
+      sha: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    });
   });
 
   it("returns merged:true idempotently when GitHub 405s but PR is already merged", async () => {
@@ -205,7 +212,11 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     const app = makeApp();
     const res = await app.request(
       req(
-        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: "stale" },
+        {
+          repo: "CHITTYOS/x",
+          pr_number: 7,
+          expected_head_sha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        },
         { "X-Webhook-Secret": SECRET },
       ),
     );
