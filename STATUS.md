@@ -302,7 +302,7 @@ Test Files:  2 passed (2)
 - [ ] Set up GitHub secrets (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)
 
 ### Phase 2: Important Improvements (3-5 days)
-- [ ] Wrap service calls with resilientFetch()
+- [x] Wrap service calls with resilientFetch()
 - [ ] Expand test coverage to 70%+
 - [ ] Add E2E tests for critical paths
 - [ ] Load test rate limiting under stress
