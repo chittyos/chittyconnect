@@ -88,7 +88,7 @@ fi
 
 ATTACHED_JSON="$(
   curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/services/$WORKER_NAME/environments/$ENV/bindings"
+    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$DEPLOYED_NAME/bindings"
 )" || {
   echo "::error::safe-deploy: failed to fetch live bindings from CF API" >&2
   exit 71
