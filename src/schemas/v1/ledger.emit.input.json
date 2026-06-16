@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "chittycanon://core/services/chittyconnect/schemas/v1/ledger.emit.input",
+  "type": "object",
+  "required": ["capability_token", "event_type", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "capability_token": { "type": "string" },
+    "event_type": { "type": "string", "enum": ["git.commit", "git.push", "git.tag"] },
+    "payload": { "type": "object" }
+  }
+}

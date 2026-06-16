@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "chittycanon://core/services/chittyconnect/schemas/v1/policy.resolve.output",
+  "type": "object",
+  "required": ["allowed_repos", "allowed_remotes", "force_push_allowed", "protected_branches"],
+  "additionalProperties": false,
+  "properties": {
+    "allowed_repos": { "type": "array", "items": { "type": "string" } },
+    "allowed_remotes": { "type": "array", "items": { "type": "string" } },
+    "force_push_allowed": { "type": "boolean" },
+    "protected_branches": { "type": "array", "items": { "type": "string" } },
+    "default_author": { "type": "string" }
+  }
+}

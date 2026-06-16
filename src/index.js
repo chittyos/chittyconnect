@@ -1500,7 +1500,7 @@ app.post("/intelligence/relationships/discover", async (c) => {
  */
 import { discoveryRoutes } from "./api/routes/discovery.js";
 import { githubActionsRoutes } from "./api/routes/github-actions.js";
-import { gitConfirmRoutes } from "./api/routes/git-confirm.js";
+import { brokerPrimitivesRoutes } from "./api/routes/broker-primitives.js";
 
 app.route("/.well-known", discoveryRoutes);
 
@@ -1512,11 +1512,45 @@ app.route("/.well-known", discoveryRoutes);
 app.route("/api/github-actions", githubActionsRoutes);
 
 /**
- * Git second-factor confirmation endpoint (chittyos/chittyconnect#210).
- * Issues short-TTL tokens redeemed by the sensitive `git_push --force`
- * write tool. API-key authenticated via mcpAuthMiddleware inside the route.
+ * Deprecated git-confirm endpoints — superseded by /api/v1/capabilities/*
+ * broker primitives (chittyos/chittyconnect#235, #210). Returns 410 Gone
+ * with replacement pointer. Registered without auth so legacy callers
+ * receive a clear deprecation signal regardless of API key.
  */
-app.route("/api/git", gitConfirmRoutes);
+app.all("/api/git/confirm", (c) =>
+  c.json(
+    {
+      error: {
+        code: "ENDPOINT_GONE",
+        message:
+          "POST /api/git/confirm is removed. Use POST /api/v1/capabilities/confirm.",
+        replacement: "/api/v1/capabilities/confirm",
+        spec: "CHARTER.md → Git Broker Surface",
+      },
+    },
+    410,
+  ),
+);
+app.all("/api/git/confirm/*", (c) =>
+  c.json(
+    {
+      error: {
+        code: "ENDPOINT_GONE",
+        message:
+          "Legacy git-confirm endpoints are removed. Use /api/v1/capabilities/* primitives.",
+        replacement: "/api/v1/capabilities/confirm",
+      },
+    },
+    410,
+  ),
+);
+
+/**
+ * Broker primitives v1 — capability mint/introspect/confirm, policy resolve,
+ * ledger emit. Closes chittyos/chittyconnect#210, #211. Partial of #209
+ * (signing endpoints deferred to chittyos/chittyconnect#242).
+ */
+app.route("/api/v1", brokerPrimitivesRoutes);
 
 /**
  * SSE Health check endpoint
