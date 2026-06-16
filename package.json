@@ -51,6 +51,7 @@
     "@cloudflare/workers-oauth-provider": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
+    "@sentry/cloudflare": "^10.58.0",
     "agents": "^0.7.5",
     "hono": "^4.12.18",
     "jose": "^5.2.0",
