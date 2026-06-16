@@ -186,45 +186,88 @@ const DISPATCH_EVENT_TYPES = new Set([
  * @param {object} mcpEvent - Normalized event from normalizeGitHubEvent
  * @returns {Promise<void>}
  */
+/**
+ * Whether a dispatch base URL points at a host we trust with the shared
+ * internal webhook secret: *.chitty.cc, chitty.cc, or localhost for dev.
+ * @param {string} base
+ * @returns {boolean}
+ */
+function isTrustedDispatchHost(base) {
+  try {
+    const host = new URL(base).hostname.toLowerCase();
+    return (
+      host === "chitty.cc" ||
+      host.endsWith(".chitty.cc") ||
+      host === "localhost" ||
+      host === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function forwardToDispatch(env, event, mcpEvent) {
   if (!DISPATCH_EVENT_TYPES.has(event)) return;
 
   const timestamp = new Date().toISOString();
-  const headers = {
+  // Same predicate the request branch uses, so the log label below can't claim
+  // "binding" when AGENT_DISPATCH lacks a fetch fn and we actually fall back.
+  const useBinding =
+    env.AGENT_DISPATCH && typeof env.AGENT_DISPATCH.fetch === "function";
+  const baseHeaders = {
     "Content-Type": "application/json",
     "X-Webhook-Source": "github",
     "X-Webhook-Timestamp": timestamp,
     "X-Forwarded-By": "chittyconnect",
-    ...(env.INTERNAL_WEBHOOK_SECRET && {
-      "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
-    }),
   };
   const body = JSON.stringify(mcpEvent);
+  // Dispatch can be slow/hung; without a timeout the queue consumer stalls and
+  // backs up v1 automations. Keep the fail-safe property meaningful.
+  const DISPATCH_TIMEOUT_MS = 5000;
 
   try {
     let response;
-    if (env.AGENT_DISPATCH && typeof env.AGENT_DISPATCH.fetch === "function") {
-      // Service binding: host is ignored, path is what matters.
+    if (useBinding) {
+      // Service binding: host is ignored, path is what matters. The binding
+      // only resolves to the trusted internal dispatch worker, so the shared
+      // secret is safe to send here.
       response = await env.AGENT_DISPATCH.fetch(
         new Request("https://internal/dispatch/github", {
           method: "POST",
-          headers,
+          headers: {
+            ...baseHeaders,
+            ...(env.INTERNAL_WEBHOOK_SECRET && {
+              "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
+            }),
+          },
           body,
+          signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
         }),
       );
     } else {
       const base = env.DISPATCH_URL || "https://dispatch.chitty.cc";
+      // Only forward the shared internal secret to trusted hosts. A
+      // misconfigured DISPATCH_URL pointing at a non-trusted host must not leak
+      // INTERNAL_WEBHOOK_SECRET.
+      const trusted = isTrustedDispatchHost(base);
       response = await fetch(`${base}/dispatch/github`, {
         method: "POST",
-        headers,
+        headers: {
+          ...baseHeaders,
+          ...(env.INTERNAL_WEBHOOK_SECRET &&
+            trusted && {
+              "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
+            }),
+        },
         body,
+        signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
       });
     }
 
     console.log("Dispatch hand-off:", {
       type: mcpEvent.type,
       delivery: mcpEvent.delivery,
-      transport: env.AGENT_DISPATCH ? "binding" : "fetch",
+      transport: useBinding ? "binding" : "fetch",
       status: response?.status,
       ok: response?.ok,
     });
