@@ -918,22 +918,45 @@ async function getMercuryToken(c, integrationSlug) {
 
 const EGRESS_DIRECT = "direct";
 const EGRESS_RELAY = "relay";
+const EGRESS_PROFILES = new Set([EGRESS_DIRECT, EGRESS_RELAY]);
+
+/**
+ * Normalize a raw profile value to a canonical, recognized profile.
+ * Profile config arrives as free-form env strings, so `RELAY`, `Relay`, and
+ * ` relay ` must all match `relay` — otherwise they'd silently fall through to
+ * the direct path, defeating the egress indirection and being hard to diagnose.
+ * Rejects unknown values early (fail closed) rather than masking misconfig.
+ *
+ * @param {string} raw
+ * @returns {string} one of EGRESS_DIRECT | EGRESS_RELAY
+ */
+function normalizeEgressProfile(raw) {
+  const profile = String(raw).trim().toLowerCase();
+  if (!EGRESS_PROFILES.has(profile)) {
+    throw new Error(
+      `Unknown Mercury egress profile '${raw}' (expected one of: ${[...EGRESS_PROFILES].join(", ")})`,
+    );
+  }
+  return profile;
+}
 
 /**
  * Resolve the active egress profile for a slug.
  * Per-slug override `MERCURY_EGRESS_PROFILE_<SLUG>` wins, else the global
  * `MERCURY_EGRESS_PROFILE`, else the `direct` default.
  * Mirrors the per-slug env convention used by getMercuryToken.
+ * Profile values are normalized case-insensitively; unknown values throw.
  *
  * @returns {{ profile: string, relayUrl?: string, accessClientId?: string, accessClientSecret?: string }}
  */
 export function resolveEgressProfile(env, slug) {
   const e = env || {};
-  let profile = e.MERCURY_EGRESS_PROFILE || EGRESS_DIRECT;
+  let rawProfile = e.MERCURY_EGRESS_PROFILE || EGRESS_DIRECT;
   if (slug) {
     const overrideKey = `MERCURY_EGRESS_PROFILE_${String(slug).replace(/-/g, "_").toUpperCase()}`;
-    if (e[overrideKey]) profile = e[overrideKey];
+    if (e[overrideKey]) rawProfile = e[overrideKey];
   }
+  const profile = normalizeEgressProfile(rawProfile);
   return {
     profile,
     relayUrl: e.MERCURY_EGRESS_URL,
@@ -974,6 +997,22 @@ export function buildEgressRequest({
       // Mercury, defeating the per-token IP allowlist this profile exists for.
       throw new Error(
         "Mercury egress profile is 'relay' but MERCURY_EGRESS_URL is not configured",
+      );
+    }
+    // Validate the path BEFORE putting it in the relay envelope. The relay
+    // re-hosts `path` onto api.mercury.com, so an absolute URL or a host-
+    // bearing / traversal value would let a caller redirect the relay off
+    // Mercury (host/URL injection), breaking the host-allowlist guarantee.
+    // Only relative Mercury API paths are permitted — fail closed otherwise.
+    if (
+      typeof path !== "string" ||
+      !path.startsWith("/") ||
+      path.startsWith("//") ||
+      path.includes("://") ||
+      path.includes("..")
+    ) {
+      throw new Error(
+        `Mercury relay path must be a relative API path beginning with '/' (no host, scheme, '//', or '..'); got: ${path}`,
       );
     }
     const headers = {
@@ -1072,7 +1111,18 @@ async function requireMercuryToken(c, next) {
   }
   c.set("mercuryToken", token);
   c.set("mercurySlug", slug);
-  c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
+  try {
+    c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
+  } catch (error) {
+    // Misconfigured egress profile (e.g. an unrecognized value) — fail closed
+    // with a diagnosable error rather than crashing the worker.
+    return c.json(
+      {
+        error: `Mercury egress misconfigured for ${slug || "default"}: ${error.message}`,
+      },
+      503,
+    );
+  }
   await next();
 }
 

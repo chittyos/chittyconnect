@@ -42,6 +42,41 @@ describe("resolveEgressProfile", () => {
     expect(resolveEgressProfile(env, "aribia-llc").profile).toBe("direct");
   });
 
+  it("normalizes profile case-insensitively (RELAY / Relay / ' relay ' → relay)", () => {
+    for (const raw of ["RELAY", "Relay", " relay ", "ReLaY"]) {
+      expect(
+        resolveEgressProfile({ MERCURY_EGRESS_PROFILE: raw }, "aribia-llc")
+          .profile,
+      ).toBe("relay");
+    }
+    expect(
+      resolveEgressProfile({ MERCURY_EGRESS_PROFILE: "DIRECT" }, "aribia-llc")
+        .profile,
+    ).toBe("direct");
+  });
+
+  it("normalizes per-slug overrides case-insensitively too", () => {
+    expect(
+      resolveEgressProfile(
+        { MERCURY_EGRESS_PROFILE_IT_CAN_BE_LLC: "Relay" },
+        "it-can-be-llc",
+      ).profile,
+    ).toBe("relay");
+  });
+
+  it("rejects an unknown profile value early (fail closed)", () => {
+    expect(() =>
+      resolveEgressProfile({ MERCURY_EGRESS_PROFILE: "proxy" }, "aribia-llc"),
+    ).toThrow(/Unknown Mercury egress profile/);
+    // unknown per-slug override also throws
+    expect(() =>
+      resolveEgressProfile(
+        { MERCURY_EGRESS_PROFILE_ARIBIA_LLC: "tunnel" },
+        "aribia-llc",
+      ),
+    ).toThrow(/Unknown Mercury egress profile/);
+  });
+
   it("surfaces relay url + Access creds from env", () => {
     const r = resolveEgressProfile(
       {
@@ -144,6 +179,44 @@ describe("buildEgressRequest — relay", () => {
     });
     expect(req.body).not.toContain("secret_tok");
     expect(req.headers["X-Mercury-Token"]).toBe("secret_tok");
+  });
+
+  it("rejects an absolute URL as path (host/URL injection guard)", () => {
+    expect(() =>
+      buildEgressRequest({ ...relay, token: "t", path: "https://evil.com/x" }),
+    ).toThrow(/relative API path/);
+  });
+
+  it("rejects a protocol-relative (//host) path", () => {
+    expect(() =>
+      buildEgressRequest({ ...relay, token: "t", path: "//evil.com/accounts" }),
+    ).toThrow(/relative API path/);
+  });
+
+  it("rejects a path-traversal (..) path", () => {
+    expect(() =>
+      buildEgressRequest({ ...relay, token: "t", path: "/a/../../b" }),
+    ).toThrow(/relative API path/);
+  });
+
+  it("rejects a non-string / schemed path", () => {
+    expect(() =>
+      buildEgressRequest({ ...relay, token: "t", path: "accounts" }),
+    ).toThrow(/relative API path/);
+    expect(() =>
+      buildEgressRequest({ ...relay, token: "t", path: 42 }),
+    ).toThrow(/relative API path/);
+  });
+
+  it("still accepts a legitimate relative path with query string", () => {
+    const req = buildEgressRequest({
+      ...relay,
+      token: "t",
+      path: "/account/abc/transactions?limit=10",
+    });
+    expect(JSON.parse(req.body).path).toBe(
+      "/account/abc/transactions?limit=10",
+    );
   });
 
   it("fails closed when relay is selected but MERCURY_EGRESS_URL is unset", () => {
