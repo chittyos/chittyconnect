@@ -73,7 +73,7 @@ api.use(
       "Mcp-Session-Id",
       "Mcp-Protocol-Version",
     ],
-    exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id"],
+    exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id", "ETag"],
     maxAge: 86400,
     credentials: true,
   }),
