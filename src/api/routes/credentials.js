@@ -61,8 +61,9 @@ credentialsRoutes.post("/provision", async (c) => {
       userAgent: c.req.header("User-Agent"),
     };
 
-    // Initialize provisioner
-    const provisioner = new EnhancedCredentialProvisioner(c.env);
+    // Initialize provisioner with ContextConsciousness™
+    const consciousness = c.get('consciousness');
+    const provisioner = new EnhancedCredentialProvisioner(c.env, consciousness);
 
     // Validate request
     provisioner.validateRequest(type, context, requestingService);

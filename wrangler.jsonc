@@ -93,6 +93,8 @@
     "dev": {
       "vars": {
         "ENVIRONMENT": "development",
+        "MCP_PORTAL_PROJECTION_ENABLED": "false",
+        "MCP_PORTAL_ID": "chitty-mcp",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -144,6 +146,11 @@
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
         ]
       },
+      // MCP Portal Projection (Model B) — registry→CF-MCP-Portal sync.
+      // Write steps gated by MCP_PORTAL_PROJECTION_ENABLED (default off).
+      "workflows": [
+        { "name": "mcp-portal-projection", "binding": "MCP_PORTAL_PROJECTION", "class_name": "MCPPortalProjection" }
+      ],
       "d1_databases": [
         { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
       ],
@@ -207,6 +214,8 @@
       ],
       "vars": {
         "ENVIRONMENT": "staging",
+        "MCP_PORTAL_PROJECTION_ENABLED": "false",
+        "MCP_PORTAL_ID": "chitty-mcp",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -268,6 +277,11 @@
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
         ]
       },
+      // MCP Portal Projection (Model B) — registry→CF-MCP-Portal sync.
+      // Write steps gated by MCP_PORTAL_PROJECTION_ENABLED (default off).
+      "workflows": [
+        { "name": "mcp-portal-projection", "binding": "MCP_PORTAL_PROJECTION", "class_name": "MCPPortalProjection" }
+      ],
       "d1_databases": [
         { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
       ],
@@ -339,6 +353,8 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
+        "MCP_PORTAL_PROJECTION_ENABLED": "false",
+        "MCP_PORTAL_ID": "chitty-mcp",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
         "REGISTRY_SERVICE_URL": "https://registry.chitty.cc",
@@ -398,6 +414,11 @@
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
         ]
       },
+      // MCP Portal Projection (Model B) — registry→CF-MCP-Portal sync.
+      // Write steps gated by MCP_PORTAL_PROJECTION_ENABLED (default off).
+      "workflows": [
+        { "name": "mcp-portal-projection", "binding": "MCP_PORTAL_PROJECTION", "class_name": "MCPPortalProjection" }
+      ],
       "d1_databases": [
         { "binding": "DB", "database_name": "chittyconnect", "database_id": "29473911-4c5b-47d8-a3e7-d1be2370edf6" }
       ],

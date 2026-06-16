@@ -15,6 +15,10 @@ import { Hono } from "hono";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { verifyWebhookSignature } from "./auth/webhook.js";
+import {
+  verifyCfAccessAssertion,
+  isCfAccessVerificationConfigured,
+} from "./auth/cf-access-verify.js";
 import { queueConsumer } from "./handlers/queue.js";
 import { api } from "./api/router.js";
 import {
@@ -247,9 +251,52 @@ function parseCsvEnv(value) {
     .filter(Boolean);
 }
 
-function isCloudflareAccessAllowed(c) {
-  const email = (c.req.header("CF-Access-Authenticated-User-Email") || "").toLowerCase();
+/**
+ * Establish the caller's Cloudflare Access identity.
+ *
+ * When CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD are configured, the SIGNED
+ * `Cf-Access-Jwt-Assertion` is verified and the email is taken from the
+ * verified claims — the forgeable `CF-Access-Authenticated-User-Email` header
+ * is ignored. This is fail-closed: a missing/invalid assertion returns "".
+ *
+ * When NOT configured, we fall back to the prior header-trust behavior so the
+ * portal is not locked out before the team domain / AUD are provisioned. This
+ * fallback is logged as a security gap (AUTH-001) and should be removed once
+ * the two vars are set in every environment.
+ *
+ * @returns {Promise<string>} verified (or header-asserted) lowercase email, or "".
+ */
+async function resolveAccessEmail(c) {
+  if (isCfAccessVerificationConfigured(c.env)) {
+    const assertion = c.req.header("Cf-Access-Jwt-Assertion");
+    const result = await verifyCfAccessAssertion(assertion, c.env);
+    if (!result.valid) {
+      console.warn("[SecretsPortal] Access assertion rejected:", {
+        code: result.code,
+        ip: c.req.header("CF-Connecting-IP"),
+        path: c.req.path,
+      });
+      return "";
+    }
+    return result.email;
+  }
+
+  // AUTH-001 fallback: unsigned header trust until CF_ACCESS_* is configured.
+  console.warn(
+    "[SecretsPortal] CF_ACCESS_TEAM_DOMAIN/CF_ACCESS_AUD not configured — " +
+      "trusting unsigned CF-Access-Authenticated-User-Email header (AUTH-001).",
+  );
+  return (
+    c.req.header("CF-Access-Authenticated-User-Email") || ""
+  ).toLowerCase();
+}
+
+async function isCloudflareAccessAllowed(c) {
+  const email = await resolveAccessEmail(c);
   if (!email) return false;
+  // Expose the verified (or, pre-config, asserted) identity for audit metadata
+  // so downstream handlers don't re-read the forgeable raw header.
+  c.set("accessEmail", email);
 
   const allowedEmails = parseCsvEnv(c.env.SECRETS_PORTAL_ACCESS_EMAILS);
   const allowedDomains = parseCsvEnv(c.env.SECRETS_PORTAL_ACCESS_DOMAINS);
@@ -263,12 +310,12 @@ function isCloudflareAccessAllowed(c) {
   // Default-deny if allow-lists configured but no match.
   if (allowedEmails.length > 0 || allowedDomains.length > 0) return false;
 
-  // If no allow-list configured, still require Access identity header.
+  // No allow-list configured: a verified (or, pre-config, asserted) identity passes.
   return true;
 }
 
 app.use("/secrets-portal", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
+  if (!(await isCloudflareAccessAllowed(c))) {
     return c.json(
       {
         ok: false,
@@ -281,11 +328,12 @@ app.use("/secrets-portal", async (c, next) => {
 });
 
 app.use("/api/v1/secrets/*", async (c, next) => {
-  const accessOnly = String(c.env.SECRETS_PORTAL_ACCESS_ONLY || "").toLowerCase() === "true";
+  const accessOnly =
+    String(c.env.SECRETS_PORTAL_ACCESS_ONLY || "").toLowerCase() === "true";
   const isPortalUpsertPath = c.req.path === "/api/v1/secrets/upsert";
 
   if (accessOnly && isPortalUpsertPath) {
-    if (!isCloudflareAccessAllowed(c)) {
+    if (!(await isCloudflareAccessAllowed(c))) {
       return c.json(
         {
           ok: false,
@@ -296,7 +344,7 @@ app.use("/api/v1/secrets/*", async (c, next) => {
     }
     c.set("apiKey", {
       type: "cloudflare-access",
-      name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+      name: c.get("accessEmail") || "unknown",
       service: "secrets-portal",
       status: "active",
     });
@@ -1635,12 +1683,15 @@ app.get("/secrets-portal", (c) => {
 });
 
 app.use("/secrets-portal/upsert", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
-    return c.json({ ok: false, error: "Cloudflare Access required for secrets portal" }, 401);
+  if (!(await isCloudflareAccessAllowed(c))) {
+    return c.json(
+      { ok: false, error: "Cloudflare Access required for secrets portal" },
+      401,
+    );
   }
   c.set("apiKey", {
     type: "cloudflare-access",
-    name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+    name: c.get("accessEmail") || "unknown",
     service: "secrets-portal",
     status: "active",
   });
@@ -1661,7 +1712,11 @@ async function secretsUpsertHandler(c) {
       let context = {};
       const raw = String(form.contextJson || "").trim();
       if (raw) {
-        try { context = JSON.parse(raw); } catch { context = { _raw: raw }; }
+        try {
+          context = JSON.parse(raw);
+        } catch {
+          context = { _raw: raw };
+        }
       }
       body = {
         path: form.path,
@@ -1675,10 +1730,14 @@ async function secretsUpsertHandler(c) {
     const instructions =
       typeof body.instructions === "string" ? body.instructions.trim() : "";
     const context =
-      body.context && typeof body.context === "object" && !Array.isArray(body.context)
+      body.context &&
+      typeof body.context === "object" &&
+      !Array.isArray(body.context)
         ? body.context
         : {};
-    const wantsHtml = (c.req.header("accept") || "").includes("text/html") && !ct.includes("application/json");
+    const wantsHtml =
+      (c.req.header("accept") || "").includes("text/html") &&
+      !ct.includes("application/json");
 
     if (path && !/^[a-z0-9._-]+(\/[a-z0-9._-]+){2,}$/i.test(path)) {
       return c.json(
@@ -1712,16 +1771,37 @@ async function secretsUpsertHandler(c) {
     // applies the secret to its target store, and deletes the KV record.
     const aesKeyB64 = c.env.SECRETS_PORTAL_AES_KEY;
     if (!aesKeyB64) {
-      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY is not configured." }, 503);
+      return c.json(
+        { ok: false, error: "SECRETS_PORTAL_AES_KEY is not configured." },
+        503,
+      );
     }
-    const aesKeyRaw = Uint8Array.from(atob(aesKeyB64), (ch) => ch.charCodeAt(0));
+    const aesKeyRaw = Uint8Array.from(atob(aesKeyB64), (ch) =>
+      ch.charCodeAt(0),
+    );
     if (aesKeyRaw.byteLength !== 32) {
-      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY must be 32 bytes (base64-encoded)." }, 503);
+      return c.json(
+        {
+          ok: false,
+          error: "SECRETS_PORTAL_AES_KEY must be 32 bytes (base64-encoded).",
+        },
+        503,
+      );
     }
-    const cryptoKey = await crypto.subtle.importKey("raw", aesKeyRaw, "AES-GCM", false, ["encrypt"]);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      aesKeyRaw,
+      "AES-GCM",
+      false,
+      ["encrypt"],
+    );
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const cipherBytes = new Uint8Array(
-      await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, new TextEncoder().encode(value)),
+      await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        new TextEncoder().encode(value),
+      ),
     );
     const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
 
@@ -1761,8 +1841,14 @@ async function secretsUpsertHandler(c) {
     return c.json(result);
   } catch (error) {
     console.error("[SecretsPortal] upsert failed:", error);
-    const errResult = { ok: false, error: error?.message || "Secret upsert failed" };
-    if ((c.req.header("accept") || "").includes("text/html") && !(c.req.header("content-type") || "").includes("application/json")) {
+    const errResult = {
+      ok: false,
+      error: error?.message || "Secret upsert failed",
+    };
+    if (
+      (c.req.header("accept") || "").includes("text/html") &&
+      !(c.req.header("content-type") || "").includes("application/json")
+    ) {
       c.header("Cache-Control", "no-store");
       return c.html(renderResultPage(errResult, false), 500);
     }
@@ -1782,8 +1868,12 @@ pre{background:#0a1324;border:1px solid #23324d;border-radius:8px;padding:14px;w
 a{display:inline-block;margin-top:14px;color:#2a66f5;}
 </style></head><body><div class="wrap"><div class="panel">
 <h1>${status}</h1>
-${ok ? `<p>Request <code>${result.requestId}</code> accepted at ${result.timestamp}.</p>
-<p>Path: <code>${result.path}</code><br>Encrypted at rest (AES-GCM-256), TTL ${result.ttl}.<br>Awaiting ChittyConnect internal consumer.</p>` : `<p>${(result.error || "").replace(/[<>&"']/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[m]))}</p>`}
+${
+  ok
+    ? `<p>Request <code>${result.requestId}</code> accepted at ${result.timestamp}.</p>
+<p>Path: <code>${result.path}</code><br>Encrypted at rest (AES-GCM-256), TTL ${result.ttl}.<br>Awaiting ChittyConnect internal consumer.</p>`
+    : `<p>${(result.error || "").replace(/[<>&"']/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" })[m])}</p>`
+}
 <a href="/secrets-portal">← Submit another</a>
 </div></div></body></html>`;
 }
@@ -2375,7 +2465,10 @@ export default {
 ${errorInfo.stack}`,
       );
       return new Response(
-        JSON.stringify({ error: "agent_routing_failed", error_description: err.message }),
+        JSON.stringify({
+          error: "agent_routing_failed",
+          error_description: err.message,
+        }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -2543,3 +2636,10 @@ ${errorInfo.stack}`);
  * Export Durable Object classes
  */
 export { McpConnectAgent };
+
+/**
+ * Export Cloudflare Workflow classes.
+ * MCPPortalProjection: registry→CF-MCP-Portal projection (Model B).
+ * Write steps are gated by MCP_PORTAL_PROJECTION_ENABLED (default off).
+ */
+export { MCPPortalProjection } from "./workflows/mcp-portal-projection.js";

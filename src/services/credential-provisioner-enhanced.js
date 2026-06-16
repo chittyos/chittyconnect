@@ -279,11 +279,16 @@ export class EnhancedCredentialProvisioner {
       typeof this.contextConsciousness.detectAnomalies === "function";
 
     if (hasContextConsciousness) {
-      // Check if requesting service is healthy
-      const serviceHealth = await this.contextConsciousness.checkServiceHealth(
-        requestingService,
-        { url: `https://${requestingService}.chitty.cc` },
-      );
+      // Check if requesting service is known/registered to avoid bootstrap/CLI lockouts
+      const isRegistered = this.contextConsciousness.services.has(requestingService);
+      let serviceHealth = { status: "healthy" };
+
+      if (isRegistered) {
+        serviceHealth = await this.contextConsciousness.checkServiceHealth(
+          requestingService,
+          { url: `https://${requestingService}.chitty.cc` },
+        );
+      }
 
       if (serviceHealth.status === "down") {
         analysis.approved = false;

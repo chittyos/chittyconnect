@@ -1,0 +1,117 @@
+{
+  "result": {
+    "id": "chitty-mcp",
+    "name": "ChittyMCP",
+    "hostname": "mcp.chitty.cc",
+    "servers": [
+      {
+        "id": "chittyagent-orchestrator",
+        "hostname": "https://chittyagent-orchestrator.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-resolve",
+        "hostname": "https://resolve.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-tasks",
+        "hostname": "https://tasks.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-imessage",
+        "hostname": "https://imessage.chitty.cc/mcp"
+      },
+      {
+        "id": "chitty-evidence",
+        "hostname": "https://chittyagent-evidence.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-storage",
+        "hostname": "https://chittyagent-storage.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-scrape",
+        "hostname": "https://chittyagent-scrape.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-notion",
+        "hostname": "https://notion.chitty.cc/mcp"
+      },
+      {
+        "id": "openai-docs",
+        "hostname": "https://developers.openai.com/mcp"
+      },
+      {
+        "id": "chittyagent-cleaner",
+        "hostname": "https://cleaner.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-market",
+        "hostname": "https://market.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-twilio",
+        "hostname": "https://chittyagent-twilio.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-helper",
+        "hostname": "https://helper.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-dispute",
+        "hostname": "https://chittyagent-dispute.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-notes",
+        "hostname": "https://chittyagent-notes.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-gam",
+        "hostname": "https://chittyagent-gam.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-quo",
+        "hostname": "https://quo.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-bluebubbles",
+        "hostname": "https://chittyagent-bluebubbles.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-sandbox",
+        "hostname": "https://sandbox.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-canon",
+        "hostname": "https://canon.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-chatgpt",
+        "hostname": "https://chittyagent-chatgpt.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "cloudeflare-codemode",
+        "hostname": "https://mcp.cloudflare.com/mcp"
+      },
+      {
+        "id": "chittyagent-auth",
+        "hostname": "https://chittyagent-auth.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-dispatch",
+        "hostname": "https://dispatch.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-autoassist",
+        "hostname": "https://autoassist.chitty.cc/mcp"
+      },
+      {
+        "id": "chittyagent-ship",
+        "hostname": "https://chittyagent-ship.ccorp.workers.dev/mcp"
+      },
+      {
+        "id": "chittyagent-neon",
+        "hostname": "https://neon.chitty.cc/mcp"
+      }
+    ]
+  }
+}

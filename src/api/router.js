@@ -42,6 +42,7 @@ import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
 import { sessionRoutes } from "./routes/sessions.js";
+import { mcpPortalRoutes } from "./routes/mcp-portal.js";
 import { neonUserStoreRoutes } from "../auth/neon-user-store.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
@@ -194,6 +195,7 @@ api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/sessions", sessionRoutes);
+api.route("/api/v1/mcp-portal", mcpPortalRoutes);
 
 // Neon Auth user store — JWKS-validated read/write surface for
 // neon_auth.{user,account,session,verification,organization,member,invitation}.
