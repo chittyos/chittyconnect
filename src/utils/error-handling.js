@@ -327,8 +327,12 @@ export async function resilientFetch(url, options = {}, retryOptions = {}) {
 
       // Check if response is OK
       if (!response.ok) {
+        let errorText = "";
+        try {
+          errorText = await response.text();
+        } catch (e) {}
         const error = new Error(
-          `HTTP ${response.status}: ${response.statusText}`,
+          `HTTP ${response.status}: ${response.statusText}${errorText ? ' - ' + errorText : ''}`,
         );
         error.status = response.status;
         error.response = response;

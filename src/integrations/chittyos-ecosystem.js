@@ -14,6 +14,8 @@
 // Import for future use
 // import { chittyCanon } from "./chittycanon-client.js";
 
+import { resilientFetch } from "../utils/error-handling.js";
+
 /**
  * ChittyOS Ecosystem Manager
  * Central orchestration for all ChittyOS service interactions
@@ -150,7 +152,7 @@ export class ChittyOSEcosystem {
     }
 
     try {
-      const response = await fetch(`${this.baseUrls.registry}/api/services`, {
+      const response = await resilientFetch(`${this.baseUrls.registry}/api/services`, {
         headers: {
           Authorization: `Bearer ${this.env.CHITTY_REGISTRY_TOKEN}`,
           "Content-Type": "application/json",
@@ -183,7 +185,7 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyID] Minting new ${args.entity} ChittyID...`);
 
     try {
-      const response = await fetch(`${this.baseUrls.chittyid}/v1/mint`, {
+      const response = await resilientFetch(`${this.baseUrls.chittyid}/v1/mint`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -216,7 +218,7 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyDNA] Initializing DNA record for ${chittyid}...`);
 
     try {
-      const response = await fetch(`${this.baseUrls.dna}/api/initialize`, {
+      const response = await resilientFetch(`${this.baseUrls.dna}/api/initialize`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -264,7 +266,7 @@ export class ChittyOSEcosystem {
       if (!this.env.CHITTY_AUTH_SERVICE_TOKEN && this.env.CHITTY_AUTH_TOKEN) {
         console.warn("[Auth] CHITTY_AUTH_TOKEN is deprecated, migrate to CHITTY_AUTH_SERVICE_TOKEN");
       }
-      const response = await fetch(`${this.baseUrls.auth}/api/keys/provision`, {
+      const response = await resilientFetch(`${this.baseUrls.auth}/api/keys/provision`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -307,7 +309,7 @@ export class ChittyOSEcosystem {
     );
 
     try {
-      const response = await fetch(
+      const response = await resilientFetch(
         `${this.baseUrls.registry}/api/services/register`,
         {
           method: "POST",
@@ -344,7 +346,7 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyVerify] Verifying context ${chittyid}...`);
 
     try {
-      const response = await fetch(
+      const response = await resilientFetch(
         `${this.baseUrls.verify}/api/verify/context`,
         {
           method: "POST",
@@ -383,7 +385,7 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyCertify] Certifying context ${chittyid}...`);
 
     try {
-      const response = await fetch(
+      const response = await resilientFetch(
         `${this.baseUrls.certify}/api/certify/context`,
         {
           method: "POST",
@@ -472,7 +474,7 @@ export class ChittyOSEcosystem {
     const url = `${service.baseUrl}${path}`;
     console.log(`[Router] Routing to ${serviceName}: ${url}`);
 
-    return fetch(url, {
+    return resilientFetch(url, {
       ...options,
       headers: {
         ...options.headers,
