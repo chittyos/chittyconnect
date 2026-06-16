@@ -29,12 +29,20 @@ const mcpHandler = McpConnectAgent.serve("/chatgpt/mcp", {
 // Sunset window: 2026-08-15.
 chatgptMcp.use("*", async (c, next) => {
   await next();
-  c.header("Deprecation", "true");
-  c.header("Sunset", "Sat, 15 Aug 2026 00:00:00 GMT");
-  c.header(
+  // The downstream MCP handler returns a streamed Response (SSE) whose headers
+  // are immutable; mutating c.res.headers in place can throw. Rebuild the
+  // Response so deprecation headers attach cleanly without buffering the body.
+  const res = new Response(c.res.body, c.res);
+  // RFC 9745: Deprecation is a structured-field Date (@<unix-seconds>), not a
+  // boolean. @1778976000 = 2026-05-17T00:00:00Z, the date this route entered
+  // deprecation.
+  res.headers.set("Deprecation", "@1778976000");
+  res.headers.set("Sunset", "Sat, 15 Aug 2026 00:00:00 GMT");
+  res.headers.set(
     "Link",
     '<https://mcp.chitty.cc/mcp>; rel="successor-version", <https://mcp.chitty.cc/sse>; rel="alternate"',
   );
+  c.res = res;
 });
 
 /**
