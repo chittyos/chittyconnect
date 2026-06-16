@@ -43,6 +43,7 @@ import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { neonUserStoreRoutes } from "../auth/neon-user-store.js";
+import { identityRoutes } from "./routes/identity.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -72,7 +73,7 @@ api.use(
       "Mcp-Session-Id",
       "Mcp-Protocol-Version",
     ],
-    exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id"],
+    exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id", "ETag"],
     maxAge: 86400,
     credentials: true,
   }),
@@ -194,6 +195,7 @@ api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/sessions", sessionRoutes);
+api.route("/api/v1/identity", identityRoutes);
 
 // Neon Auth user store — JWKS-validated read/write surface for
 // neon_auth.{user,account,session,verification,organization,member,invitation}.
