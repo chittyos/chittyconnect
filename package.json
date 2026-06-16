@@ -52,7 +52,7 @@
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
     "agents": "^0.7.5",
-    "hono": "^4.12.18",
+    "hono": "^4.12.25",
     "jose": "^5.2.0",
     "node-fetch": "^3.3.2",
     "zod": "^3.22.0"
@@ -63,7 +63,7 @@
     "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
     "prettier": "^3.2.0",
-    "vitest": "^4.0.8",
+    "vitest": "^4.1.0",
     "wrangler": "^4.76.0"
   },
   "lint-staged": {
