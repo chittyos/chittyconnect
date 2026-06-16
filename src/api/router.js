@@ -71,6 +71,7 @@ api.use(
       "X-ChittyID",
       "Mcp-Session-Id",
       "Mcp-Protocol-Version",
+      "X-Bypass-Cache",
     ],
     exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id"],
     maxAge: 86400,

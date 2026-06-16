@@ -78,15 +78,15 @@ async function getCourtListenerToken(env) {
       }
     }
   }
-  // Broker path (1Password) with env-var fallback. Signature mirrors
-  // google.js: (env, brokerPath, fallbackEnvVar, logPrefix). The fallback
-  // env var name matches the Secrets Store binding above so a single
-  // configured value works whether delivered as a Secrets Store binding
-  // or a plain Worker env var.
+  // Broker path (1Password). No env-var fallback: the Secrets Store binding
+  // is already resolved above, so resolution is exactly two explicit sources
+  // (Secrets Store binding, then broker). Passing an env-var fallback here
+  // would silently reopen a third, undeclared credential path outside the
+  // Secrets Store / broker-only policy for this proxy.
   return getCredential(
     env,
     "integrations/courtlistener/api_token",
-    "COURTLISTENER_API_TOKEN",
+    undefined,
     "CourtListener",
   );
 }
@@ -121,6 +121,14 @@ function failClosedNoToken(c) {
  */
 async function clGet(c, upstreamUrl) {
   const bypass = c.req.header("X-Bypass-Cache") === "1";
+
+  // Resolve the token BEFORE consulting the cache. A cache HIT must not be
+  // allowed to bypass the fail-closed contract: if the token is removed or
+  // its source becomes unavailable, every request — cached or not — must
+  // emit the 503, not keep serving stale cached upstream data.
+  const token = await getCourtListenerToken(c.env);
+  if (!token) return failClosedNoToken(c);
+
   const cache = !bypass && typeof caches !== "undefined" ? caches.default : null;
   const cacheReq = new Request(upstreamUrl, { method: "GET" });
 
@@ -137,9 +145,6 @@ async function clGet(c, upstreamUrl) {
       // cache.match failure is non-fatal; fall through to live fetch
     }
   }
-
-  const token = await getCourtListenerToken(c.env);
-  if (!token) return failClosedNoToken(c);
 
   let upstream;
   try {

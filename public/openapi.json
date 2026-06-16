@@ -1538,6 +1538,9 @@
               }
             }
           },
+          "502": {
+            "description": "Bad Gateway — upstream fetch failed or returned invalid JSON"
+          },
           "503": {
             "description": "CourtListener token not provisioned"
           }
@@ -1583,6 +1586,9 @@
               }
             }
           },
+          "502": {
+            "description": "Bad Gateway — upstream fetch failed or returned invalid JSON"
+          },
           "503": {
             "description": "CourtListener token not provisioned"
           }
@@ -1626,6 +1632,9 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Bad Gateway \u2014 upstream fetch failed or returned invalid JSON"
           },
           "503": {
             "description": "CourtListener token not provisioned"
@@ -1702,6 +1711,9 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Bad Gateway \u2014 upstream fetch failed or returned invalid JSON"
           },
           "503": {
             "description": "CourtListener token not provisioned"

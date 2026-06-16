@@ -150,8 +150,8 @@ describe("GET /search", () => {
     const res = await get("/search", env, { query: "q=foo" });
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toContain("403");
-    expect(body.error.length).toBeLessThan(400);
+    // Assert the exact 200-char truncation contract, not a loose bound.
+    expect(body.error).toBe(`CourtListener API 403: ${"x".repeat(200)}`);
   });
 
   it("returns 502 on network error", async () => {
@@ -301,7 +301,8 @@ describe("POST /citation-lookup", () => {
     const res = await post("/citation-lookup", env, { body: { text: "garbage" } });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.length).toBeLessThan(400);
+    // Assert the exact 200-char truncation contract, not a loose bound.
+    expect(body.error).toBe(`CourtListener API 400: ${"y".repeat(200)}`);
   });
 
   it("scrubs the API token from POST error bodies", async () => {
@@ -368,6 +369,25 @@ describe("Cache API wrap on GETs", () => {
     const res = await get("/search", env, { query: "q=cached" });
     expect(res.status).toBe(200);
     expect(res.headers.get("X-Cache")).toBe("HIT");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("fails closed (503) even on a cache hit when no token is available", async () => {
+    // Regression: a cache HIT must not bypass the fail-closed token contract.
+    const cacheMatch = vi.fn().mockResolvedValue(jsonResponse({ count: 99, results: ["stale"] }));
+    globalThis.caches = { default: { match: cacheMatch, put: vi.fn() } };
+    globalThis.fetch = vi.fn();
+    mockGetCredential.mockResolvedValueOnce(undefined);
+
+    const res = await get("/search", makeEnv({ COURTLISTENER_API_TOKEN: undefined }), {
+      query: "q=cached",
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe("POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE");
+    // Token resolution gates the cache: a HIT must not be served, and no
+    // upstream fetch should occur either.
+    expect(cacheMatch).not.toHaveBeenCalled();
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
