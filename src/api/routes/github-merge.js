@@ -113,13 +113,18 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
 
   const { repo, pr_number, merge_method, expected_head_sha } = body || {};
 
-  if (!repo || typeof repo !== "string" || !repo.includes("/")) {
+  // repo must be exactly "owner/name": two non-empty segments, each limited to
+  // GitHub's identifier charset. A permissive check (e.g. includes("/")) lets
+  // "owner/name/extra", "/name", or "owner/" through, and split("/", 2) would
+  // silently drop trailing segments — risking a merge against the wrong repo.
+  const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
+  if (!repo || typeof repo !== "string" || !REPO_RE.test(repo)) {
     return c.json(
       {
         merged: false,
         error: {
           code: "MISSING_REQUIRED_FIELDS",
-          message: 'repo ("owner/name") is required',
+          message: 'repo must be exactly "owner/name"',
         },
         status: 400,
       },
@@ -147,6 +152,27 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
         error: {
           code: "INVALID_MERGE_METHOD",
           message: `merge_method must be one of: ${[...VALID_MERGE_METHODS].join(", ")}`,
+        },
+        status: 400,
+      },
+      400,
+    );
+  }
+
+  // expected_head_sha is the TOCTOU guard — only meaningful if it's a real
+  // git object id. Reject non-string/whitespace early rather than forwarding a
+  // malformed guard to GitHub where it would fail less predictably.
+  if (
+    expected_head_sha !== undefined &&
+    (typeof expected_head_sha !== "string" ||
+      !/^[0-9a-fA-F]{7,40}$/.test(expected_head_sha))
+  ) {
+    return c.json(
+      {
+        merged: false,
+        error: {
+          code: "INVALID_EXPECTED_HEAD_SHA",
+          message: "expected_head_sha must be a 7-40 char hex git sha",
         },
         status: 400,
       },

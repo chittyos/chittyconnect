@@ -81,9 +81,17 @@ export async function getInstallationToken(installationId, appJwt) {
  * @returns {Promise<number>} Installation id
  */
 export async function getInstallationIdForRepo(env, owner, repo) {
+  // Exported helper — validate inputs and encode them into the URL so callers
+  // passing whitespace or unexpected characters can't produce a malformed URL
+  // or an unintended request path.
+  const cleanOwner = typeof owner === "string" ? owner.trim() : "";
+  const cleanRepo = typeof repo === "string" ? repo.trim() : "";
+  if (!cleanOwner || !cleanRepo) {
+    throw new Error("getInstallationIdForRepo requires non-empty owner and repo");
+  }
   const appJwt = await generateAppJWT(env.GITHUB_APP_ID, env.GITHUB_APP_PK);
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/installation`,
+    `https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/installation`,
     {
       headers: {
         Authorization: `Bearer ${appJwt}`,
