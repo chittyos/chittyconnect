@@ -287,6 +287,28 @@ CREATE POLICY invitation_self_email ON neon_auth.invitation
     )
   );
 
+-- ---------------------------------------------------------------------------
+-- 3. Grant the runtime app role least-privilege DML on the 7 owned tables
+--
+--    Per the Neon Auth ownership-split authority, ChittyConnect's user-store
+--    connects as `protected_app_rw` (rolbypassrls=false), NOT `neondb_owner`
+--    (rolbypassrls=true — bypasses RLS even under FORCE) and NOT the
+--    `neon_auth` owner role (which would hand ChittyConnect authority over
+--    ChittyAuth's jwks/project_config tables, collapsing the ownership split).
+--    protected_app_rw is non-owner + non-bypass, so ENABLE + these policies
+--    enforce for it; the FORCE above is defense-in-depth. NEON_AUTH_DATABASE_URL
+--    must point to protected_app_rw for enforcement to be live in production.
+--    Grants are idempotent (re-GRANT is a no-op). Validated live on a Neon
+--    branch: as protected_app_rw, SELECT isolates per-DID, self-INSERT is
+--    allowed, and foreign-INSERT raises an RLS WITH CHECK violation.
+-- ---------------------------------------------------------------------------
+GRANT USAGE ON SCHEMA neon_auth TO protected_app_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  neon_auth."user", neon_auth.account, neon_auth.session,
+  neon_auth.verification, neon_auth.organization,
+  neon_auth.member, neon_auth.invitation
+  TO protected_app_rw;
+
 COMMIT;
 
 -- ---------------------------------------------------------------------------
