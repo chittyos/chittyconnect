@@ -127,9 +127,9 @@
       },
 
       // Resource bindings — dev
-      "agent_memory": [
-        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
-      ],
+      // "agent_memory": [
+      //   { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      // ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],
@@ -257,9 +257,9 @@
       },
 
       // Resource bindings — staging
-      "agent_memory": [
-        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
-      ],
+      // "agent_memory": [
+      //   { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      // ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],
@@ -397,9 +397,9 @@
       },
 
       // Resource bindings — production
-      "agent_memory": [
-        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
-      ],
+      // "agent_memory": [
+      //   { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      // ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],
