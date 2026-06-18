@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { MCP_URL, MCP_OAUTH_BEARER, mcpOAuthCall } from "./config.js";
+import { CH1TTY_MCP_URL, MCP_OAUTH_BEARER, mcpOAuthCall } from "./config.js";
 
 function parseStreamableResponseText(text) {
   const results = [];
@@ -38,7 +38,7 @@ async function parseStreamableResponse(res) {
 
 const describeIfToken = MCP_OAUTH_BEARER ? describe : describe.skip;
 
-describeIfToken("MCP OAuth gateway (mcp.chitty.cc/mcp)", () => {
+describeIfToken("MCP OAuth gateway (mcp.ch1tty.com/mcp)", () => {
   it("initialize succeeds and returns session header", async () => {
     const res = await mcpOAuthCall("initialize", {
       protocolVersion: "2025-06-18",
@@ -48,7 +48,9 @@ describeIfToken("MCP OAuth gateway (mcp.chitty.cc/mcp)", () => {
 
     expect(res.ok).toBe(true);
     expect(res.url).toContain("/mcp");
-    expect(MCP_URL).toContain("mcp.chitty.cc");
+    if (!CH1TTY_MCP_URL.includes("127.0.0.1") && !CH1TTY_MCP_URL.includes("localhost")) {
+      expect(CH1TTY_MCP_URL).toContain("mcp.ch1tty.com");
+    }
 
     const body = await parseStreamableResponse(res);
     const sessionId = res.headers.get("mcp-session-id");

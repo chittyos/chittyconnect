@@ -152,12 +152,15 @@ export class ChittyOSEcosystem {
     }
 
     try {
-      const response = await resilientFetch(`${this.baseUrls.registry}/api/services`, {
-        headers: {
-          Authorization: `Bearer ${this.env.CHITTY_REGISTRY_TOKEN}`,
-          "Content-Type": "application/json",
+      const response = await resilientFetch(
+        `${this.baseUrls.registry}/api/services`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.env.CHITTY_REGISTRY_TOKEN}`,
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`Registry discovery failed: ${response.status}`);
@@ -185,14 +188,17 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyID] Minting new ${args.entity} ChittyID...`);
 
     try {
-      const response = await resilientFetch(`${this.baseUrls.chittyid}/v1/mint`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN}`,
+      const response = await resilientFetch(
+        `${this.baseUrls.chittyid}/v1/mint`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN}`,
+          },
+          body: JSON.stringify(args),
         },
-        body: JSON.stringify(args),
-      });
+      );
 
       if (!response.ok) {
         const error = await response.text();
@@ -218,24 +224,27 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyDNA] Initializing DNA record for ${chittyid}...`);
 
     try {
-      const response = await resilientFetch(`${this.baseUrls.dna}/api/initialize`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.env.CHITTY_DNA_TOKEN}`,
-          "X-ChittyID": chittyid,
-        },
-        body: JSON.stringify({
-          chittyid,
-          type: "context",
-          metadata,
-          genesis: {
-            service: "chittyconnect",
-            timestamp: new Date().toISOString(),
-            genesisSchemaVersion: "1.0.0",
+      const response = await resilientFetch(
+        `${this.baseUrls.dna}/api/initialize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.env.CHITTY_DNA_TOKEN}`,
+            "X-ChittyID": chittyid,
           },
-        }),
-      });
+          body: JSON.stringify({
+            chittyid,
+            type: "context",
+            metadata,
+            genesis: {
+              service: "chittyconnect",
+              timestamp: new Date().toISOString(),
+              genesisSchemaVersion: "1.0.0",
+            },
+          }),
+        },
+      );
 
       if (!response.ok) {
         const error = await response.text();
@@ -262,19 +271,25 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyAuth] Requesting API keys for ${chittyid}...`);
 
     try {
-      const authToken = this.env.CHITTY_AUTH_SERVICE_TOKEN || this.env.CHITTY_AUTH_TOKEN;
+      const authToken =
+        this.env.CHITTY_AUTH_SERVICE_TOKEN || this.env.CHITTY_AUTH_TOKEN;
       if (!this.env.CHITTY_AUTH_SERVICE_TOKEN && this.env.CHITTY_AUTH_TOKEN) {
-        console.warn("[Auth] CHITTY_AUTH_TOKEN is deprecated, migrate to CHITTY_AUTH_SERVICE_TOKEN");
+        console.warn(
+          "[Auth] CHITTY_AUTH_TOKEN is deprecated, migrate to CHITTY_AUTH_SERVICE_TOKEN",
+        );
       }
-      const response = await resilientFetch(`${this.baseUrls.auth}/api/keys/provision`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-          "X-ChittyID": chittyid,
+      const response = await resilientFetch(
+        `${this.baseUrls.auth}/api/keys/provision`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+            "X-ChittyID": chittyid,
+          },
+          body: JSON.stringify(keyParams),
         },
-        body: JSON.stringify(keyParams),
-      });
+      );
 
       if (!response.ok) {
         const error = await response.text();

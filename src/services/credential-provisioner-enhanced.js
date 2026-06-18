@@ -530,12 +530,17 @@ export class EnhancedCredentialProvisioner {
         environment,
       })
       .catch((err) => {
-        console.warn("[EnhancedCredentialProvisioner] 1Password account_id fetch failed:", err.message);
+        console.warn(
+          "[EnhancedCredentialProvisioner] 1Password account_id fetch failed:",
+          err.message,
+        );
         return this.env.CHITTYOS_ACCOUNT_ID;
       });
 
     if (!accountId) {
-      throw new Error("Cloudflare Account ID unavailable — both 1Password and CHITTYOS_ACCOUNT_ID env var are empty");
+      throw new Error(
+        "Cloudflare Account ID unavailable — both 1Password and CHITTYOS_ACCOUNT_ID env var are empty",
+      );
     }
     if (!makeApiKey) {
       throw new Error(
@@ -1066,9 +1071,8 @@ export class EnhancedCredentialProvisioner {
     repository,
     permissions,
   ) {
-    const { generateAppJWT, getInstallationToken } = await import(
-      "../auth/github.js"
-    );
+    const { generateAppJWT, getInstallationToken } =
+      await import("../auth/github.js");
 
     // Generate App JWT
     const appJwt = await generateAppJWT(appId, privateKey);
@@ -1170,27 +1174,25 @@ export class EnhancedCredentialProvisioner {
     try {
       // Log to ChittyChronicle
       const chronicleUrl = this.env.CHITTYCHRONICLE_SERVICE_URL;
-      if (!chronicleUrl) throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-      const chronicleResponse = await fetch(
-        `${chronicleUrl}/api/entries`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.env.CHITTY_CHRONICLE_TOKEN}`,
-          },
-          body: JSON.stringify({
-            eventType: "credential.provisioned",
-            entityId: event.requestingService,
-            data: {
-              ...event,
-              timestamp: new Date().toISOString(),
-              provider: this.broker?.type || "unknown",
-              enhanced: true,
-            },
-          }),
+      if (!chronicleUrl)
+        throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+      const chronicleResponse = await fetch(`${chronicleUrl}/api/entries`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.env.CHITTY_CHRONICLE_TOKEN}`,
         },
-      );
+        body: JSON.stringify({
+          eventType: "credential.provisioned",
+          entityId: event.requestingService,
+          data: {
+            ...event,
+            timestamp: new Date().toISOString(),
+            provider: this.broker?.type || "unknown",
+            enhanced: true,
+          },
+        }),
+      });
 
       if (!chronicleResponse.ok) {
         console.warn(

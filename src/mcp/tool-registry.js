@@ -251,7 +251,8 @@ const MCP_TOOLS = [
         },
         max_num_results: {
           type: "number",
-          description: "Maximum number of document records to return (default: 10)",
+          description:
+            "Maximum number of document records to return (default: 10)",
           default: 10,
         },
       },
@@ -1117,6 +1118,36 @@ const MCP_TOOLS = [
   },
 
   // ── 11. Infrastructure (3) ──────────────────────────────────
+  {
+    name: "chitty_cloudflare_access_apps",
+    description:
+      "List or manage Cloudflare Access applications and Linked Apps (App Launcher bookmarks). Use to rewire access and expose MCPs or connections in the App Launcher.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["list", "create_bookmark"],
+          description: "Action to perform",
+        },
+        name: {
+          type: "string",
+          description:
+            "Name of the bookmark/linked app (required for create_bookmark)",
+        },
+        domain: {
+          type: "string",
+          description:
+            "Target URL/Domain for the linked app (required for create_bookmark)",
+        },
+        logo_url: {
+          type: "string",
+          description: "Optional logo URL for the App Launcher bookmark",
+        },
+      },
+      required: ["action"],
+    },
+  },
   {
     name: "chitty_infra_logs",
     description:

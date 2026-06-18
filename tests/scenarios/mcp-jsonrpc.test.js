@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { BASE_URL, API_KEY, mcpCall } from "./config.js";
+import { BASE_URL, MCP_URL, mcpCall, API_KEY } from "./config.js";
 
 /**
  * Parse a Streamable HTTP response.
@@ -122,7 +122,7 @@ describe("MCP JSON-RPC protocol", () => {
       method: "POST",
       headers: {
         "X-ChittyOS-API-Key": API_KEY,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Accept: "application/json, text/event-stream",
       },
       body: JSON.stringify({ jsonrpc: "1.0", method: "ping", id: 6 }),
@@ -137,7 +137,7 @@ describe("MCP JSON-RPC protocol", () => {
   it("missing auth returns 401 JSON-RPC error", async () => {
     const res = await fetch(`${BASE_URL}/chatgpt/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
       body: JSON.stringify({
         jsonrpc: "2.0",
         method: "initialize",

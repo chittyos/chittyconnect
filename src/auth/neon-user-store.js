@@ -268,10 +268,7 @@ neonUserStoreRoutes.post("/organizations", async (c) => {
   const logo = typeof body?.logo === "string" ? body.logo : null;
   const metadata = typeof body?.metadata === "string" ? body.metadata : null;
   if (!name || !slug) {
-    return c.json(
-      { error: "missing_fields", required: ["name", "slug"] },
-      400,
-    );
+    return c.json({ error: "missing_fields", required: ["name", "slug"] }, 400);
   }
 
   try {

@@ -24,7 +24,10 @@ tenantRoutes.post("/provision", async (c) => {
     }
 
     const manager = new TenantProjectManager(c.env);
-    const result = await manager.provisionTenant(tenantId, { region, pgVersion });
+    const result = await manager.provisionTenant(tenantId, {
+      region,
+      pgVersion,
+    });
     return c.json(result, 201);
   } catch (error) {
     const status = error.message.includes("already provisioned") ? 409 : 500;
@@ -116,43 +119,98 @@ tenantRoutes.post("/:tenantId/replicate", async (c) => {
     // Per-table column allowlists prevent SQL injection via record keys
     const ALLOWED_COLUMNS = {
       evidence_documents: [
-        "id", "document_type", "file_name", "file_size", "mime_type", "content_hash",
-        "r2_key", "ocr_text", "metadata", "processing_status", "privilege_flag",
-        "privilege_basis", "evidence_strength", "evidence_strength_rationale",
-        "uploaded_by", "client_id", "superseded_by", "supersedes",
-        "replicated_at", "source", "created_at", "updated_at",
+        "id",
+        "document_type",
+        "file_name",
+        "file_size",
+        "mime_type",
+        "content_hash",
+        "r2_key",
+        "ocr_text",
+        "metadata",
+        "processing_status",
+        "privilege_flag",
+        "privilege_basis",
+        "evidence_strength",
+        "evidence_strength_rationale",
+        "uploaded_by",
+        "client_id",
+        "superseded_by",
+        "supersedes",
+        "replicated_at",
+        "source",
+        "created_at",
+        "updated_at",
       ],
       evidence_custody_log: [
-        "id", "document_id", "action", "actor", "actor_type", "details",
-        "ip_address", "created_at",
+        "id",
+        "document_id",
+        "action",
+        "actor",
+        "actor_type",
+        "details",
+        "ip_address",
+        "created_at",
       ],
       document_families: [
-        "id", "parent_document_id", "child_document_id", "family_role",
-        "ordinal", "notes", "created_at",
+        "id",
+        "parent_document_id",
+        "child_document_id",
+        "family_role",
+        "ordinal",
+        "notes",
+        "created_at",
       ],
       client_documents: [
-        "id", "document_type", "title", "description", "file_name", "r2_key",
-        "content_hash", "metadata", "status", "uploaded_by", "created_at", "updated_at",
+        "id",
+        "document_type",
+        "title",
+        "description",
+        "file_name",
+        "r2_key",
+        "content_hash",
+        "metadata",
+        "status",
+        "uploaded_by",
+        "created_at",
+        "updated_at",
       ],
       financial_records: [
-        "id", "record_type", "description", "amount", "currency", "date",
-        "counterparty", "account_reference", "metadata", "source_document_id",
-        "created_at", "updated_at",
+        "id",
+        "record_type",
+        "description",
+        "amount",
+        "currency",
+        "date",
+        "counterparty",
+        "account_reference",
+        "metadata",
+        "source_document_id",
+        "created_at",
+        "updated_at",
       ],
     };
 
     if (!ALLOWED_COLUMNS[table]) {
-      return c.json({ error: `table '${table}' is not allowed for tenant replication` }, 400);
+      return c.json(
+        { error: `table '${table}' is not allowed for tenant replication` },
+        400,
+      );
     }
 
     const allowedCols = ALLOWED_COLUMNS[table];
-    const columns = Object.keys(record).filter((col) => allowedCols.includes(col));
+    const columns = Object.keys(record).filter((col) =>
+      allowedCols.includes(col),
+    );
     if (columns.length === 0) {
       return c.json({ error: "no valid columns in record" }, 400);
     }
 
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-    const updateSet = columns.filter((c) => c !== "id").map((col) => `${col} = $${columns.indexOf(col) + 1}`).join(", ");
+    const updateSet = columns
+      .filter((c) => c !== "id")
+      .map((col) => `${col} = $${columns.indexOf(col) + 1}`)
+      .join(", ");
     const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${updateSet}`;
 
     const values = columns.map((col) => record[col]);

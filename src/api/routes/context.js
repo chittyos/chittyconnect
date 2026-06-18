@@ -40,17 +40,13 @@ contextRoutes.post("/sync", async (c) => {
           VALUES (?, ?, 'session_ingest', ?, ?, ?, 'success', ?)
         `,
         )
-          .bind(
-            eventId,
-            sessionId,
-            "ch1tty-buffer-sync",
-            eventCount,
-            0,
-            now,
-          )
+          .bind(eventId, sessionId, "ch1tty-buffer-sync", eventCount, 0, now)
           .run();
       } catch (error) {
-        console.error("[context.sync] D1 sync_events write failed:", error.message);
+        console.error(
+          "[context.sync] D1 sync_events write failed:",
+          error.message,
+        );
       }
     }
 

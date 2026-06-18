@@ -11,6 +11,9 @@ export const BASE_URL =
 export const MCP_URL =
   process.env.CHITTY_MCP_URL || "https://mcp.chitty.cc";
 
+export const CH1TTY_MCP_URL =
+  process.env.CH1TTY_MCP_URL || "https://mcp.ch1tty.com";
+
 export const API_KEY =
   process.env.CHITTY_SCENARIO_API_KEY || "chitty_test_scenario_runner";
 
@@ -22,6 +25,7 @@ export function headers() {
   return {
     "X-ChittyOS-API-Key": API_KEY,
     "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
 }
 
@@ -57,6 +61,7 @@ export async function mcpCall(method, params = {}, extra = {}) {
     "X-ChittyOS-API-Key": API_KEY,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
   if (extra.sessionId) {
     hdrs["Mcp-Session-Id"] = extra.sessionId;
@@ -89,13 +94,14 @@ export async function mcpOAuthCall(method, params = {}, extra = {}) {
     Authorization: `Bearer ${MCP_OAUTH_BEARER}`,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
 
   if (extra.sessionId) {
     hdrs["Mcp-Session-Id"] = extra.sessionId;
   }
 
-  return fetch(`${MCP_URL}/mcp`, {
+  return fetch(`${CH1TTY_MCP_URL}/mcp`, {
     method: "POST",
     headers: hdrs,
     body: JSON.stringify(body),

@@ -12,25 +12,24 @@
 
 // --- Rotation Registry ---
 
-
 /**
  * Each entry defines a rotatable secret: how to refresh it, where to cache it,
  * and how often it should be checked.
  */
 const ROTATION_REGISTRY = {
   gdrive_access_token: {
-    description: 'Google Drive OAuth2 access token',
-    kvKey: 'secret:gdrive:access_token',
-    metaKey: 'secret:gdrive:meta',
+    description: "Google Drive OAuth2 access token",
+    kvKey: "secret:gdrive:access_token",
+    metaKey: "secret:gdrive:meta",
     refreshIntervalMs: 50 * 60 * 1000, // 50 minutes (tokens expire at 60)
-    rotator: 'rotateGDriveToken',
+    rotator: "rotateGDriveToken",
   },
   neon_password: {
-    description: 'Neon database role password',
-    kvKey: 'secret:neon:connection_uri',
-    metaKey: 'secret:neon:meta',
+    description: "Neon database role password",
+    kvKey: "secret:neon:connection_uri",
+    metaKey: "secret:neon:meta",
     refreshIntervalMs: 7 * 24 * 60 * 60 * 1000, // 7 days
-    rotator: 'rotateNeonPassword',
+    rotator: "rotateNeonPassword",
   },
 };
 
@@ -45,7 +44,9 @@ export class SecretRotationService {
     this.env = env;
     this.kv = env.CREDENTIAL_CACHE;
     if (!this.kv) {
-      throw new Error('[SecretRotation] CREDENTIAL_CACHE KV binding is not configured');
+      throw new Error(
+        "[SecretRotation] CREDENTIAL_CACHE KV binding is not configured",
+      );
     }
   }
 
@@ -56,23 +57,35 @@ export class SecretRotationService {
    * @returns {Promise<RotationReport>}
    */
   async runDueRotations() {
-    const report = { rotated: [], skipped: [], failed: [], timestamp: new Date().toISOString() };
+    const report = {
+      rotated: [],
+      skipped: [],
+      failed: [],
+      timestamp: new Date().toISOString(),
+    };
 
     for (const [name, config] of Object.entries(ROTATION_REGISTRY)) {
       try {
         const meta = await this.getMeta(config.metaKey);
-        const lastRotatedAt = meta?.lastRotatedAt ? new Date(meta.lastRotatedAt).getTime() : 0;
+        const lastRotatedAt = meta?.lastRotatedAt
+          ? new Date(meta.lastRotatedAt).getTime()
+          : 0;
         const age = Date.now() - lastRotatedAt;
 
         if (age < config.refreshIntervalMs) {
-          report.skipped.push({ name, reason: 'not_due', ageMs: age, intervalMs: config.refreshIntervalMs });
+          report.skipped.push({
+            name,
+            reason: "not_due",
+            ageMs: age,
+            intervalMs: config.refreshIntervalMs,
+          });
           continue;
         }
 
         const result = await this[config.rotator]();
         await this.setMeta(config.metaKey, {
           lastRotatedAt: new Date().toISOString(),
-          lastResult: result.ok ? 'success' : 'error',
+          lastResult: result.ok ? "success" : "error",
           lastError: result.error || null,
         });
 
@@ -108,7 +121,7 @@ export class SecretRotationService {
       const result = await this[config.rotator]();
       await this.setMeta(config.metaKey, {
         lastRotatedAt: new Date().toISOString(),
-        lastResult: result.ok ? 'success' : 'error',
+        lastResult: result.ok ? "success" : "error",
         lastError: result.error || null,
         forcedAt: new Date().toISOString(),
       });
@@ -128,13 +141,15 @@ export class SecretRotationService {
 
     for (const [name, config] of Object.entries(ROTATION_REGISTRY)) {
       const meta = await this.getMeta(config.metaKey);
-      const lastRotatedAt = meta?.lastRotatedAt ? new Date(meta.lastRotatedAt).getTime() : 0;
+      const lastRotatedAt = meta?.lastRotatedAt
+        ? new Date(meta.lastRotatedAt).getTime()
+        : 0;
       const age = Date.now() - lastRotatedAt;
 
       secrets[name] = {
         description: config.description,
         lastRotatedAt: meta?.lastRotatedAt || null,
-        lastResult: meta?.lastResult || 'never',
+        lastResult: meta?.lastResult || "never",
         lastError: meta?.lastError || null,
         ageMs: lastRotatedAt ? age : null,
         intervalMs: config.refreshIntervalMs,
@@ -144,8 +159,8 @@ export class SecretRotationService {
     }
 
     return {
-      service: 'chittyconnect',
-      component: 'secret-rotation',
+      service: "chittyconnect",
+      component: "secret-rotation",
       secrets,
       timestamp: new Date().toISOString(),
     };
@@ -167,7 +182,7 @@ export class SecretRotationService {
     // Primary path: service account JWT flow (no refresh token needed).
     // Service-account failure must NOT short-circuit the refresh-token
     // fallback — otherwise a transient SA error causes an outage.
-    const saJson = await this.kv.get('secret:gdrive:service_account');
+    const saJson = await this.kv.get("secret:gdrive:service_account");
     if (saJson) {
       try {
         const saResult = await this._rotateViaServiceAccount(saJson);
@@ -183,22 +198,23 @@ export class SecretRotationService {
     }
 
     // Fallback: OAuth2 refresh token flow
-    const refreshToken = await this.kv.get('secret:gdrive:refresh_token');
+    const refreshToken = await this.kv.get("secret:gdrive:refresh_token");
     const clientId = this.env.GDRIVE_CLIENT_ID;
     const clientSecret = this.env.GDRIVE_CLIENT_SECRET;
 
     if (!refreshToken || !clientId || !clientSecret) {
       return {
         ok: false,
-        error: 'Missing GDrive credentials: neither service_account nor OAuth refresh_token configured in CREDENTIAL_CACHE KV',
+        error:
+          "Missing GDrive credentials: neither service_account nor OAuth refresh_token configured in CREDENTIAL_CACHE KV",
       };
     }
 
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: 'refresh_token',
+        grant_type: "refresh_token",
         refresh_token: refreshToken,
         client_id: clientId,
         client_secret: clientSecret,
@@ -207,19 +223,24 @@ export class SecretRotationService {
 
     if (!response.ok) {
       const body = await response.text();
-      return { ok: false, error: `Google OAuth2 error: ${response.status} — ${body}` };
+      return {
+        ok: false,
+        error: `Google OAuth2 error: ${response.status} — ${body}`,
+      };
     }
 
     const data = await response.json();
     const accessToken = data.access_token;
     const expiresIn = data.expires_in || 3600;
 
-    await this.kv.put('secret:gdrive:access_token', accessToken, {
+    await this.kv.put("secret:gdrive:access_token", accessToken, {
       expirationTtl: Math.max(expiresIn - 120, 300),
     });
 
-    console.log(`[SecretRotation] GDrive access token rotated via refresh_token, expires in ${expiresIn}s`);
-    return { ok: true, expiresIn, method: 'refresh_token' };
+    console.log(
+      `[SecretRotation] GDrive access token rotated via refresh_token, expires in ${expiresIn}s`,
+    );
+    return { ok: true, expiresIn, method: "refresh_token" };
   }
 
   /**
@@ -231,43 +252,59 @@ export class SecretRotationService {
     try {
       sa = JSON.parse(saJson);
     } catch {
-      return { ok: false, error: 'Invalid service_account JSON in KV' };
+      return { ok: false, error: "Invalid service_account JSON in KV" };
     }
 
     // Validate and normalize service account fields
     if (!sa.client_email || !sa.private_key) {
-      return { ok: false, error: 'missing service-account field: client_email or private_key' };
+      return {
+        ok: false,
+        error: "missing service-account field: client_email or private_key",
+      };
     }
 
     // If impersonate is provided at all, it must be a non-empty string —
     // an empty/whitespace value would silently cache as app-only and surprise callers.
     if (sa.impersonate !== undefined && sa.impersonate !== null) {
-      if (typeof sa.impersonate !== 'string' || sa.impersonate.trim() === '') {
-        return { ok: false, error: 'invalid service-account field: impersonate must be a non-empty string when provided' };
+      if (typeof sa.impersonate !== "string" || sa.impersonate.trim() === "") {
+        return {
+          ok: false,
+          error:
+            "invalid service-account field: impersonate must be a non-empty string when provided",
+        };
       }
     }
 
     let normalizedScopes;
     if (!sa.scopes) {
-      return { ok: false, error: 'missing service-account field: scopes' };
+      return { ok: false, error: "missing service-account field: scopes" };
     }
-    if (typeof sa.scopes === 'string') {
+    if (typeof sa.scopes === "string") {
       normalizedScopes = sa.scopes;
     } else if (Array.isArray(sa.scopes)) {
-      if (sa.scopes.length === 0 || !sa.scopes.every((s) => typeof s === 'string')) {
-        return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+      if (
+        sa.scopes.length === 0 ||
+        !sa.scopes.every((s) => typeof s === "string")
+      ) {
+        return {
+          ok: false,
+          error: "invalid scopes: must be string or array of strings",
+        };
       }
-      normalizedScopes = sa.scopes.join(' ');
+      normalizedScopes = sa.scopes.join(" ");
     } else {
-      return { ok: false, error: 'invalid scopes: must be string or array of strings' };
+      return {
+        ok: false,
+        error: "invalid scopes: must be string or array of strings",
+      };
     }
 
-    const { createJwt } = await import('./jwt-helper.js');
+    const { createJwt } = await import("./jwt-helper.js");
     const now = Math.floor(Date.now() / 1000);
     const claims = {
       iss: sa.client_email,
       scope: normalizedScopes,
-      aud: 'https://oauth2.googleapis.com/token',
+      aud: "https://oauth2.googleapis.com/token",
       iat: now,
       exp: now + 3600,
     };
@@ -277,18 +314,21 @@ export class SecretRotationService {
 
     const signedJwt = await createJwt(claims, sa.private_key);
 
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion: signedJwt,
       }),
     });
 
     if (!response.ok) {
       const body = await response.text();
-      return { ok: false, error: `Service account JWT error: ${response.status} — ${body}` };
+      return {
+        ok: false,
+        error: `Service account JWT error: ${response.status} — ${body}`,
+      };
     }
 
     const data = await response.json();
@@ -300,11 +340,11 @@ export class SecretRotationService {
     // an app-only token and fail against users/me.
     const delegated = Boolean(claims.sub);
     const cacheKey = delegated
-      ? 'secret:gdrive:access_token'
-      : 'secret:gdrive:access_token:app_only';
+      ? "secret:gdrive:access_token"
+      : "secret:gdrive:access_token:app_only";
     const staleKey = delegated
-      ? 'secret:gdrive:access_token:app_only'
-      : 'secret:gdrive:access_token';
+      ? "secret:gdrive:access_token:app_only"
+      : "secret:gdrive:access_token";
     await this.kv.put(cacheKey, accessToken, {
       expirationTtl: Math.max(expiresIn - 120, 300),
     });
@@ -313,9 +353,9 @@ export class SecretRotationService {
     await this.kv.delete(staleKey).catch(() => {});
 
     console.log(
-      `[SecretRotation] GDrive access token rotated via service_account JWT (${delegated ? 'delegated' : 'app-only'}), expires in ${expiresIn}s`,
+      `[SecretRotation] GDrive access token rotated via service_account JWT (${delegated ? "delegated" : "app-only"}), expires in ${expiresIn}s`,
     );
-    return { ok: true, expiresIn, method: 'service_account', delegated };
+    return { ok: true, expiresIn, method: "service_account", delegated };
   }
 
   /**
@@ -333,49 +373,65 @@ export class SecretRotationService {
     const neonProjectId = this.env.NEON_PROJECT_ID;
     const neonBranchId = this.env.NEON_BRANCH_ID;
     const neonHost = this.env.NEON_HOST;
-    const neonRoleName = this.env.NEON_ROLE_NAME || 'chittyos_app';
-    const neonDb = this.env.NEON_DATABASE || 'neondb';
+    const neonRoleName = this.env.NEON_ROLE_NAME || "chittyos_app";
+    const neonDb = this.env.NEON_DATABASE || "neondb";
 
     if (!neonApiKey || !neonProjectId || !neonBranchId) {
-      return { ok: false, error: 'Missing Neon API credentials (NEON_API_KEY, NEON_PROJECT_ID, NEON_BRANCH_ID are all required)' };
+      return {
+        ok: false,
+        error:
+          "Missing Neon API credentials (NEON_API_KEY, NEON_PROJECT_ID, NEON_BRANCH_ID are all required)",
+      };
     }
 
     if (!neonHost) {
-      return { ok: false, error: 'NEON_HOST is required — without it the rotated password cannot be cached as a connection URI' };
+      return {
+        ok: false,
+        error:
+          "NEON_HOST is required — without it the rotated password cannot be cached as a connection URI",
+      };
     }
 
     // Step 1: Reset the role password via Neon API
     const resetUrl = `https://console.neon.tech/api/v2/projects/${neonProjectId}/branches/${neonBranchId}/roles/${neonRoleName}/reset_password`;
     const resetResponse = await fetch(resetUrl, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${neonApiKey}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
     if (!resetResponse.ok) {
       const body = await resetResponse.text();
-      return { ok: false, error: `Neon password reset failed: ${resetResponse.status} — ${body}` };
+      return {
+        ok: false,
+        error: `Neon password reset failed: ${resetResponse.status} — ${body}`,
+      };
     }
 
     const resetData = await resetResponse.json();
     const newPassword = resetData.role?.password;
 
     if (!newPassword) {
-      return { ok: false, error: 'Neon API did not return a new password' };
+      return { ok: false, error: "Neon API did not return a new password" };
     }
 
     // Step 2: Build new connection URI and cache it
     const newUri = `postgresql://${neonRoleName}:${encodeURIComponent(newPassword)}@${neonHost}/${neonDb}?sslmode=require`;
-    await this.kv.put('secret:neon:connection_uri', newUri, {
+    await this.kv.put("secret:neon:connection_uri", newUri, {
       expirationTtl: 8 * 24 * 60 * 60, // 8 days (rotation is weekly)
     });
 
     // Step 3: Cache the rotated-at timestamp (password itself is NOT cached in KV)
-    await this.kv.put('secret:neon:password_rotated_at', new Date().toISOString());
+    await this.kv.put(
+      "secret:neon:password_rotated_at",
+      new Date().toISOString(),
+    );
 
-    console.log(`[SecretRotation] Neon password rotated for role ${neonRoleName}`);
+    console.log(
+      `[SecretRotation] Neon password rotated for role ${neonRoleName}`,
+    );
     return { ok: true };
   }
 
@@ -387,7 +443,10 @@ export class SecretRotationService {
     try {
       return JSON.parse(raw);
     } catch (err) {
-      console.error(`[SecretRotation] Failed to parse metadata for key "${key}":`, err.message);
+      console.error(
+        `[SecretRotation] Failed to parse metadata for key "${key}":`,
+        err.message,
+      );
       return null;
     }
   }
@@ -406,10 +465,10 @@ export class SecretRotationService {
  * @returns {Promise<string|null>}
  */
 export async function getCachedGDriveToken(kv, opts = {}) {
-  const delegated = await kv.get('secret:gdrive:access_token');
+  const delegated = await kv.get("secret:gdrive:access_token");
   if (delegated) return delegated;
   if (opts.allowAppOnly) {
-    return kv.get('secret:gdrive:access_token:app_only');
+    return kv.get("secret:gdrive:access_token:app_only");
   }
   return null;
 }
@@ -421,5 +480,5 @@ export async function getCachedGDriveToken(kv, opts = {}) {
  * @returns {Promise<string|null>}
  */
 export async function getCachedNeonUri(kv) {
-  return kv.get('secret:neon:connection_uri');
+  return kv.get("secret:neon:connection_uri");
 }

@@ -39,12 +39,18 @@ async function getGoogleToken(env, { scope = "gmail" } = {}) {
       });
       if (cached) return cached;
     } catch {
-      console.warn("Google token KV cache read failed; falling back to broker/env token source");
+      console.warn(
+        "Google token KV cache read failed; falling back to broker/env token source",
+      );
     }
   }
 
   // Fallback: 1Password broker or env var
-  return getCredential(env, "integrations/google/access_token", "GOOGLE_ACCESS_TOKEN");
+  return getCredential(
+    env,
+    "integrations/google/access_token",
+    "GOOGLE_ACCESS_TOKEN",
+  );
 }
 
 /**
@@ -53,7 +59,11 @@ async function getGoogleToken(env, { scope = "gmail" } = {}) {
 async function googleProxy(env, googleUrl, opts = {}) {
   const token = await getGoogleToken(env, opts);
   if (!token) {
-    return { ok: false, status: 503, error: "Google access token not available" };
+    return {
+      ok: false,
+      status: 503,
+      error: "Google access token not available",
+    };
   }
 
   let response;
@@ -67,13 +77,21 @@ async function googleProxy(env, googleUrl, opts = {}) {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    return { ok: false, status: response.status, error: `Google API ${response.status}: ${body.slice(0, 200)}` };
+    return {
+      ok: false,
+      status: response.status,
+      error: `Google API ${response.status}: ${body.slice(0, 200)}`,
+    };
   }
 
   try {
     return { ok: true, data: await response.json() };
   } catch {
-    return { ok: false, status: 502, error: "Google API returned an invalid JSON response" };
+    return {
+      ok: false,
+      status: 502,
+      error: "Google API returned an invalid JSON response",
+    };
   }
 }
 
@@ -95,7 +113,11 @@ googleRoutes.get("/gdrive/files", async (c) => {
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
 
-  const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`, { scope: "drive" });
+  const result = await googleProxy(
+    c.env,
+    `${DRIVE_API}/files?${params.toString()}`,
+    { scope: "drive" },
+  );
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -112,7 +134,11 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
   if (fields) params.set("fields", fields);
 
   const encodedFileId = encodeURIComponent(fileId);
-  const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`, { scope: "drive" });
+  const result = await googleProxy(
+    c.env,
+    `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`,
+    { scope: "drive" },
+  );
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -126,16 +152,23 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   const fileId = c.req.param("fileId");
   const token = await getGoogleToken(c.env, { scope: "drive" });
-  if (!token) return c.json({ error: "Google access token not available" }, 503);
+  if (!token)
+    return c.json({ error: "Google access token not available" }, 503);
 
   // First, fetch file metadata to determine mimeType
   const encodedFileId = encodeURIComponent(fileId);
-  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const metadataResponse = await fetch(
+    `${DRIVE_API}/files/${encodedFileId}?fields=mimeType`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
 
   if (!metadataResponse.ok) {
-    return c.json({ error: `Failed to fetch file metadata: ${metadataResponse.status}` }, metadataResponse.status);
+    return c.json(
+      { error: `Failed to fetch file metadata: ${metadataResponse.status}` },
+      metadataResponse.status,
+    );
   }
 
   const metadata = await metadataResponse.json();
@@ -163,11 +196,15 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   });
 
   if (!response.ok) {
-    return c.json({ error: `Drive download failed: ${response.status}` }, response.status);
+    return c.json(
+      { error: `Drive download failed: ${response.status}` },
+      response.status,
+    );
   }
 
   const headers = {
-    "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
+    "Content-Type":
+      response.headers.get("Content-Type") || "application/octet-stream",
   };
   const contentLength = response.headers.get("Content-Length");
   if (contentLength !== null) {
@@ -199,7 +236,10 @@ googleRoutes.get("/email/messages", async (c) => {
   if (maxResults) params.set("maxResults", maxResults);
   if (pageToken) params.set("pageToken", pageToken);
 
-  const result = await googleProxy(c.env, `${GMAIL_API}/messages?${params.toString()}`);
+  const result = await googleProxy(
+    c.env,
+    `${GMAIL_API}/messages?${params.toString()}`,
+  );
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -216,7 +256,10 @@ googleRoutes.get("/email/messages/:messageId", async (c) => {
   if (format) params.set("format", format);
 
   const encodedMessageId = encodeURIComponent(messageId);
-  const result = await googleProxy(c.env, `${GMAIL_API}/messages/${encodedMessageId}?${params.toString()}`);
+  const result = await googleProxy(
+    c.env,
+    `${GMAIL_API}/messages/${encodedMessageId}?${params.toString()}`,
+  );
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 });
@@ -225,44 +268,50 @@ googleRoutes.get("/email/messages/:messageId", async (c) => {
  * GET /email/messages/:messageId/attachments/:attachmentId
  * Download a Gmail attachment (returns raw bytes).
  */
-googleRoutes.get("/email/messages/:messageId/attachments/:attachmentId", async (c) => {
-  const { messageId, attachmentId } = c.req.param();
+googleRoutes.get(
+  "/email/messages/:messageId/attachments/:attachmentId",
+  async (c) => {
+    const { messageId, attachmentId } = c.req.param();
 
-  const encodedMessageId = encodeURIComponent(messageId);
-  const encodedAttachmentId = encodeURIComponent(attachmentId);
+    const encodedMessageId = encodeURIComponent(messageId);
+    const encodedAttachmentId = encodeURIComponent(attachmentId);
 
-  const result = await googleProxy(
-    c.env,
-    `${GMAIL_API}/messages/${encodedMessageId}/attachments/${encodedAttachmentId}`,
-  );
-  if (!result.ok) return c.json({ error: result.error }, result.status);
+    const result = await googleProxy(
+      c.env,
+      `${GMAIL_API}/messages/${encodedMessageId}/attachments/${encodedAttachmentId}`,
+    );
+    if (!result.ok) return c.json({ error: result.error }, result.status);
 
-  // Gmail returns attachment data as base64url-encoded in { data, size }
-  const { data, size } = result.data;
-  if (!data) return c.json({ error: "No attachment data returned" }, 404);
+    // Gmail returns attachment data as base64url-encoded in { data, size }
+    const { data, size } = result.data;
+    if (!data) return c.json({ error: "No attachment data returned" }, 404);
 
-  // Decode base64url → binary
-  // 1. Replace URL-safe chars with standard base64 chars
-  let base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+    // Decode base64url → binary
+    // 1. Replace URL-safe chars with standard base64 chars
+    let base64 = data.replace(/-/g, "+").replace(/_/g, "/");
 
-  // 2. Add padding if needed (length must be multiple of 4)
-  const paddingNeeded = (4 - (base64.length % 4)) % 4;
-  base64 += "=".repeat(paddingNeeded);
+    // 2. Add padding if needed (length must be multiple of 4)
+    const paddingNeeded = (4 - (base64.length % 4)) % 4;
+    base64 += "=".repeat(paddingNeeded);
 
-  // 3. Decode with error handling
-  let binary;
-  try {
-    binary = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
-  } catch (err) {
-    return c.json({ error: `Failed to decode attachment data: ${err.message}` }, 500);
-  }
+    // 3. Decode with error handling
+    let binary;
+    try {
+      binary = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+    } catch (err) {
+      return c.json(
+        { error: `Failed to decode attachment data: ${err.message}` },
+        500,
+      );
+    }
 
-  return new Response(binary, {
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(size || binary.length),
-    },
-  });
-});
+    return new Response(binary, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(size || binary.length),
+      },
+    });
+  },
+);
 
 export { googleRoutes };

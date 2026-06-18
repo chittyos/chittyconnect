@@ -7,7 +7,11 @@
  * @module mcp/tool-dispatcher
  */
 
-import { getCredential, getServiceToken, getMintAuthToken } from "../lib/credential-helper.js";
+import {
+  getCredential,
+  getServiceToken,
+  getMintAuthToken,
+} from "../lib/credential-helper.js";
 import { serviceFetch } from "../lib/service-switch.js";
 import {
   getCloudflareApiCredentials,
@@ -309,7 +313,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── ChittyLedger tools ──────────────────────────────────────────
     else if (name === "chitty_ledger_stats") {
-      const response = await serviceFetch(env, "ledger", "/api/dashboard/stats");
+      const response = await serviceFetch(
+        env,
+        "ledger",
+        "/api/dashboard/stats",
+      );
       const { data, error: respErr } = await checkAndParseJson(
         response,
         "ChittyLedger",
@@ -860,34 +868,73 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     // ── Evidence tools — delegated to ChittyStorage (search/retrieve/ingest) ──
     else if (name === "chitty_evidence_search") {
       if (!env.SVC_STORAGE) {
-        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ChittyStorage not configured (SVC_STORAGE binding missing)",
+            },
+          ],
+          isError: true,
+        };
       }
-      const params = new URLSearchParams({ q: args.query || "", limit: String(args.max_num_results || 10) });
+      const params = new URLSearchParams({
+        q: args.query || "",
+        limit: String(args.max_num_results || 10),
+      });
       if (args.entity_slug) params.set("entity", args.entity_slug);
-      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?${params}`);
+      const response = await env.SVC_STORAGE.fetch(
+        `https://internal/api/docs?${params}`,
+      );
       const data = await response.json();
       if (!data.docs || !data.docs.length) {
-        return { content: [{ type: "text", text: "No matching documents found." }] };
+        return {
+          content: [{ type: "text", text: "No matching documents found." }],
+        };
       }
-      const formatted = data.docs.slice(0, 10).map((d) => {
-        const tags = d.tags || {};
-        const entity = tags.primary_entity || "unlinked";
-        const docType = tags.doc_type || "unclassified";
-        return `[${entity}/${docType}] ${d.filename}\n  hash: ${d.content_hash}\n  tier: ${d.processing_tier} | created: ${d.created_at}`;
-      }).join("\n\n");
+      const formatted = data.docs
+        .slice(0, 10)
+        .map((d) => {
+          const tags = d.tags || {};
+          const entity = tags.primary_entity || "unlinked";
+          const docType = tags.doc_type || "unclassified";
+          return `[${entity}/${docType}] ${d.filename}\n  hash: ${d.content_hash}\n  tier: ${d.processing_tier} | created: ${d.created_at}`;
+        })
+        .join("\n\n");
       return { content: [{ type: "text", text: formatted }] };
     } else if (name === "chitty_evidence_retrieve") {
       if (!env.SVC_STORAGE) {
-        return { content: [{ type: "text", text: "ChittyStorage not configured (SVC_STORAGE binding missing)" }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ChittyStorage not configured (SVC_STORAGE binding missing)",
+            },
+          ],
+          isError: true,
+        };
       }
       const hash = args.content_hash || args.evidence_id || args.query;
       if (!hash) {
-        return { content: [{ type: "text", text: "Provide content_hash, evidence_id, or query to retrieve." }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Provide content_hash, evidence_id, or query to retrieve.",
+            },
+          ],
+          isError: true,
+        };
       }
-      const response = await env.SVC_STORAGE.fetch(`https://internal/api/docs?q=${encodeURIComponent(hash)}&limit=1`);
+      const response = await env.SVC_STORAGE.fetch(
+        `https://internal/api/docs?q=${encodeURIComponent(hash)}&limit=1`,
+      );
       const data = await response.json();
       if (!data.docs?.length) {
-        return { content: [{ type: "text", text: `Document not found: ${hash}` }], isError: true };
+        return {
+          content: [{ type: "text", text: `Document not found: ${hash}` }],
+          isError: true,
+        };
       }
       const doc = data.docs[0];
       result = {
@@ -899,9 +946,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         entities: doc.entities || [],
         file_url: `https://storage.chitty.cc/api/files/${doc.content_hash}`,
       };
-    }
-
-    else if (name.startsWith("chitty_evidence_")) {
+    } else if (name.startsWith("chitty_evidence_")) {
       const action = name.replace("chitty_evidence_", "");
       const endpoint =
         action === "ingest"
@@ -1330,7 +1375,61 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     }
 
     // ── Infrastructure tools ────────────────────────────────────────
-    else if (name === "chitty_infra_logs") {
+    else if (name === "chitty_cloudflare_access_apps") {
+      const cfAuth = await requireCloudflareAuth();
+      if (cfAuth.error) return cfAuth.error;
+      const { apiToken, accountId } = cfAuth;
+
+      if (args.action === "list") {
+        const response = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        const fetchErr = await checkFetchError(response, "CloudflareAccessAPI");
+        if (fetchErr) return fetchErr;
+        const data = await response.json();
+        result = data.result || [];
+      } else if (args.action === "create_bookmark") {
+        if (!args.name || !args.domain) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "name and domain are required for create_bookmark",
+              },
+            ],
+            isError: true,
+          };
+        }
+        const payload = {
+          name: args.name,
+          type: "bookmark",
+          domain: args.domain,
+          app_launcher_visible: true,
+          logo_url: args.logo_url || "https://chitty.cc/favicon.ico",
+        };
+        const response = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          },
+        );
+        const fetchErr = await checkFetchError(response, "CloudflareAccessAPI");
+        if (fetchErr) return fetchErr;
+        const data = await response.json();
+        result = data.result;
+      }
+    } else if (name === "chitty_infra_logs") {
       const cfAuth = await requireCloudflareAuth();
       if (cfAuth.error) return cfAuth.error;
 
@@ -1818,7 +1917,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const agentId = args.agent_id;
       if (!agentId) {
         return {
-          content: [{ type: "text", text: "Missing required parameter: agent_id" }],
+          content: [
+            { type: "text", text: "Missing required parameter: agent_id" },
+          ],
           isError: true,
         };
       }
@@ -1827,7 +1928,12 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const db = env.DB;
       if (!db) {
         return {
-          content: [{ type: "text", text: "D1 not available — cannot resolve agent context" }],
+          content: [
+            {
+              type: "text",
+              text: "D1 not available — cannot resolve agent context",
+            },
+          ],
           isError: true,
         };
       }
@@ -1853,7 +1959,9 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       let layers = [];
       try {
         layers = JSON.parse(prompt.layers || "[]");
-      } catch { /* empty */ }
+      } catch {
+        /* empty */
+      }
 
       const additionalLayerIds = args.additional_layers || [];
       for (const layerId of additionalLayerIds) {
@@ -1862,7 +1970,11 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           .bind(layerId)
           .first();
         if (layerPrompt) {
-          layers.push({ id: layerId, content: layerPrompt.base, order: layers.length + 1 });
+          layers.push({
+            id: layerId,
+            content: layerPrompt.base,
+            order: layers.length + 1,
+          });
         }
       }
 

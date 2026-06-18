@@ -275,12 +275,9 @@ sessionRoutes.post("/sync", async (c) => {
       if (memory && context) {
         const parts = [];
         if (project?.slug) parts.push(`Project: ${project.slug}`);
-        if (context.summary)
-          parts.push(`Session summary: ${context.summary}`);
+        if (context.summary) parts.push(`Session summary: ${context.summary}`);
         if (context.keyFacts?.length)
-          parts.push(
-            `Key facts: ${context.keyFacts.slice(0, 8).join("; ")}`,
-          );
+          parts.push(`Key facts: ${context.keyFacts.slice(0, 8).join("; ")}`);
         if (context.pendingTasks?.length)
           parts.push(
             `Pending tasks: ${context.pendingTasks.slice(0, 8).join("; ")}`,
@@ -445,10 +442,7 @@ sessionRoutes.post("/sync", async (c) => {
             },
           );
           if (!resp.ok) {
-            console.error(
-              "[Sessions/Sync] Notion update failed:",
-              resp.status,
-            );
+            console.error("[Sessions/Sync] Notion update failed:", resp.status);
           }
         } catch (err) {
           console.error("[Sessions/Sync] Notion error:", err.message);

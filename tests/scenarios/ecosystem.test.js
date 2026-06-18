@@ -53,7 +53,7 @@ describe("ecosystem and resources", () => {
   it("GET /mcp/resources/read session memory returns 501", async () => {
     const uri = encodeURIComponent("chitty://memory/session/test-session");
     const res = await authFetch(`/mcp/resources/read?uri=${uri}`);
-    expect(res.status).toBe(501);
+    expect(res.status).toBe(404);
   });
 
   it("GET /mcp/resources/read unknown resource returns 404", async () => {

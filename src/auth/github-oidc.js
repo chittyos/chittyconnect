@@ -192,7 +192,10 @@ export function githubOIDCMiddleware(options = {}) {
       // Check organization if using wildcard repos
       if (allowedOrgs.length > 0) {
         const owner = result.claims.repositoryOwner || "";
-        if (!owner || !allowedOrgs.some((org) => org.toLowerCase() === owner.toLowerCase())) {
+        if (
+          !owner ||
+          !allowedOrgs.some((org) => org.toLowerCase() === owner.toLowerCase())
+        ) {
           return c.json(
             {
               success: false,

@@ -57,6 +57,11 @@ function getRateLimitKey(c, identifier) {
   let limitType = "default";
   if (path.startsWith("/mcp/tools/call")) {
     limitType = "mcp_tools";
+  } else if (
+    path.startsWith("/api/chittyid/mint") ||
+    path.startsWith("/chittyid/mint")
+  ) {
+    limitType = "chittyid_mint";
   } else if (path.startsWith("/api/")) {
     limitType = "api";
   }
@@ -70,16 +75,23 @@ function getRateLimitKey(c, identifier) {
 function getRateLimitConfig(c, isAuthenticated = false) {
   const path = c.req.path;
 
-  if (isAuthenticated) {
-    return RATE_LIMITS.authenticated;
-  }
-
   if (path.startsWith("/mcp/tools/call")) {
     const body = c.get("requestBody");
     if (body?.name === "chittyid_mint") {
       return RATE_LIMITS.chittyid_mint;
     }
     return RATE_LIMITS.mcp_tools;
+  }
+
+  if (
+    path.startsWith("/api/chittyid/mint") ||
+    path.startsWith("/chittyid/mint")
+  ) {
+    return RATE_LIMITS.chittyid_mint;
+  }
+
+  if (isAuthenticated) {
+    return RATE_LIMITS.authenticated;
   }
 
   if (path.startsWith("/api/")) {

@@ -62,7 +62,13 @@ export class TenantDataMigration {
       mode: "dry-run",
       totalClients: clients.length,
       clients: [],
-      totals: { documents: 0, custodyLogs: 0, families: 0, alreadyProvisioned: 0, needsProvisioning: 0 },
+      totals: {
+        documents: 0,
+        custodyLogs: 0,
+        families: 0,
+        alreadyProvisioned: 0,
+        needsProvisioning: 0,
+      },
     };
 
     for (const client of clients) {
@@ -139,7 +145,14 @@ export class TenantDataMigration {
       mode: "execute",
       startedAt: new Date().toISOString(),
       clients: [],
-      totals: { provisioned: 0, documents: 0, custodyLogs: 0, families: 0, financialRecords: 0, errors: 0 },
+      totals: {
+        provisioned: 0,
+        documents: 0,
+        custodyLogs: 0,
+        families: 0,
+        financialRecords: 0,
+        errors: 0,
+      },
     };
 
     for (const client of clients) {
@@ -247,7 +260,10 @@ export class TenantDataMigration {
           content_hash: doc.content_hash,
           r2_key: doc.r2_key,
           ocr_text: doc.ocr_text,
-          metadata: typeof doc.metadata === "string" ? doc.metadata : JSON.stringify(doc.metadata || {}),
+          metadata:
+            typeof doc.metadata === "string"
+              ? doc.metadata
+              : JSON.stringify(doc.metadata || {}),
           processing_status: "replicated",
           privilege_flag: doc.privilege_flag || "none",
           privilege_basis: doc.privilege_basis,
@@ -419,7 +435,10 @@ export class TenantDataMigration {
           date: rec.date,
           counterparty: rec.counterparty,
           account_reference: rec.account_reference,
-          metadata: typeof rec.metadata === "string" ? rec.metadata : JSON.stringify(rec.metadata || {}),
+          metadata:
+            typeof rec.metadata === "string"
+              ? rec.metadata
+              : JSON.stringify(rec.metadata || {}),
           source_document_id: rec.source_document_id,
           created_at: rec.created_at,
           updated_at: rec.updated_at,
@@ -461,7 +480,8 @@ export class TenantDataMigration {
   async #queryEvidenceDb(sql, params = []) {
     // Use the Cloudflare D1 HTTP API via the evidence service binding
     // or fall back to the evidence service's API
-    const token = this.env.CHITTY_EVIDENCE_TOKEN || this.env.CHITTYCONNECT_SERVICE_TOKEN;
+    const token =
+      this.env.CHITTY_EVIDENCE_TOKEN || this.env.CHITTYCONNECT_SERVICE_TOKEN;
 
     const response = await fetch(`${EVIDENCE_SERVICE_URL}/api/v1/query`, {
       method: "POST",

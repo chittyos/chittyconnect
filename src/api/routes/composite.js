@@ -355,7 +355,9 @@ compositeRoutes.post(
           { expirationTtl: 86400 }, // 24 hours
         );
       } else {
-        console.warn("[Composite] CONVERSATIONS binding not available — context not persisted");
+        console.warn(
+          "[Composite] CONVERSATIONS binding not available — context not persisted",
+        );
       }
 
       // Return comprehensive response

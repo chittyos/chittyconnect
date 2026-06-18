@@ -68,6 +68,21 @@ chatgptMcp.use("*", async (c, next) => {
     );
   }
 
+  // Validate the API key against the KV store
+  if (c.env.API_KEYS) {
+    const keyData = await c.env.API_KEYS.get(`key:${apiKey}`);
+    if (!keyData) {
+      return c.json(
+        {
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Invalid API key" },
+          id: null,
+        },
+        403,
+      );
+    }
+  }
+
   c.set("authToken", apiKey);
   await next();
 });

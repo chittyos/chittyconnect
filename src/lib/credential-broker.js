@@ -28,7 +28,9 @@ import { CloudflareSecretsClient } from "../services/cloudflare-secrets-client.j
  * @returns {CredentialBrokerInterface} Broker instance
  */
 export function createCredentialBroker(env) {
-  const brokerType = (env.CREDENTIAL_BROKER_TYPE || "cloudflare-secrets").toLowerCase();
+  const brokerType = (
+    env.CREDENTIAL_BROKER_TYPE || "cloudflare-secrets"
+  ).toLowerCase();
 
   switch (brokerType) {
     case "cloudflare-secrets":
@@ -180,15 +182,19 @@ class AutoBroker {
       this.onePassword.healthCheck(),
     ]);
 
-    const cfOk = cfHealth.status === "fulfilled" &&
+    const cfOk =
+      cfHealth.status === "fulfilled" &&
       (cfHealth.value.status === "healthy" || cfHealth.value.status === "ok");
 
     return {
       status: cfOk ? "healthy" : "degraded",
       backends: {
-        "cloudflare-secrets": cfHealth.status === "fulfilled" ? cfHealth.value : { status: "down" },
-        chittyserv: csHealth.status === "fulfilled" ? csHealth.value : { status: "down" },
-        onePassword: opHealth.status === "fulfilled" ? opHealth.value : { status: "down" },
+        "cloudflare-secrets":
+          cfHealth.status === "fulfilled" ? cfHealth.value : { status: "down" },
+        chittyserv:
+          csHealth.status === "fulfilled" ? csHealth.value : { status: "down" },
+        onePassword:
+          opHealth.status === "fulfilled" ? opHealth.value : { status: "down" },
       },
       activeBackend: cfOk ? "cloudflare-secrets" : "fallback",
       timestamp: Date.now(),

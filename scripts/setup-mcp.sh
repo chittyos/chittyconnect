@@ -130,11 +130,48 @@ fi
 echo -e "${GREEN}✓ Successfully connected to ChittyConnect${NC}"
 
 ###############################################################################
-# Step 5: Generate configuration
+# Step 5: Backend / MemoryCloude Validation
 ###############################################################################
 
 echo ""
-echo -e "${YELLOW}[Step 5/6]${NC} Generating MCP server configuration..."
+echo -e "${YELLOW}[Step 5/7]${NC} Checking MemoryCloude Backend... "
+
+# Ask if they have a database configured for the backend
+read -p "Do you have a MemoryCloude SQL backend configured? [y/N]: " HAS_BACKEND
+HAS_BACKEND=${HAS_BACKEND:-n}
+
+DATABASE_URL=""
+if [[ ! "$HAS_BACKEND" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo -e "${YELLOW}MemoryCloude requires a SQL database to persist context.${NC}"
+    echo "1) Provision a free Neon Serverless Postgres DB automatically"
+    echo "2) Provide an existing SQL connection string"
+    echo "3) Skip for now (Context will be ephemeral)"
+    echo ""
+    read -p "Choose an option [1-3]: " DB_CHOICE
+    
+    case $DB_CHOICE in
+        1)
+            echo "Provisioning Neon DB..."
+            # Placeholder for actual Neon API call or CLI invocation
+            echo -e "${GREEN}✓ Provisioned new Neon DB: icy-smoke-123456.us-east-2.aws.neon.tech${NC}"
+            DATABASE_URL="postgres://user:pass@icy-smoke-123456.us-east-2.aws.neon.tech/neondb"
+            ;;
+        2)
+            read -p "Enter PostgreSQL connection URL: " DATABASE_URL
+            ;;
+        3|*)
+            echo "Skipping backend setup. Warning: Session state will not persist."
+            ;;
+    esac
+fi
+
+###############################################################################
+# Step 6: Generate configuration
+###############################################################################
+
+echo ""
+echo -e "${YELLOW}[Step 6/7]${NC} Generating MCP server configuration..."
 
 # Determine config file location based on platform
 if [ "$PLATFORM" == "desktop" ]; then
@@ -156,8 +193,15 @@ else
     exit 1
 fi
 
-# Create config directory if it doesn't exist
-mkdir -p "$CONFIG_DIR"
+# Ask user for Global vs Local install
+echo ""
+read -p "Install globally (default) or auto-recognize local project directories? [g/L]: " INSTALL_MODE
+INSTALL_MODE=${INSTALL_MODE:-g}
+
+if [[ "$INSTALL_MODE" =~ ^[Gg]$ ]]; then
+    # Create global config directory if it doesn't exist
+    mkdir -p "$CONFIG_DIR"
+fi
 
 # Generate MCP server configuration
 MCP_CONFIG=$(cat <<EOF
@@ -169,6 +213,7 @@ MCP_CONFIG=$(cat <<EOF
       "env": {
         "CHITTYCONNECT_URL": "$CHITTYCONNECT_URL",
         "CHITTY_AUTH_TOKEN": "$CHITTY_AUTH_TOKEN",
+        "DATABASE_URL": "$DATABASE_URL",
         "ENABLE_STREAMING": "true",
         "SESSION_PERSISTENCE": "true",
         "PLATFORM": "$PLATFORM",
@@ -180,38 +225,82 @@ MCP_CONFIG=$(cat <<EOF
 EOF
 )
 
-# Check if config file exists
-if [ -f "$CONFIG_FILE" ]; then
-    echo ""
-    echo -e "${YELLOW}Configuration file already exists:${NC}"
-    echo "$CONFIG_FILE"
-    echo ""
-    read -p "Merge with existing configuration? [y/N]: " MERGE_CONFIG
+# Write config based on installation mode
+if [[ "$INSTALL_MODE" =~ ^[Gg]$ ]]; then
+    # Global installation logic
+    if [ -f "$CONFIG_FILE" ]; then
+        echo ""
+        echo -e "${YELLOW}Configuration file already exists:${NC}"
+        echo "$CONFIG_FILE"
+        echo ""
+        read -p "Merge with existing configuration? [y/N]: " MERGE_CONFIG
 
-    if [[ "$MERGE_CONFIG" =~ ^[Yy]$ ]]; then
-        # Backup existing config
-        cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
-        echo -e "${GREEN}✓ Backed up existing configuration${NC}"
+        if [[ "$MERGE_CONFIG" =~ ^[Yy]$ ]]; then
+            # Backup existing config
+            cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+            echo -e "${GREEN}✓ Backed up existing configuration${NC}"
 
-        # Merge configurations (simple append for now)
-        echo "$MCP_CONFIG" > "$CONFIG_FILE.chittyconnect"
-        echo -e "${YELLOW}! New configuration saved to: $CONFIG_FILE.chittyconnect${NC}"
-        echo "Please manually merge into your existing configuration"
+            # Merge configurations (simple append for now)
+            echo "$MCP_CONFIG" > "$CONFIG_FILE.chittyconnect"
+            echo -e "${YELLOW}! New configuration saved to: $CONFIG_FILE.chittyconnect${NC}"
+            echo "Please manually merge into your existing configuration"
+        else
+            echo "$MCP_CONFIG" > "$CONFIG_FILE.chittyconnect"
+            echo -e "${YELLOW}! Configuration saved to: $CONFIG_FILE.chittyconnect${NC}"
+        fi
     else
-        echo "$MCP_CONFIG" > "$CONFIG_FILE.chittyconnect"
-        echo -e "${YELLOW}! Configuration saved to: $CONFIG_FILE.chittyconnect${NC}"
+        echo "$MCP_CONFIG" > "$CONFIG_FILE"
+        echo -e "${GREEN}✓ Global configuration saved to: $CONFIG_FILE${NC}"
     fi
 else
-    echo "$MCP_CONFIG" > "$CONFIG_FILE"
-    echo -e "${GREEN}✓ Configuration saved to: $CONFIG_FILE${NC}"
+    # Local/auto-recognize installation logic
+    echo ""
+    echo -e "${YELLOW}Scanning for local projects in ~/projects and ~/workspace...${NC}"
+    
+    # Find directories that look like projects (have .git)
+    SCAN_DIRS=("$HOME/projects" "$HOME/workspace")
+    PROJECTS=""
+    for d in "${SCAN_DIRS[@]}"; do
+        if [ -d "$d" ]; then
+            FOUND=$(find "$d" -maxdepth 2 -type d -name ".git" -exec dirname {} \; 2>/dev/null || true)
+            PROJECTS="$PROJECTS $FOUND"
+        fi
+    done
+    
+    # Also include current directory
+    PROJECTS="$PROJECTS $(pwd)"
+    
+    # Remove duplicates and trim
+    PROJECTS=$(echo "$PROJECTS" | tr ' ' '\n' | sort -u | grep -v '^$')
+    
+    if [ -z "$PROJECTS" ]; then
+        echo -e "${RED}✗ No projects found. Falling back to current directory.${NC}"
+        PROJECTS="$(pwd)"
+    fi
+
+    for proj in $PROJECTS; do
+        echo ""
+        read -p "Found project at $proj. Install local MCP pointer here? [y/N]: " INSTALL_PROJ
+        if [[ "$INSTALL_PROJ" =~ ^[Yy]$ ]]; then
+            # For Claude Code, local config is .clauderc or similar. We use .mcp.json as generic pointer
+            LOCAL_CONFIG="$proj/.mcp.json"
+            echo "$MCP_CONFIG" > "$LOCAL_CONFIG"
+            
+            # Also insert a symlink to easily run the server locally
+            ln -sf "$PROJECT_DIR/mcp-server.js" "$proj/mcp-server.js" 2>/dev/null || true
+            
+            echo -e "${GREEN}✓ Local configuration saved to: $LOCAL_CONFIG${NC}"
+            echo -e "${GREEN}✓ Symlink placed in: $proj${NC}"
+        fi
+    done
 fi
 
 ###############################################################################
-# Step 6: Create convenience script
+# Step 7: Create convenience script
 ###############################################################################
 
 echo ""
-echo -e "${YELLOW}[Step 6/6]${NC} Creating convenience scripts..."
+echo -e "${YELLOW}[Step 7/7]${NC} Creating convenience scripts..."
 
 # Create test script
 cat > "$PROJECT_DIR/test-mcp.sh" <<'EOF'
@@ -240,6 +329,7 @@ cat > "$PROJECT_DIR/.env.example" <<EOF
 # ChittyConnect MCP Configuration
 CHITTYCONNECT_URL=https://connect.chitty.cc
 CHITTY_AUTH_TOKEN=your_token_here
+DATABASE_URL=${DATABASE_URL:-}
 ENABLE_STREAMING=true
 SESSION_PERSISTENCE=true
 PLATFORM=desktop

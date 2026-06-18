@@ -44,6 +44,15 @@ function isPolicyBundlePath(c) {
   }
 }
 
+function isTasksServiceProxy(c) {
+  try {
+    const url = new URL(c.req.raw?.url || "http://localhost");
+    return url.pathname.startsWith("/api/v1/tasks/");
+  } catch {
+    return false;
+  }
+}
+
 function cfAccessHeadersMatch(c) {
   const incomingId = c.req.header("CF-Access-Client-Id") || "";
   const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
@@ -64,7 +73,8 @@ export async function authenticate(c, next) {
   // Those routes (see isJwtAuthOwnedPath) gate themselves; falling through
   // here would otherwise reject any request that does not also carry an
   // X-ChittyOS-API-Key.
-  if (isJwtAuthOwnedPath(c)) {
+  // Also skip for proxied service paths that handle their own auth.
+  if (isJwtAuthOwnedPath(c) || isTasksServiceProxy(c)) {
     await next();
     return;
   }

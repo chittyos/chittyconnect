@@ -121,6 +121,13 @@ mcpRoutes.get("/resources/list", async (c) => {
   return c.json({
     resources: [
       {
+        uri: "chittycanon://gov/governance#core-types",
+        name: "Canonical Ontology (PLTEA)",
+        description:
+          "The universal 5-type entity ontology definitions (Person, Location, Thing, Event, Authority)",
+        mimeType: "application/json",
+      },
+      {
         uri: "chitty://ecosystem/status",
         name: "Ecosystem Status",
         description: "Real-time status of all ChittyOS services",
@@ -166,7 +173,26 @@ mcpRoutes.get("/resources/read", async (c) => {
   try {
     let content;
 
-    if (uri === "chitty://ecosystem/status") {
+    if (
+      uri === "chittycanon://gov/governance#core-types" ||
+      uri === "chittycanon://gov/governance"
+    ) {
+      const response = await fetch("https://canon.chitty.cc/api/ontology", {
+        headers: { Authorization: c.req.header("Authorization") },
+      });
+      if (!response.ok) {
+        return c.json({
+          contents: [
+            {
+              uri,
+              mimeType: "text/plain",
+              text: `Canonical ontology unavailable (${response.status})`,
+            },
+          ],
+        });
+      }
+      content = await response.text();
+    } else if (uri === "chitty://ecosystem/status") {
       const response = await fetch(
         `${resolveInternalBaseUrl(c.req.url)}/api/services/status`,
         {

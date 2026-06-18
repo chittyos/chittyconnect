@@ -107,8 +107,7 @@ gitConfirmRoutes.post("/confirm", async (c) => {
       {
         error: {
           code: "MISSING_REQUIRED_FIELDS",
-          message:
-            "intent, repo_path, remote, and ref are all required",
+          message: "intent, repo_path, remote, and ref are all required",
         },
       },
       400,

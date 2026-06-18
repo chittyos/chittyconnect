@@ -487,6 +487,52 @@ app.get("/api/v1/doctrine/seed", (c) => {
         "queue_sync_to_chittyconnect",
       ],
       self_check_interval: 10,
+      cloudflare_mcp_servers: [
+        {
+          name: "Documentation",
+          url: "https://docs.mcp.cloudflare.com/mcp",
+          description: "Get up to date reference information on Cloudflare",
+        },
+        {
+          name: "Workers Bindings",
+          url: "https://bindings.mcp.cloudflare.com/mcp",
+          description:
+            "Build Workers applications with storage, AI, and compute primitives",
+        },
+        {
+          name: "Workers Builds",
+          url: "https://builds.mcp.cloudflare.com/mcp",
+          description: "Get insights and manage your Cloudflare Workers Builds",
+        },
+        {
+          name: "Observability",
+          url: "https://observability.mcp.cloudflare.com/mcp",
+          description:
+            "Debug and get insight into your application's logs and analytics",
+        },
+        {
+          name: "Container",
+          url: "https://containers.mcp.cloudflare.com/mcp",
+          description: "Spin up a sandbox development environment",
+        },
+        {
+          name: "Browser rendering",
+          url: "https://browser.mcp.cloudflare.com/mcp",
+          description:
+            "Fetch web pages, convert them to markdown and take screenshots",
+        },
+        {
+          name: "Logpush",
+          url: "https://logs.mcp.cloudflare.com/mcp",
+          description: "Get quick summaries for Logpush job health",
+        },
+        {
+          name: "AI Gateway",
+          url: "https://ai-gateway.mcp.cloudflare.com/mcp",
+          description:
+            "Search your logs, get details about the prompts and responses",
+        },
+      ],
     },
 
     api_endpoints: {
@@ -2585,6 +2631,56 @@ ${errorInfo.stack}`);
           }
         } catch (err) {
           console.error(`[Scheduled] 1Password sync failed:`, err);
+        }
+        return;
+      }
+
+      // Daily cron — register canonical schemas with schema.chitty.cc
+      if (event.cron === "0 0 * * *") {
+        try {
+          const { MCP_TOOLS } = await import("./mcp/tool-registry.js");
+          const registryUrl =
+            env.SCHEMA_REGISTRY_URL ||
+            "https://schema.chitty.cc/api/tools/register";
+          console.log(
+            `[Scheduled] Registering ${MCP_TOOLS.length} schemas to ${registryUrl}...`,
+          );
+          let successCount = 0;
+          let failCount = 0;
+          for (const tool of MCP_TOOLS) {
+            try {
+              const payload = {
+                server: "chittyconnect",
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+              };
+              const res = await fetch(registryUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              if (res.ok) {
+                successCount++;
+              } else {
+                failCount++;
+                console.error(
+                  `[Scheduled] Failed to register tool ${tool.name}: ${res.status}`,
+                );
+              }
+            } catch (toolErr) {
+              failCount++;
+              console.error(
+                `[Scheduled] Error registering tool ${tool.name}:`,
+                toolErr,
+              );
+            }
+          }
+          console.log(
+            `[Scheduled] Canonical tool registration done. Success: ${successCount}, Fail: ${failCount}`,
+          );
+        } catch (err) {
+          console.error(`[Scheduled] Schema registration failed:`, err);
         }
         return;
       }

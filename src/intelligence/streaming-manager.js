@@ -67,7 +67,8 @@ export class StreamingManager {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
-        "Access-Control-Allow-Origin": getAllowedOrigin(options.origin) || "https://connect.chitty.cc",
+        "Access-Control-Allow-Origin":
+          getAllowedOrigin(options.origin) || "https://connect.chitty.cc",
         Vary: "Origin",
       },
     });

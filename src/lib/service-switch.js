@@ -12,17 +12,17 @@
  */
 
 const DEFAULTS = {
-  tasks:       { enabled: true, mode: "binding", binding: "SVC_TASKS" },
-  ledger:      { enabled: true, mode: "binding", binding: "SVC_LEDGER" },
-  finance:     { enabled: true, mode: "binding", binding: "SVC_FINANCE" },
-  contextual:  { enabled: true, mode: "binding", binding: "SVC_CONTEXTUAL" },
-  id:          { enabled: true, mode: "binding", binding: "SVC_ID" },
-  mint:        { enabled: true, mode: "binding", binding: "SVC_ID" },
-  evidence:    { enabled: true, mode: "binding", binding: "SVC_EVIDENCE" },
-  concierge:   { enabled: true, mode: "binding", binding: "SVC_CONCIERGE" },
-  chronicle:   { enabled: true, mode: "binding", binding: "SVC_CHRONICLE" },
-  disputes:    { enabled: true, mode: "binding", binding: "SVC_DISPUTES" },
-  score:       { enabled: true, mode: "binding", binding: "SVC_SCORE" },
+  tasks: { enabled: true, mode: "binding", binding: "SVC_TASKS" },
+  ledger: { enabled: true, mode: "binding", binding: "SVC_LEDGER" },
+  finance: { enabled: true, mode: "binding", binding: "SVC_FINANCE" },
+  contextual: { enabled: true, mode: "binding", binding: "SVC_CONTEXTUAL" },
+  id: { enabled: true, mode: "binding", binding: "SVC_ID" },
+  mint: { enabled: true, mode: "binding", binding: "SVC_ID" },
+  evidence: { enabled: true, mode: "binding", binding: "SVC_EVIDENCE" },
+  concierge: { enabled: true, mode: "binding", binding: "SVC_CONCIERGE" },
+  chronicle: { enabled: true, mode: "binding", binding: "SVC_CHRONICLE" },
+  disputes: { enabled: true, mode: "binding", binding: "SVC_DISPUTES" },
+  score: { enabled: true, mode: "binding", binding: "SVC_SCORE" },
 };
 
 let _cache = null;
@@ -34,10 +34,12 @@ const CACHE_TTL = 60_000; // 1 minute
  */
 async function loadSwitches(env) {
   const now = Date.now();
-  if (_cache && (now - _cacheTs) < CACHE_TTL) return _cache;
+  if (_cache && now - _cacheTs < CACHE_TTL) return _cache;
 
   try {
-    const raw = env.IDEMP_KV ? await env.IDEMP_KV.get("service:switches") : null;
+    const raw = env.IDEMP_KV
+      ? await env.IDEMP_KV.get("service:switches")
+      : null;
     _cache = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
   } catch (err) {
     console.error("[service-switch] Failed to load switches from KV:", err);
@@ -53,7 +55,13 @@ async function loadSwitches(env) {
  */
 export async function getSwitch(env, serviceName) {
   const switches = await loadSwitches(env);
-  return switches[serviceName] || { enabled: false, mode: "disabled", reason: "unknown service" };
+  return (
+    switches[serviceName] || {
+      enabled: false,
+      mode: "disabled",
+      reason: "unknown service",
+    }
+  );
 }
 
 /**
@@ -70,10 +78,13 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
   const sw = await getSwitch(env, serviceName);
 
   if (!sw.enabled) {
-    return new Response(JSON.stringify({
-      error: `Service "${serviceName}" is disabled`,
-      reason: sw.reason || "maintenance",
-    }), { status: 503, headers: { "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({
+        error: `Service "${serviceName}" is disabled`,
+        reason: sw.reason || "maintenance",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
   }
 
   const headers = {
@@ -83,10 +94,15 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
   };
 
   if (sw.mode === "binding" && sw.binding && !env[sw.binding]) {
-    console.error(`[service-switch] Binding "${sw.binding}" for "${serviceName}" not in env. Check wrangler.jsonc services.`);
-    return new Response(JSON.stringify({
-      error: `Service "${serviceName}" binding "${sw.binding}" not configured in wrangler.jsonc`,
-    }), { status: 503, headers: { "Content-Type": "application/json" } });
+    console.error(
+      `[service-switch] Binding "${sw.binding}" for "${serviceName}" not in env. Check wrangler.jsonc services.`,
+    );
+    return new Response(
+      JSON.stringify({
+        error: `Service "${serviceName}" binding "${sw.binding}" not configured in wrangler.jsonc`,
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
   }
 
   if (sw.mode === "binding" && sw.binding && env[sw.binding]) {
@@ -106,7 +122,18 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     } else {
-      console.warn(`[service-switch] No service token for "${serviceName}" in HTTP mode`);
+      console.warn(
+        `[service-switch] No service token for "${serviceName}" in HTTP mode`,
+      );
+    }
+
+    // Automatically inject Cloudflare Access headers if provisioned
+    const cfClientId = env[`CF_ACCESS_CLIENT_ID_${serviceName.toUpperCase()}`];
+    const cfClientSecret =
+      env[`CF_ACCESS_CLIENT_SECRET_${serviceName.toUpperCase()}`];
+    if (cfClientId && cfClientSecret) {
+      headers["CF-Access-Client-Id"] = cfClientId;
+      headers["CF-Access-Client-Secret"] = cfClientSecret;
     }
 
     const req = new Request(`${sw.url}${path}`, {
@@ -117,9 +144,12 @@ export async function serviceFetch(env, serviceName, path, options = {}) {
     return fetch(req);
   }
 
-  return new Response(JSON.stringify({
-    error: `Service "${serviceName}" has invalid switch mode: ${sw.mode}`,
-  }), { status: 500, headers: { "Content-Type": "application/json" } });
+  return new Response(
+    JSON.stringify({
+      error: `Service "${serviceName}" has invalid switch mode: ${sw.mode}`,
+    }),
+    { status: 500, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 /**

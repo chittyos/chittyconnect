@@ -33,9 +33,7 @@ export async function requestReviewers(
   if (useCODEOWNERS && changedFiles.length > 0) {
     try {
       const owners = await getCodeOwners(token, owner, repo, changedFiles);
-      defaultReviewers = [
-        ...new Set([...defaultReviewers, ...owners.users]),
-      ];
+      defaultReviewers = [...new Set([...defaultReviewers, ...owners.users])];
       defaultTeams = [...new Set([...defaultTeams, ...owners.teams])];
     } catch {
       // Fall through to defaults on CODEOWNERS fetch failure

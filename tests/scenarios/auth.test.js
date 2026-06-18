@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { BASE_URL, API_KEY, authFetch } from "./config.js";
+import { BASE_URL, MCP_URL, API_KEY, authFetch } from "./config.js";
 
 describe("authentication", () => {
   describe("REST API auth (/api/*)", () => {
@@ -21,14 +21,14 @@ describe("authentication", () => {
       const res = await fetch(`${BASE_URL}/api/services/status`, {
         headers: {
           Authorization: `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
       });
       expect(res.status).toBe(200);
     });
 
     it("rejects missing auth with 401", async () => {
-      const res = await fetch(`${BASE_URL}/api/services/status`);
+      const res = await fetch(`${BASE_URL}/api/services/status`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
       expect(res.status).toBe(401);
 
       const body = await res.json();
@@ -47,7 +47,7 @@ describe("authentication", () => {
     it("rejects missing auth with 401", async () => {
       const res = await fetch(`${BASE_URL}/chatgpt/mcp`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 }),
       });
       expect(res.status).toBe(401);
@@ -58,7 +58,7 @@ describe("authentication", () => {
         method: "POST",
         headers: {
           "X-ChittyOS-API-Key": "invalid_key_123",
-          "Content-Type": "application/json",
+          "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 }),
       });
@@ -70,7 +70,7 @@ describe("authentication", () => {
         method: "POST",
         headers: {
           "X-ChittyOS-API-Key": API_KEY,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           Accept: "application/json, text/event-stream",
         },
         body: JSON.stringify({
@@ -90,7 +90,7 @@ describe("authentication", () => {
 
   describe("public MCP routes (/mcp/*)", () => {
     it("/mcp/tools/list is accessible without auth", async () => {
-      const res = await fetch(`${BASE_URL}/mcp/tools/list`);
+      const res = await fetch(`${BASE_URL}/mcp/tools/list`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
       expect(res.status).toBe(200);
     });
   });

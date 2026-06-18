@@ -113,7 +113,7 @@ export class CloudflareSecretsClient {
 
     throw new Error(
       `Credential not found in env bindings: ${credentialPath}. ` +
-      `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`
+        `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`,
     );
   }
 
@@ -153,14 +153,16 @@ export class CloudflareSecretsClient {
       "ENCRYPTION_KEY",
     ];
 
-    const present = required.filter(k => !!this.env[k]);
-    const missing = required.filter(k => !this.env[k]);
+    const present = required.filter((k) => !!this.env[k]);
+    const missing = required.filter((k) => !this.env[k]);
 
     return {
       status: missing.length === 0 ? "healthy" : "degraded",
       type: "cloudflare-secrets",
       bindings: {
-        total: Object.keys(this.env).filter(k => k === k.toUpperCase() && k.length > 3).length,
+        total: Object.keys(this.env).filter(
+          (k) => k === k.toUpperCase() && k.length > 3,
+        ).length,
         required: required.length,
         present: present.length,
         missing,

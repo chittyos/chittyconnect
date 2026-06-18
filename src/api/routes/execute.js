@@ -58,17 +58,17 @@ executeRoutes.post("/sql", async (c) => {
       return c.json({
         rows: result.rows,
         rowCount: result.rowCount,
-        fields: result.fields?.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
+        fields: result.fields?.map((f) => ({
+          name: f.name,
+          dataTypeID: f.dataTypeID,
+        })),
       });
     } finally {
       await client.end();
     }
   } catch (error) {
     console.error("[Execute/SQL]", error);
-    return c.json(
-      { error: error.message, type: "sql_execution_error" },
-      500,
-    );
+    return c.json({ error: error.message, type: "sql_execution_error" }, 500);
   }
 });
 
@@ -108,10 +108,7 @@ executeRoutes.post("/sql/batch", async (c) => {
     }
   } catch (error) {
     console.error("[Execute/SQL/Batch]", error);
-    return c.json(
-      { error: error.message, type: "sql_batch_error" },
-      500,
-    );
+    return c.json({ error: error.message, type: "sql_batch_error" }, 500);
   }
 });
 
@@ -138,7 +135,13 @@ const FETCH_CREDENTIAL_ALIASES = {
 
 executeRoutes.post("/fetch", async (c) => {
   try {
-    const { url, method = "GET", headers = {}, body, credential } = await c.req.json();
+    const {
+      url,
+      method = "GET",
+      headers = {},
+      body,
+      credential,
+    } = await c.req.json();
 
     if (!url) {
       return c.json({ error: "url required" }, 400);
@@ -154,7 +157,10 @@ executeRoutes.post("/fetch", async (c) => {
     }
     const allowlistRaw = c.env.FETCH_ALLOWED_HOSTS || "";
     const allowedHosts = new Set(
-      allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
+      allowlistRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
     );
 
     const fetchHeaders = { ...headers };
@@ -162,7 +168,10 @@ executeRoutes.post("/fetch", async (c) => {
       const credentialPath = FETCH_CREDENTIAL_ALIASES[credential];
       if (!credentialPath) {
         return c.json(
-          { error: `unknown credential alias '${credential}'`, allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
+          {
+            error: `unknown credential alias '${credential}'`,
+            allowed: Object.keys(FETCH_CREDENTIAL_ALIASES),
+          },
           400,
         );
       }
@@ -170,7 +179,12 @@ executeRoutes.post("/fetch", async (c) => {
       // either via the operator-configured FETCH_ALLOWED_HOSTS env var, or by
       // matching a known host owned by the credential alias.
       if (allowedHosts.size > 0 && !allowedHosts.has(parsedUrl.hostname)) {
-        return c.json({ error: `host '${parsedUrl.hostname}' is not in FETCH_ALLOWED_HOSTS` }, 403);
+        return c.json(
+          {
+            error: `host '${parsedUrl.hostname}' is not in FETCH_ALLOWED_HOSTS`,
+          },
+          403,
+        );
       }
       const token = await getCredential(c.env, credentialPath, null);
       if (token) {
@@ -181,7 +195,11 @@ executeRoutes.post("/fetch", async (c) => {
     const response = await fetch(url, {
       method,
       headers: fetchHeaders,
-      body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+      body: body
+        ? typeof body === "string"
+          ? body
+          : JSON.stringify(body)
+        : undefined,
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -210,12 +228,12 @@ const KNOWN_DATABASES = {
     envFallback: "NEON_CHITTYOS_CORE_URL",
     kvKey: "secret:neon:chittyos-core:connection_uri",
   },
-  "chittycommand": {
+  chittycommand: {
     credentialPath: "integrations/neon/chittycommand",
     envFallback: "NEON_CHITTYCOMMAND_URL",
     kvKey: "secret:neon:chittycommand:connection_uri",
   },
-  "chittycounsel": {
+  chittycounsel: {
     credentialPath: "integrations/neon/chittycounsel",
     envFallback: "NEON_CHITTYCOUNSEL_URL",
     kvKey: "secret:neon:chittycounsel:connection_uri",
@@ -224,7 +242,10 @@ const KNOWN_DATABASES = {
 
 async function resolveNeonConnection(env, database) {
   // Direct connection string
-  if (database.startsWith("postgresql://") || database.startsWith("postgres://")) {
+  if (
+    database.startsWith("postgresql://") ||
+    database.startsWith("postgres://")
+  ) {
     return database;
   }
 
@@ -238,7 +259,11 @@ async function resolveNeonConnection(env, database) {
   }
 
   // Try credential broker (1Password)
-  const cred = await getCredential(env, known.credentialPath, known.envFallback);
+  const cred = await getCredential(
+    env,
+    known.credentialPath,
+    known.envFallback,
+  );
   return cred || null;
 }
 

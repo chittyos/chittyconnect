@@ -199,6 +199,16 @@ api.all("/api/mercury/*", async (c) => {
 api.route("/api/context", contextRoutes);
 api.route("/api/v1/context", contextRoutes);
 api.route("/api/context/tasks", tasksRoutes);
+
+// Proxy for chittyagent-tasks
+api.all("/api/v1/tasks/*", async (c) => {
+  if (!c.env.SVC_TASKS) {
+    return c.json({ error: "SVC_TASKS binding not configured" }, 503);
+  }
+  // Let the microservice handle its own routing and auth (e.g. CHITTY_AUTH_SERVICE_TOKEN)
+  return c.env.SVC_TASKS.fetch(c.req.raw);
+});
+
 api.route("/api/files", filesRoutes);
 api.route("/api/dashboard", dashboard);
 api.route("/api/v1/context", contextResolution);

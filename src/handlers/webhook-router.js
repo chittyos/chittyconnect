@@ -99,9 +99,12 @@ async function logWebhook(env, event) {
     }
 
     // Also log to Chronicle API if available
-    const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL || env.CHITTYCHRONICLE_URL;
+    const chronicleUrl =
+      env.CHITTYCHRONICLE_SERVICE_URL || env.CHITTYCHRONICLE_URL;
     if (env.CHITTYCHRONICLE_URL && !env.CHITTYCHRONICLE_SERVICE_URL) {
-      console.warn('[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL');
+      console.warn(
+        "[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL",
+      );
     }
     if (chronicleUrl) {
       const resp = await fetch(`${chronicleUrl}/events`, {
@@ -118,7 +121,9 @@ async function logWebhook(env, event) {
       });
       if (!resp.ok) {
         const body = await resp.text().catch(() => "");
-        console.warn(`[webhook-router] Chronicle log returned ${resp.status}: ${body}`);
+        console.warn(
+          `[webhook-router] Chronicle log returned ${resp.status}: ${body}`,
+        );
       }
     }
   } catch (e) {

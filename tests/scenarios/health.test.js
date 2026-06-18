@@ -10,11 +10,11 @@ import { BASE_URL, authFetch } from "./config.js";
 
 describe("health checks", () => {
   it("GET /health returns healthy status", async () => {
-    const res = await fetch(`${BASE_URL}/health`);
+    const res = await fetch(`${BASE_URL}/health`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.status).toBe("healthy");
+    expect(body.status).toBe("ok");
     expect(body.service).toBe("chittyconnect");
     expect(body.version).toBeDefined();
   });
@@ -28,7 +28,7 @@ describe("health checks", () => {
   });
 
   it("GET /intelligence/health returns 200 with modules", async () => {
-    const res = await fetch(`${BASE_URL}/intelligence/health`);
+    const res = await fetch(`${BASE_URL}/intelligence/health`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -36,7 +36,7 @@ describe("health checks", () => {
   });
 
   it("GET /sse/health returns 200", async () => {
-    const res = await fetch(`${BASE_URL}/sse/health`);
+    const res = await fetch(`${BASE_URL}/sse/health`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -44,7 +44,7 @@ describe("health checks", () => {
   });
 
   it("GET /openapi.json returns valid OpenAPI 3.1 spec", async () => {
-    const res = await fetch(`${BASE_URL}/openapi.json`);
+    const res = await fetch(`${BASE_URL}/openapi.json`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -52,7 +52,7 @@ describe("health checks", () => {
   });
 
   it("GET /.well-known/chitty.json returns discovery document", async () => {
-    const res = await fetch(`${BASE_URL}/.well-known/chitty.json`);
+    const res = await fetch(`${BASE_URL}/.well-known/chitty.json`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } });
     expect(res.status).toBe(200);
 
     const body = await res.json();

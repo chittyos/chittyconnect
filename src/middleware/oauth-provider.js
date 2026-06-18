@@ -126,7 +126,10 @@ async function handleAuthorize(request, env) {
   // splitting on ":" expecting exactly 3 parts. Strip colons from the clientId
   // itself as well, since a dynamically-registered client could supply one.
   // @canon: chittycanon://gov/governance#core-types
-  const safeClientId = (oauthReqInfo.clientId || "anonymous").replace(/:/g, "-");
+  const safeClientId = (oauthReqInfo.clientId || "anonymous").replace(
+    /:/g,
+    "-",
+  );
   const actorId = `mcp-client-${safeClientId}`;
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,

@@ -209,8 +209,7 @@ export class ContextResolver {
       } else if (
         projectPath &&
         row.project_path &&
-        projectPath.split("/").pop() ===
-          row.project_path.split("/").pop()
+        projectPath.split("/").pop() === row.project_path.split("/").pop()
       ) {
         score += 0.2;
         signals.push("project_name_match");
@@ -236,8 +235,7 @@ export class ContextResolver {
 
       // Temporal recency — more recent activity = more likely correct entity
       if (row.last_activity) {
-        const daysSince =
-          (Date.now() / 1000 - row.last_activity) / 86400;
+        const daysSince = (Date.now() / 1000 - row.last_activity) / 86400;
         if (daysSince < 1) {
           score += 0.15;
           signals.push("active_today");
@@ -282,12 +280,8 @@ export class ContextResolver {
       context: {
         ...bestCandidate,
         competencies: JSON.parse(bestCandidate.competencies || "[]"),
-        expertise_domains: JSON.parse(
-          bestCandidate.expertise_domains || "[]",
-        ),
-        current_sessions: JSON.parse(
-          bestCandidate.current_sessions || "[]",
-        ),
+        expertise_domains: JSON.parse(bestCandidate.expertise_domains || "[]"),
+        current_sessions: JSON.parse(bestCandidate.current_sessions || "[]"),
       },
       confidence: bestScore,
       reason: bestReason,

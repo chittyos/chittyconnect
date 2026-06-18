@@ -52,7 +52,13 @@ export async function resolveTrustLevel(chittyId, env) {
   const entityType = segments.length >= 5 ? segments[4] : "P";
 
   // Fail-closed fallback: ANONYMOUS trust grants no governance permissions
-  const FALLBACK = { trust_level: TRUST_LEVELS.ANONYMOUS, entity_type: entityType, ty: 0, vy: 0, ry: 0 };
+  const FALLBACK = {
+    trust_level: TRUST_LEVELS.ANONYMOUS,
+    entity_type: entityType,
+    ty: 0,
+    vy: 0,
+    ry: 0,
+  };
 
   if (!env.CREDENTIAL_CACHE) {
     console.error(

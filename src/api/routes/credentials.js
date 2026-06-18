@@ -684,37 +684,78 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     const item = c.req.param("item");
     const field = c.req.param("field");
 
-    const validVaults = ["infrastructure", "services", "integrations", "emergency"];
+    const validVaults = [
+      "infrastructure",
+      "services",
+      "integrations",
+      "emergency",
+    ];
     if (!validVaults.includes(vault)) {
-      return c.json({ success: false, error: { code: "INVALID_VAULT", message: `Invalid vault: ${vault}` } }, 400);
+      return c.json(
+        {
+          success: false,
+          error: { code: "INVALID_VAULT", message: `Invalid vault: ${vault}` },
+        },
+        400,
+      );
     }
 
     const body = await c.req.json();
     if (!body.value) {
-      return c.json({ success: false, error: { code: "MISSING_VALUE", message: "Request body must include value" } }, 400);
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "MISSING_VALUE",
+            message: "Request body must include value",
+          },
+        },
+        400,
+      );
     }
 
     const apiKeyMeta = c.get("apiKey") || {};
-    const requestingService = apiKeyMeta.service || apiKeyMeta.name || "unknown";
+    const requestingService =
+      apiKeyMeta.service || apiKeyMeta.name || "unknown";
 
-    console.log(`[Credentials] Storing ${vault}/${item}/${field} (by ${requestingService})`);
+    console.log(
+      `[Credentials] Storing ${vault}/${item}/${field} (by ${requestingService})`,
+    );
 
-    const { OnePasswordConnectClient } = await import("../../services/1password-connect-client.js");
+    const { OnePasswordConnectClient } =
+      await import("../../services/1password-connect-client.js");
     const client = new OnePasswordConnectClient(c.env);
-    const result = await client.put(`${vault}/${item}/${field}`, body.value, { notes: body.notes });
+    const result = await client.put(`${vault}/${item}/${field}`, body.value, {
+      notes: body.notes,
+    });
 
     try {
       await c.env.DB.prepare(
-        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
-      ).bind("1password_store", item, field, requestingService).run();
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+        .bind("1password_store", item, field, requestingService)
+        .run();
     } catch (dbErr) {
       console.warn("[Credentials] Audit log failed:", dbErr.message);
     }
 
-    return c.json({ success: true, ...result, metadata: { vault, item, field, timestamp: new Date().toISOString() } }, result.action === "created" ? 201 : 200);
+    return c.json(
+      {
+        success: true,
+        ...result,
+        metadata: { vault, item, field, timestamp: new Date().toISOString() },
+      },
+      result.action === "created" ? 201 : 200,
+    );
   } catch (error) {
     console.error("[Credentials] Store error:", error);
-    return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
+    return c.json(
+      {
+        success: false,
+        error: { code: "STORE_FAILED", message: error.message },
+      },
+      500,
+    );
   }
 });
 
@@ -738,9 +779,7 @@ credentialsRoutes.get("/health", async (c) => {
     cloudflare_make_api_key: c.env.CLOUDFLARE_MAKE_API_KEY
       ? "configured"
       : "missing",
-    cloudflare_account_id: c.env.CHITTYOS_ACCOUNT_ID
-      ? "configured"
-      : "missing",
+    cloudflare_account_id: c.env.CHITTYOS_ACCOUNT_ID ? "configured" : "missing",
     database: "unknown",
     rate_limit: c.env.RATE_LIMIT ? "available" : "missing",
     chronicle: c.env.CHITTY_CHRONICLE_TOKEN ? "configured" : "missing",

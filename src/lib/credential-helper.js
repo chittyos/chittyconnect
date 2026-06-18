@@ -101,24 +101,24 @@ export async function getMintAuthToken(env) {
     env.CHITTYAUTH_ISSUED_MINT_API_KEY ||
     env.CHITTYAUTH_ISSUED_MINT_TOKEN ||
     env.MINT_API_KEY ||
-    await getCredential(
+    (await getCredential(
       env,
       "services/chittymint/service_token",
       "CHITTYAUTH_ISSUED_MINT_API_KEY",
       "chittymint",
-    ) ||
-    await getCredential(
+    )) ||
+    (await getCredential(
       env,
       "services/chittymint/service_token",
       "CHITTYAUTH_ISSUED_MINT_TOKEN",
       "chittymint",
-    ) ||
-    await getCredential(
+    )) ||
+    (await getCredential(
       env,
       "services/chittymint/service_token",
       "MINT_API_KEY",
       "chittymint",
-    );
+    ));
 
   if (authIssued) {
     return { token: authIssued, source: "auth-issued" };

@@ -58,7 +58,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
 
     const catalogEntries = getServiceCatalogEntries(env);
 
-    const normalizeService = function(service) {
+    const normalizeService = function (service) {
       const name = service?.name || service?.id || "";
       const url = service?.url || (name ? `https://${name}.chitty.cc` : "");
 
@@ -116,8 +116,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
       // Legacy API field kept for backward compatibility
       api: `https://api.chitty.cc/${service.sub}/api`,
       direct_api: `${service.url.replace(/\/$/, "")}/api`,
-      health:
-        service.health_url || `${service.url.replace(/\/$/, "")}/health`,
+      health: service.health_url || `${service.url.replace(/\/$/, "")}/health`,
       status: service.status || "unknown",
     }));
 
@@ -143,8 +142,7 @@ discoveryRoutes.get("/chitty.json", async (c) => {
           tools_count: MCP_TOOL_NAMES.size,
           supports_streaming: true,
           session_management: true,
-          oauth_discovery:
-            `${mcpBase}/.well-known/oauth-authorization-server`,
+          oauth_discovery: `${mcpBase}/.well-known/oauth-authorization-server`,
         },
         api: {
           openapi_spec: "https://connect.chitty.cc/openapi.json",

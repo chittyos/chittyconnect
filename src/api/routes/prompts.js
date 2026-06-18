@@ -31,49 +31,99 @@ promptRoutes.post("/", async (c) => {
     return c.json({ error: "id, domain, and base are required" }, 400);
   }
 
-  const consumerId = c.get("apiKey")?.chittyId || c.get("apiKey")?.userId || null;
+  const consumerId =
+    c.get("apiKey")?.chittyId || c.get("apiKey")?.userId || null;
 
   // RY: check author gate if updating an existing prompt in this domain
   // For creation, any authenticated user can create (domain-level gates enforced on update)
 
   const layers = JSON.stringify(body.layers || []);
-  const envGate = JSON.stringify(body.envGate || { production: "ai", staging: "ai", dev: "configurable", test: "deterministic" });
-  const authorGate = JSON.stringify(body.authorGate || { domain: body.domain, allowedAuthors: consumerId ? [consumerId] : ["*"], requireApproval: false });
-  const consumerGate = JSON.stringify(body.consumerGate || { allowedServices: ["*"], allowedAgents: ["*"], scopeBoundaries: [] });
+  const envGate = JSON.stringify(
+    body.envGate || {
+      production: "ai",
+      staging: "ai",
+      dev: "configurable",
+      test: "deterministic",
+    },
+  );
+  const authorGate = JSON.stringify(
+    body.authorGate || {
+      domain: body.domain,
+      allowedAuthors: consumerId ? [consumerId] : ["*"],
+      requireApproval: false,
+    },
+  );
+  const consumerGate = JSON.stringify(
+    body.consumerGate || {
+      allowedServices: ["*"],
+      allowedAgents: ["*"],
+      scopeBoundaries: [],
+    },
+  );
 
   try {
     // Check if already exists
-    const existing = await db.prepare("SELECT id, version FROM prompt_registry WHERE id = ?").bind(body.id).first();
+    const existing = await db
+      .prepare("SELECT id, version FROM prompt_registry WHERE id = ?")
+      .bind(body.id)
+      .first();
     if (existing) {
-      return c.json({ error: "Prompt already exists. Use PUT to update." }, 409);
+      return c.json(
+        { error: "Prompt already exists. Use PUT to update." },
+        409,
+      );
     }
 
     // Atomic: batch both inserts in a single D1 transaction
-    const registryStmt = db.prepare(`
+    const registryStmt = db
+      .prepare(
+        `
       INSERT INTO prompt_registry (id, domain, version, base, layers, fallback, env_gate, author_gate, consumer_gate, created_by, changelog)
       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      body.id, body.domain, body.base, layers,
-      body.fallback || "passthrough", envGate, authorGate, consumerGate,
-      consumerId, body.changelog || "Initial creation"
-    );
+    `,
+      )
+      .bind(
+        body.id,
+        body.domain,
+        body.base,
+        layers,
+        body.fallback || "passthrough",
+        envGate,
+        authorGate,
+        consumerGate,
+        consumerId,
+        body.changelog || "Initial creation",
+      );
 
     // TY: save version 1
-    const versionStmt = db.prepare(`
+    const versionStmt = db
+      .prepare(
+        `
       INSERT INTO prompt_versions (prompt_id, version, base, layers, fallback, env_gate, author_gate, consumer_gate, changelog, created_by)
       VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      body.id, body.base, layers, body.fallback || "passthrough",
-      envGate, authorGate, consumerGate,
-      body.changelog || "Initial creation", consumerId
-    );
+    `,
+      )
+      .bind(
+        body.id,
+        body.base,
+        layers,
+        body.fallback || "passthrough",
+        envGate,
+        authorGate,
+        consumerGate,
+        body.changelog || "Initial creation",
+        consumerId,
+      );
 
     await db.batch([registryStmt, versionStmt]);
 
     return c.json({ id: body.id, version: 1, status: "created" }, 201);
   } catch (err) {
     console.error("[prompts] create error:", err);
-    return c.json({ error: "Failed to create prompt", detail: err.message }, 500);
+    return c.json(
+      { error: "Failed to create prompt", detail: err.message },
+      500,
+    );
   }
 });
 
@@ -82,15 +132,28 @@ promptRoutes.get("/:id", async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: "D1 not available" }, 503);
 
-  const prompt = await db.prepare("SELECT * FROM prompt_registry WHERE id = ?").bind(c.req.param("id")).first();
+  const prompt = await db
+    .prepare("SELECT * FROM prompt_registry WHERE id = ?")
+    .bind(c.req.param("id"))
+    .first();
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
 
   // RY: check consumer gate on read
   const getApiKey = c.get("apiKey");
-  const getConsumerService = getApiKey?.service || getApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const getConsumerService =
+    getApiKey?.service ||
+    getApiKey?.chittyId ||
+    c.req.header("X-Source-Service") ||
+    "unknown";
   const consumerCheck = checkConsumerGate(prompt, getConsumerService);
   if (!consumerCheck.allowed) {
-    return c.json({ error: "Unauthorized: consumer gate denied", reason: consumerCheck.reason }, 403);
+    return c.json(
+      {
+        error: "Unauthorized: consumer gate denied",
+        reason: consumerCheck.reason,
+      },
+      403,
+    );
   }
 
   return c.json(formatPrompt(prompt));
@@ -104,17 +167,31 @@ promptRoutes.get("/", async (c) => {
   const domain = c.req.query("domain");
   let results;
   if (domain) {
-    results = await db.prepare("SELECT * FROM prompt_registry WHERE domain = ? ORDER BY id").bind(domain).all();
+    results = await db
+      .prepare("SELECT * FROM prompt_registry WHERE domain = ? ORDER BY id")
+      .bind(domain)
+      .all();
   } else {
-    results = await db.prepare("SELECT * FROM prompt_registry ORDER BY domain, id").all();
+    results = await db
+      .prepare("SELECT * FROM prompt_registry ORDER BY domain, id")
+      .all();
   }
 
   // RY: filter results by consumer gate
   const listApiKey = c.get("apiKey");
-  const listConsumerService = listApiKey?.service || listApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
-  const filtered = (results.results || []).filter((row) => checkConsumerGate(row, listConsumerService).allowed);
+  const listConsumerService =
+    listApiKey?.service ||
+    listApiKey?.chittyId ||
+    c.req.header("X-Source-Service") ||
+    "unknown";
+  const filtered = (results.results || []).filter(
+    (row) => checkConsumerGate(row, listConsumerService).allowed,
+  );
 
-  return c.json({ prompts: filtered.map(formatPrompt), total: filtered.length });
+  return c.json({
+    prompts: filtered.map(formatPrompt),
+    total: filtered.length,
+  });
 });
 
 // Update prompt (creates new version)
@@ -126,47 +203,97 @@ promptRoutes.put("/:id", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: "Request body required" }, 400);
 
-  const existing = await db.prepare("SELECT * FROM prompt_registry WHERE id = ?").bind(promptId).first();
+  const existing = await db
+    .prepare("SELECT * FROM prompt_registry WHERE id = ?")
+    .bind(promptId)
+    .first();
   if (!existing) return c.json({ error: "Prompt not found" }, 404);
 
-  const consumerId = c.get("apiKey")?.chittyId || c.get("apiKey")?.userId || null;
+  const consumerId =
+    c.get("apiKey")?.chittyId || c.get("apiKey")?.userId || null;
 
   // RY: enforce author gate
   const authorGateCheck = checkAuthorGate(existing, consumerId);
   if (!authorGateCheck.allowed) {
-    return c.json({ error: "Unauthorized: author gate denied", reason: authorGateCheck.reason }, 403);
+    return c.json(
+      {
+        error: "Unauthorized: author gate denied",
+        reason: authorGateCheck.reason,
+      },
+      403,
+    );
   }
 
   const newVersion = (existing.version || 0) + 1;
   const base = body.base || existing.base;
-  const layers = JSON.stringify(body.layers || JSON.parse(existing.layers || "[]"));
+  const layers = JSON.stringify(
+    body.layers || JSON.parse(existing.layers || "[]"),
+  );
   const fallback = body.fallback || existing.fallback;
-  const envGate = JSON.stringify(body.envGate || JSON.parse(existing.env_gate || "{}"));
-  const authorGate = JSON.stringify(body.authorGate || JSON.parse(existing.author_gate || "{}"));
-  const consumerGate = JSON.stringify(body.consumerGate || JSON.parse(existing.consumer_gate || "{}"));
+  const envGate = JSON.stringify(
+    body.envGate || JSON.parse(existing.env_gate || "{}"),
+  );
+  const authorGate = JSON.stringify(
+    body.authorGate || JSON.parse(existing.author_gate || "{}"),
+  );
+  const consumerGate = JSON.stringify(
+    body.consumerGate || JSON.parse(existing.consumer_gate || "{}"),
+  );
   const changelog = body.changelog || `Updated to version ${newVersion}`;
 
   try {
     // Atomic: batch update + version insert in a single D1 transaction
-    const updateStmt = db.prepare(`
+    const updateStmt = db
+      .prepare(
+        `
       UPDATE prompt_registry
       SET version = ?, base = ?, layers = ?, fallback = ?, env_gate = ?, author_gate = ?, consumer_gate = ?,
           updated_at = datetime('now'), changelog = ?
       WHERE id = ?
-    `).bind(newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, promptId);
+    `,
+      )
+      .bind(
+        newVersion,
+        base,
+        layers,
+        fallback,
+        envGate,
+        authorGate,
+        consumerGate,
+        changelog,
+        promptId,
+      );
 
     // TY: save version snapshot
-    const versionInsertStmt = db.prepare(`
+    const versionInsertStmt = db
+      .prepare(
+        `
       INSERT INTO prompt_versions (prompt_id, version, base, layers, fallback, env_gate, author_gate, consumer_gate, changelog, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(promptId, newVersion, base, layers, fallback, envGate, authorGate, consumerGate, changelog, consumerId);
+    `,
+      )
+      .bind(
+        promptId,
+        newVersion,
+        base,
+        layers,
+        fallback,
+        envGate,
+        authorGate,
+        consumerGate,
+        changelog,
+        consumerId,
+      );
 
     await db.batch([updateStmt, versionInsertStmt]);
 
     return c.json({ id: promptId, version: newVersion, status: "updated" });
   } catch (err) {
     console.error("[prompts] update error:", err);
-    return c.json({ error: "Failed to update prompt", detail: err.message }, 500);
+    return c.json(
+      { error: "Failed to update prompt", detail: err.message },
+      500,
+    );
   }
 });
 
@@ -175,11 +302,17 @@ promptRoutes.get("/:id/versions", async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: "D1 not available" }, 503);
 
-  const results = await db.prepare(
-    "SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY version DESC"
-  ).bind(c.req.param("id")).all();
+  const results = await db
+    .prepare(
+      "SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY version DESC",
+    )
+    .bind(c.req.param("id"))
+    .all();
 
-  return c.json({ versions: (results.results || []).map(formatVersion), total: results.results?.length || 0 });
+  return c.json({
+    versions: (results.results || []).map(formatVersion),
+    total: results.results?.length || 0,
+  });
 });
 
 // ── Resolve (TY + RY) ───────────────────────────────────────
@@ -191,24 +324,38 @@ promptRoutes.post("/resolve", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body?.promptId) return c.json({ error: "promptId is required" }, 400);
 
-  const prompt = await db.prepare("SELECT * FROM prompt_registry WHERE id = ?").bind(body.promptId).first();
+  const prompt = await db
+    .prepare("SELECT * FROM prompt_registry WHERE id = ?")
+    .bind(body.promptId)
+    .first();
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
 
   const environment = body.environment || "production";
   const apiKey = c.get("apiKey");
-  const consumerService = apiKey?.service || apiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerService =
+    apiKey?.service ||
+    apiKey?.chittyId ||
+    c.req.header("X-Source-Service") ||
+    "unknown";
   const consumerId = apiKey?.chittyId || apiKey?.userId || null;
 
   // RY: check consumer gate
   const consumerCheck = checkConsumerGate(prompt, consumerService);
   if (!consumerCheck.allowed) {
-    return c.json({ error: "Unauthorized: consumer gate denied", reason: consumerCheck.reason }, 403);
+    return c.json(
+      {
+        error: "Unauthorized: consumer gate denied",
+        reason: consumerCheck.reason,
+      },
+      403,
+    );
   }
 
   // RY: check environment gate
   const envGate = safeParseJson(prompt.env_gate);
   const envMode = envGate[environment] || "ai";
-  const aiEnabled = envMode === "ai" || (envMode === "configurable" && body.forceAi);
+  const aiEnabled =
+    envMode === "ai" || (envMode === "configurable" && body.forceAi);
 
   // TY: compose prompt from base + layers + additional layers
   const baseLayers = safeParseJson(prompt.layers);
@@ -217,15 +364,26 @@ promptRoutes.post("/resolve", async (c) => {
 
   // Look up additional layers by ID (from other prompts or layer registry)
   for (const layerId of additionalLayerIds) {
-    const layerPrompt = await db.prepare("SELECT base FROM prompt_registry WHERE id = ?").bind(layerId).first();
+    const layerPrompt = await db
+      .prepare("SELECT base FROM prompt_registry WHERE id = ?")
+      .bind(layerId)
+      .first();
     if (layerPrompt) {
-      resolvedLayers.push({ id: layerId, content: layerPrompt.base, order: resolvedLayers.length + 1 });
+      resolvedLayers.push({
+        id: layerId,
+        content: layerPrompt.base,
+        order: resolvedLayers.length + 1,
+      });
     }
   }
 
   // Sort by order and compose
   resolvedLayers.sort((a, b) => (a.order || 0) - (b.order || 0));
-  const composedPrompt = composePrompt(prompt.base, resolvedLayers, body.variables);
+  const composedPrompt = composePrompt(
+    prompt.base,
+    resolvedLayers,
+    body.variables,
+  );
   const resolvedLayerIds = resolvedLayers.map((l) => l.id);
 
   // VY: log execution
@@ -259,30 +417,49 @@ promptRoutes.post("/execute", async (c) => {
     return c.json({ error: "promptId and input are required" }, 400);
   }
 
-  const prompt = await db.prepare("SELECT * FROM prompt_registry WHERE id = ?").bind(body.promptId).first();
+  const prompt = await db
+    .prepare("SELECT * FROM prompt_registry WHERE id = ?")
+    .bind(body.promptId)
+    .first();
   if (!prompt) return c.json({ error: "Prompt not found" }, 404);
 
   const environment = body.environment || "production";
   const apiKeyExec = c.get("apiKey");
-  const consumerService = apiKeyExec?.service || apiKeyExec?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerService =
+    apiKeyExec?.service ||
+    apiKeyExec?.chittyId ||
+    c.req.header("X-Source-Service") ||
+    "unknown";
   const consumerId = apiKeyExec?.chittyId || apiKeyExec?.userId || null;
 
   // RY: gates
   const consumerCheck = checkConsumerGate(prompt, consumerService);
   if (!consumerCheck.allowed) {
-    return c.json({ error: "Unauthorized: consumer gate denied", reason: consumerCheck.reason }, 403);
+    return c.json(
+      {
+        error: "Unauthorized: consumer gate denied",
+        reason: consumerCheck.reason,
+      },
+      403,
+    );
   }
 
   const envGate = safeParseJson(prompt.env_gate);
   const envMode = envGate[environment] || "ai";
-  const aiEnabled = envMode === "ai" || (envMode === "configurable" && body.forceAi);
+  const aiEnabled =
+    envMode === "ai" || (envMode === "configurable" && body.forceAi);
 
   if (!aiEnabled) {
     // VY: log gated execution
     await logExecution(db, {
-      promptId: body.promptId, promptVersion: prompt.version,
-      consumerId, consumerService, mode: "execute", environment,
-      layersResolved: [], error: `AI gated: env=${environment} mode=${envMode}`,
+      promptId: body.promptId,
+      promptVersion: prompt.version,
+      consumerId,
+      consumerService,
+      mode: "execute",
+      environment,
+      layersResolved: [],
+      error: `AI gated: env=${environment} mode=${envMode}`,
     });
 
     return c.json({
@@ -300,14 +477,25 @@ promptRoutes.post("/execute", async (c) => {
   const resolvedLayers = [...baseLayers];
 
   for (const layerId of additionalLayerIds) {
-    const layerPrompt = await db.prepare("SELECT base FROM prompt_registry WHERE id = ?").bind(layerId).first();
+    const layerPrompt = await db
+      .prepare("SELECT base FROM prompt_registry WHERE id = ?")
+      .bind(layerId)
+      .first();
     if (layerPrompt) {
-      resolvedLayers.push({ id: layerId, content: layerPrompt.base, order: resolvedLayers.length + 1 });
+      resolvedLayers.push({
+        id: layerId,
+        content: layerPrompt.base,
+        order: resolvedLayers.length + 1,
+      });
     }
   }
 
   resolvedLayers.sort((a, b) => (a.order || 0) - (b.order || 0));
-  const composedPrompt = composePrompt(prompt.base, resolvedLayers, body.variables);
+  const composedPrompt = composePrompt(
+    prompt.base,
+    resolvedLayers,
+    body.variables,
+  );
   const resolvedLayerIds = resolvedLayers.map((l) => l.id);
 
   // Dispatch to agent or AI proxy
@@ -322,7 +510,8 @@ promptRoutes.post("/execute", async (c) => {
 
     if (dispatchTarget.type === "chittyrouter") {
       // Dispatch to ChittyRouter agent (authenticated)
-      const { getServiceToken } = await import("../../lib/credential-helper.js");
+      const { getServiceToken } =
+        await import("../../lib/credential-helper.js");
       const routerToken = await getServiceToken(c.env, "chittyrouter");
       if (!routerToken) {
         throw new Error("ChittyRouter dispatch unavailable: no service token");
@@ -332,7 +521,7 @@ promptRoutes.post("/execute", async (c) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${routerToken}`,
+          Authorization: `Bearer ${routerToken}`,
           "X-Source-Service": "chittyconnect",
         },
         body: JSON.stringify({
@@ -346,7 +535,9 @@ promptRoutes.post("/execute", async (c) => {
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        throw new Error(`Agent dispatch failed: ${res.status} ${errText.slice(0, 200)}`);
+        throw new Error(
+          `Agent dispatch failed: ${res.status} ${errText.slice(0, 200)}`,
+        );
       }
 
       const agentResult = await res.json();
@@ -360,10 +551,16 @@ promptRoutes.post("/execute", async (c) => {
           {
             messages: [
               { role: "system", content: composedPrompt },
-              { role: "user", content: typeof body.input === "string" ? body.input : JSON.stringify(body.input) },
+              {
+                role: "user",
+                content:
+                  typeof body.input === "string"
+                    ? body.input
+                    : JSON.stringify(body.input),
+              },
             ],
             max_tokens: body.maxTokens || 4096,
-          }
+          },
         );
         result = aiResult.response;
         executedBy = "chittyconnect/workers-ai";
@@ -379,18 +576,29 @@ promptRoutes.post("/execute", async (c) => {
   const latencyMs = Date.now() - startMs;
 
   // VY: log execution with full context
-  const inputStr = typeof body.input === "string" ? body.input : JSON.stringify(body.input);
+  const inputStr =
+    typeof body.input === "string" ? body.input : JSON.stringify(body.input);
   const inputHash = await hashInput(inputStr);
 
   await logExecution(db, {
-    promptId: body.promptId, promptVersion: prompt.version,
-    consumerId, consumerService, executedBy, mode: "execute",
-    environment, inputHash, layersResolved: resolvedLayerIds,
-    latencyMs, error,
+    promptId: body.promptId,
+    promptVersion: prompt.version,
+    consumerId,
+    consumerService,
+    executedBy,
+    mode: "execute",
+    environment,
+    inputHash,
+    layersResolved: resolvedLayerIds,
+    latencyMs,
+    error,
   });
 
   if (error) {
-    return c.json({ error: "Execution failed", detail: error, version: prompt.version }, 502);
+    return c.json(
+      { error: "Execution failed", detail: error, version: prompt.version },
+      502,
+    );
   }
 
   return c.json({
@@ -420,12 +628,19 @@ promptRoutes.post("/executions/:executionId/quality", async (c) => {
 
   // Verify the execution exists and belongs to the caller
   const qualityApiKey = c.get("apiKey");
-  const callerService = qualityApiKey?.service || qualityApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const callerService =
+    qualityApiKey?.service ||
+    qualityApiKey?.chittyId ||
+    c.req.header("X-Source-Service") ||
+    "unknown";
   const callerId = qualityApiKey?.chittyId || qualityApiKey?.userId || null;
 
-  const execution = await db.prepare(
-    "SELECT consumer_id, consumer_service FROM prompt_executions WHERE id = ?"
-  ).bind(executionId).first();
+  const execution = await db
+    .prepare(
+      "SELECT consumer_id, consumer_service FROM prompt_executions WHERE id = ?",
+    )
+    .bind(executionId)
+    .first();
 
   if (!execution) {
     return c.json({ error: "Execution not found" }, 404);
@@ -433,15 +648,27 @@ promptRoutes.post("/executions/:executionId/quality", async (c) => {
 
   // Ownership check: caller must match the original consumer
   if (execution.consumer_id && callerId && execution.consumer_id !== callerId) {
-    return c.json({ error: "Unauthorized: execution belongs to a different consumer" }, 403);
+    return c.json(
+      { error: "Unauthorized: execution belongs to a different consumer" },
+      403,
+    );
   }
-  if (execution.consumer_service !== callerService && execution.consumer_id !== callerId) {
-    return c.json({ error: "Unauthorized: execution belongs to a different service" }, 403);
+  if (
+    execution.consumer_service !== callerService &&
+    execution.consumer_id !== callerId
+  ) {
+    return c.json(
+      { error: "Unauthorized: execution belongs to a different service" },
+      403,
+    );
   }
 
-  await db.prepare(
-    "UPDATE prompt_executions SET output_quality = ?, quality_source = ? WHERE id = ?"
-  ).bind(quality, source, executionId).run();
+  await db
+    .prepare(
+      "UPDATE prompt_executions SET output_quality = ?, quality_source = ? WHERE id = ?",
+    )
+    .bind(quality, source, executionId)
+    .run();
 
   return c.json({ status: "updated" });
 });
@@ -454,10 +681,14 @@ promptRoutes.get("/:id/drift", async (c) => {
 
   const promptId = c.req.param("id");
   const rawDays = parseInt(c.req.query("days") || "30", 10);
-  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(rawDays, 365)) : 30;
+  const days = Number.isFinite(rawDays)
+    ? Math.max(1, Math.min(rawDays, 365))
+    : 30;
 
   // Get quality distribution over time
-  const results = await db.prepare(`
+  const results = await db
+    .prepare(
+      `
     SELECT
       prompt_version,
       COUNT(*) as executions,
@@ -470,7 +701,10 @@ promptRoutes.get("/:id/drift", async (c) => {
     WHERE prompt_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
     GROUP BY prompt_version
     ORDER BY prompt_version DESC
-  `).bind(promptId, days).all();
+  `,
+    )
+    .bind(promptId, days)
+    .all();
 
   return c.json({
     promptId,
@@ -488,14 +722,22 @@ promptRoutes.get("/:id/executions", async (c) => {
   const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
   const offset = parseInt(c.req.query("offset") || "0");
 
-  const results = await db.prepare(`
+  const results = await db
+    .prepare(
+      `
     SELECT * FROM prompt_executions
     WHERE prompt_id = ?
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
-  `).bind(c.req.param("id"), limit, offset).all();
+  `,
+    )
+    .bind(c.req.param("id"), limit, offset)
+    .all();
 
-  return c.json({ executions: results.results || [], total: results.results?.length || 0 });
+  return c.json({
+    executions: results.results || [],
+    total: results.results?.length || 0,
+  });
 });
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -535,7 +777,11 @@ function formatVersion(row) {
 }
 
 function safeParseJson(str) {
-  try { return JSON.parse(str || "{}"); } catch { return {}; }
+  try {
+    return JSON.parse(str || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function composePrompt(base, layers, variables) {
@@ -558,10 +804,16 @@ function checkAuthorGate(prompt, consumerId) {
     return { allowed: true };
   }
   if (!consumerId) {
-    return { allowed: false, reason: "No ChittyID provided and author gate is restricted" };
+    return {
+      allowed: false,
+      reason: "No ChittyID provided and author gate is restricted",
+    };
   }
   if (!gate.allowedAuthors.includes(consumerId)) {
-    return { allowed: false, reason: `ChittyID ${consumerId} not in allowedAuthors for domain ${gate.domain || "unknown"}` };
+    return {
+      allowed: false,
+      reason: `ChittyID ${consumerId} not in allowedAuthors for domain ${gate.domain || "unknown"}`,
+    };
   }
   return { allowed: true };
 }
@@ -572,7 +824,10 @@ function checkConsumerGate(prompt, consumerService) {
     return { allowed: true };
   }
   if (!gate.allowedServices.includes(consumerService)) {
-    return { allowed: false, reason: `Service ${consumerService} not in allowedServices` };
+    return {
+      allowed: false,
+      reason: `Service ${consumerService} not in allowedServices`,
+    };
   }
   return { allowed: true };
 }
@@ -583,7 +838,10 @@ function resolveDispatchTarget(domain, env) {
     litigation: { agent: "response-agent", path: "/agents/response/generate" },
     scrape: { agent: "scrape-agent", path: "/agents/scrape/process" },
     triage: { agent: "triage-agent", path: "/agents/triage/classify" },
-    intelligence: { agent: "intelligence-agent", path: "/agents/intelligence/analyze" },
+    intelligence: {
+      agent: "intelligence-agent",
+      path: "/agents/intelligence/analyze",
+    },
     agents: { agent: "agent-executor", path: "/agents/executor/run" },
   };
 
@@ -598,18 +856,28 @@ function resolveDispatchTarget(domain, env) {
 
 async function logExecution(db, params) {
   try {
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO prompt_executions
         (prompt_id, prompt_version, consumer_id, consumer_service, executed_by, mode, environment, input_hash, layers_resolved, latency_ms, error)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      params.promptId, params.promptVersion,
-      params.consumerId || null, params.consumerService || "unknown",
-      params.executedBy || null, params.mode || "resolve",
-      params.environment || "production", params.inputHash || null,
-      JSON.stringify(params.layersResolved || []),
-      params.latencyMs || null, params.error || null
-    ).run();
+    `,
+      )
+      .bind(
+        params.promptId,
+        params.promptVersion,
+        params.consumerId || null,
+        params.consumerService || "unknown",
+        params.executedBy || null,
+        params.mode || "resolve",
+        params.environment || "production",
+        params.inputHash || null,
+        JSON.stringify(params.layersResolved || []),
+        params.latencyMs || null,
+        params.error || null,
+      )
+      .run();
   } catch (err) {
     console.error("[prompts] execution log failed:", err);
   }
@@ -621,7 +889,9 @@ async function hashInput(input) {
     const data = encoder.encode(input);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return "sha256:" + hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return (
+      "sha256:" + hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+    );
   } catch {
     return null;
   }

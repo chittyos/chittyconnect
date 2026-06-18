@@ -77,7 +77,9 @@ export class ChittyServClient {
    */
   async fetchFromChittyServ(credentialPath) {
     if (!this.baseUrl) {
-      throw new Error("CHITTYSERV_URL not configured — ChittyServ unavailable in this environment");
+      throw new Error(
+        "CHITTYSERV_URL not configured — ChittyServ unavailable in this environment",
+      );
     }
     const url = `${this.baseUrl}/v1/credentials/${credentialPath}`;
 

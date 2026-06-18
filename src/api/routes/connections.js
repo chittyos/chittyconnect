@@ -865,8 +865,24 @@ async function performHealthCheck(conn, env) {
           error: "URL blocked by SSRF policy",
         };
       }
+      // Automatically inject Cloudflare Access headers if provisioned
+      const cfSlug = (conn.slug || "").toUpperCase().replace(/-/g, "_");
+      const cfClientId =
+        env[`CF_ACCESS_CLIENT_ID_${cfSlug}`] ||
+        env[`CF_ACCESS_CLIENT_ID_${cfSlug.replace(/^CHITTY/, "")}`];
+      const cfClientSecret =
+        env[`CF_ACCESS_CLIENT_SECRET_${cfSlug}`] ||
+        env[`CF_ACCESS_CLIENT_SECRET_${cfSlug.replace(/^CHITTY/, "")}`];
+
+      const headers = {};
+      if (cfClientId && cfClientSecret) {
+        headers["CF-Access-Client-Id"] = cfClientId;
+        headers["CF-Access-Client-Secret"] = cfClientSecret;
+      }
+
       const response = await fetch(url, {
         method: "GET",
+        headers,
         signal: AbortSignal.timeout(5000),
       });
 
