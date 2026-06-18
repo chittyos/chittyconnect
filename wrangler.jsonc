@@ -127,6 +127,9 @@
       },
 
       // Resource bindings — dev
+      "agent_memory": [
+        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],
@@ -248,11 +251,15 @@
         "crons": [
           "0 * * * *",
           "*/5 * * * *",
-          "*/50 * * * *"
+          "*/50 * * * *",
+          "0 0 * * *"
         ]
       },
 
       // Resource bindings — staging
+      "agent_memory": [
+        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],
@@ -384,11 +391,15 @@
         "crons": [
           "0 * * * *",
           "*/5 * * * *",
-          "*/50 * * * *"
+          "*/50 * * * *",
+          "0 0 * * *"
         ]
       },
 
       // Resource bindings — production
+      "agent_memory": [
+        { "binding": "MEMORY", "namespace": "ch1tty-memory" }
+      ],
       "r2_buckets": [
         { "binding": "FILES", "bucket_name": "chittyos-files" }
       ],

@@ -18,13 +18,66 @@ class MockKV {
   }
 }
 
+class MockAgentMemoryProfile {
+  constructor(id) {
+    this.id = id;
+    this.ingested = [];
+    this.remembered = [];
+    this.recalls = [];
+    this.summaries = [];
+  }
+
+  async ingest(messages, options) {
+    this.ingested.push({ messages, options });
+  }
+
+  async remember(facts) {
+    this.remembered.push(facts);
+  }
+
+  async recall(query, options) {
+    this.recalls.push({ query, options });
+    return {
+      candidates: [
+        { summary: "recalled fact", score: 0.9, sessionId: this.id }
+      ]
+    };
+  }
+
+  async getSummary(options) {
+    this.summaries.push(options);
+    return {
+      summary: "session summary text"
+    };
+  }
+}
+
+class MockAgentMemory {
+  constructor() {
+    this.profiles = new Map();
+  }
+
+  async getProfile(id) {
+    if (!this.profiles.has(id)) {
+      this.profiles.set(id, new MockAgentMemoryProfile(id));
+    }
+    return this.profiles.get(id);
+  }
+
+  async deleteProfile(id) {
+    this.profiles.delete(id);
+  }
+}
+
 describe("MemoryCloude user history", () => {
   let kv;
   let memory;
+  let mockMemory;
 
   beforeEach(async () => {
     kv = new MockKV();
-    memory = new MemoryCloude({ TOKEN_KV: kv });
+    mockMemory = new MockAgentMemory();
+    memory = new MemoryCloude({ TOKEN_KV: kv, MEMORY: mockMemory });
     await memory.initialize();
   });
 
@@ -72,5 +125,28 @@ describe("MemoryCloude user history", () => {
     const history = await memory.getUserHistory("user-legacy", 5);
     expect(history).toHaveLength(1);
     expect(history[0].content).toBe("legacy payload");
+  });
+
+  it("uses the native agent_memory binding for persistence and recall", async () => {
+    await memory.persistInteraction("session-test", {
+      userId: "user-test",
+      type: "request",
+      content: "hello memory",
+    });
+
+    const profile = await mockMemory.getProfile("user-test");
+    expect(profile.ingested.length).toBe(1);
+    expect(profile.ingested[0].messages[0].content).toContain("hello memory");
+
+    // Test recallContext
+    const recallResults = await memory.recallContext("session-test", "hello");
+    expect(profile.recalls.length).toBe(1);
+    expect(profile.recalls[0].query).toBe("hello");
+    expect(recallResults).toHaveLength(1);
+    expect(recallResults[0].content).toBe("recalled fact");
+
+    // Test getSessionSummary
+    const summary = await memory.getSessionSummary("session-test");
+    expect(summary).toBe("session summary text");
   });
 });

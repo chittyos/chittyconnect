@@ -14,6 +14,7 @@ export class MemoryCloude {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
     this.vectorStore = env.MEMORY_VECTORIZE; // Cloudflare Vectorize for semantic memory
+    this.memoryNs = env.MEMORY; // Cloudflare Agent Memory binding
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year
@@ -29,8 +30,15 @@ export class MemoryCloude {
 
     // Check for Vectorize availability
     this.hasVectorize = !!this.vectorStore;
+    this.hasAgentMemory = !!this.memoryNs;
 
-    if (!this.hasVectorize) {
+    if (!this.hasAgentMemory) {
+      console.warn(
+        "[MemoryCloude™] Agent Memory binding (MEMORY) not available.",
+      );
+    }
+
+    if (!this.hasVectorize && !this.hasAgentMemory) {
       console.warn(
         "[MemoryCloude™] Vectorize not available, using KV-only mode",
       );
@@ -57,7 +65,61 @@ export class MemoryCloude {
       { expirationTtl: this.retention.conversations * 86400 },
     );
 
-    // 2. Generate and store embedding (if Vectorize available)
+    // Store mapping of sessionId -> userId if userId is present
+    if (interaction.userId) {
+      await this.kv.put(`session:${sessionId}:user`, interaction.userId, {
+        expirationTtl: this.retention.conversations * 86400,
+      });
+    }
+
+    // 2. Ingest into Agent Memory
+    if (this.hasAgentMemory) {
+      try {
+        const profileKey = interaction.userId || sessionId;
+        const profile = await this.memoryNs.getProfile(profileKey);
+        const text = this.extractTextContent(interaction);
+
+        await profile.ingest(
+          [
+            {
+              role: interaction.role || "user",
+              content: text,
+              timestamp: new Date(),
+            },
+          ],
+          { sessionId },
+        );
+        console.log(
+          `[MemoryCloude™] Ingested interaction to Agent Memory profile: ${profileKey}`,
+        );
+      } catch (error) {
+        console.warn(
+          "[MemoryCloude™] Agent Memory ingest failed:",
+          error.message,
+        );
+      }
+
+      // If this is a task decomposition, store in global decompositions profile as well
+      if (interaction.type === "task_decomposition") {
+        try {
+          const globalProfile = await this.memoryNs.getProfile(
+            "global-decompositions",
+          );
+          const text = this.extractTextContent(interaction);
+          await globalProfile.ingest(
+            [{ role: "assistant", content: text, timestamp: new Date() }],
+            { sessionId },
+          );
+        } catch (error) {
+          console.warn(
+            "[MemoryCloude™] Global task decomposition ingest failed:",
+            error.message,
+          );
+        }
+      }
+    }
+
+    // 3. Generate and store embedding (if Vectorize available)
     if (this.hasVectorize) {
       await this.storeEmbedding(interactionId, sessionId, interaction);
     }
@@ -222,6 +284,32 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
+
+    if (this.hasAgentMemory) {
+      try {
+        const userId = await this.kv.get(`session:${sessionId}:user`);
+        const profileKey = userId || sessionId;
+        const profile = await this.memoryNs.getProfile(profileKey);
+
+        const result = await profile.recall(query, {
+          sessionId,
+        });
+
+        return (result.candidates || [])
+          .map((c) => ({
+            content: c.summary,
+            relevanceScore: c.score || 1.0,
+            sessionId: c.sessionId || sessionId,
+          }))
+          .slice(0, limit);
+      } catch (error) {
+        console.warn(
+          "[MemoryCloude™] Agent Memory recall failed:",
+          error.message,
+        );
+      }
+    }
+
     const useSemanticSearch = options.semantic !== false && this.hasVectorize;
 
     if (useSemanticSearch) {
@@ -480,6 +568,24 @@ export class MemoryCloude {
    * Get session summary
    */
   async getSessionSummary(sessionId) {
+    if (this.hasAgentMemory) {
+      try {
+        const userId = await this.kv.get(`session:${sessionId}:user`);
+        const profileKey = userId || sessionId;
+        const profile = await this.memoryNs.getProfile(profileKey);
+
+        const response = await profile.getSummary({ sessionId });
+        if (response && response.summary) {
+          return response.summary;
+        }
+      } catch (error) {
+        console.warn(
+          "[MemoryCloude™] Agent Memory getSummary failed:",
+          error.message,
+        );
+      }
+    }
+
     const summary = await this.kv.get(`session:${sessionId}:summary`);
 
     if (!summary) {
@@ -517,6 +623,23 @@ export class MemoryCloude {
    * Recall similar decompositions for Cognitive-Coordination™
    */
   async recallSimilarDecompositions(subtask) {
+    if (this.hasAgentMemory) {
+      try {
+        const profile = await this.memoryNs.getProfile("global-decompositions");
+        const result = await profile.recall(JSON.stringify(subtask));
+        return (result.candidates || []).map((c) => ({
+          task: subtask,
+          approach: c.summary,
+          performance: { success: true },
+        }));
+      } catch (error) {
+        console.warn(
+          "[MemoryCloude™] Similar decomposition recall failed:",
+          error.message,
+        );
+      }
+    }
+
     // Search for similar task decompositions in memory
     if (!this.hasVectorize) {
       return [];
