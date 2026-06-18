@@ -94,8 +94,10 @@ googleRoutes.get("/gdrive/files", async (c) => {
   if (fields) params.set("fields", fields);
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
-  // Shared-drive support: without these, files living in shared drives are
-  // invisible to list/get even when the delegated user is a member.
+  // Shared-drive support for files.list: supportsAllDrives, includeItemsFromAllDrives,
+  // and corpora are all required here; the latter two are list-only params and are
+  // not forwarded to files.get or download calls. supportsAllDrives is also set on
+  // those routes separately.
   params.set("supportsAllDrives", "true");
   params.set("includeItemsFromAllDrives", "true");
   params.set("corpora", "allDrives");
