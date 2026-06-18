@@ -1,3 +1,7 @@
+import {
+  handleProvisionSecretsRoute,
+  handleDirectFetchRoute,
+} from "./integrations/1password.js";
 /**
  * ChittyConnect - itsChitty™ GPT Connector
  *
@@ -253,7 +257,9 @@ function parseCsvEnv(value) {
 }
 
 function isCloudflareAccessAllowed(c) {
-  const email = (c.req.header("CF-Access-Authenticated-User-Email") || "").toLowerCase();
+  const email = (
+    c.req.header("CF-Access-Authenticated-User-Email") || ""
+  ).toLowerCase();
   if (!email) return false;
 
   const allowedEmails = parseCsvEnv(c.env.SECRETS_PORTAL_ACCESS_EMAILS);
@@ -286,7 +292,8 @@ app.use("/secrets-portal", async (c, next) => {
 });
 
 app.use("/api/v1/secrets/*", async (c, next) => {
-  const accessOnly = String(c.env.SECRETS_PORTAL_ACCESS_ONLY || "").toLowerCase() === "true";
+  const accessOnly =
+    String(c.env.SECRETS_PORTAL_ACCESS_ONLY || "").toLowerCase() === "true";
   const isPortalUpsertPath = c.req.path === "/api/v1/secrets/upsert";
 
   if (accessOnly && isPortalUpsertPath) {
@@ -1641,7 +1648,10 @@ app.get("/secrets-portal", (c) => {
 
 app.use("/secrets-portal/upsert", async (c, next) => {
   if (!isCloudflareAccessAllowed(c)) {
-    return c.json({ ok: false, error: "Cloudflare Access required for secrets portal" }, 401);
+    return c.json(
+      { ok: false, error: "Cloudflare Access required for secrets portal" },
+      401,
+    );
   }
   c.set("apiKey", {
     type: "cloudflare-access",
@@ -1666,7 +1676,11 @@ async function secretsUpsertHandler(c) {
       let context = {};
       const raw = String(form.contextJson || "").trim();
       if (raw) {
-        try { context = JSON.parse(raw); } catch { context = { _raw: raw }; }
+        try {
+          context = JSON.parse(raw);
+        } catch {
+          context = { _raw: raw };
+        }
       }
       body = {
         path: form.path,
@@ -1680,10 +1694,14 @@ async function secretsUpsertHandler(c) {
     const instructions =
       typeof body.instructions === "string" ? body.instructions.trim() : "";
     const context =
-      body.context && typeof body.context === "object" && !Array.isArray(body.context)
+      body.context &&
+      typeof body.context === "object" &&
+      !Array.isArray(body.context)
         ? body.context
         : {};
-    const wantsHtml = (c.req.header("accept") || "").includes("text/html") && !ct.includes("application/json");
+    const wantsHtml =
+      (c.req.header("accept") || "").includes("text/html") &&
+      !ct.includes("application/json");
 
     if (path && !/^[a-z0-9._-]+(\/[a-z0-9._-]+){2,}$/i.test(path)) {
       return c.json(
@@ -1717,16 +1735,37 @@ async function secretsUpsertHandler(c) {
     // applies the secret to its target store, and deletes the KV record.
     const aesKeyB64 = c.env.SECRETS_PORTAL_AES_KEY;
     if (!aesKeyB64) {
-      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY is not configured." }, 503);
+      return c.json(
+        { ok: false, error: "SECRETS_PORTAL_AES_KEY is not configured." },
+        503,
+      );
     }
-    const aesKeyRaw = Uint8Array.from(atob(aesKeyB64), (ch) => ch.charCodeAt(0));
+    const aesKeyRaw = Uint8Array.from(atob(aesKeyB64), (ch) =>
+      ch.charCodeAt(0),
+    );
     if (aesKeyRaw.byteLength !== 32) {
-      return c.json({ ok: false, error: "SECRETS_PORTAL_AES_KEY must be 32 bytes (base64-encoded)." }, 503);
+      return c.json(
+        {
+          ok: false,
+          error: "SECRETS_PORTAL_AES_KEY must be 32 bytes (base64-encoded).",
+        },
+        503,
+      );
     }
-    const cryptoKey = await crypto.subtle.importKey("raw", aesKeyRaw, "AES-GCM", false, ["encrypt"]);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      aesKeyRaw,
+      "AES-GCM",
+      false,
+      ["encrypt"],
+    );
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const cipherBytes = new Uint8Array(
-      await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, new TextEncoder().encode(value)),
+      await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        new TextEncoder().encode(value),
+      ),
     );
     const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
 
@@ -1766,8 +1805,14 @@ async function secretsUpsertHandler(c) {
     return c.json(result);
   } catch (error) {
     console.error("[SecretsPortal] upsert failed:", error);
-    const errResult = { ok: false, error: error?.message || "Secret upsert failed" };
-    if ((c.req.header("accept") || "").includes("text/html") && !(c.req.header("content-type") || "").includes("application/json")) {
+    const errResult = {
+      ok: false,
+      error: error?.message || "Secret upsert failed",
+    };
+    if (
+      (c.req.header("accept") || "").includes("text/html") &&
+      !(c.req.header("content-type") || "").includes("application/json")
+    ) {
       c.header("Cache-Control", "no-store");
       return c.html(renderResultPage(errResult, false), 500);
     }
@@ -1787,8 +1832,12 @@ pre{background:#0a1324;border:1px solid #23324d;border-radius:8px;padding:14px;w
 a{display:inline-block;margin-top:14px;color:#2a66f5;}
 </style></head><body><div class="wrap"><div class="panel">
 <h1>${status}</h1>
-${ok ? `<p>Request <code>${result.requestId}</code> accepted at ${result.timestamp}.</p>
-<p>Path: <code>${result.path}</code><br>Encrypted at rest (AES-GCM-256), TTL ${result.ttl}.<br>Awaiting ChittyConnect internal consumer.</p>` : `<p>${(result.error || "").replace(/[<>&"']/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[m]))}</p>`}
+${
+  ok
+    ? `<p>Request <code>${result.requestId}</code> accepted at ${result.timestamp}.</p>
+<p>Path: <code>${result.path}</code><br>Encrypted at rest (AES-GCM-256), TTL ${result.ttl}.<br>Awaiting ChittyConnect internal consumer.</p>`
+    : `<p>${(result.error || "").replace(/[<>&"']/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" })[m])}</p>`
+}
 <a href="/secrets-portal">← Submit another</a>
 </div></div></body></html>`;
 }
@@ -2224,112 +2273,31 @@ export default withSentry(
   {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
-    const host = (url.hostname || "").toLowerCase();
+      const host = (url.hostname || "").toLowerCase();
 
-    // Debug: log all OAuth-related requests to diagnose Notion integration
-    if (
-      url.pathname === "/token" ||
-      url.pathname === "/authorize" ||
-      url.pathname === "/register" ||
-      url.pathname.startsWith("/.well-known/")
-    ) {
-      console.log(
-        `[OAuth-Debug] ${request.method} ${url.pathname} from ${request.headers.get("Origin") || "no-origin"} referer=${request.headers.get("Referer") || "none"}`,
-      );
-    }
-
-    // MCP Server Metadata (draft spec): Notion requests this to discover the
-    // MCP endpoint URL before starting OAuth. Return minimal server card.
-    if (url.pathname === "/.well-known/mcp.json") {
-      return new Response(
-        JSON.stringify({
-          mcpVersion: "2025-03-26",
-          capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "ChittyConnect", version: "2.2.0" },
-          url: `${url.origin}/mcp`,
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(request),
-          },
-        },
-      );
-    }
-
-    // OIDC Discovery: Notion requests /.well-known/openid-configuration which
-    // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
-    // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
-    if (url.pathname === "/.well-known/openid-configuration") {
-      console.log(
-        "[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server",
-      );
-      const rewritten = new URL(request.url);
-      rewritten.pathname = "/.well-known/oauth-authorization-server";
-      request = new Request(rewritten.toString(), request);
-    }
-
-    // RFC 9728: Path-specific Protected Resource Metadata.
-    // OAuthProvider handles /.well-known/oauth-protected-resource (base).
-    // MCP clients request /.well-known/oauth-protected-resource/mcp
-    // for the /mcp resource path. Serve the same PRM for all subpaths.
-    if (
-      url.pathname.startsWith("/.well-known/oauth-protected-resource/") &&
-      url.pathname !== "/.well-known/oauth-protected-resource"
-    ) {
-      return new Response(
-        JSON.stringify({
-          resource: `${url.origin}`,
-          authorization_servers: [`${url.origin}`],
-          scopes_supported: ["mcp:read", "mcp:write", "mcp:admin"],
-          bearer_methods_supported: ["header"],
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(request),
-          },
-        },
-      );
-    }
-
-    // Strip redirect_uri query params for the token exchange (POST /token).
-    // The /authorize endpoint is handled by oauth-provider.js's handleAuthorize,
-    // which strips, validates, AND re-appends the extra params to the final redirect.
-    // We must NOT strip here for /authorize or the re-append logic loses the params.
-    if (url.pathname === "/token" && request.method === "POST") {
-      console.log(
-        "[OAuth-Debug] Stripping redirect_uri query params from token body",
-      );
-      request = await stripRedirectUriFromTokenBody(request);
-    }
-
-    // Route /chatgpt/mcp to McpConnectAgent via agents routing.
-    // Rewrite URL to /agents/mcp-agent/chatgpt-mcp so routeAgentRequest
-    // resolves it to the MCP_AGENT DO binding (mcp-agent in kebab-case).
-    // This preserves full env (KV, DO, R2) which OAuthProvider strips.
-    // @canon: chittycanon://core/services/chittyconnect/interface/chatgpt-mcp
-    if (
-      url.pathname === "/chatgpt/mcp" ||
-      url.pathname.startsWith("/chatgpt/mcp/")
-    ) {
-      try {
-        const handler = McpConnectAgent.serve("/chatgpt/mcp", {
-          binding: "MCP_AGENT",
-        });
-        return await handler.fetch(request, env, ctx);
-      } catch (err) {
-        const errorInfo = formatCaughtError(err);
-        console.error(
-          `[MCP-Agent] /chatgpt/mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+      // Debug: log all OAuth-related requests to diagnose Notion integration
+      if (
+        url.pathname === "/token" ||
+        url.pathname === "/authorize" ||
+        url.pathname === "/register" ||
+        url.pathname.startsWith("/.well-known/")
+      ) {
+        console.log(
+          `[OAuth-Debug] ${request.method} ${url.pathname} from ${request.headers.get("Origin") || "no-origin"} referer=${request.headers.get("Referer") || "none"}`,
         );
+      }
+
+      // MCP Server Metadata (draft spec): Notion requests this to discover the
+      // MCP endpoint URL before starting OAuth. Return minimal server card.
+      if (url.pathname === "/.well-known/mcp.json") {
         return new Response(
           JSON.stringify({
-            error: "internal_error",
-            error_description: errorInfo.message,
+            mcpVersion: "2025-03-26",
+            capabilities: { tools: { listChanged: false } },
+            serverInfo: { name: "ChittyConnect", version: "2.2.0" },
+            url: `${url.origin}/mcp`,
           }),
           {
-            status: 500,
             headers: {
               "Content-Type": "application/json",
               ...corsHeaders(request),
@@ -2337,25 +2305,35 @@ export default withSentry(
           },
         );
       }
-    }
 
-    // When mcp.chitty.cc is fronted by Cloudflare Managed OAuth, Access owns
-    // the OAuth exchange and the origin should behave like a plain MCP server.
-    if (host === "mcp.chitty.cc" && url.pathname === "/mcp") {
-      try {
-        return mcpAgentHandler.fetch(request, env, ctx);
-      } catch (err) {
-        const errorInfo = formatCaughtError(err);
-        console.error(
-          `[MCP-Agent] /mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
+      // OIDC Discovery: Notion requests /.well-known/openid-configuration which
+      // OAuthProvider doesn't serve. Rewrite to /.well-known/oauth-authorization-server
+      // (RFC 8414) which OAuthProvider handles natively — same metadata, different path.
+      if (url.pathname === "/.well-known/openid-configuration") {
+        console.log(
+          "[OAuth-Debug] Rewriting openid-configuration → oauth-authorization-server",
         );
+        const rewritten = new URL(request.url);
+        rewritten.pathname = "/.well-known/oauth-authorization-server";
+        request = new Request(rewritten.toString(), request);
+      }
+
+      // RFC 9728: Path-specific Protected Resource Metadata.
+      // OAuthProvider handles /.well-known/oauth-protected-resource (base).
+      // MCP clients request /.well-known/oauth-protected-resource/mcp
+      // for the /mcp resource path. Serve the same PRM for all subpaths.
+      if (
+        url.pathname.startsWith("/.well-known/oauth-protected-resource/") &&
+        url.pathname !== "/.well-known/oauth-protected-resource"
+      ) {
         return new Response(
           JSON.stringify({
-            error: "internal_error",
-            error_description: errorInfo.message,
+            resource: `${url.origin}`,
+            authorization_servers: [`${url.origin}`],
+            scopes_supported: ["mcp:read", "mcp:write", "mcp:admin"],
+            bearer_methods_supported: ["header"],
           }),
           {
-            status: 500,
             headers: {
               "Content-Type": "application/json",
               ...corsHeaders(request),
@@ -2363,191 +2341,258 @@ export default withSentry(
           },
         );
       }
-    }
 
-    // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
-    // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
-    // handler entirely (past the oauthProvider catch block below) and causes
-    // Cloudflare to return 530 (error 1101 — uncaught Worker exception).
-    let agentResponse;
-    let agentRouted = false;
-    try {
-      agentResponse = await routeAgentRequest(request, env);
-      // routeAgentRequest returning undefined means "not an agent path" and we
-      // should fall through to the next handler. Throwing means the agent path
-      // matched but the DO/fetch failed — return a 500 instead of masking the
-      // failure as an unrelated 404 from oauthProvider.
-      agentRouted = agentResponse instanceof Response;
-    } catch (err) {
-      const errorInfo = formatCaughtError(err);
-      console.error(
-        `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${errorInfo.message}
-${errorInfo.stack}`,
-      );
-      return new Response(
-        JSON.stringify({ error: "agent_routing_failed", error_description: err.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
-    }
-    if (agentRouted) return agentResponse;
-
-    let response;
-    try {
-      if (isOAuthProviderRoute(url)) {
-        response = await oauthProvider.fetch(request, env, ctx);
-      } else {
-        response = await app.fetch(request, env, ctx);
-      }
-    } catch (err) {
-      const errorInfo = formatCaughtError(err);
-      console.error(`[Fetch-Fatal] ${request.method} ${url.pathname} threw: ${errorInfo.message}
-${errorInfo.stack}`);
-      return new Response(
-        JSON.stringify({
-          error: "internal_error",
-          error_description: errorInfo.message,
-        }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(request),
-          },
-        },
-      );
-    }
-
-    // Hard guard: some downstream handlers/middleware may accidentally return
-    // undefined/non-Response, which causes Cloudflare to emit 1101
-    // ("Incorrect type for Promise: did not resolve to Response").
-    if (!(response instanceof Response)) {
-      console.error(
-        `[Fetch-Fatal] ${request.method} ${url.pathname} returned non-Response`,
-      );
-      return new Response(
-        JSON.stringify({
-          error: "invalid_handler_response",
-          error_description:
-            "Request handler did not return a valid Response object",
-        }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(request),
-          },
-        },
-      );
-    }
-
-    // Debug: log response status for OAuth endpoints
-    if (
-      url.pathname === "/token" ||
-      url.pathname === "/authorize" ||
-      url.pathname === "/register"
-    ) {
-      console.log(
-        `[OAuth-Debug] ${request.method} ${url.pathname} → ${response.status}`,
-      );
-    }
-
-    return response;
-  },
-
-  /**
-   * Queue consumer for async event processing
-   */
-  async queue(batch, env) {
-    if (batch.queue === "documint-proofs") {
-      const { proofQueueConsumer } = await import("./handlers/proof-queue.js");
-      await proofQueueConsumer(batch, env);
-    } else {
-      await queueConsumer(batch, env);
-    }
-  },
-
-  // Scheduled handler for cron triggers
-  // - "0 * * * *"     (hourly)  → 1Password event sync to ChittyChronicle
-  // - every 5 min     → Connection health checks
-  async scheduled(event, env, ctx) {
-    console.log(
-      `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
-    );
-
-    // OAuth token rotation (every 50 minutes)
-    if (event.cron === "*/50 * * * *") {
-      try {
-        const rotation = new SecretRotationService(env);
-        const result = await rotation.forceRotate("gdrive_access_token");
+      // Strip redirect_uri query params for the token exchange (POST /token).
+      // The /authorize endpoint is handled by oauth-provider.js's handleAuthorize,
+      // which strips, validates, AND re-appends the extra params to the final redirect.
+      // We must NOT strip here for /authorize or the re-append logic loses the params.
+      if (url.pathname === "/token" && request.method === "POST") {
         console.log(
-          `[Scheduled] OAuth rotation: ${result.ok ? "success" : result.error}`,
+          "[OAuth-Debug] Stripping redirect_uri query params from token body",
         );
-      } catch (err) {
-        console.error(`[Scheduled] OAuth rotation failed:`, err);
-      }
-      return;
-    }
-
-    // Connection health checks (every 5 minutes)
-    if (event.cron === "*/5 * * * *") {
-      try {
-        const summary = await runAllHealthChecks(env);
-        console.log(
-          `[Scheduled] Health checks complete: ${summary.healthy}/${summary.total} healthy, ${summary.degraded} degraded, ${summary.down} down`,
-        );
-      } catch (err) {
-        console.error(`[Scheduled] Health checks failed:`, err);
-      }
-      return;
-    }
-
-    // Hourly cron — secret rotation + 1Password sync
-    if (event.cron === "0 * * * *") {
-      // Secret rotation check (runs due rotations only)
-      try {
-        const rotation = new SecretRotationService(env);
-        const report = await rotation.runDueRotations();
-        console.log(
-          `[Scheduled] Secret rotation: ${report.rotated.length} rotated, ${report.skipped.length} skipped, ${report.failed.length} failed`,
-        );
-      } catch (err) {
-        console.error(`[Scheduled] Secret rotation failed:`, err);
+        request = await stripRedirectUriFromTokenBody(request);
       }
 
-      // 1Password event sync
-      try {
-        const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
-        if (!chronicleUrl)
-          throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-        const response = await fetch(`${chronicleUrl}/api/sync/1password`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(env.CHITTY_CHRONICLE_TOKEN
-              ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-              : {}),
-          },
-          body: JSON.stringify({
-            source: "chittyconnect-cron",
-            timestamp: new Date().toISOString(),
-          }),
-        });
-        if (!response.ok) {
+      // When mcp.chitty.cc is fronted by Cloudflare Managed OAuth, Access owns
+      // the OAuth exchange and the origin should behave like a plain MCP server.
+      if (
+        (host === "mcp.chitty.cc" ||
+          host === "mcp.ch1tty.com" ||
+          host.startsWith("127.0.0.1") ||
+          host === "localhost") &&
+        url.pathname === "/mcp"
+      ) {
+        try {
+          return mcpAgentHandler.fetch(request, env, ctx);
+        } catch (err) {
+          const errorInfo = formatCaughtError(err);
           console.error(
-            `[Scheduled] 1Password sync failed: ${response.status}`,
+            `[MCP-Agent] /mcp threw: ${errorInfo.message}\n${errorInfo.stack}`,
           );
+          return new Response(
+            JSON.stringify({
+              error: "internal_error",
+              error_description: errorInfo.message,
+            }),
+            {
+              status: 500,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders(request),
+              },
+            },
+          );
+        }
+      }
+
+      // Route Agents SDK requests (including rewritten /chatgpt/mcp) to DO
+      // Wrapped in try-catch: an uncaught throw here propagates out of the fetch
+      // handler entirely (past the oauthProvider catch block below) and causes
+      // Cloudflare to return 530 (error 1101 — uncaught Worker exception).
+
+      // 1Password Secrets Broker Routes
+      if (
+        request.method === "POST" &&
+        url.pathname === "/admin/provision-secrets"
+      ) {
+        return handleProvisionSecretsRoute(request, env);
+      }
+      if (request.method === "GET" && url.pathname.startsWith("/secrets/")) {
+        return handleDirectFetchRoute(request, env);
+      }
+
+      let agentResponse;
+      let agentRouted = false;
+      try {
+        agentResponse = await routeAgentRequest(request, env);
+        // routeAgentRequest returning undefined means "not an agent path" and we
+        // should fall through to the next handler. Throwing means the agent path
+        // matched but the DO/fetch failed — return a 500 instead of masking the
+        // failure as an unrelated 404 from oauthProvider.
+        agentRouted = agentResponse instanceof Response;
+      } catch (err) {
+        const errorInfo = formatCaughtError(err);
+        console.error(
+          `[Agents] routeAgentRequest threw for ${request.method} ${url.pathname}: ${errorInfo.message}
+${errorInfo.stack}`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "agent_routing_failed",
+            error_description: err.message,
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (agentRouted) return agentResponse;
+
+      let response;
+      try {
+        if (isOAuthProviderRoute(url)) {
+          response = await oauthProvider.fetch(request, env, ctx);
         } else {
-          console.log(`[Scheduled] 1Password sync: ${response.status}`);
+          response = await app.fetch(request, env, ctx);
         }
       } catch (err) {
-        console.error(`[Scheduled] 1Password sync failed:`, err);
+        const errorInfo = formatCaughtError(err);
+        console.error(`[Fetch-Fatal] ${request.method} ${url.pathname} threw: ${errorInfo.message}
+${errorInfo.stack}`);
+        return new Response(
+          JSON.stringify({
+            error: "internal_error",
+            error_description: errorInfo.message,
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
       }
-      return;
-    }
 
-    console.warn(`[Scheduled] Unhandled cron trigger: ${event.cron}`);
+      // Hard guard: some downstream handlers/middleware may accidentally return
+      // undefined/non-Response, which causes Cloudflare to emit 1101
+      // ("Incorrect type for Promise: did not resolve to Response").
+      if (!(response instanceof Response)) {
+        console.error(
+          `[Fetch-Fatal] ${request.method} ${url.pathname} returned non-Response`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "invalid_handler_response",
+            error_description:
+              "Request handler did not return a valid Response object",
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders(request),
+            },
+          },
+        );
+      }
+
+      // Debug: log response status for OAuth endpoints
+      if (
+        url.pathname === "/token" ||
+        url.pathname === "/authorize" ||
+        url.pathname === "/register"
+      ) {
+        console.log(
+          `[OAuth-Debug] ${request.method} ${url.pathname} → ${response.status}`,
+        );
+      }
+
+      return response;
+    },
+
+    /**
+     * Queue consumer for async event processing
+     */
+    async queue(batch, env) {
+      if (batch.queue === "documint-proofs") {
+        const { proofQueueConsumer } =
+          await import("./handlers/proof-queue.js");
+        await proofQueueConsumer(batch, env);
+      } else if (
+        batch.queue === "access-events" ||
+        (batch.messages.length > 0 &&
+          batch.messages[0].body?.type?.startsWith("cf.access"))
+      ) {
+        const { accessQueueConsumer } =
+          await import("./handlers/access-queue.js");
+        await accessQueueConsumer(batch, env);
+      } else {
+        await queueConsumer(batch, env);
+      }
+    },
+
+    // Scheduled handler for cron triggers
+    // - "0 * * * *"     (hourly)  → 1Password event sync to ChittyChronicle
+    // - every 5 min     → Connection health checks
+    async scheduled(event, env, ctx) {
+      console.log(
+        `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
+      );
+
+      // OAuth token rotation (every 50 minutes)
+      if (event.cron === "*/50 * * * *") {
+        try {
+          const rotation = new SecretRotationService(env);
+          const result = await rotation.forceRotate("gdrive_access_token");
+          console.log(
+            `[Scheduled] OAuth rotation: ${result.ok ? "success" : result.error}`,
+          );
+        } catch (err) {
+          console.error(`[Scheduled] OAuth rotation failed:`, err);
+        }
+        return;
+      }
+
+      // Connection health checks (every 5 minutes)
+      if (event.cron === "*/5 * * * *") {
+        try {
+          const summary = await runAllHealthChecks(env);
+          console.log(
+            `[Scheduled] Health checks complete: ${summary.healthy}/${summary.total} healthy, ${summary.degraded} degraded, ${summary.down} down`,
+          );
+        } catch (err) {
+          console.error(`[Scheduled] Health checks failed:`, err);
+        }
+        return;
+      }
+
+      // Hourly cron — secret rotation + 1Password sync
+      if (event.cron === "0 * * * *") {
+        // Secret rotation check (runs due rotations only)
+        try {
+          const rotation = new SecretRotationService(env);
+          const report = await rotation.runDueRotations();
+          console.log(
+            `[Scheduled] Secret rotation: ${report.rotated.length} rotated, ${report.skipped.length} skipped, ${report.failed.length} failed`,
+          );
+        } catch (err) {
+          console.error(`[Scheduled] Secret rotation failed:`, err);
+        }
+
+        // 1Password event sync
+        try {
+          const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
+          if (!chronicleUrl)
+            throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
+          const response = await fetch(`${chronicleUrl}/api/sync/1password`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(env.CHITTY_CHRONICLE_TOKEN
+                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+                : {}),
+            },
+            body: JSON.stringify({
+              source: "chittyconnect-cron",
+              timestamp: new Date().toISOString(),
+            }),
+          });
+          if (!response.ok) {
+            console.error(
+              `[Scheduled] 1Password sync failed: ${response.status}`,
+            );
+          } else {
+            console.log(`[Scheduled] 1Password sync: ${response.status}`);
+          }
+        } catch (err) {
+          console.error(`[Scheduled] 1Password sync failed:`, err);
+        }
+        return;
+      }
+
+      console.warn(`[Scheduled] Unhandled cron trigger: ${event.cron}`);
+    },
   },
-});
+);
 
 /**
  * Export Durable Object classes
