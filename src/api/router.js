@@ -143,7 +143,7 @@ api.get("/openapi.json", (c) => {
   return c.json(openapiSpec);
 });
 
-// Route handlers
+// Route handlers (Legacy unversioned paths)
 api.route("/api/chittyid", chittyidRoutes);
 api.route("/api/chittycases", chittycasesRoutes);
 api.route("/api/chittydisputes", chittydisputesRoutes);
@@ -157,16 +157,38 @@ api.route("/api/chittysync", chittysyncRoutes);
 api.route("/api/chittyevidence", chittyevidenceRoutes);
 api.route("/api/registry", registryRoutes);
 api.route("/api/services", servicesRoutes);
-api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/google", googleRoutes);
+api.route("/api/credentials", credentialsRoutes);
+api.route("/api/intelligence", intelligence);
+
+// Route handlers (v1 standard paths - Aliased)
+api.route("/api/v1/chittyid", chittyidRoutes);
+api.route("/api/v1/chittycases", chittycasesRoutes);
+api.route("/api/v1/chittydisputes", chittydisputesRoutes);
+api.route("/api/v1/chittytrack", chittytrackRoutes);
+api.route("/api/v1/chittyauth", chittyauthRoutes);
+api.route("/api/v1/chittyfinance", chittyfinanceRoutes);
+api.route("/api/v1/chittycontextual", chittycontextualRoutes);
+api.route("/api/v1/chittychronicle", chittychronicleRoutes);
+api.route("/api/v1/chittyquality", chittyqualityRoutes);
+api.route("/api/v1/chittysync", chittysyncRoutes);
+api.route("/api/v1/chittyevidence", chittyevidenceRoutes);
+api.route("/api/v1/registry", registryRoutes);
+api.route("/api/v1/services", servicesRoutes);
+api.route("/api/v1/thirdparty", thirdpartyRoutes);
+api.route("/api/v1/google", googleRoutes);
+api.route("/api/v1/credentials", credentialsRoutes);
 
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
-// Rewrites to /api/thirdparty/mercury/* so the thirdparty handler picks them up.
+// Rewrites to /api/v1/thirdparty/mercury/* so the thirdparty handler picks them up.
 api.all("/api/mercury/*", async (c) => {
   try {
     const url = new URL(c.req.url);
-    url.pathname = url.pathname.replace("/api/mercury", "/api/thirdparty/mercury");
+    url.pathname = url.pathname.replace(
+      "/api/mercury",
+      "/api/v1/thirdparty/mercury",
+    );
     const newReq = new Request(url.toString(), c.req.raw);
     return thirdpartyRoutes.fetch(newReq, c.env, c.executionCtx);
   } catch (error) {
@@ -174,8 +196,6 @@ api.all("/api/mercury/*", async (c) => {
     return c.json({ error: error.message }, 500);
   }
 });
-api.route("/api/credentials", credentialsRoutes);
-api.route("/api/intelligence", intelligence);
 api.route("/api/context", contextRoutes);
 api.route("/api/v1/context", contextRoutes);
 api.route("/api/context/tasks", tasksRoutes);

@@ -14,6 +14,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      canary_percentage:
+        description: 'Percentage of traffic to route to new version (1-100)'
+        required: false
+        default: '100'
+        type: string
 
 permissions:
   contents: read
@@ -30,7 +36,7 @@ jobs:
   # Validate & Migrate
   #########################################
   validate:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,11 +92,40 @@ jobs:
       - run: npm ci
 
       - name: Deploy to Cloudflare
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Pass the workflow input through env, never interpolated directly into
+          # the shell below — `${{ }}` expansion inside run: is a template-injection
+          # sink (a crafted canary_percentage could execute arbitrary commands).
+          CANARY_PERCENTAGE: ${{ inputs.canary_percentage || '100' }}
+        run: |
+          PERCENTAGE="$CANARY_PERCENTAGE"
+          # Validate: integer 0-100 only. Reject anything else (defense against
+          # injection / malformed input) before it reaches wrangler.
+          if ! printf '%s' "$PERCENTAGE" | grep -qE '^[0-9]{1,3}$' || [ "$PERCENTAGE" -gt 100 ]; then
+            echo "::error::Invalid canary_percentage '$PERCENTAGE' — must be an integer 0-100"
+            exit 1
+          fi
+          if [ "$PERCENTAGE" != "100" ]; then
+            echo "Uploading new version for canary deployment..."
+            # Note: We still must use the required CHITTYCONNECT_SAFE_DEPLOY=1 bypass
+            UPLOAD_OUT=$(CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler versions upload --env production --dry-run=false)
+            echo "$UPLOAD_OUT"
+            
+            # Extract VERSION_ID or fallback
+            VERSION_ID=$(echo "$UPLOAD_OUT" | grep "Version ID:" | awk '{print $3}' || true)
+            if [ -n "$VERSION_ID" ]; then
+              echo "Routing $PERCENTAGE% of traffic to version $VERSION_ID..."
+              CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler versions deploy --env production --percentage "$PERCENTAGE" --version-id "$VERSION_ID"
+            else
+              echo "Failed to extract VERSION_ID from upload. Proceeding with standard deploy."
+              CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env production
+            fi
+          else
+            echo "Deploying 100% of traffic..."
+            CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env production
+          fi
 
   #########################################
   # Post-deploy verification + rollback

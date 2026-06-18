@@ -35,6 +35,8 @@ import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
 import { SecretRotationService } from "./services/secret-rotation.js";
+import { rateLimitMiddleware } from "./middleware/rate-limit.js";
+import { withSentry } from "@sentry/cloudflare";
 
 const app = new Hono();
 
@@ -211,6 +213,9 @@ async function ensureEcosystemInitialized(env) {
     return null;
   }
 }
+
+// Rate Limiting Middleware
+app.use("*", rateLimitMiddleware);
 
 // Middleware to ensure ecosystem is initialized
 app.use("*", async (c, next) => {
@@ -2211,9 +2216,14 @@ async function stripRedirectUriFromTokenBody(request) {
   }
 }
 
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+export default withSentry(
+  (env) => ({
+    dsn: env.SENTRY_DSN || "",
+    tracesSampleRate: 1.0,
+  }),
+  {
+    async fetch(request, env, ctx) {
+      const url = new URL(request.url);
     const host = (url.hostname || "").toLowerCase();
 
     // Debug: log all OAuth-related requests to diagnose Notion integration
@@ -2537,7 +2547,7 @@ ${errorInfo.stack}`);
 
     console.warn(`[Scheduled] Unhandled cron trigger: ${event.cron}`);
   },
-};
+});
 
 /**
  * Export Durable Object classes
