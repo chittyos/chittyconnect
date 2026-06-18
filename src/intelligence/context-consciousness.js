@@ -104,37 +104,28 @@ export class ContextConsciousness {
    * Check health of a specific service
    */
   async checkServiceHealth(name, service) {
-    const start = Date.now();
-    let status = "healthy";
-    let latency = 0;
-
+    const portalUrl =
+      this.env.PORTAL_STATUS_URL || "https://mcp.chitty.cc/api/v1/servers";
     try {
-      const healthUrl = service.healthEndpoint || `${service.url}/health`;
-      const response = await fetch(healthUrl, {
-        method: "GET",
-        signal: AbortSignal.timeout(5000), // 5s timeout
+      const response = await fetch(portalUrl, {
+        headers: { Authorization: `Bearer ${this.env.PORTAL_API_KEY}` },
       });
-
-      latency = Date.now() - start;
-
       if (!response.ok) {
-        status = response.status >= 500 ? "down" : "degraded";
-      } else if (latency > this.alertThresholds.latency) {
-        status = "degraded";
+        throw new Error(`Portal returned status ${response.status}`);
       }
-
+      const data = await response.json();
+      const server = data.servers?.find((s) => s.id === name);
       return {
-        status,
-        latency,
+        status: server?.status === "Ready" ? "healthy" : "down",
         lastCheck: Date.now(),
-        details: await response.json().catch(() => ({})),
+        details: server || {},
       };
     } catch (error) {
       return {
         status: "down",
-        latency: Date.now() - start,
-        lastCheck: Date.now(),
         error: error.message,
+        lastCheck: Date.now(),
+        details: {},
       };
     }
   }
