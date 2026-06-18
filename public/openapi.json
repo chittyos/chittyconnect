@@ -13,10 +13,6 @@
     {
       "url": "https://connect.chitty.cc",
       "description": "Production ChittyConnect API"
-    },
-    {
-      "url": "https://connect-staging.chitty.cc",
-      "description": "Staging environment"
     }
   ],
   "security": [
