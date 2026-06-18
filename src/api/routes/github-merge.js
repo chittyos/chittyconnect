@@ -118,7 +118,18 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
   // "owner/name/extra", "/name", or "owner/" through, and split("/", 2) would
   // silently drop trailing segments — risking a merge against the wrong repo.
   const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
-  if (!repo || typeof repo !== "string" || !REPO_RE.test(repo)) {
+  // Reject "." / ".." name segments explicitly: they pass REPO_RE (dots are
+  // valid in repo names like ".github"), but URL resolution collapses
+  // /repos/owner/../pulls/... to a different path. encodeURIComponent does NOT
+  // encode dots, so the only safe guard is an exact-segment check.
+  const repoName = typeof repo === "string" ? repo.split("/", 2)[1] : "";
+  if (
+    !repo ||
+    typeof repo !== "string" ||
+    !REPO_RE.test(repo) ||
+    repoName === "." ||
+    repoName === ".."
+  ) {
     return c.json(
       {
         merged: false,
