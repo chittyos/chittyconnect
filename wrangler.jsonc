@@ -179,7 +179,6 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
-      "name": "chittyconnect-staging",
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
       // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
       // is owned by the chittymcp worker). Closes #192.
@@ -265,10 +264,8 @@
       ],
       "durable_objects": {
         "bindings": [
-          // Staging worker (chittyconnect-staging) binds to the production worker's DO.
-          // Cross-worker DO binding: keep script_name pinned to the prod worker name.
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" },
-          { "name": "SESSION_STATE", "class_name": "SessionStateActor", "script_name": "chittyconnect" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
         ]
       },
       "d1_databases": [
@@ -306,7 +303,6 @@
     // PRODUCTION — `wrangler deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
-      "name": "chittyconnect",
       // workers.dev URL is enabled so post-deploy CI can probe /health without
       // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
       // public surface is connect.chitty.cc. mcp.chitty.cc is owned by the
