@@ -26,6 +26,15 @@ async function parseStreamableResponse(res) {
 
   // SSE stream — collect "data:" lines
   const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // fallback
+    }
+  }
+
   const results = [];
   for (const line of text.split("\n")) {
     if (line.startsWith("data:")) {
