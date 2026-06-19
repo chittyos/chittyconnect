@@ -98,10 +98,24 @@ mcpRoutes.post("/tools/call", async (c) => {
     "",
   );
 
+  // Enrich context with ChittyID from the authenticated session.
+  // The credential gate uses context.chittyId to route through the
+  // MyChittyActor identity proxy instead of direct credential lookups.
+  const apiKeyInfo = c.get("apiKey") || {};
+  const enrichedContext = {
+    ...context,
+    chittyId:
+      context?.chittyId ||
+      context?.chitty_id ||
+      apiKeyInfo.chittyId ||
+      apiKeyInfo.userId ||
+      null,
+  };
+
   const result = await dispatchToolCall(name, args, c.env, {
     baseUrl,
     authToken,
-    context,
+    context: enrichedContext,
   });
 
   if (result.isError) {

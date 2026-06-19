@@ -13,11 +13,12 @@ import {
   getMintAuthToken,
 } from "../lib/credential-helper.js";
 import { serviceFetch } from "../lib/service-switch.js";
-import {
-  getCloudflareApiCredentials,
-  parseTimeframe,
-} from "../lib/cloudflare-api-helper.js";
+import { parseTimeframe } from "../lib/cloudflare-api-helper.js";
 import { getServiceCatalog } from "../lib/service-catalog.js";
+import {
+  gatedServiceAuth,
+  gatedCloudflareAuth,
+} from "../lib/credential-gate.js";
 import { Client } from "@neondatabase/serverless";
 
 /**
@@ -117,99 +118,32 @@ async function fetchServiceStatusSnapshot(env) {
  * @param {object} [options]
  * @param {string} [options.baseUrl] - Base URL for local API calls (e.g. "https://connect.chitty.cc")
  * @param {string} [options.authToken] - Bearer token for authenticated local calls
- * @param {object} [options.context] - MCP session context (sessionId, etc.)
+ * @param {object} [options.context] - MCP session context (sessionId, chittyId, etc.)
  * @returns {Promise<{content: Array<{type: string, text: string}>, isError?: boolean}>}
  */
 export async function dispatchToolCall(name, args = {}, env, options = {}) {
   const { baseUrl = "https://connect.chitty.cc", authToken, context } = options;
   // authHeader: only for calls to our own baseUrl (connect.chitty.cc internal routes)
   const authHeader = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-  // requireServiceAuth: for cross-service calls to *.chitty.cc siblings — fails explicitly if no token
+
+  // Extract ChittyID from context for credential gating.
+  // When present, credentials are acquired through the MyChittyActor identity
+  // gate (ledger proof required) instead of direct credential-helper lookups.
+  const callerChittyId = context?.chittyId || context?.chitty_id || null;
+  const gateContext = callerChittyId
+    ? { chittyId: callerChittyId, toolName: name, args }
+    : {};
+
+  // requireServiceAuth: for cross-service calls to *.chitty.cc siblings
+  // When a ChittyID is present, routes through the credential gate.
   const requireServiceAuth = async (serviceName, displayName) => {
-    let token;
-    try {
-      token = await getServiceToken(env, serviceName);
-    } catch (err) {
-      console.error(
-        `[MCP] Service token retrieval failed for ${displayName}:`,
-        err,
-      );
-      return {
-        error: {
-          content: [
-            {
-              type: "text",
-              text: `Authentication failed: Unable to retrieve service token for ${displayName} (${err.message})`,
-            },
-          ],
-          isError: true,
-        },
-        headers: {},
-      };
-    }
-    if (!token) {
-      return {
-        error: {
-          content: [
-            {
-              type: "text",
-              text: `Authentication required: No service token available for ${displayName}`,
-            },
-          ],
-          isError: true,
-        },
-        headers: {},
-      };
-    }
-    return { error: null, headers: { Authorization: `Bearer ${token}` } };
+    return gatedServiceAuth(env, serviceName, displayName, gateContext);
   };
 
-  // requireCloudflareAuth: for Cloudflare API calls — fails explicitly if no token/accountId
+  // requireCloudflareAuth: for Cloudflare API calls
+  // When a ChittyID is present, routes through the credential gate.
   const requireCloudflareAuth = async () => {
-    let apiToken, accountId;
-    try {
-      ({ apiToken, accountId } = await getCloudflareApiCredentials(env));
-    } catch (err) {
-      console.error("[MCP] Cloudflare credential retrieval failed:", err);
-      return {
-        error: {
-          content: [
-            {
-              type: "text",
-              text: `Cloudflare auth failed: ${err.message}`,
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-    if (!apiToken) {
-      return {
-        error: {
-          content: [
-            {
-              type: "text",
-              text: "Cloudflare API token not configured (set CLOUDFLARE_MAKE_API_KEY or 1Password path infrastructure/cloudflare/api_token)",
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-    if (!accountId) {
-      return {
-        error: {
-          content: [
-            {
-              type: "text",
-              text: "Cloudflare account ID not configured (set CHITTYOS_ACCOUNT_ID)",
-            },
-          ],
-          isError: true,
-        },
-      };
-    }
-    return { error: null, apiToken, accountId };
+    return gatedCloudflareAuth(env, gateContext);
   };
 
   try {
