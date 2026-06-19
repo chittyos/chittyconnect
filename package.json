@@ -46,6 +46,7 @@
     "LICENSE"
   ],
   "dependencies": {
+    "@cloudflare/actors": "^0.0.1-beta.6",
     "@cloudflare/workers-oauth-provider": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",

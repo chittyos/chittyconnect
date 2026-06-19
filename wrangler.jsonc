@@ -45,7 +45,8 @@
   // Migrations are global to the DO class, not per-env
   "migrations": [
     { "tag": "v3", "new_classes": ["MCPSessionDurableObject"] },
-    { "tag": "v4", "deleted_classes": ["MCPSessionDurableObject"], "new_sqlite_classes": ["McpConnectAgent"] }
+    { "tag": "v4", "deleted_classes": ["MCPSessionDurableObject"], "new_sqlite_classes": ["McpConnectAgent"] },
+    { "tag": "v5", "new_sqlite_classes": ["SessionStateActor"] }
   ],
 
   // ──────────────────────────────────────────────────────────────────
@@ -141,7 +142,8 @@
       ],
       "durable_objects": {
         "bindings": [
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
         ]
       },
       "d1_databases": [
@@ -265,7 +267,8 @@
         "bindings": [
           // Staging worker (chittyconnect-staging) binds to the production worker's DO.
           // Cross-worker DO binding: keep script_name pinned to the prod worker name.
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent", "script_name": "chittyconnect" },
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor", "script_name": "chittyconnect" }
         ]
       },
       "d1_databases": [
@@ -395,7 +398,8 @@
       ],
       "durable_objects": {
         "bindings": [
-          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" }
+          { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
         ]
       },
       "d1_databases": [
