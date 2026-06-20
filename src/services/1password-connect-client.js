@@ -550,6 +550,7 @@ export default OnePasswordConnectClient;
  * @param {string} value - Credential value
  * @param {object} [options]
  * @param {string} [options.notes] - Item notes
+ * @param {string} [options.category] - 1Password item category (default: "API_CREDENTIAL"; use "LOGIN" for DB connection strings)
  * @returns {Promise<{stored: boolean, action: string, item: string}>}
  */
 OnePasswordConnectClient.prototype.put = async function (credentialPath, value, options = {}) {
@@ -593,7 +594,7 @@ OnePasswordConnectClient.prototype.put = async function (credentialPath, value, 
   } else {
     // Create new item
     const newItem = {
-      vaultId: parsed.vaultId, title: parsed.item, category: "API_CREDENTIAL",
+      vaultId: parsed.vaultId, title: parsed.item, category: options.category || "API_CREDENTIAL",
       fields: [
         { id: "notesPlain", type: "STRING", purpose: "NOTES", label: "notesPlain", value: options.notes || `Stored via ChittyConnect ${new Date().toISOString()}` },
         { id: parsed.field, type: "CONCEALED", label: parsed.field, value },

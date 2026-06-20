@@ -546,6 +546,119 @@ credentialsRoutes.get("/twilio", async (c) => {
 });
 
 /**
+ * POST /api/credentials/backfill-from-neon
+ *
+ * Broker-native cold-backfill: fetches a Neon connection string from the Neon
+ * Management API using the Worker's own NEON_API_KEY, then writes it to
+ * 1Password using the Worker's own ONEPASSWORD_CONNECT_TOKEN. The caller never
+ * holds a Neon key, a 1Password token, or the plaintext connection string.
+ *
+ * Auth: Bearer <CHITTYCONNECT_SERVICE_TOKEN>
+ *
+ * Body:
+ *   neonProjectId  - Neon project ID
+ *   neonRole       - Neon role/user name
+ *   pooled         - Use pgBouncer pooled endpoint (default: true)
+ *   targetVault    - 1Password vault (infrastructure, services, integrations)
+ *   targetItem     - 1Password item title
+ *   targetField    - Field label to write (default: "password")
+ *   category       - 1Password category (default: "LOGIN")
+ *   notes          - Optional item notes
+ *
+ * Response (value never included):
+ *   { stored: true, vault, item, title, action }
+ */
+credentialsRoutes.post("/backfill-from-neon", async (c) => {
+  const inboundToken = (c.req.header("Authorization") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  if (!inboundToken || inboundToken !== c.env.CHITTYCONNECT_SERVICE_TOKEN) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const {
+      neonProjectId,
+      neonRole,
+      pooled = true,
+      targetVault,
+      targetItem,
+      targetField = "password",
+      category = "LOGIN",
+      notes,
+    } = await c.req.json();
+
+    if (!neonProjectId || !neonRole || !targetVault || !targetItem) {
+      return c.json(
+        { error: "neonProjectId, neonRole, targetVault, and targetItem are required" },
+        400,
+      );
+    }
+
+    if (!c.env.NEON_API_KEY) {
+      return c.json({ error: "NEON_API_KEY not configured" }, 503);
+    }
+
+    const params = new URLSearchParams({
+      role_name: neonRole,
+      pooled: String(pooled),
+    });
+    const neonResp = await fetch(
+      `https://console.neon.tech/api/v2/projects/${encodeURIComponent(neonProjectId)}/connection_uri?${params}`,
+      {
+        headers: {
+          Authorization: `Bearer ${c.env.NEON_API_KEY}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!neonResp.ok) {
+      await neonResp.text();
+      return c.json({ error: `Neon API error: ${neonResp.status}` }, 502);
+    }
+    const neonData = await neonResp.json();
+    const connectionString = neonData.uri;
+    if (!connectionString) {
+      return c.json({ error: "Neon API returned no connection URI" }, 502);
+    }
+
+    const { OnePasswordConnectClient } = await import(
+      "../../services/1password-connect-client.js"
+    );
+    const client = new OnePasswordConnectClient(c.env);
+    const result = await client.put(
+      `${targetVault}/${targetItem}/${targetField}`,
+      connectionString,
+      { notes, category },
+    );
+
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+        .bind("neon_backfill", targetItem, targetField, "backfill-from-neon")
+        .run();
+    } catch (dbErr) {
+      console.warn("[Credentials] Audit log failed:", dbErr.message);
+    }
+
+    return c.json(
+      {
+        stored: true,
+        vault: targetVault,
+        item: targetItem,
+        title: result.item || targetItem,
+        action: result.action,
+      },
+      result.action === "created" ? 201 : 200,
+    );
+  } catch (error) {
+    console.error("[Credentials] backfill-from-neon error (value redacted)");
+    return c.json({ error: "Backfill failed", code: "BACKFILL_FAILED" }, 500);
+  }
+});
+
+/**
  * GET /api/credentials/:vault/:item/:field
  *
  * Retrieve a specific credential from 1Password by path.
