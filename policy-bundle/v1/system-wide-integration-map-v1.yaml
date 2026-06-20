@@ -1,0 +1,42 @@
+version: 1
+# Canonical, host-independent references. Resolved from the published bundle
+# (policy-bundle/v1/) or the canon URI; never absolute local filesystem paths.
+contract:
+  policy_doc: chittycanon://canon/system-wide-sensitive-intent-contract-v1.md
+  policy_json: chittycanon://canon/system-wide-sensitive-intent-policy-v1.json
+  conformance: chittycanon://canon/system-wide-conformance-tests-v1.md
+  drift_remediation: chittycanon://canon/system-wide-drift-remediation-framework-v1.md
+
+surfaces:
+  claude_desktop:
+    enforce_at:
+      - prompt_policy_reference
+      - mcp_gateway_route_guard
+      - post_tool_response_filter
+  codex:
+    enforce_at:
+      - runtime_instruction_reference
+      - mcp_server_route_guard
+  chatgpt:
+    enforce_at:
+      - custom_instruction_reference
+      - app_bridge_route_guard
+  ch1tty:
+    enforce_at:
+      - cast_execute_router
+      - sensitive_intent_classifier
+      - fail_closed_error_normalizer
+  chittymcp:
+    enforce_at:
+      - tool_dispatch_policy_gate
+      - auth_scope_validator
+  chittyconnect_concierge:
+    enforce_at:
+      - capability_broker_only
+      - no_direct_secret_prompt_rule
+
+global_invariants:
+  - sensitive_intents_mandatory_broker
+  - no_long_lived_secret_paste_prompts
+  - fail_closed_on_broker_unavailable
+  - canonical_error_taxonomy_only

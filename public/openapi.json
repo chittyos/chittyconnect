@@ -13,10 +13,6 @@
     {
       "url": "https://connect.chitty.cc",
       "description": "Production ChittyConnect API"
-    },
-    {
-      "url": "https://connect-staging.chitty.cc",
-      "description": "Staging environment"
     }
   ],
   "security": [
@@ -1106,6 +1102,164 @@
                         "type": "object"
                       }
                     }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity/{chittyId}/policy-bundle": {
+      "get": {
+        "summary": "Get Identity Policy Bundle",
+        "description": "Return the system-wide governance policy bundle keyed by ChittyID so the governance contract travels with the identity across any channel (Claude, Desktop, Mobile, web, ChatGPT). Public, non-secret governance — no authentication required. Supports conditional requests via the ETag header (derived from the bundle's content hash): send a matching If-None-Match to receive 304 Not Modified.",
+        "operationId": "getIdentityPolicyBundle",
+        "tags": ["Identity"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "chittyId",
+            "in": "path",
+            "required": true,
+            "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Policy bundle for the identity",
+            "headers": {
+              "ETag": {
+                "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "description": "public, max-age=300, must-revalidate",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chittyId": { "type": "string" },
+                    "version": { "type": "string", "example": "v1" },
+                    "scope": { "type": "string", "example": "system-wide" },
+                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" },
+                    "bundle": {
+                      "type": "object",
+                      "description": "Map of bundle file keys to { name, content }.",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "content": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified — the supplied If-None-Match matches the current bundle ETag. No body is returned; the ETag header is echoed.",
+            "headers": {
+              "ETag": {
+                "description": "Current bundle ETag (W/\"<sha256>\").",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ChittyID format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity/{chittyId}/policy-bundle/check": {
+      "get": {
+        "summary": "Check Identity Policy Bundle Version",
+        "description": "Lightweight version probe for the identity policy bundle. Returns the bundle version and content hash without the full file payload so a client can detect drift cheaply. Public, non-secret governance — no authentication required. Supports conditional requests via ETag/If-None-Match (304 Not Modified).",
+        "operationId": "checkIdentityPolicyBundle",
+        "tags": ["Identity"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "chittyId",
+            "in": "path",
+            "required": true,
+            "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bundle version metadata (no file payload)",
+            "headers": {
+              "ETag": {
+                "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chittyId": { "type": "string" },
+                    "version": { "type": "string", "example": "v1" },
+                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" }
+                  }
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified — the supplied If-None-Match matches the current bundle ETag.",
+            "headers": {
+              "ETag": {
+                "description": "Current bundle ETag (W/\"<sha256>\").",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ChittyID format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
+                    "message": { "type": "string" }
                   }
                 }
               }

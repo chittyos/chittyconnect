@@ -13,6 +13,7 @@
     "deploy:staging": "./scripts/safe-deploy.sh staging",
     "deploy:production": "./scripts/safe-deploy.sh production",
     "deploy:audit": "./scripts/audit-bindings.sh production",
+    "policy-bundle:build": "node scripts/build-policy-bundle.mjs",
     "kv:seed": "./scripts/seed-kv.sh",
     "test": "vitest",
     "test:watch": "vitest --watch",
@@ -42,6 +43,7 @@
     "mcp-server.js",
     "wrangler*.toml",
     "scripts/*.sh",
+    "policy-bundle/**",
     "README.md",
     "LICENSE"
   ],
@@ -50,8 +52,9 @@
     "@cloudflare/workers-oauth-provider": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
+    "@sentry/cloudflare": "^10.58.0",
     "agents": "^0.7.5",
-    "hono": "^4.12.14",
+    "hono": "^4.12.18",
     "jose": "^5.2.0",
     "node-fetch": "^3.3.2",
     "zod": "^3.22.0"
