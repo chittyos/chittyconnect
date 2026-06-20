@@ -67,18 +67,35 @@ const json = JSON.parse(stripJsonc(raw));
 function namesFrom(obj) {
   if (!obj || typeof obj !== 'object') return [];
   const out = [];
+  // Secret stores
   for (const item of obj.secrets_store_secrets || []) if (item?.binding) out.push(item.binding);
+  // KV namespaces
   for (const item of obj.kv_namespaces        || []) if (item?.binding) out.push(item.binding);
+  // D1 databases
   for (const item of obj.d1_databases         || []) if (item?.binding) out.push(item.binding);
+  // R2 buckets
   for (const item of obj.r2_buckets           || []) if (item?.binding) out.push(item.binding);
+  // Vectorize indexes (https://developers.cloudflare.com/vectorize/reference/client-api/)
   for (const item of obj.vectorize            || []) if (item?.binding) out.push(item.binding);
+  // Service bindings (https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/)
   for (const item of obj.services             || []) if (item?.binding) out.push(item.binding);
+  // Hyperdrive
   for (const item of obj.hyperdrive           || []) if (item?.binding) out.push(item.binding);
+  // Analytics Engine
   for (const item of obj.analytics_engine_datasets || []) if (item?.binding) out.push(item.binding);
+  // AI Search namespace bindings (https://developers.cloudflare.com/ai-search/api/migration/workers-binding/)
+  // Changelog: https://developers.cloudflare.com/changelog/post/2026-04-16-ai-search-namespace-binding/
+  for (const item of obj.ai_search_namespaces || []) if (item?.binding) out.push(item.binding);
+  // Browser rendering
+  if (obj.browser?.binding) out.push(obj.browser.binding);
+  // Workers AI
   if (obj.ai?.binding) out.push(obj.ai.binding);
+  // Queue producers
   if (obj.queues?.producers) for (const p of obj.queues.producers) if (p?.binding) out.push(p.binding);
   // queues.consumers are invocation handlers, NOT bindings — do not include.
+  // Durable Objects
   if (obj.durable_objects?.bindings) for (const d of obj.durable_objects.bindings) if (d?.name) out.push(d.name);
+  // Plain vars
   if (obj.vars && typeof obj.vars === 'object') for (const k of Object.keys(obj.vars)) out.push(k);
   return out;
 }
