@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { BASE_URL, MCP_URL, API_KEY, authFetch } from "./config.js";
+import { BASE_URL, API_KEY, authFetch } from "./config.js";
 
 describe("authentication", () => {
   describe("REST API auth (/api/*)", () => {

@@ -718,9 +718,10 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
     const requestingService =
       apiKeyMeta.service || apiKeyMeta.name || "unknown";
 
-    console.log(
-      `[Credentials] Storing ${vault}/${item}/${field} (by ${requestingService})`,
-    );
+    // Audit of the requesting service is recorded in credential_provisions
+    // (below); keep it out of console logs to avoid clear-text logging of
+    // API-key-derived metadata (CodeQL js/clear-text-logging).
+    console.log(`[Credentials] Storing ${vault}/${item}/${field}`);
 
     const { OnePasswordConnectClient } =
       await import("../../services/1password-connect-client.js");

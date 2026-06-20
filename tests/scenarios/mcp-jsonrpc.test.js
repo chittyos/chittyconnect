@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { BASE_URL, MCP_URL, mcpCall, API_KEY } from "./config.js";
+import { BASE_URL, mcpCall, API_KEY } from "./config.js";
 
 /**
  * Parse a Streamable HTTP response.

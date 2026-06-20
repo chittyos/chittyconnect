@@ -1071,7 +1071,7 @@ export class EnhancedCredentialProvisioner {
     repository,
     permissions,
   ) {
-    const { generateAppJWT, getInstallationToken } =
+    const { generateAppJWT } =
       await import("../auth/github.js");
 
     // Generate App JWT

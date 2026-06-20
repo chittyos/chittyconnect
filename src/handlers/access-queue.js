@@ -22,7 +22,7 @@ export async function accessQueueConsumer(batch, env) {
 }
 
 async function processAccessEvent(message, env) {
-  const { type, payload, metadata } = message;
+  const { type, payload } = message;
 
   if (type === "cf.access.application.created") {
     console.log(
