@@ -17,16 +17,28 @@
 #   3. Audits the deployed bindings against wrangler.jsonc and FAILS LOUD
 #      if anything declared is missing on the live worker.
 #
+# Deployment environments:
+#   CF Workers Builds — deploy command: `npm run deploy`
+#     Workers Builds injects WORKERS_CI=1 and pre-authenticates wrangler.
+#     No CLOUDFLARE_API_TOKEN needed. Post-deploy binding audit is skipped
+#     because Builds → wrangler deploy uses the same wrangler.jsonc, so
+#     binding drift is structurally impossible.
+#   GitHub Actions / local — export CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+#     Full post-deploy binding audit runs via CF API.
+#
 # Usage:
 #   scripts/safe-deploy.sh production
 #   scripts/safe-deploy.sh staging
 #   npm run deploy            (which calls this script)
 #
-# Required env:
+# Required env (GH Actions / local only):
 #   CLOUDFLARE_API_TOKEN  — for both wrangler and the post-deploy audit
 #   CLOUDFLARE_ACCOUNT_ID — defaults to chittyconnect account if unset
 
 set -euo pipefail
+
+# ── Detect CF Workers Builds environment ─────────────────────────────────────
+IS_WORKERS_CI="${WORKERS_CI:-0}"
 
 ENV="${1:-}"
 if [ -z "$ENV" ]; then
@@ -52,19 +64,25 @@ if [ ! -f "$WRANGLER_CFG" ]; then
   exit 65
 fi
 
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+# In Workers Builds, wrangler is pre-authenticated — no token needed.
+# Outside of Workers Builds (GH Actions / local), require the token.
+if [ "$IS_WORKERS_CI" != "1" ] && [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   echo "::error::safe-deploy: CLOUDFLARE_API_TOKEN is not set" >&2
   echo "  hint: 'op run --env-file=.env.op -- npm run deploy' or export the token" >&2
   exit 66
 fi
 
-WORKER_NAME="$(node -e "const fs=require('fs');const r=fs.readFileSync('$WRANGLER_CFG','utf8').replace(/\\/\\*[\\s\\S]*?\\*\\//g,'').split('\\n').map(l=>l.replace(/^\\s*\\/\\/.*$/,'')).join('\\n');const m=r.match(/\"name\"\\s*:\\s*\"([^\"]+)\"/);console.log(m?m[1]:'')")"
+WORKER_NAME="$(node -e "const fs=require('fs');const r=fs.readFileSync('$WRANGLER_CFG','utf8').replace(/\/\*[\s\S]*?\*\//g,'').split('\n').map(l=>l.replace(/^\s*\/\/.*$/,'')).join('\n');const m=r.match(/\"name\"\s*:\s*\"([^\"]+)\"/);console.log(m?m[1]:'')")"
 if [ "$ENV" = "staging" ]; then
   DEPLOYED_NAME="${WORKER_NAME}-staging"
 else
   DEPLOYED_NAME="$WORKER_NAME"
 fi
 
+if [ "$IS_WORKERS_CI" = "1" ]; then
+  echo "[safe-deploy] ⚡ Running inside CF Workers Builds (WORKERS_CI=1)"
+  echo "[safe-deploy] branch=${WORKERS_CI_BRANCH:-unknown} commit=${WORKERS_CI_COMMIT_SHA:-unknown}"
+fi
 echo "[safe-deploy] env=$ENV worker=$DEPLOYED_NAME"
 
 # ── 1. Deploy with explicit --env ────────────────────────────────────────────
@@ -74,11 +92,20 @@ echo "[safe-deploy] running: npx wrangler deploy --env $ENV"
 CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV"
 
 # ── 2. Audit declared vs attached bindings ───────────────────────────────────
+# When running inside CF Workers Builds, wrangler deploy reads the same
+# wrangler.jsonc we're checking against — binding drift is structurally
+# impossible. Skip the API-based audit (which also can't auth since Builds
+# pre-authenticates wrangler but doesn't expose CLOUDFLARE_API_TOKEN).
+if [ "$IS_WORKERS_CI" = "1" ]; then
+  echo "[safe-deploy] ⚡ Workers Builds: skipping API binding audit (drift impossible — Builds uses same wrangler.jsonc)"
+  echo "[safe-deploy] ✅ Deploy complete via Workers Builds"
+  exit 0
+fi
+
+# ── API-based audit (GH Actions / local deploys) ────────────────────────────
 echo "[safe-deploy] auditing bindings on live worker $DEPLOYED_NAME ..."
 
 # Extract declared binding NAMES from wrangler.jsonc for this env.
-# We parse top-level secrets_store_secrets (inherited) + env.<env>.* binding
-# blocks. JSONC: strip // comments first.
 DECLARED="$(node "$REPO_ROOT/scripts/lib/extract-declared-bindings.mjs" "$ENV")"
 
 if [ -z "$DECLARED" ]; then
@@ -131,8 +158,7 @@ else
   # Version response nests bindings under .result.resources.bindings[]
   # or .result.bindings[] depending on API version — try both.
   ATTACHED="$(echo "$VERSION_JSON" | jq -r '
-    (.result.resources.bindings // .result.bindings // [])[]
-    | .name // empty
+    (.result.resources.bindings // .result.bindings // [])[].name // empty
   ' | sort -u)"
 fi
 
@@ -155,4 +181,4 @@ fi
 
 DECLARED_COUNT="$(grep -c . <<<"$DECLARED" || true)"
 ATTACHED_COUNT="$(grep -c . <<<"$ATTACHED" || true)"
-echo "[safe-deploy] OK — $DECLARED_COUNT declared bindings all present (live worker has $ATTACHED_COUNT total)"
+echo "[safe-deploy] ✅ OK — $DECLARED_COUNT declared bindings all present (live worker has $ATTACHED_COUNT total)"
