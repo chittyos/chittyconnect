@@ -42,6 +42,7 @@ import { promptRoutes } from "./routes/prompts.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { migrationRoutes } from "./routes/tenant-migration.js";
 import { sessionRoutes } from "./routes/sessions.js";
+import ledgerRoutes from "./routes/ledger.js";
 import { neonUserStoreRoutes } from "../auth/neon-user-store.js";
 import { identityRoutes } from "./routes/identity.js";
 import { authenticate } from "./middleware/auth.js";
@@ -195,6 +196,7 @@ api.route("/api/v1/context/prompts", promptRoutes);
 api.route("/api/v1/tenants/migration", migrationRoutes);
 api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/sessions", sessionRoutes);
+api.route("/api/v1/ledger", ledgerRoutes);
 api.route("/api/v1/identity", identityRoutes);
 
 // Neon Auth user store — JWKS-validated read/write surface for

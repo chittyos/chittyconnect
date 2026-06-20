@@ -1,8 +1,8 @@
 /**
- * SessionStateService - Wrapper for Durable Objects integration
+ * SessionStateService - Wrapper for Cloudflare Actors integration
  *
- * Provides a clean interface for interacting with SessionStateDO
- * and handles migration from KV-based storage.
+ * Provides a clean interface for interacting with SessionStateActor
+ * using direct RPC instead of HTTP fetch boilerplate.
  */
 
 export class SessionStateService {
@@ -12,13 +12,13 @@ export class SessionStateService {
   }
 
   /**
-   * Get or create Durable Object for a ChittyID
+   * Get Actor stub for a ChittyID
    */
-  getDurableObject(chittyId) {
+  getActor(chittyId) {
     if (!this.env.SESSION_STATE) {
       throw new Error("SESSION_STATE binding not available — phantom binding not yet provisioned");
     }
-    // Use ChittyID as the Durable Object name for consistent routing
+    // Use ChittyID as the Actor name for consistent routing
     const id = this.env.SESSION_STATE.idFromName(chittyId);
     return this.env.SESSION_STATE.get(id);
   }
@@ -28,22 +28,8 @@ export class SessionStateService {
    */
   async createSession(chittyId, sessionId, metadata = {}) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/session/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-ChittyID": chittyId,
-        },
-        body: JSON.stringify({ sessionId, metadata }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create session: ${response.status}`);
-      }
-
-      const session = await response.json();
+      const actor = this.getActor(chittyId);
+      const session = await actor.createSession(chittyId, sessionId, metadata);
 
       // Cache locally
       this.cache.set(sessionId, session);
@@ -52,7 +38,7 @@ export class SessionStateService {
     } catch (error) {
       console.error("[SessionStateService] Create session error:", error);
 
-      // Fallback to KV storage if DO fails
+      // Fallback to KV storage if Actor fails
       return await this.createSessionKVFallback(chittyId, sessionId, metadata);
     }
   }
@@ -62,22 +48,8 @@ export class SessionStateService {
    */
   async updateSession(chittyId, sessionId, updates) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/session/update", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-ChittyID": chittyId,
-        },
-        body: JSON.stringify({ sessionId, updates }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to update session: ${response.status}`);
-      }
-
-      const session = await response.json();
+      const actor = this.getActor(chittyId);
+      const session = await actor.updateSession(sessionId, updates);
 
       // Update cache
       this.cache.set(sessionId, session);
@@ -101,24 +73,8 @@ export class SessionStateService {
     }
 
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch(
-        `https://do/session/get?sessionId=${sessionId}`,
-        {
-          method: "GET",
-          headers: { "X-ChittyID": chittyId },
-        },
-      );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null;
-        }
-        throw new Error(`Failed to get session: ${response.status}`);
-      }
-
-      const session = await response.json();
+      const actor = this.getActor(chittyId);
+      const session = await actor.getSession(sessionId);
 
       // Cache for future requests
       this.cache.set(sessionId, session);
@@ -126,6 +82,10 @@ export class SessionStateService {
       return session;
     } catch (error) {
       console.error("[SessionStateService] Get session error:", error);
+
+      if (error.message && error.message.includes("Session not found")) {
+        return null;
+      }
 
       // Fallback to KV storage
       return await this.getSessionKVFallback(sessionId);
@@ -137,18 +97,8 @@ export class SessionStateService {
    */
   async listSessions(chittyId) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/session/list", {
-        method: "GET",
-        headers: { "X-ChittyID": chittyId },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to list sessions: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.listSessions();
     } catch (error) {
       console.error("[SessionStateService] List sessions error:", error);
       return { count: 0, sessions: [] };
@@ -160,22 +110,8 @@ export class SessionStateService {
    */
   async addDecision(chittyId, decision) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/decision/add", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-ChittyID": chittyId,
-        },
-        body: JSON.stringify(decision),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to add decision: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.addDecision(chittyId, decision);
     } catch (error) {
       console.error("[SessionStateService] Add decision error:", error);
 
@@ -189,21 +125,8 @@ export class SessionStateService {
    */
   async getDecisions(chittyId, limit = 10) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch(
-        `https://do/decision/list?limit=${limit}`,
-        {
-          method: "GET",
-          headers: { "X-ChittyID": chittyId },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to get decisions: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.listDecisions(limit);
     } catch (error) {
       console.error("[SessionStateService] Get decisions error:", error);
       return { count: 0, decisions: [] };
@@ -215,22 +138,8 @@ export class SessionStateService {
    */
   async setContext(chittyId, key, value) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/context/set", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-ChittyID": chittyId,
-        },
-        body: JSON.stringify({ key, value }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to set context: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.setContext(key, value);
     } catch (error) {
       console.error("[SessionStateService] Set context error:", error);
 
@@ -244,22 +153,8 @@ export class SessionStateService {
    */
   async getContext(chittyId, key = null) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const url = key
-        ? `https://do/context/get?key=${key}`
-        : "https://do/context/get";
-
-      const response = await durableObject.fetch(url, {
-        method: "GET",
-        headers: { "X-ChittyID": chittyId },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get context: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.getContext(key);
     } catch (error) {
       console.error("[SessionStateService] Get context error:", error);
 
@@ -269,13 +164,13 @@ export class SessionStateService {
   }
 
   /**
-   * Establish WebSocket connection to DO for real-time updates
+   * Establish WebSocket connection to Actor for real-time updates
    */
   async connectWebSocket(chittyId, sessionId) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
+      const actor = this.getActor(chittyId);
 
-      const response = await durableObject.fetch("https://do/ws", {
+      const response = await actor.fetch("https://do/ws", {
         headers: {
           Upgrade: "websocket",
           "X-ChittyID": chittyId,
@@ -299,22 +194,12 @@ export class SessionStateService {
   }
 
   /**
-   * Get metrics for a ChittyID's Durable Object
+   * Get metrics for a ChittyID's Actor
    */
   async getMetrics(chittyId) {
     try {
-      const durableObject = this.getDurableObject(chittyId);
-
-      const response = await durableObject.fetch("https://do/metrics", {
-        method: "GET",
-        headers: { "X-ChittyID": chittyId },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get metrics: ${response.status}`);
-      }
-
-      return await response.json();
+      const actor = this.getActor(chittyId);
+      return await actor.getMetrics(chittyId);
     } catch (error) {
       console.error("[SessionStateService] Get metrics error:", error);
       return null;
@@ -322,7 +207,7 @@ export class SessionStateService {
   }
 
   /**
-   * Migrate existing KV session to Durable Object
+   * Migrate existing KV session to Actor
    */
   async migrateSession(chittyId, sessionId) {
     try {
@@ -337,7 +222,7 @@ export class SessionStateService {
         return null;
       }
 
-      // Create session in DO
+      // Create session in Actor
       const session = await this.createSession(
         chittyId,
         sessionId,
@@ -347,7 +232,7 @@ export class SessionStateService {
       // Delete from KV after successful migration
       await this.env.TOKEN_KV.delete(kvKey);
 
-      console.log(`[SessionStateService] Migrated session ${sessionId} to DO`);
+      console.log(`[SessionStateService] Migrated session ${sessionId} to Actor`);
       return session;
     } catch (error) {
       console.error("[SessionStateService] Migration error:", error);

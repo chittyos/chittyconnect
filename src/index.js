@@ -2553,3 +2553,4 @@ ${errorInfo.stack}`);
  * Export Durable Object classes
  */
 export { McpConnectAgent };
+export { SessionStateActor } from "./durable-objects/SessionStateActor.js";
