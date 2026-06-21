@@ -16,8 +16,7 @@ export const createMockEnv = (overrides = {}) => ({
   IDEMP_KV: createMockKV(),
   API_KEYS: createMockKV(),
   CREDENTIAL_CACHE: createMockKV(),
-  MEMORY_VECTORIZE: createMockVectorize(),
-  CONTEXT_VECTORIZE: createMockVectorize(),
+  AI_SEARCH: createMockAiSearch(),
   AI: createMockAI(),
   FILES: createMockR2(),
   EVENT_Q: createMockQueue(),
@@ -56,14 +55,23 @@ export const createMockKV = () => ({
 });
 
 /**
- * Create mock Vectorize index
+ * Create mock AI Search namespace
  */
-export const createMockVectorize = () => ({
-  query: vi.fn().mockResolvedValue({ matches: [] }),
-  insert: vi.fn().mockResolvedValue({ count: 1 }),
-  upsert: vi.fn().mockResolvedValue({ count: 1 }),
-  delete: vi.fn().mockResolvedValue({ count: 1 }),
-  getByIds: vi.fn().mockResolvedValue({ vectors: [] })
+export const createMockAiSearch = () => ({
+  get: vi.fn().mockReturnValue({
+    items: {
+      upload: vi.fn().mockResolvedValue({ id: 'mock-id' }),
+      uploadAndPoll: vi.fn().mockResolvedValue({ id: 'mock-id' }),
+      list: vi.fn().mockResolvedValue({ result: [] }),
+      delete: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockReturnValue({
+        info: vi.fn().mockResolvedValue({ id: 'mock-id' }),
+        download: vi.fn().mockResolvedValue({ body: 'stream' })
+      })
+    },
+    search: vi.fn().mockResolvedValue({ chunks: [] })
+  }),
+  search: vi.fn().mockResolvedValue({ chunks: [] })
 });
 
 /**

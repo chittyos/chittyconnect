@@ -13,7 +13,7 @@ export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
-    this.vectorStore = env.MEMORY_VECTORIZE; // Cloudflare Vectorize for semantic memory
+    this.searchNamespace = env.AI_SEARCH; // Cloudflare AI Search namespace binding
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year
@@ -27,12 +27,12 @@ export class MemoryCloude {
   async initialize() {
     console.log("[MemoryCloude™] Initializing perpetual context system...");
 
-    // Check for Vectorize availability
-    this.hasVectorize = !!this.vectorStore;
+    // Check for AI Search availability
+    this.hasAiSearch = !!this.searchNamespace;
 
-    if (!this.hasVectorize) {
+    if (!this.hasAiSearch) {
       console.warn(
-        "[MemoryCloude™] Vectorize not available, using KV-only mode",
+        "[MemoryCloude™] AI Search not available, using KV-only mode",
       );
     }
 
@@ -82,37 +82,29 @@ export class MemoryCloude {
   }
 
   /**
-   * Store embedding in Vectorize
+   * Store interaction in AI Search
    */
   async storeEmbedding(interactionId, sessionId, interaction) {
     try {
-      // Generate embedding using Cloudflare AI
-      const text = this.extractTextContent(interaction);
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [text],
-      });
-
-      if (embedding && embedding.data && embedding.data[0]) {
-        // Store in Vectorize
-        await this.vectorStore.insert([
+      if (this.hasAiSearch) {
+        const text = this.extractTextContent(interaction);
+        const instance = this.searchNamespace.get("memory-cloude");
+        await instance.items.upload(
+          interactionId,
+          text,
           {
-            id: interactionId,
-            values: embedding.data[0],
             metadata: {
-              sessionId,
-              timestamp: Date.now(),
-              userId: interaction.userId,
-              type: interaction.type,
-              entities: JSON.stringify(interaction.entities || []),
-              actions: JSON.stringify(interaction.actions || []),
-            },
-          },
-        ]);
-
-        console.log(`[MemoryCloude™] Stored embedding for ${interactionId}`);
+              sessionId: String(sessionId),
+              timestamp: String(Date.now()),
+              userId: String(interaction.userId || ""),
+              type: String(interaction.type || ""),
+            }
+          }
+        );
+        console.log(`[MemoryCloude™] Stored interaction ${interactionId} in AI Search`);
       }
     } catch (error) {
-      console.warn("[MemoryCloude™] Embedding storage failed:", error.message);
+      console.warn("[MemoryCloude™] Interaction storage failed:", error.message);
     }
   }
 
@@ -222,7 +214,7 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
-    const useSemanticSearch = options.semantic !== false && this.hasVectorize;
+    const useSemanticSearch = options.semantic !== false && this.hasAiSearch;
 
     if (useSemanticSearch) {
       return await this.semanticRecall(sessionId, query, limit);
@@ -232,32 +224,29 @@ export class MemoryCloude {
   }
 
   /**
-   * Semantic search using vector embeddings
+   * Semantic search using AI Search cross-instance capabilities
    */
   async semanticRecall(sessionId, query, limit) {
     try {
-      // Generate query embedding
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [query],
+      const searchResults = await this.searchNamespace.search({
+        messages: [{ role: "user", content: query }],
+        ai_search_options: {
+          instance_ids: ["memory-cloude", "context-embeddings"],
+          retrieval: { top_k: limit * 2 }
+        }
       });
 
-      if (!embedding || !embedding.data || !embedding.data[0]) {
-        throw new Error("Failed to generate query embedding");
+      if (!searchResults || !searchResults.chunks) {
+        throw new Error("No results from AI Search");
       }
 
-      // Query Vectorize
-      const matches = await this.vectorStore.query(embedding.data[0], {
-        topK: limit * 2, // Get more, then filter by session
-        returnMetadata: true,
-      });
-
-      // Filter by session and re-rank
-      const sessionMatches = matches
-        .filter((m) => m.metadata.sessionId === sessionId)
-        .map((m) => ({
-          id: m.id,
-          score: m.score,
-          metadata: m.metadata,
+      // Filter by session and format
+      const sessionMatches = searchResults.chunks
+        .filter((chunk) => chunk.item.metadata && chunk.item.metadata.sessionId === sessionId)
+        .map((chunk) => ({
+          id: chunk.item.key,
+          score: chunk.score,
+          metadata: chunk.item.metadata,
         }));
 
       // Re-rank by recency and relevance
@@ -518,29 +507,30 @@ export class MemoryCloude {
    */
   async recallSimilarDecompositions(subtask) {
     // Search for similar task decompositions in memory
-    if (!this.hasVectorize) {
+    if (!this.hasAiSearch) {
       return [];
     }
 
     try {
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [JSON.stringify(subtask)],
+      const searchResults = await this.searchNamespace.search({
+        messages: [{ role: "user", content: JSON.stringify(subtask) }],
+        ai_search_options: {
+          instance_ids: ["memory-cloude"],
+          retrieval: {
+            top_k: 5,
+            filters: { type: "task_decomposition" }
+          }
+        }
       });
 
-      if (!embedding || !embedding.data || !embedding.data[0]) {
+      if (!searchResults || !searchResults.chunks) {
         return [];
       }
 
-      const matches = await this.vectorStore.query(embedding.data[0], {
-        topK: 5,
-        returnMetadata: true,
-        filter: { type: "task_decomposition" },
-      });
-
-      return matches.map((m) => ({
-        task: m.metadata.task,
-        approach: m.metadata.approach,
-        performance: m.metadata.performance,
+      return searchResults.chunks.map((chunk) => ({
+        task: chunk.item.metadata.task,
+        approach: chunk.item.metadata.approach,
+        performance: chunk.item.metadata.performance,
       }));
     } catch (error) {
       console.warn(
@@ -560,7 +550,7 @@ export class MemoryCloude {
     return {
       interactions: index?.interactions?.length || 0,
       lastUpdate: index?.lastUpdate || null,
-      hasVectorize: this.hasVectorize,
+      hasVectorize: this.hasAiSearch,
       retentionDays: this.retention.conversations,
     };
   }
