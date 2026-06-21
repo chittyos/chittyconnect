@@ -302,6 +302,7 @@ export class SessionStateActor extends Actor {
    */
   async fetch(request) {
     if (request.headers.get("Upgrade") === "websocket") {
+      // eslint-disable-next-line no-undef
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 

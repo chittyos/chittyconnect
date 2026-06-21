@@ -330,7 +330,9 @@ export async function resilientFetch(url, options = {}, retryOptions = {}) {
         let errorText = "";
         try {
           errorText = await response.text();
-        } catch (e) {}
+        } catch (e) {
+          /* ignore error */
+        }
         const error = new Error(
           `HTTP ${response.status}: ${response.statusText}${errorText ? ' - ' + errorText : ''}`,
         );
