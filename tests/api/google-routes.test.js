@@ -213,6 +213,16 @@ describe("GET /gdrive/files", () => {
     expect(url).toContain("https://www.googleapis.com/drive/v3/files");
   });
 
+  it("always sets shared-drive params on the upstream files.list URL", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+    await get("/gdrive/files", env);
+    const [url] = globalThis.fetch.mock.calls[0];
+    const params = new URL(url).searchParams;
+    expect(params.get("supportsAllDrives")).toBe("true");
+    expect(params.get("includeItemsFromAllDrives")).toBe("true");
+    expect(params.get("corpora")).toBe("allDrives");
+  });
+
   it("forwards q query parameter to Google API", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
     await get("/gdrive/files", env, "q=name+contains+'report'");
@@ -301,6 +311,13 @@ describe("GET /gdrive/files/:fileId", () => {
     expect(url).toContain("fields=");
   });
 
+  it("includes supportsAllDrives=true on the upstream files.get URL", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "f1" }));
+    await get("/gdrive/files/f1", env);
+    const [url] = globalThis.fetch.mock.calls[0];
+    expect(new URL(url).searchParams.get("supportsAllDrives")).toBe("true");
+  });
+
   it("returns 404 when Google returns 404", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(404, "File not found"));
     const res = await get("/gdrive/files/missing", env);
@@ -367,6 +384,32 @@ describe("GET /gdrive/files/:fileId/content", () => {
     expect(res.status).toBe(200);
     const [exportUrl] = globalThis.fetch.mock.calls[1];
     expect(exportUrl).toContain("/export");
+  });
+
+  it("includes supportsAllDrives=true on the metadata prefetch and the export URL for Google-native files", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/vnd.google-apps.document" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([37, 80, 68, 70]), { status: 200, headers: { "Content-Type": "application/pdf" } }));
+
+    await get("/gdrive/files/doc-id/content", env);
+
+    const [metadataUrl] = globalThis.fetch.mock.calls[0];
+    expect(new URL(metadataUrl).searchParams.get("supportsAllDrives")).toBe("true");
+    const [exportUrl] = globalThis.fetch.mock.calls[1];
+    expect(new URL(exportUrl).searchParams.get("supportsAllDrives")).toBe("true");
+  });
+
+  it("includes supportsAllDrives=true on the metadata prefetch and the alt=media download URL", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/png" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([137, 80, 78, 71]), { status: 200, headers: { "Content-Type": "image/png" } }));
+
+    await get("/gdrive/files/img-id/content", env);
+
+    const [metadataUrl] = globalThis.fetch.mock.calls[0];
+    expect(new URL(metadataUrl).searchParams.get("supportsAllDrives")).toBe("true");
+    const [downloadUrl] = globalThis.fetch.mock.calls[1];
+    expect(new URL(downloadUrl).searchParams.get("supportsAllDrives")).toBe("true");
   });
 
   it("downloads binary files using alt=media", async () => {
