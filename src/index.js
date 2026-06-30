@@ -1506,6 +1506,7 @@ app.post("/intelligence/relationships/discover", async (c) => {
 import { discoveryRoutes } from "./api/routes/discovery.js";
 import { githubActionsRoutes } from "./api/routes/github-actions.js";
 import { gitConfirmRoutes } from "./api/routes/git-confirm.js";
+import { githubMergeRoutes } from "./api/routes/github-merge.js";
 
 app.route("/.well-known", discoveryRoutes);
 
@@ -1522,6 +1523,15 @@ app.route("/api/github-actions", githubActionsRoutes);
  * write tool. API-key authenticated via mcpAuthMiddleware inside the route.
  */
 app.route("/api/git", gitConfirmRoutes);
+
+/**
+ * GitHub PR merge — governed, internally-authenticated connection action.
+ * POST /integrations/github/merge-pr. The App installation token is minted
+ * and used entirely within ChittyConnect; the calling executor (autoassist)
+ * holds no GitHub credential and decides maintainer policy itself. Internal
+ * secret (X-Webhook-Secret) authenticated inside the route; fails closed.
+ */
+app.route("/integrations/github", githubMergeRoutes);
 
 /**
  * SSE Health check endpoint
