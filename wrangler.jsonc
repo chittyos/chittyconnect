@@ -145,7 +145,6 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
@@ -258,7 +257,6 @@
         "consumers": []
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
@@ -382,7 +380,6 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
