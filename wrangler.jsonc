@@ -21,6 +21,7 @@
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
+  "legacy_env": false,
   "main": "src/index.js",
   "compatibility_date": "2026-03-02",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -152,10 +153,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -164,7 +165,6 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
-      "name": "chittyconnect-staging",
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -255,9 +255,7 @@
           { "binding": "EVENT_Q", "queue": "github-events" },
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
         ],
-        "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
-        ]
+        "consumers": []
       },
       "ai": { "binding": "AI" },
       "tail_consumers": [{ "service": "chittytrack" }],
@@ -268,10 +266,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -280,7 +278,6 @@
     // PRODUCTION — `wrangler deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
-      "name": "chittyconnect",
       // workers.dev URL is enabled so post-deploy CI can probe /health without
       // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
       // public surface remains the connect.chitty.cc / mcp.chitty.cc routes.
@@ -393,10 +390,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence", "environment": "production" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore", "environment": "production" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     }
