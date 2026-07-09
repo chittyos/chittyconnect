@@ -182,13 +182,10 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
-<<<<<<< HEAD
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
       // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
       // is owned by the chittymcp worker). Closes #192.
       "workers_dev": true,
-=======
->>>>>>> feat/agent-context-tool
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
