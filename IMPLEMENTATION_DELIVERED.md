@@ -287,7 +287,7 @@ All implementations include:
 wrangler secret put ENABLE_DURABLE_OBJECTS --env production    # Enter: false
 wrangler secret put ENABLE_R2_STORAGE --env production         # Enter: false
 wrangler secret put ONEPASSWORD_CONNECT_URL --env production   # Enter: (empty)
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Individual Rollback

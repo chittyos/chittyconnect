@@ -25,7 +25,7 @@ files.
 
 1. **Data Diode** — Admin SAs read from many vaults, write to exactly one. A compromised admin can only corrupt its own target vault.
 2. **Least Privilege** — Runtime SAs are read-only everywhere. Workers cannot modify vault contents.
-3. **No Secret Sprawl** — Secrets never appear in git history, shell logs, or general LLM prompt context. They are injected just-in-time via `chittysecrets run`, environment bindings, or authenticated machine-to-machine credential responses.
+3. **No Secret Sprawl** — Secrets never appear in git history, shell logs, or general LLM prompt context. They are injected just-in-time via `op run`, environment bindings, or authenticated machine-to-machine credential responses.
 4. **Kill Switch** — Any SA token can be revoked instantly in the chittysecrets web UI, cutting off access globally without redeployment.
 5. **Separation of Concerns** — Provisioning, brokering, and orchestration are handled by different systems with different access levels.
 
@@ -47,7 +47,7 @@ files.
 export OP_SERVICE_ACCOUNT_TOKEN="<sa-chitty-admin-stage token>"
 
 # Read from chittysecrets environment, write to Cloudflare Secrets
-chittysecrets run --environment chitty-app-stage -- sh -c \
+op run --environment chitty-app-stage -- sh -c \
   'echo "$NEON_DATABASE_URL" | npx wrangler secret put NEON_DATABASE_URL --name chittyconnect'
 ```
 
@@ -346,7 +346,7 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 ### Provisioning Flow (one-shot)
 
 ```
-┌─────────────┐    chittysecrets run     ┌─────────────┐   wrangler    ┌─────────────┐
+┌─────────────┐    op run     ┌─────────────┐   wrangler    ┌─────────────┐
 │  chittysecrets  │──────────────→│  GH Actions  │──secret put──→│  Cloudflare  │
 │  Vault      │  (admin SA)   │  Workflow     │              │  Secrets     │
 └─────────────┘               └─────────────┘               └─────────────┘

@@ -76,7 +76,7 @@ export class EnhancedCredentialProvisioner {
         name: "D1 Database Write",
         scope: "account",
       },
-      // Zone-scoped. Required for `cf deploy` against a worker
+      // Zone-scoped. Required for `wrangler deploy` against a worker
       // with a `routes` block — without this permission group, deploy
       // fails post-upload at PUT /zones/{zid}/workers/routes with
       // Authentication error code 10000.
@@ -575,7 +575,7 @@ export class EnhancedCredentialProvisioner {
     if (zonePermissions.length > 0 && requestedZones.length === 0) {
       // Drop zone-scoped perms when no zones provided. Caller still
       // gets the account-scoped subset. If the dropped perms are load-
-      // bearing (e.g. cf deploy of a worker with `routes`), the
+      // bearing (e.g. wrangler deploy of a worker with `routes`), the
       // resulting deploy will fail with code 10000 — which is the
       // existing behavior, so no regression.
       console.warn(

@@ -65,8 +65,8 @@ fail_open = true
 
 # Only validate secrets for these command patterns
 validate_patterns = [
-  "chittysecrets run",
-  "cf deploy",
+  "op run",
+  "wrangler deploy",
   "wrangler d1",
   "npm run deploy"
 ]

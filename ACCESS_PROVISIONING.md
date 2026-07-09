@@ -146,7 +146,7 @@ ChittyConnect is an **access provisioning broker**, not an executor. It authenti
   "instructions": {
     "method": "environment_variable",
     "variable_name": "GITHUB_TOKEN",
-    "command": "chittysecrets run --env-file=- -- git push origin main"
+    "command": "op run --env-file=- -- git push origin main"
   }
 }
 ```
@@ -298,7 +298,7 @@ async function revokeAccess(provision, env) {
       success: true,
       provision_id: provision.provision_id,
       instructions: {
-        command: `chittysecrets run --env-file=- -- git push origin ${args.branch}`,
+        command: `op run --env-file=- -- git push origin ${args.branch}`,
         credential_path: provision.credential_reference,
         expires_at: provision.expires_at
       }
@@ -369,13 +369,13 @@ curl -X POST https://connect.chitty.cc/api/provision/request \
 #   "credential_reference": "op://ChittyOS/github-chittyos-data/token",
 #   "expires_at": "2025-10-21T18:00:00Z",
 #   "instructions": {
-#     "command": "chittysecrets run --env-file=- -- git push origin main"
+#     "command": "op run --env-file=- -- git push origin main"
 #   }
 # }
 
 # 3. Execute git push with provisioned credentials
 cd /Users/nb/.claude/projects/-/CHITTYOS/chittyos-data
-chittysecrets run --env-file=- -- git push origin main
+op run --env-file=- -- git push origin main
 
 # ChittyConnect observes but does NOT execute
 # Credentials auto-revoke at 18:00:00Z

@@ -153,7 +153,7 @@ npm install
 npx wrangler d1 execute chittyconnect-production --file migrations/004_context_sync.sql
 
 # Deploy to production
-npx cf deploy --env production
+npx wrangler deploy --env production
 
 # Verify deployment
 curl https://connect.chitty.cc/.well-known/chitty.json
@@ -337,4 +337,4 @@ Per `docs/ECOSYSTEM_CICD_INTEGRATION.md`:
 
 Once credentials are updated, deployment will complete automatically via GitHub Actions.
 
-Alternatively, deployment can be triggered manually using `npx cf deploy --env production` with valid local credentials.
+Alternatively, deployment can be triggered manually using `npx wrangler deploy --env production` with valid local credentials.

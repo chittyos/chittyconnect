@@ -289,12 +289,12 @@ githubActionsRoutes.get("/available", async (c) => {
       {
         name: "CLOUDFLARE_API_TOKEN",
         description: "Cloudflare API token for Workers deployment",
-        required_for: ["cf deploy", "wrangler d1"],
+        required_for: ["wrangler deploy", "wrangler d1"],
       },
       {
         name: "CLOUDFLARE_ACCOUNT_ID",
         description: "Cloudflare account ID",
-        required_for: ["cf deploy"],
+        required_for: ["wrangler deploy"],
       },
       {
         name: "NEON_DATABASE_URL",

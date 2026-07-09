@@ -69,7 +69,7 @@ cat wrangler-durable-objects.toml >> wrangler.toml
 # (Add: export { SessionStateDO } from './durable-objects/SessionStateDO.js';)
 
 # 3. Deploy to staging
-cf deploy --env staging
+wrangler deploy --env staging
 
 # 4. Test session creation
 curl -X POST https://connect-staging.chitty.cc/api/v1/sessions \
@@ -95,7 +95,7 @@ wrangler d1 execute chittyconnect --env staging \
 # bucket_name = "chittyconnect-documents"
 
 # 4. Deploy to staging
-cf deploy --env staging
+wrangler deploy --env staging
 
 # 5. Test document upload
 curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
@@ -132,7 +132,7 @@ curl https://chittysecrets-connect.chitty.cc/v1/health \
 
 # 6. Update ChittyConnect
 wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env production
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ---
@@ -363,7 +363,7 @@ wrangler d1 execute chittyconnect --env staging \
   --command="SELECT name FROM sqlite_master WHERE type='table'"
 
 # 4. Deploy worker
-cf deploy --env staging
+wrangler deploy --env staging
 
 # 5. Test upload
 curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
@@ -492,7 +492,7 @@ curl https://chittysecrets-connect.chitty.cc/v1/health \
 
 # 8. Update ChittyConnect
 wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env production
-cf deploy --env production
+wrangler deploy --env production
 
 # 9. Test end-to-end
 curl -X POST https://connect.chitty.cc/api/v1/credentials/provision \
@@ -681,7 +681,7 @@ wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty)
 
 # Redeploy
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Detailed Rollback

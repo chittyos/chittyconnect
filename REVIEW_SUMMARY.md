@@ -248,7 +248,7 @@ Added documentation section linking to new guides.
    # Follow QUICK_START.md
    wrangler kv:namespace create "IDEMP_KV"
    # ... create all resources
-   cf deploy --env production
+   wrangler deploy --env production
    ```
 
 2. **Fix DNS**

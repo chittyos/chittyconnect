@@ -117,7 +117,7 @@ Populate each with the secrets its Workers need.
 
 ### 3. Deployment Hook
 
-`~/.claude/hooks/chittysecrets-validate-env.sh` gates `cf deploy` commands:
+`~/.claude/hooks/chittysecrets-validate-env.sh` gates `wrangler deploy` commands:
 - Checks `OP_SERVICE_ACCOUNT_TOKEN` on VM for SSH commands
 - Allows `--dry-run` without token
 - Handles SSH with flags (`ssh -o ... chittyserv-dev`)
@@ -143,7 +143,7 @@ separate Wrangler config files.
   "observability": { "enabled": true },
 
   // Secrets: NEON_DATABASE_URL, JWT_SECRET, service tokens
-  // Injected by: chittysecrets run --environment <ID> -- npx cf deploy --env prod
+  // Injected by: op run --environment <ID> -- npx wrangler deploy --env prod
 
   "env": {
     "dev": {
@@ -174,7 +174,7 @@ Full template: `process-ops/state/wrangler-template.jsonc`
 ### Phase 2: First Worker ✅ partial
 - [x] Migrate chittyauth wrangler.jsonc (env blocks, dry-run validated)
 - [ ] Sync chittyauth secrets to CF Secrets Store
-- [ ] Deploy: `chittysecrets run --env chitty-app-prod -- npx cf deploy --env prod`
+- [ ] Deploy: `op run --env chitty-app-prod -- npx wrangler deploy --env prod`
 - [ ] Verify: `curl https://auth.chitty.cc/health`
 
 ### Phase 3: Shared Secrets ⬜
@@ -195,7 +195,7 @@ Full template: `process-ops/state/wrangler-template.jsonc`
 
 ### Phase 5: Cleanup ⬜
 - [ ] Remove obsolete `ONEPASSWORD_*` names/usages from chittyconnect and keep only canonical runtime config
-- [ ] Remove `chittysecrets run` from legacy deploy scripts
+- [ ] Remove `op run` from legacy deploy scripts
 - [ ] Move ~30 service URLs to plain `vars`
 - [ ] Move ~12 Notion DB IDs to plain `vars`
 - [ ] Update 6 stale compatibility dates
@@ -265,7 +265,7 @@ After each phase, verify:
 |-------|---------|----------|
 | SA auth works | `op user get --me` | Returns SA details |
 | Environment readable | `op environment read <ID>` | Returns JSON variables |
-| Worker config valid | `npx cf deploy --dry-run --env prod` | No errors, correct vars listed |
+| Worker config valid | `npx wrangler deploy --dry-run --env prod` | No errors, correct vars listed |
 | Secrets synced | `npx wrangler secret list --name <worker>` | Lists expected secret names |
 | Service healthy | `curl https://<svc>.chitty.cc/health` | `{"status":"ok"}` |
 | No 1P Desktop dependency | `pkill chittysecrets && op environment read <ID>` | Still works |
@@ -282,7 +282,7 @@ ssh chittyserv-dev "cp ~/projects/github.com/CHITTYFOUNDATION/chittyauth/wrangle
   ~/projects/github.com/CHITTYFOUNDATION/chittyauth/wrangler.jsonc"
 
 # 2. Redeploy without --env flag (uses top-level config)
-ssh chittyserv-dev "cd ~/projects/github.com/CHITTYFOUNDATION/chittyauth && npx cf deploy"
+ssh chittyserv-dev "cd ~/projects/github.com/CHITTYFOUNDATION/chittyauth && npx wrangler deploy"
 
 # 3. Verify
 curl -s https://auth.chitty.cc/health | jq .

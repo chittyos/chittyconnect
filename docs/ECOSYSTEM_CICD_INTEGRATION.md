@@ -58,7 +58,7 @@ deploy:
   runs-on: ubuntu-latest
   steps:
     - name: Deploy to Cloudflare
-      run: npx cf deploy --env ${{ env.ENVIRONMENT }}
+      run: npx wrangler deploy --env ${{ env.ENVIRONMENT }}
 ```
 
 ### Phase 3: Post-Deploy (Integration & Reconciliation)

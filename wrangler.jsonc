@@ -4,8 +4,8 @@
   //
   // Deploy model:
   //   wrangler dev                     → local dev (env.dev)
-  //   cf deploy --env staging    → chittyconnect-staging worker
-  //   cf deploy --env production → chittyconnect worker (live routes)
+  //   wrangler deploy --env staging    → chittyconnect-staging worker
+  //   wrangler deploy --env production → chittyconnect worker (live routes)
   //
   // Secret model (canonical — no exceptions):
   //   chittysecrets           → cold / source-of-truth
@@ -33,13 +33,13 @@
   // BARE DEPLOY GUARD (#219)
   // wrangler runs build.command before every deploy. We require a
   // sentinel env var that scripts/safe-deploy.sh sets — so bare
-  // `cf deploy` invocations (no --env, no wrapper) abort here
+  // `wrangler deploy` invocations (no --env, no wrapper) abort here
   // before any binding write happens. Catches: laptop shells with the
   // Global API Key, wdeploy-style aliases, agent scripts, stray CI.
   // The only sanctioned deploy path is `npm run deploy[:staging]`.
   // ──────────────────────────────────────────────────────────────────
   "build": {
-    "command": "[ \"${CHITTYCONNECT_SAFE_DEPLOY:-0}\" = \"1\" ] || { echo '::error::Direct cf deploy blocked. Run: npm run deploy (or deploy:staging). See chittyconnect#219.' >&2; exit 1; }",
+    "command": "[ \"${CHITTYCONNECT_SAFE_DEPLOY:-0}\" = \"1\" ] || { echo '::error::Direct wrangler deploy blocked. Run: npm run deploy (or deploy:staging). See chittyconnect#219.' >&2; exit 1; }",
     "cwd": "."
   },
 
@@ -179,7 +179,7 @@
     },
 
     // ════════════════════════════════════════════════════════════════
-    // STAGING — `cf deploy --env staging`
+    // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
@@ -305,7 +305,7 @@
     },
 
     // ════════════════════════════════════════════════════════════════
-    // PRODUCTION — `cf deploy --env production`
+    // PRODUCTION — `wrangler deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
       // workers.dev URL is enabled so post-deploy CI can probe /health without

@@ -13,7 +13,7 @@ This is a condensed reference for the three major optimizations. For complete de
 export { SessionStateDO } from './durable-objects/SessionStateDO.js';
 
 # Deploy
-cf deploy --env staging
+wrangler deploy --env staging
 
 # Test
 curl -X POST https://connect-staging.chitty.cc/api/v1/sessions \
@@ -90,7 +90,7 @@ wrangler d1 execute chittyconnect --env staging \
   --file=./migrations/003_document_storage.sql
 
 # Deploy
-cf deploy --env staging
+wrangler deploy --env staging
 
 # Test upload
 curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
@@ -200,7 +200,7 @@ curl https://chittysecrets-connect.chitty.cc/v1/health \
 
 # 6. Update ChittyConnect
 wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env production
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Docker Commands
@@ -396,7 +396,7 @@ wrangler secret put ENABLE_R2_STORAGE --env production       # Enter: false
 wrangler secret put ONEPASSWORD_CONNECT_URL --env production # Enter: (empty)
 
 # Redeploy
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Individual Rollback
@@ -405,18 +405,18 @@ cf deploy --env production
 # Rollback Durable Objects only
 wrangler secret put ENABLE_DURABLE_OBJECTS --env production
 # Enter: false
-cf deploy --env production
+wrangler deploy --env production
 
 # Rollback R2 Storage only
 wrangler secret put ENABLE_R2_STORAGE --env production
 # Enter: false
-cf deploy --env production
+wrangler deploy --env production
 
 # Rollback chittysecrets Connect only
 docker-compose down
 wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty)
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ---

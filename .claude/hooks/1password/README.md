@@ -55,7 +55,7 @@ The hook automatically detects `op://` references in commands:
 
 ```bash
 # These commands trigger validation:
-CLOUDFLARE_API_TOKEN="op://Private/cloudflare/token" chittysecrets run -- cf deploy
+CLOUDFLARE_API_TOKEN="op://Private/cloudflare/token" op run -- wrangler deploy
 op read "op://Private/database/connection_string"
 ```
 
@@ -93,7 +93,7 @@ description = "ChittyConnect service token"
 Enable debug mode:
 
 ```bash
-DEBUG=1 echo '{"command":"chittysecrets run -- echo test","workspace_roots":["."]}' | \
+DEBUG=1 echo '{"command":"op run -- echo test","workspace_roots":["."]}' | \
   .claude/hooks/chittysecrets/validate-secrets.sh
 ```
 

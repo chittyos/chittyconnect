@@ -38,8 +38,8 @@ Reference: [Credential Ownership Law](./CREDENTIAL_OWNERSHIP_LAW.md)
 | Environment | Deploy Command | Worker Name |
 |-------------|---------------|-------------|
 | **dev** | `wrangler dev` | local |
-| **staging** | `cf deploy --env staging` | chittyconnect-staging |
-| **production** | `cf deploy --env production` | chittyconnect |
+| **staging** | `wrangler deploy --env staging` | chittyconnect-staging |
+| **production** | `wrangler deploy --env production` | chittyconnect |
 
 All `wrangler secret put` commands **must** include `--env <environment>`. Bare `wrangler secret put` (no env flag) is never correct.
 

@@ -116,7 +116,7 @@ export default {
 
 ```bash
 # Deploy to staging environment
-cf deploy --env staging
+wrangler deploy --env staging
 
 # Verify deployment
 wrangler tail --env staging
@@ -181,7 +181,7 @@ wrangler secret put DO_ROLLOUT_PERCENTAGE --env staging
 
 ```bash
 # Once staging is stable (24-48 hours)
-cf deploy --env production
+wrangler deploy --env production
 
 # Enable 10% rollout in production
 wrangler secret put DO_ROLLOUT_PERCENTAGE --env production
@@ -284,7 +284,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_I
 
 ```bash
 # Deploy to staging
-cf deploy --env staging
+wrangler deploy --env staging
 
 # Test document upload
 curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
@@ -343,7 +343,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_I
 
 ```bash
 # Deploy to production
-cf deploy --env production
+wrangler deploy --env production
 
 # Monitor document storage
 curl https://connect.chitty.cc/api/v1/documents/stats \
@@ -463,7 +463,7 @@ wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env production
 # Enter the token from chittysecrets Connect
 
 # Deploy updated configuration
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Step 7: Test End-to-End Integration
@@ -549,7 +549,7 @@ wrangler rollback --env production
 
 # Remove DO configuration from wrangler.toml
 # Comment out [durable_objects] section and redeploy
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Rollback: R2 Document Storage
@@ -565,7 +565,7 @@ wrangler secret put ENABLE_R2_STORAGE --env production
 
 # To completely remove R2 binding
 # Comment out [[r2_buckets]] in wrangler.toml
-cf deploy --env production
+wrangler deploy --env production
 ```
 
 ### Rollback: chittysecrets Connect
@@ -580,7 +580,7 @@ wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty string)
 
 # ChittyConnect will fall back to existing secrets
-cf deploy --env production
+wrangler deploy --env production
 
 # Delete Cloudflare Tunnel (optional)
 cloudflared tunnel delete chittysecrets-connect-chittyos
