@@ -21,6 +21,7 @@
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
+  "legacy_env": false,
   "main": "src/index.js",
   "compatibility_date": "2026-03-02",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -162,7 +163,6 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
@@ -170,10 +170,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore-worker" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -182,10 +182,13 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
+<<<<<<< HEAD
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
       // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
       // is owned by the chittymcp worker). Closes #192.
       "workers_dev": true,
+=======
+>>>>>>> feat/agent-context-tool
       // Cloudflare Secrets Store — must be declared per-env (not inherited from top-level)
       "secrets_store_secrets": [
         { "binding": "MERCURY_TOKEN_ARIBIA_LLC", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "MERCURY_TOKEN_ARIBIA_LLC" },
@@ -289,7 +292,6 @@
         // prod will process the messages. Closes #193.
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
@@ -297,10 +299,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore-worker" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     },
@@ -420,7 +422,6 @@
         ]
       },
       "ai": { "binding": "AI" },
-      "tail_consumers": [{ "service": "chittytrack" }],
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
@@ -428,10 +429,10 @@
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
-        { "binding": "SVC_EVIDENCE", "service": "chittyevidence-db" },
+        { "binding": "SVC_EVIDENCE", "service": "chittyagent-evidence", "environment": "production" },
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
-        { "binding": "SVC_SCORE", "service": "chittyscore-worker" },
+        { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
         { "binding": "SVC_STORAGE", "service": "chittystorage" }
       ]
     }
