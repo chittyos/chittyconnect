@@ -4,11 +4,11 @@
   //
   // Deploy model:
   //   wrangler dev                     → local dev (env.dev)
-  //   wrangler deploy --env staging    → chittyconnect-staging worker
-  //   wrangler deploy --env production → chittyconnect worker (live routes)
+  //   cf deploy --env staging    → chittyconnect-staging worker
+  //   cf deploy --env production → chittyconnect worker (live routes)
   //
   // Secret model (canonical — no exceptions):
-  //   1Password           → cold / source-of-truth
+  //   chittysecrets           → cold / source-of-truth
   //   wrangler secret put → hot / runtime delivery (scoped per env)
   //   KV                  → short-lived rotated values only
   //   [vars]              → non-secret config only
@@ -33,13 +33,13 @@
   // BARE DEPLOY GUARD (#219)
   // wrangler runs build.command before every deploy. We require a
   // sentinel env var that scripts/safe-deploy.sh sets — so bare
-  // `wrangler deploy` invocations (no --env, no wrapper) abort here
+  // `cf deploy` invocations (no --env, no wrapper) abort here
   // before any binding write happens. Catches: laptop shells with the
   // Global API Key, wdeploy-style aliases, agent scripts, stray CI.
   // The only sanctioned deploy path is `npm run deploy[:staging]`.
   // ──────────────────────────────────────────────────────────────────
   "build": {
-    "command": "[ \"${CHITTYCONNECT_SAFE_DEPLOY:-0}\" = \"1\" ] || { echo '::error::Direct wrangler deploy blocked. Run: npm run deploy (or deploy:staging). See chittyconnect#219.' >&2; exit 1; }",
+    "command": "[ \"${CHITTYCONNECT_SAFE_DEPLOY:-0}\" = \"1\" ] || { echo '::error::Direct cf deploy blocked. Run: npm run deploy (or deploy:staging). See chittyconnect#219.' >&2; exit 1; }",
     "cwd": "."
   },
 
@@ -179,7 +179,7 @@
     },
 
     // ════════════════════════════════════════════════════════════════
-    // STAGING — `wrangler deploy --env staging`
+    // STAGING — `cf deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
@@ -305,7 +305,7 @@
     },
 
     // ════════════════════════════════════════════════════════════════
-    // PRODUCTION — `wrangler deploy --env production`
+    // PRODUCTION — `cf deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
       // workers.dev URL is enabled so post-deploy CI can probe /health without
@@ -439,7 +439,7 @@
   // SECRETS MANIFEST
   // ──────────────────────────────────────────────────────────────────
   // All secrets: wrangler secret put <NAME> --env <dev|staging|production>
-  // Source of truth: 1Password → Cloudflare Secrets (hot runtime delivery)
+  // Source of truth: chittysecrets → Cloudflare Secrets (hot runtime delivery)
   //
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ GITHUB INTEGRATION                                             │
@@ -507,12 +507,12 @@
   // ┌─────────────────────────────────────────────────────────────────┐
   // │ CREDENTIAL PROVISIONING & 1PASSWORD                            │
   // ├─────────────────────────────────────────────────────────────────┤
-  // │ ✓ ONEPASSWORD_CONNECT_TOKEN  1Password Connect JWT             │
+  // │ ✓ ONEPASSWORD_CONNECT_TOKEN  chittysecrets Connect JWT             │
   // │ ✓ CLOUDFLARE_MAKE_API_KEY    CF API fallback (if 1Pass down)   │
   // │ ✓ ENCRYPTION_KEY             32-byte key for KV cache encryption│
   // │ ✓ INTERNAL_WEBHOOK_SECRET    Internal webhook verification     │
   // │ ✓ SECRETS_PORTAL_AES_KEY     AES key for /secrets portal       │
-  // │ ⚠ OP_EVENTS_API_TOKEN        1Password Events API token (n/p)  │
+  // │ ⚠ OP_EVENTS_API_TOKEN        chittysecrets Events API token (n/p)  │
   // │ ⚠ EMERGENCY_REVOKE_TOKEN     Emergency credential revoke (n/p) │
   // └─────────────────────────────────────────────────────────────────┘
   //
@@ -545,7 +545,7 @@
   // │ Provision as KV/DO/R2 when features are promoted to prod.      │
   // └─────────────────────────────────────────────────────────────────┘
   //
-  // 1Password vault items required for credential provisioning:
+  // chittysecrets vault items required for credential provisioning:
   //   Vault: ChittyOS-Core (oxwo63jlcbo66c7kwx67lquw4i)
   //   Item title: "cloudflare"  fields: make_api_key, account_id
 }

@@ -498,7 +498,7 @@ Following MCP best practices (Single Responsibility Principle):
 
 - [ ] Fix DNS and deploy
   ```bash
-  wrangler deploy --env production
+  cf deploy --env production
   ```
 
 - [ ] Set up secrets
@@ -584,7 +584,7 @@ wrangler kv:namespace create "RATE_LIMIT" --preview false
 # Update wrangler.toml with IDs
 
 # Deploy
-wrangler deploy --env production
+cf deploy --env production
 ```
 
 ### 2. Add Basic Testing

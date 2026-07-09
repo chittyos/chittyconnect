@@ -62,7 +62,7 @@ if [ "$ENV" = "production" ]; then
     sleep 5
 fi
 
-wrangler deploy --env $ENV
+cf deploy --env $ENV
 
 # Health check
 echo ""

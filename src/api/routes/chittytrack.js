@@ -2,7 +2,7 @@
  * ChittyTrack API Routes
  * Centralized observability proxy for ChittyOS
  *
- * Service token retrieved dynamically from 1Password with automatic
+ * Service token retrieved dynamically from chittysecrets with automatic
  * failover to CHITTY_TRACK_TOKEN environment variable.
  */
 

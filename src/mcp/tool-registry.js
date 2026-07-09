@@ -961,7 +961,7 @@ const MCP_TOOLS = [
   {
     name: "chitty_credential_retrieve",
     description:
-      "Securely retrieve credentials from 1Password with ContextConsciousness™ validation. Risk-based access control.",
+      "Securely retrieve credentials from chittysecrets with ContextConsciousness™ validation. Risk-based access control.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1057,7 +1057,7 @@ const MCP_TOOLS = [
   {
     name: "chitty_notion_query",
     description:
-      "Query Notion databases through ChittyConnect proxy with 1Password credential retrieval.",
+      "Query Notion databases through ChittyConnect proxy with chittysecrets credential retrieval.",
     inputSchema: {
       type: "object",
       properties: {

@@ -8,7 +8,7 @@
  * 1. GitHub Actions gets OIDC token from GitHub
  * 2. Sends token to ChittyConnect
  * 3. ChittyConnect validates OIDC token
- * 4. ChittyConnect fetches credential from 1Password
+ * 4. ChittyConnect fetches credential from chittysecrets
  * 5. Returns credential to GitHub Actions
  *
  * @module api/routes/github-actions
@@ -175,7 +175,7 @@ githubActionsRoutes.post("/credentials", async (c) => {
       const config = credentialMap[credName];
 
       try {
-        // Try credential broker (ChittyServ or 1Password)
+        // Try credential broker (ChittyServ or chittysecrets)
         {
           const value = await broker.get(config.path);
           result[credName] = value;
@@ -289,12 +289,12 @@ githubActionsRoutes.get("/available", async (c) => {
       {
         name: "CLOUDFLARE_API_TOKEN",
         description: "Cloudflare API token for Workers deployment",
-        required_for: ["wrangler deploy", "wrangler d1"],
+        required_for: ["cf deploy", "wrangler d1"],
       },
       {
         name: "CLOUDFLARE_ACCOUNT_ID",
         description: "Cloudflare account ID",
-        required_for: ["wrangler deploy"],
+        required_for: ["cf deploy"],
       },
       {
         name: "NEON_DATABASE_URL",

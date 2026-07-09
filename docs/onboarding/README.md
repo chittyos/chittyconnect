@@ -28,7 +28,7 @@ Authoritative sources in-repo:
 Process summary:
 1) Draft onboarding page (service/product/datalayer/implementation)
 2) Classify via ontology and request scopes
-3) Provision secrets via ChittyAuth (or 1Password → Wrangler secrets)
+3) Provision secrets via ChittyAuth (or chittysecrets → Wrangler secrets)
 4) Submit PR with labels: security-approved, docs-approved, access-reviewed
 5) CI governance checks enforce presence, labels, and scope compliance
 

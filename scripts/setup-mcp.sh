@@ -278,7 +278,7 @@ echo "  • Legal case management"
 echo "  • Evidence ingestion and analysis"
 echo "  • ContextConsciousness™ ecosystem awareness"
 echo "  • MemoryCloude™ persistent memory"
-echo "  • Secure credential management via 1Password"
+echo "  • Secure credential management via chittysecrets"
 echo "  • Service health monitoring"
 echo "  • And many more..."
 

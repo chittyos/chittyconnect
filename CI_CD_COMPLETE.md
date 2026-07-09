@@ -101,7 +101,7 @@ CLOUDFLARE_ACCOUNT_ID    # bbf9fcd845e78035b7a135c481e88541
 # Or with wrangler
 cd /Users/nb/.claude/projects/-/CHITTYOS/chittyos-apps/chittyconnect
 npm ci
-wrangler deploy --env production
+cf deploy --env production
 ```
 
 ---

@@ -112,7 +112,7 @@ fix(ci): make MCP manifest validation optional to unblock deployment
 ```bash
 # Deploy locally with valid Cloudflare credentials
 npx wrangler login
-npx wrangler deploy --env production
+npx cf deploy --env production
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-25
 **Scope**: Enforcement audit — every secret, var, and binding classified and mapped to dev/stage/prod
-**Canonical model**: 1Password (cold/source-of-truth) → Cloudflare Secrets (hot/runtime) → KV only for short-lived rotated values
+**Canonical model**: chittysecrets (cold/source-of-truth) → Cloudflare Secrets (hot/runtime) → KV only for short-lived rotated values
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Category | Count | Compliant | Non-Compliant | Action Required |
 |----------|-------|-----------|---------------|-----------------|
-| **Secrets** | 33 | 7 | 26 | Add to sync-secrets catalog + 1Password environments |
+| **Secrets** | 33 | 7 | 26 | Add to sync-secrets catalog + chittysecrets environments |
 | **Vars** | 14 | 10 | 4 | Add to wrangler env blocks |
 | **Bindings** | 18 | 9 | 9 | Add missing bindings to dev/stage env blocks |
 | **Delete** | 5 | — | 5 | Remove dead references |
@@ -23,11 +23,11 @@
 
 ---
 
-## 1. SECRETS (must be in Cloudflare Secrets, sourced from 1Password)
+## 1. SECRETS (must be in Cloudflare Secrets, sourced from chittysecrets)
 
 ### Currently in sync-secrets.yml catalog (7/33) ✅
 
-| Secret Name | 1Password Source | sync-secrets.yml | CF Secret | Notes |
+| Secret Name | chittysecrets Source | sync-secrets.yml | CF Secret | Notes |
 |---|---|---|---|---|
 | `NEON_DATABASE_URL` | ✅ chitty-app-{env} | ✅ | ✅ | |
 | `GDRIVE_CLIENT_ID` | ✅ | ✅ | ✅ | |
@@ -81,9 +81,9 @@
 #### Infrastructure Secrets (3)
 | Secret Name | Referenced In | Action |
 |---|---|---|
-| `ENCRYPTION_KEY` | 1password-connect-client.js:316 | **ADD** — KV cache encryption key |
+| `ENCRYPTION_KEY` | chittysecrets-connect-client.js:316 | **ADD** — KV cache encryption key |
 | `EMERGENCY_REVOKE_TOKEN` | wrangler comment only | **ADD** — emergency credential revoke |
-| `OP_EVENTS_API_TOKEN` | onepassword-events.js:253 | **ADD** — 1Password Events API |
+| `OP_EVENTS_API_TOKEN` | onepassword-events.js:253 | **ADD** — chittysecrets Events API |
 
 ---
 
@@ -99,7 +99,7 @@
 | `CHITTYOS_ACCOUNT_ID` | `0bc21e3a5a...` | Same across envs | ✅ |
 | `CHITTYOS_DOMAIN` | `chitty.cc` | Same across envs | ✅ |
 | `NEON_ORG_ID` | `org-old-mountain-22774840` | Same across envs | ✅ |
-| `ONEPASSWORD_CONNECT_URL` | `https://1password-connect.chitty.cc` | Same across envs | ✅ |
+| `ONEPASSWORD_CONNECT_URL` | `https://chittysecrets-connect.chitty.cc` | Same across envs | ✅ |
 | `ONEPASSWORD_VAULT_*` (4 vaults) | vault IDs | Same across envs | ✅ |
 | `CREDENTIAL_FAILOVER_ENABLED` | `"true"` | Same across envs | ✅ |
 | `CREDENTIAL_BROKER_TYPE` | `"auto"` | Same across envs | ✅ |
@@ -259,7 +259,7 @@ Code references 5 KV namespaces (`MEMORY_KV`, `CHRONICLE_KV`, `COMMAND_KV`, `CON
 
 ### Phase 2: Secret Catalog (sync-secrets.yml)
 7. Add all 26 missing secrets to the sync catalog
-8. Create corresponding 1Password environment entries in `chitty-app-dev`, `chitty-app-stage`, `chitty-app-prod`
+8. Create corresponding chittysecrets environment entries in `chitty-app-dev`, `chitty-app-stage`, `chitty-app-prod`
 9. Run `sync-secrets.yml` for each environment (dry-run first)
 10. Verify all secrets are set: `wrangler secret list --name chittyconnect`
 
@@ -274,7 +274,7 @@ Code references 5 KV namespaces (`MEMORY_KV`, `CHRONICLE_KV`, `COMMAND_KV`, `CON
 16. Deploy to dev, verify all bindings resolve
 17. Deploy to staging, run integration tests
 18. Deploy to prod, verify no regressions
-19. Update `.1password/environments.toml` to include all secrets
+19. Update `.chittysecrets/environments.toml` to include all secrets
 20. Close this audit with a PR linking to all changes
 
 ---
@@ -289,7 +289,7 @@ Per the canonical model, KV is only for **short-lived rotated values where justi
 | `TOKEN_KV` | OAuth tokens, session tokens | ✅ Rotated, TTL-based |
 | `API_KEYS` | API key validation cache | ⚠️ Review — could be D1 |
 | `OAUTH_KV` | OAuth 2.1 provider state | ✅ Required by @cloudflare/workers-oauth-provider |
-| `CREDENTIAL_CACHE` | Encrypted credential cache from 1Password | ✅ Short-lived cache, encrypted |
+| `CREDENTIAL_CACHE` | Encrypted credential cache from chittysecrets | ✅ Short-lived cache, encrypted |
 | `RATE_LIMIT` | Rate limit counters | ✅ Short-lived counters |
 | `TENANT_CONNECTIONS` | Tenant connection state | ⚠️ Review — could be D1 |
 | `MEMORY_KV` (missing) | MemoryCloude persistence | ⚠️ May need Vectorize instead |

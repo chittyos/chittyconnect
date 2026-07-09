@@ -4,14 +4,14 @@ This guide provides step-by-step instructions for deploying the three major Clou
 
 1. Durable Objects for ContextConsciousness™ session state
 2. R2 Document Storage
-3. Cloudflare Tunnel + 1Password Connect
+3. Cloudflare Tunnel + chittysecrets Connect
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Deployment 1: Durable Objects](#deployment-1-durable-objects)
 - [Deployment 2: R2 Document Storage](#deployment-2-r2-document-storage)
-- [Deployment 3: Cloudflare Tunnel + 1Password Connect](#deployment-3-cloudflare-tunnel--1password-connect)
+- [Deployment 3: Cloudflare Tunnel + chittysecrets Connect](#deployment-3-cloudflare-tunnel--chittysecrets-connect)
 - [Testing & Validation](#testing--validation)
 - [Rollback Procedures](#rollback-procedures)
 - [Cost Estimates](#cost-estimates)
@@ -28,11 +28,11 @@ npm install -g wrangler@latest
 # Cloudflare account access
 wrangler login
 
-# 1Password CLI (for 1Password Connect setup)
-brew install --cask 1password-cli  # macOS
-# OR download from https://1password.com/downloads/command-line/
+# chittysecrets CLI (for chittysecrets Connect setup)
+brew install --cask chittysecrets-cli  # macOS
+# OR download from https://chittysecrets.com/downloads/command-line/
 
-# Docker and Docker Compose (for 1Password Connect server)
+# Docker and Docker Compose (for chittysecrets Connect server)
 docker --version
 docker-compose --version
 ```
@@ -45,7 +45,7 @@ docker-compose --version
   - Workers R2 Storage: Edit
   - Workers Durable Objects: Edit
   - Account Settings: Read
-- 1Password account with Connect Server credentials
+- chittysecrets account with Connect Server credentials
 - Infrastructure server with Docker support
 
 ---
@@ -116,7 +116,7 @@ export default {
 
 ```bash
 # Deploy to staging environment
-wrangler deploy --env staging
+cf deploy --env staging
 
 # Verify deployment
 wrangler tail --env staging
@@ -181,7 +181,7 @@ wrangler secret put DO_ROLLOUT_PERCENTAGE --env staging
 
 ```bash
 # Once staging is stable (24-48 hours)
-wrangler deploy --env production
+cf deploy --env production
 
 # Enable 10% rollout in production
 wrangler secret put DO_ROLLOUT_PERCENTAGE --env production
@@ -284,7 +284,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_I
 
 ```bash
 # Deploy to staging
-wrangler deploy --env staging
+cf deploy --env staging
 
 # Test document upload
 curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
@@ -343,7 +343,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_I
 
 ```bash
 # Deploy to production
-wrangler deploy --env production
+cf deploy --env production
 
 # Monitor document storage
 curl https://connect.chitty.cc/api/v1/documents/stats \
@@ -352,27 +352,27 @@ curl https://connect.chitty.cc/api/v1/documents/stats \
 
 ---
 
-## Deployment 3: Cloudflare Tunnel + 1Password Connect
+## Deployment 3: Cloudflare Tunnel + chittysecrets Connect
 
 ### Overview
-Deploy 1Password Connect server with Cloudflare Tunnel for secure, private access.
+Deploy chittysecrets Connect server with Cloudflare Tunnel for secure, private access.
 
 **Estimated Downtime**: None (new service)
-**Free Tier**: Cloudflare Tunnel is free, 1Password Connect requires Business plan
+**Free Tier**: Cloudflare Tunnel is free, chittysecrets Connect requires Business plan
 
-### Step 1: Provision 1Password Connect Credentials
+### Step 1: Provision chittysecrets Connect Credentials
 
 ```bash
-# Using 1Password CLI
+# Using chittysecrets CLI
 op signin
 
 # Create Connect server credentials
 op connect server create "ChittyOS Infrastructure" \
   --vaults "infrastructure,services,integrations,emergency" \
-  > infrastructure/1password-connect/credentials/1password-credentials.json
+  > infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 
 # Secure the credentials file
-chmod 600 infrastructure/1password-connect/credentials/1password-credentials.json
+chmod 600 infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 ```
 
 ### Step 2: Create Cloudflare Tunnel
@@ -385,24 +385,24 @@ wrangler login
 # 1. Go to https://one.dash.cloudflare.com/
 # 2. Navigate to Zero Trust > Networks > Tunnels
 # 3. Click "Create a tunnel"
-# 4. Name: "1password-connect-chittyos"
+# 4. Name: "chittysecrets-connect-chittyos"
 # 5. Save the tunnel token
 
 # OR create via CLI:
-cloudflared tunnel create 1password-connect-chittyos
+cloudflared tunnel create chittysecrets-connect-chittyos
 
 # Configure tunnel routing
-cloudflared tunnel route dns 1password-connect-chittyos 1password-connect.chitty.cc
+cloudflared tunnel route dns chittysecrets-connect-chittyos chittysecrets-connect.chitty.cc
 ```
 
 ### Step 3: Configure Environment Variables
 
 ```bash
-cd infrastructure/1password-connect
+cd infrastructure/chittysecrets-connect
 
 # Create .env file
 cat > .env << 'EOF'
-# 1Password Connect
+# chittysecrets Connect
 OP_SESSION=your-session-token-here
 OP_LOG_LEVEL=info
 
@@ -438,8 +438,8 @@ docker-compose exec connect-api wget -qO- http://localhost:8080/health
 # 1. Go to Zero Trust > Access > Applications
 # 2. Add application
 # 3. Type: Self-hosted
-# 4. Name: "1Password Connect API"
-# 5. Subdomain: 1password-connect
+# 4. Name: "chittysecrets Connect API"
+# 5. Subdomain: chittysecrets-connect
 # 6. Domain: chitty.cc
 # 7. Add policy:
 #    - Name: "ChittyOS Services Only"
@@ -448,22 +448,22 @@ docker-compose exec connect-api wget -qO- http://localhost:8080/health
 # 8. Save
 
 # Test access
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $ONEPASSWORD_CONNECT_TOKEN"
 ```
 
 ### Step 6: Update ChittyConnect Configuration
 
 ```bash
-# Set 1Password Connect URL in wrangler.toml
+# Set chittysecrets Connect URL in wrangler.toml
 # (Already configured in your wrangler.toml under vars)
 
 # Set the Connect token as secret
 wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env production
-# Enter the token from 1Password Connect
+# Enter the token from chittysecrets Connect
 
 # Deploy updated configuration
-wrangler deploy --env production
+cf deploy --env production
 ```
 
 ### Step 7: Test End-to-End Integration
@@ -514,12 +514,12 @@ wrangler tail --env production
 - [ ] CORS headers present on responses
 - [ ] Lifecycle policies execute
 
-### 1Password Connect Testing Checklist
+### chittysecrets Connect Testing Checklist
 
 - [ ] Connect API health endpoint responds
 - [ ] Connect Sync health endpoint responds
 - [ ] Cloudflare Tunnel establishes connection
-- [ ] DNS resolves 1password-connect.chitty.cc
+- [ ] DNS resolves chittysecrets-connect.chitty.cc
 - [ ] Authentication token validates
 - [ ] Credential retrieval works
 - [ ] Vault access permissions correct
@@ -549,7 +549,7 @@ wrangler rollback --env production
 
 # Remove DO configuration from wrangler.toml
 # Comment out [durable_objects] section and redeploy
-wrangler deploy --env production
+cf deploy --env production
 ```
 
 ### Rollback: R2 Document Storage
@@ -565,14 +565,14 @@ wrangler secret put ENABLE_R2_STORAGE --env production
 
 # To completely remove R2 binding
 # Comment out [[r2_buckets]] in wrangler.toml
-wrangler deploy --env production
+cf deploy --env production
 ```
 
-### Rollback: 1Password Connect
+### Rollback: chittysecrets Connect
 
 ```bash
 # Stop Docker services
-cd infrastructure/1password-connect
+cd infrastructure/chittysecrets-connect
 docker-compose down
 
 # Disable in ChittyConnect
@@ -580,13 +580,13 @@ wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty string)
 
 # ChittyConnect will fall back to existing secrets
-wrangler deploy --env production
+cf deploy --env production
 
 # Delete Cloudflare Tunnel (optional)
-cloudflared tunnel delete 1password-connect-chittyos
+cloudflared tunnel delete chittysecrets-connect-chittyos
 
 # Remove DNS record
-# Via Cloudflare Dashboard: DNS > Records > Delete 1password-connect
+# Via Cloudflare Dashboard: DNS > Records > Delete chittysecrets-connect
 ```
 
 ---
@@ -627,12 +627,12 @@ cloudflared tunnel delete 1password-connect-chittyos
 - Downloads: ~200K/month = **FREE**
 - **Total: $0/month**
 
-### Cloudflare Tunnel + 1Password Connect
+### Cloudflare Tunnel + chittysecrets Connect
 
 **Cloudflare Tunnel**: **FREE** (unlimited bandwidth)
 
-**1Password Connect**:
-- Requires 1Password Business plan: **$7.99/user/month**
+**chittysecrets Connect**:
+- Requires chittysecrets Business plan: **$7.99/user/month**
 - Infrastructure-only usage: **~$8-16/month**
 
 **Infrastructure Server**:
@@ -641,7 +641,7 @@ cloudflared tunnel delete 1password-connect-chittyos
 - Hetzner VPS: **€4.51/month (~$5/month)**
 
 **Estimated Monthly Cost**:
-- 1Password Connect: **$8/month**
+- chittysecrets Connect: **$8/month**
 - Server: **$5-15/month**
 - **Total: $13-23/month**
 
@@ -650,7 +650,7 @@ cloudflared tunnel delete 1password-connect-chittyos
 **Monthly Cost for All Three Optimizations**:
 - Durable Objects: **$0**
 - R2 Storage: **$0**
-- 1Password Connect: **$13-23**
+- chittysecrets Connect: **$13-23**
 - **Total: $13-23/month**
 
 **Annual Cost**: **$156-276/year**
@@ -671,7 +671,7 @@ cloudflared tunnel delete 1password-connect-chittyos
 ```bash
 # Check service health
 curl https://connect.chitty.cc/health
-curl https://1password-connect.chitty.cc/v1/health
+curl https://chittysecrets-connect.chitty.cc/v1/health
 
 # Check DO metrics
 curl https://connect.chitty.cc/api/v1/sessions/metrics
@@ -695,7 +695,7 @@ docker-compose ps
 ### Monthly Checks
 - Review Cloudflare Analytics dashboard
 - Check R2 storage costs
-- Review 1Password Connect access logs
+- Review chittysecrets Connect access logs
 - Test disaster recovery procedures
 
 ---
@@ -729,7 +729,7 @@ wrangler r2 object list chittyconnect-documents | wc -l
 wrangler r2 object put chittyconnect-documents/test.txt --file=test.txt
 ```
 
-**Issue: 1Password Connect unreachable**
+**Issue: chittysecrets Connect unreachable**
 ```bash
 # Check Docker containers
 docker-compose ps
@@ -758,5 +758,5 @@ After successful deployment:
 
 For questions or issues, refer to:
 - Cloudflare Workers docs: https://developers.cloudflare.com/workers/
-- 1Password Connect docs: https://developer.1password.com/docs/connect/
+- chittysecrets Connect docs: https://developer.chittysecrets.com/docs/connect/
 - ChittyOS documentation: /Users/nb/Projects/development/CLAUDE.md

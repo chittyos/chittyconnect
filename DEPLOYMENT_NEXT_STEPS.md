@@ -26,7 +26,7 @@ All implementation is done and committed to GitHub (7 commits, 11 files):
 
 **Issue**: Repository secret `CLOUDFLARE_API_TOKEN` is invalid (code: 10001)
 
-**Root Cause**: The "Global API Key" in 1Password is not compatible with API Token authentication
+**Root Cause**: The "Global API Key" in chittysecrets is not compatible with API Token authentication
 
 **Solution**: Create a **Cloudflare API Token** (not Global API Key)
 

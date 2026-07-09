@@ -42,7 +42,7 @@ KV_NAMESPACE_ID=<your-namespace-id> ./scripts/seed-kv.sh
 
 | KV Key                     | Type       | Default Value                                | Purpose                              |
 |----------------------------|------------|----------------------------------------------|--------------------------------------|
-| `cred:allowlist`           | JSON array | `["op://ChittyOS/","op://Finance/"]`         | 1Password vault prefixes allowed for credential resolution |
+| `cred:allowlist`           | JSON array | `["op://ChittyOS/","op://Finance/"]`         | chittysecrets vault prefixes allowed for credential resolution |
 | `cred:subject_allowlist`   | JSON array | `["svc:chittyconnect"]`                      | Service subjects permitted to request credentials |
 | `cred:token_sha256_list`   | JSON array | `[]`                                         | Pre-approved token SHA-256 hashes    |
 | `cred:rate_limit`          | number     | `10`                                         | Max credential requests per rate-limit window |

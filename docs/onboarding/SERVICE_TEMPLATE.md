@@ -19,7 +19,7 @@ Optional
 Webhooks: <list>
 
 Secrets & Provisioning
-- Long‑lived service tokens: managed in 1Password; synced to Wrangler secrets
+- Long‑lived service tokens: managed in chittysecrets; synced to Wrangler secrets
 - Ephemeral CI tokens: provisioned via ChittyAuth/ChittyConnect
 - Required env:
   - CHITTY_AUTH_TOKEN (auth.chitty.cc)

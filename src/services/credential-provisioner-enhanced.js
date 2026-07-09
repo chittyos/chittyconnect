@@ -1,13 +1,13 @@
 /**
- * Enhanced Credential Provisioning Service with 1Password Integration
+ * Enhanced Credential Provisioning Service with chittysecrets Integration
  *
- * This enhanced version integrates with 1Password Connect to retrieve
+ * This enhanced version integrates with chittysecrets Connect to retrieve
  * root credentials dynamically, eliminating the need to store sensitive
  * keys in environment variables.
  *
  * Security principles:
  * - Never store root credentials in environment variables
- * - Retrieve credentials from 1Password on-demand
+ * - Retrieve credentials from chittysecrets on-demand
  * - Context-aware provisioning with ContextConsciousness™
  * - Always create scoped, time-limited tokens
  * - Log all provisioning operations
@@ -76,7 +76,7 @@ export class EnhancedCredentialProvisioner {
         name: "D1 Database Write",
         scope: "account",
       },
-      // Zone-scoped. Required for `wrangler deploy` against a worker
+      // Zone-scoped. Required for `cf deploy` against a worker
       // with a `routes` block — without this permission group, deploy
       // fails post-upload at PUT /zones/{zid}/workers/routes with
       // Authentication error code 10000.
@@ -197,7 +197,7 @@ export class EnhancedCredentialProvisioner {
 
   /**
    * Provision a credential based on type and context
-   * Enhanced with 1Password retrieval and ContextConsciousness validation
+   * Enhanced with chittysecrets retrieval and ContextConsciousness validation
    *
    * @param {string} type - Credential type
    * @param {object} context - Context information
@@ -501,7 +501,7 @@ export class EnhancedCredentialProvisioner {
   }
 
   /**
-   * Provision Cloudflare API token with credentials from 1Password
+   * Provision Cloudflare API token with credentials from chittysecrets
    *
    * @private
    * @param {string} type - Token type
@@ -512,7 +512,7 @@ export class EnhancedCredentialProvisioner {
   async provisionCloudflareToken(type, context, requestingService) {
     const { service, purpose, environment = "production" } = context;
 
-    // Retrieve Cloudflare credentials from 1Password
+    // Retrieve Cloudflare credentials from chittysecrets
     const makeApiKey = await this.onePassword.getInfrastructureCredential(
       "cloudflare",
       "make_api_key",
@@ -530,16 +530,16 @@ export class EnhancedCredentialProvisioner {
         environment,
       })
       .catch((err) => {
-        console.warn("[EnhancedCredentialProvisioner] 1Password account_id fetch failed:", err.message);
+        console.warn("[EnhancedCredentialProvisioner] chittysecrets account_id fetch failed:", err.message);
         return this.env.CHITTYOS_ACCOUNT_ID;
       });
 
     if (!accountId) {
-      throw new Error("Cloudflare Account ID unavailable — both 1Password and CHITTYOS_ACCOUNT_ID env var are empty");
+      throw new Error("Cloudflare Account ID unavailable — both chittysecrets and CHITTYOS_ACCOUNT_ID env var are empty");
     }
     if (!makeApiKey) {
       throw new Error(
-        "Failed to retrieve Cloudflare credentials from 1Password",
+        "Failed to retrieve Cloudflare credentials from chittysecrets",
       );
     }
 
@@ -575,7 +575,7 @@ export class EnhancedCredentialProvisioner {
     if (zonePermissions.length > 0 && requestedZones.length === 0) {
       // Drop zone-scoped perms when no zones provided. Caller still
       // gets the account-scoped subset. If the dropped perms are load-
-      // bearing (e.g. wrangler deploy of a worker with `routes`), the
+      // bearing (e.g. cf deploy of a worker with `routes`), the
       // resulting deploy will fail with code 10000 — which is the
       // existing behavior, so no regression.
       console.warn(
@@ -692,7 +692,7 @@ export class EnhancedCredentialProvisioner {
       metadata: {
         provisioned_by: "ChittyConnect Enhanced",
         context_validated: true,
-        retrieved_from: "1Password",
+        retrieved_from: "chittysecrets",
         timestamp: new Date().toISOString(),
       },
     };
@@ -709,7 +709,7 @@ export class EnhancedCredentialProvisioner {
   async provisionServiceToken(context, requestingService) {
     const { source_service, target_service, scopes = [] } = context;
 
-    // Retrieve the target service's token from 1Password
+    // Retrieve the target service's token from chittysecrets
     const token = await this.onePassword.getServiceToken(target_service, {
       service: source_service,
       purpose: "inter-service-call",
@@ -767,7 +767,7 @@ export class EnhancedCredentialProvisioner {
     const { repository, permissions = ["contents:write", "actions:write"] } =
       context;
 
-    // Retrieve GitHub App credentials from 1Password
+    // Retrieve GitHub App credentials from chittysecrets
     const appId = await this.onePassword.getInfrastructureCredential(
       "github",
       "app_id",
@@ -789,7 +789,7 @@ export class EnhancedCredentialProvisioner {
     );
 
     if (!appId || !privateKey) {
-      throw new Error("Failed to retrieve GitHub credentials from 1Password");
+      throw new Error("Failed to retrieve GitHub credentials from chittysecrets");
     }
 
     // Generate installation access token
@@ -837,7 +837,7 @@ export class EnhancedCredentialProvisioner {
   async provisionNeonConnection(context, requestingService) {
     const { database, readonly = false } = context;
 
-    // Retrieve Neon credentials from 1Password
+    // Retrieve Neon credentials from chittysecrets
     const databaseUrl = await this.onePassword.getInfrastructureCredential(
       "neon",
       "database_url",
@@ -849,7 +849,7 @@ export class EnhancedCredentialProvisioner {
     );
 
     if (!databaseUrl) {
-      throw new Error("Failed to retrieve Neon credentials from 1Password");
+      throw new Error("Failed to retrieve Neon credentials from chittysecrets");
     }
 
     // Create a database-specific connection string if needed
@@ -892,7 +892,7 @@ export class EnhancedCredentialProvisioner {
    * Generic integration API key provisioner
    *
    * Dynamically provisions API keys for any configured integration platform.
-   * Uses credential type metadata to determine 1Password path, env var name, etc.
+   * Uses credential type metadata to determine chittysecrets path, env var name, etc.
    *
    * @private
    * @param {string} type - Credential type name (e.g., 'neon_api_key')
@@ -914,7 +914,7 @@ export class EnhancedCredentialProvisioner {
       `[EnhancedCredentialProvisioner] Provisioning ${platform} API key via dynamic handler`,
     );
 
-    // Retrieve API key from 1Password using configured path
+    // Retrieve API key from chittysecrets using configured path
     const apiKey = await this.onePassword.get(onePasswordPath, {
       service: requestingService,
       purpose,
@@ -923,7 +923,7 @@ export class EnhancedCredentialProvisioner {
 
     if (!apiKey) {
       throw new Error(
-        `Failed to retrieve ${platform} API key from 1Password (path: ${onePasswordPath})`,
+        `Failed to retrieve ${platform} API key from chittysecrets (path: ${onePasswordPath})`,
       );
     }
 

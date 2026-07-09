@@ -32,7 +32,7 @@ async function runMigrations() {
     console.error('Usage:');
     console.error('  DATABASE_URL="postgres://..." node scripts/run-neon-migrations.js');
     console.error('');
-    console.error('Or with 1Password CLI:');
+    console.error('Or with chittysecrets CLI:');
     console.error('  DATABASE_URL=$(op read "op://Infrastructure/Neon Database/credential") node scripts/run-neon-migrations.js');
     process.exit(1);
   }

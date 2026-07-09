@@ -4,10 +4,10 @@
  * Supports multiple backends:
  *   - "cloudflare-secrets" → Direct env binding reads (zero latency, default)
  *   - "chittyserv"         → ChittyServ API at CHITTYSERV_URL/v1/
- *   - "1password"          → 1Password Connect API (legacy, deprecated)
- *   - "auto"               → cloudflare-secrets → chittyserv → 1password
+ *   - "chittysecrets"          → chittysecrets Connect API (legacy, deprecated)
+ *   - "auto"               → cloudflare-secrets → chittyserv → chittysecrets
  *
- * Portal Pattern: Secrets are synced from 1Password synthetic-shared vault
+ * Portal Pattern: Secrets are synced from chittysecrets synthetic-shared vault
  * to Cloudflare Secrets Store at deploy time. The broker reads from env
  * bindings first (zero network, zero latency), falling back to runtime
  * credential fetching only when env bindings are missing.
@@ -17,7 +17,7 @@
  * @module lib/credential-broker
  */
 
-import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
+import { OnePasswordConnectClient } from "../services/chittysecrets-connect-client.js";
 import { ChittyServClient } from "../services/chittyserv-client.js";
 import { CloudflareSecretsClient } from "../services/cloudflare-secrets-client.js";
 
@@ -39,7 +39,7 @@ export function createCredentialBroker(env) {
     case "chittyserv":
       return new ChittyServBroker(env);
 
-    case "1password":
+    case "chittysecrets":
       return new OnePasswordBroker(env);
 
     case "auto":
@@ -103,12 +103,12 @@ class ChittyServBroker {
   }
 }
 
-// ─── 1Password Broker (Legacy — Deprecated) ─────────────────────────────────
+// ─── chittysecrets Broker (Legacy — Deprecated) ─────────────────────────────────
 
 class OnePasswordBroker {
   constructor(env) {
     this.client = new OnePasswordConnectClient(env);
-    this.type = "1password";
+    this.type = "chittysecrets";
   }
 
   async get(credentialPath, options = {}) {
@@ -128,7 +128,7 @@ class OnePasswordBroker {
   }
 }
 
-// ─── Auto Broker (cloudflare-secrets → chittyserv → 1password) ──────────────
+// ─── Auto Broker (cloudflare-secrets → chittyserv → chittysecrets) ──────────────
 
 class AutoBroker {
   constructor(env) {
@@ -157,7 +157,7 @@ class AutoBroker {
       );
     }
 
-    // 3. Fall back to 1Password Connect
+    // 3. Fall back to chittysecrets Connect
     return this.onePassword.get(credentialPath, options);
   }
 

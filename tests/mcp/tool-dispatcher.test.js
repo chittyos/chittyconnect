@@ -1236,13 +1236,13 @@ describe("dispatchToolCall", () => {
   describe("requireServiceAuth handles getServiceToken throwing", () => {
     it("returns structured auth error when getServiceToken throws", async () => {
       getServiceToken.mockRejectedValue(
-        new Error("1Password connection timeout"),
+        new Error("chittysecrets connection timeout"),
       );
 
       const result = await dispatchToolCall("chitty_ledger_stats", {}, mockEnv);
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("1Password connection timeout");
+      expect(result.content[0].text).toContain("chittysecrets connection timeout");
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });

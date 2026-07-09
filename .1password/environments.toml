@@ -1,7 +1,7 @@
-# ChittyConnect 1Password Environment Configuration
+# ChittyConnect chittysecrets Environment Configuration
 # Used by Claude Code hooks to validate secret accessibility
 #
-# Format based on: https://github.com/1Password/cursor-hooks
+# Format based on: https://github.com/chittysecrets/cursor-hooks
 
 [project]
 name = "chittyconnect"
@@ -18,10 +18,10 @@ ref = "op://Private/gxyne23yqngvk2nzjwl62uakx4/Global API Key/token"
 description = "Cloudflare Global API Token"
 required_for = ["deploy", "wrangler", "d1"]
 
-# 1Password Connect (for runtime credential access)
+# chittysecrets Connect (for runtime credential access)
 [[secrets]]
 ref = "op://ChittyOS/chittyconnect/onepassword_connect_token"
-description = "1Password Connect API token"
+description = "chittysecrets Connect API token"
 required_for = ["runtime"]
 
 # Service tokens
@@ -60,13 +60,13 @@ required_for = ["runtime"]
 
 # Validation settings
 [validation]
-# Fail open if 1Password is unavailable
+# Fail open if chittysecrets is unavailable
 fail_open = true
 
 # Only validate secrets for these command patterns
 validate_patterns = [
-  "op run",
-  "wrangler deploy",
+  "chittysecrets run",
+  "cf deploy",
   "wrangler d1",
   "npm run deploy"
 ]

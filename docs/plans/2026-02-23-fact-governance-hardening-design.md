@@ -308,7 +308,7 @@ PDFs stored in existing R2 bucket (`chittyos-files`) under `exports/facts/` pref
 
 1. ChittyProof service registered at `registry.chitty.cc`
 2. ChittyLedger API extended with `/seal`, `/dispute`, `/proof` endpoints
-3. Service tokens provisioned in 1Password and Wrangler
+3. Service tokens provisioned in chittysecrets and Wrangler
 
 ## 12. Verification
 

@@ -1,9 +1,9 @@
 /**
  * Third-Party Integration Routes
- * Proxy for Notion, Neon, Google, OpenAI with 1Password Connect integration
+ * Proxy for Notion, Neon, Google, OpenAI with chittysecrets Connect integration
  *
- * All credentials are retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * All credentials are retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  */
 
 import { Hono } from "hono";
@@ -51,7 +51,7 @@ thirdpartyRoutes.post("/notion/query", async (c) => {
       return c.json({ error: "databaseId is required" }, 400);
     }
 
-    // Get Notion token from 1Password with fallback
+    // Get Notion token from chittysecrets with fallback
     const notionToken = await getCredential(
       c.env,
       "integrations/notion/api_key",
@@ -63,7 +63,7 @@ thirdpartyRoutes.post("/notion/query", async (c) => {
         {
           error: "Notion API key not configured",
           details:
-            "Neither 1Password Connect nor environment variable available",
+            "Neither chittysecrets Connect nor environment variable available",
         },
         503,
       );
@@ -102,7 +102,7 @@ thirdpartyRoutes.post("/notion/page/create", async (c) => {
   try {
     const body = await c.req.json();
 
-    // Get Notion token from 1Password with fallback
+    // Get Notion token from chittysecrets with fallback
     const notionToken = await getCredential(
       c.env,
       "integrations/notion/api_key",
@@ -242,7 +242,7 @@ thirdpartyRoutes.post("/neon/query", async (c) => {
       return c.json({ error: "query is required" }, 400);
     }
 
-    // Get Neon database URL from 1Password with fallback
+    // Get Neon database URL from chittysecrets with fallback
     const neonDbUrl =
       c.env.NEON_DATABASE_URL ||
       (await getCredential(
@@ -284,7 +284,7 @@ thirdpartyRoutes.post("/openai/chat", async (c) => {
       return c.json({ error: "messages is required" }, 400);
     }
 
-    // Get OpenAI API key from 1Password with fallback
+    // Get OpenAI API key from chittysecrets with fallback
     const openaiKey = await getCredential(
       c.env,
       "integrations/openai/api_key",
@@ -616,7 +616,7 @@ thirdpartyRoutes.patch("/notion/page/update", async (c) => {
       return c.json({ error: "pageId is required" }, 400);
     }
 
-    // Get Notion token from 1Password with fallback
+    // Get Notion token from chittysecrets with fallback
     const notionToken = await getCredential(
       c.env,
       "integrations/notion/api_key",
@@ -721,7 +721,7 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
       return c.json({ error: "content is required" }, 400);
     }
 
-    // Get GitHub token from 1Password with fallback
+    // Get GitHub token from chittysecrets with fallback
     const githubToken = await getCredential(
       c.env,
       "integrations/github/token",
@@ -733,7 +733,7 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
         {
           error: "GitHub token not configured",
           details:
-            "Neither 1Password Connect nor environment variable available",
+            "Neither chittysecrets Connect nor environment variable available",
         },
         503,
       );
@@ -777,7 +777,7 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
       "",
     );
 
-    // Get GitHub token from 1Password with fallback
+    // Get GitHub token from chittysecrets with fallback
     const githubToken = await getCredential(
       c.env,
       "integrations/github/token",
@@ -829,7 +829,7 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
       maxResults = 10,
     } = c.req.query();
 
-    // Get Google access token from 1Password with fallback
+    // Get Google access token from chittysecrets with fallback
     const googleToken = await getCredential(
       c.env,
       "integrations/google/access_token",
@@ -906,7 +906,7 @@ async function resolveBinding(binding) {
 /**
  * Resolve Mercury API token for a given integration.
  * Checks: request header > Secrets Store binding > legacy env var >
- * single fallback > credential broker (1Password).
+ * single fallback > credential broker (chittysecrets).
  */
 async function getMercuryToken(c, integrationSlug) {
   const slug = integrationSlug || "default";

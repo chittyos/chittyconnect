@@ -1,10 +1,10 @@
 /**
- * 1Password Connect API Client
+ * chittysecrets Connect API Client
  *
- * Provides secure, cached access to credentials stored in 1Password.
+ * Provides secure, cached access to credentials stored in chittysecrets.
  * Implements intelligent caching, error handling, and failover strategies.
  *
- * @module services/1password-connect-client
+ * @module services/chittysecrets-connect-client
  */
 
 export class OnePasswordConnectClient {
@@ -36,7 +36,7 @@ export class OnePasswordConnectClient {
   }
 
   /**
-   * Retrieve a credential from 1Password by path
+   * Retrieve a credential from chittysecrets by path
    *
    * @param {string} credentialPath - Path like "infrastructure/cloudflare/make_api_key"
    * @param {object} options - Retrieval options
@@ -55,16 +55,16 @@ export class OnePasswordConnectClient {
     if (!bypassCache) {
       const cached = await this.getFromCache(credentialPath);
       if (cached) {
-        console.log(`[1Password] Cache HIT for ${credentialPath}`);
+        console.log(`[chittysecrets] Cache HIT for ${credentialPath}`);
         return cached;
       }
     }
 
     console.log(
-      `[1Password] Cache MISS for ${credentialPath}, fetching from Connect API`,
+      `[chittysecrets] Cache MISS for ${credentialPath}, fetching from Connect API`,
     );
 
-    // Fetch from 1Password Connect API
+    // Fetch from chittysecrets Connect API
     const value = await this.fetchFromConnect(parsed);
 
     // Cache the result (unless emergency vault)
@@ -96,7 +96,7 @@ export class OnePasswordConnectClient {
 
     // Validate vault
     if (!this.vaults[vault]) {
-      console.error(`[1Password] Unknown vault: ${vault}`);
+      console.error(`[chittysecrets] Unknown vault: ${vault}`);
       return null;
     }
 
@@ -110,7 +110,7 @@ export class OnePasswordConnectClient {
   }
 
   /**
-   * Fetch credential from 1Password Connect API
+   * Fetch credential from chittysecrets Connect API
    *
    * @private
    * @param {object} parsed - Parsed credential path
@@ -189,12 +189,12 @@ export class OnePasswordConnectClient {
       }
 
       console.log(
-        `[1Password] Successfully retrieved ${parsed.fullPath} (${value.length} chars)`,
+        `[chittysecrets] Successfully retrieved ${parsed.fullPath} (${value.length} chars)`,
       );
 
       return value;
     } catch (error) {
-      console.error(`[1Password] Fetch error for ${parsed.fullPath}:`, error);
+      console.error(`[chittysecrets] Fetch error for ${parsed.fullPath}:`, error);
 
       // Check if we should failover to environment variable
       if (this.env.CREDENTIAL_FAILOVER_ENABLED === "true") {
@@ -206,7 +206,7 @@ export class OnePasswordConnectClient {
   }
 
   /**
-   * Failover to environment variable if 1Password Connect fails
+   * Failover to environment variable if chittysecrets Connect fails
    *
    * @private
    * @param {object} parsed - Parsed credential path
@@ -214,7 +214,7 @@ export class OnePasswordConnectClient {
    */
   async failoverToEnvironment(parsed) {
     console.warn(
-      `[1Password] Attempting failover to environment variables for ${parsed.fullPath}`,
+      `[chittysecrets] Attempting failover to environment variables for ${parsed.fullPath}`,
     );
 
     // Convert path to environment variable name
@@ -232,7 +232,7 @@ export class OnePasswordConnectClient {
     }
 
     console.warn(
-      `[1Password] Failover SUCCESS - using ${envVarName} from environment`,
+      `[chittysecrets] Failover SUCCESS - using ${envVarName} from environment`,
     );
 
     return envValue;
@@ -248,7 +248,7 @@ export class OnePasswordConnectClient {
    */
   async getFromCache(credentialPath) {
     try {
-      const cacheKey = `1password:cache:${credentialPath}`;
+      const cacheKey = `chittysecrets:cache:${credentialPath}`;
       const cached = await this.env.CREDENTIAL_CACHE.get(cacheKey);
 
       if (cached) {
@@ -258,7 +258,7 @@ export class OnePasswordConnectClient {
 
       return null;
     } catch (error) {
-      console.error(`[1Password] Cache read error:`, error);
+      console.error(`[chittysecrets] Cache read error:`, error);
       return null;
     }
   }
@@ -274,7 +274,7 @@ export class OnePasswordConnectClient {
    */
   async setCache(credentialPath, value, ttl) {
     try {
-      const cacheKey = `1password:cache:${credentialPath}`;
+      const cacheKey = `chittysecrets:cache:${credentialPath}`;
 
       // Encrypt value before caching
       const encrypted = await this.encrypt(value);
@@ -283,9 +283,9 @@ export class OnePasswordConnectClient {
         expirationTtl: ttl,
       });
 
-      console.log(`[1Password] Cached ${credentialPath} for ${ttl}s`);
+      console.log(`[chittysecrets] Cached ${credentialPath} for ${ttl}s`);
     } catch (error) {
-      console.error(`[1Password] Cache write error:`, error);
+      console.error(`[chittysecrets] Cache write error:`, error);
       // Don't throw - cache failure shouldn't break credential retrieval
     }
   }
@@ -324,7 +324,7 @@ export class OnePasswordConnectClient {
     this.cachedEncryptionKey = await crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
-        salt: encoder.encode("chittyos-1password-salt"),
+        salt: encoder.encode("chittyos-chittysecrets-salt"),
         iterations: 100000,
         hash: "SHA-256",
       },
@@ -334,7 +334,7 @@ export class OnePasswordConnectClient {
       ["encrypt", "decrypt"],
     );
 
-    console.log("[1Password] Encryption key cached for improved performance");
+    console.log("[chittysecrets] Encryption key cached for improved performance");
     return this.cachedEncryptionKey;
   }
 
@@ -375,7 +375,7 @@ export class OnePasswordConnectClient {
 
     const encryptTime = Date.now() - startTime;
     if (encryptTime > 10) {
-      console.log(`[1Password] Encryption took ${encryptTime}ms`);
+      console.log(`[chittysecrets] Encryption took ${encryptTime}ms`);
     }
 
     return result;
@@ -415,14 +415,14 @@ export class OnePasswordConnectClient {
 
     const decryptTime = Date.now() - startTime;
     if (decryptTime > 10) {
-      console.log(`[1Password] Decryption took ${decryptTime}ms`);
+      console.log(`[chittysecrets] Decryption took ${decryptTime}ms`);
     }
 
     return decoder.decode(decrypted);
   }
 
   /**
-   * Retrieve an infrastructure credential from 1Password.
+   * Retrieve an infrastructure credential from chittysecrets.
    *
    * Convenience wrapper around `get()` that constructs the path
    * `infrastructure/{item}/{field}` so callers do not need to hard-code
@@ -441,7 +441,7 @@ export class OnePasswordConnectClient {
   }
 
   /**
-   * Retrieve a ChittyOS inter-service token from 1Password.
+   * Retrieve a ChittyOS inter-service token from chittysecrets.
    *
    * Convenience wrapper around `get()` that constructs the path
    * `services/{service}/token` so callers do not need to hard-code
@@ -464,7 +464,7 @@ export class OnePasswordConnectClient {
    */
   async prefetch(credentialPaths) {
     console.log(
-      `[1Password] Prefetching ${credentialPaths.length} credentials`,
+      `[chittysecrets] Prefetching ${credentialPaths.length} credentials`,
     );
 
     const results = await Promise.allSettled(
@@ -478,9 +478,9 @@ export class OnePasswordConnectClient {
 
       if (result.status === "fulfilled") {
         credentialMap.set(path, result.value);
-        console.log(`[1Password] Prefetch SUCCESS: ${path}`);
+        console.log(`[chittysecrets] Prefetch SUCCESS: ${path}`);
       } else {
-        console.error(`[1Password] Prefetch FAILED: ${path}`, result.reason);
+        console.error(`[chittysecrets] Prefetch FAILED: ${path}`, result.reason);
       }
     });
 
@@ -495,16 +495,16 @@ export class OnePasswordConnectClient {
    */
   async invalidateCache(credentialPath) {
     try {
-      const cacheKey = `1password:cache:${credentialPath}`;
+      const cacheKey = `chittysecrets:cache:${credentialPath}`;
       await this.env.CREDENTIAL_CACHE.delete(cacheKey);
-      console.log(`[1Password] Invalidated cache for ${credentialPath}`);
+      console.log(`[chittysecrets] Invalidated cache for ${credentialPath}`);
     } catch (error) {
-      console.error(`[1Password] Cache invalidation error:`, error);
+      console.error(`[chittysecrets] Cache invalidation error:`, error);
     }
   }
 
   /**
-   * Health check for 1Password Connect API
+   * Health check for chittysecrets Connect API
    *
    * @returns {Promise<object>} Health status
    */
@@ -513,7 +513,7 @@ export class OnePasswordConnectClient {
       if (!this.connectUrl || !this.connectToken) {
         return {
           status: "not_configured",
-          message: "1Password Connect not configured",
+          message: "chittysecrets Connect not configured",
           timestamp: Date.now(),
         };
       }
@@ -543,7 +543,7 @@ export class OnePasswordConnectClient {
 export default OnePasswordConnectClient;
 
 /**
- * Store a credential in 1Password via Connect API.
+ * Store a credential in chittysecrets via Connect API.
  * Creates a new item or updates an existing field.
  *
  * @param {string} credentialPath - "vault/item/field"
@@ -555,7 +555,7 @@ export default OnePasswordConnectClient;
 OnePasswordConnectClient.prototype.put = async function (credentialPath, value, options = {}) {
   const parsed = this.parseCredentialPath(credentialPath);
   if (!parsed) throw new Error(`Invalid credential path: ${credentialPath}`);
-  if (!this.connectUrl || !this.connectToken) throw new Error("1Password Connect not configured");
+  if (!this.connectUrl || !this.connectToken) throw new Error("chittysecrets Connect not configured");
 
   const headers = { Authorization: `Bearer ${this.connectToken}`, "Content-Type": "application/json" };
 

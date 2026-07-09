@@ -59,7 +59,7 @@ chittyconnect/
 │   └── lib/
 │       ├── responses.js                # Response utilities (NEW)
 │       ├── errors.js                   # Error classes (NEW)
-│       └── credential-helper.js        # 1Password integration
+│       └── credential-helper.js        # chittysecrets integration
 └── docs/
     ├── GPT_ACTIONS_OPTIMIZATION_RECOMMENDATIONS.md
     └── GPT_ACTIONS_IMPLEMENTATION_GUIDE.md (this file)

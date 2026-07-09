@@ -40,13 +40,13 @@ npm test
 ### 2. Deploy
 ```bash
 # Production deploy (default)
-npx wrangler deploy --env production
+npx cf deploy --env production
 
 # Staging deploy
-npx wrangler deploy --env staging
+npx cf deploy --env staging
 
 # Dev deploy
-npx wrangler deploy --env dev
+npx cf deploy --env dev
 ```
 
 ### 3. Post-Deploy Verification
@@ -59,7 +59,7 @@ curl -s https://connect.chitty.cc/api/v1/status | jq .
 ```
 
 ## Important
-`npm run deploy` runs bare `wrangler deploy` without `--env`, which deploys the top-level config (not production routes). Always use `npx wrangler deploy --env production` for production deploys.
+`npm run deploy` runs bare `cf deploy` without `--env`, which deploys the top-level config (not production routes). Always use `npx cf deploy --env production` for production deploys.
 
 ## Environment Variables
 Secrets are managed via wrangler secrets:

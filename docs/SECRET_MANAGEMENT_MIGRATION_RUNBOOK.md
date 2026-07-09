@@ -33,7 +33,7 @@ If there is a disagreement between this runbook and the architecture spec, the a
 |----------|-------|--------|
 | Service-to-service URLs | ~30 | Move to `vars` (not secrets) |
 | Notion database IDs | ~12 | Move to `vars` (not secrets) |
-| 1Password-specific (`ONEPASSWORD_*`) | ~8 | Normalize to canonical runtime config; delete only obsolete names/usages |
+| chittysecrets-specific (`ONEPASSWORD_*`) | ~8 | Normalize to canonical runtime config; delete only obsolete names/usages |
 | Service tokens | ~25 | → Cloudflare Secrets Store |
 | Third-party credentials | ~20 | → Cloudflare Secrets Store |
 | Signing/encryption keys | ~5 | → Secrets Store + rotation audit |
@@ -58,7 +58,7 @@ be aligned before the model can be considered canonical with no exceptions.
 Current runtime inventory from `src/` and `mcp/`:
 
 - `secret`: service tokens, API keys, webhook secrets, encryption keys, OAuth secrets
-- `var`: service URLs, account/domain identifiers, feature flags, environment labels, 1Password Connect URL, 1Password vault IDs
+- `var`: service URLs, account/domain identifiers, feature flags, environment labels, chittysecrets Connect URL, chittysecrets vault IDs
 - `binding`: `DB`, `API_KEYS`, `TOKEN_KV`, `CREDENTIAL_CACHE`, `RATE_LIMIT`, `FILES`, `EVENT_Q`, `PROOF_Q`, `MCP_AGENT`, `AI`, `TENANT_CONNECTIONS`
 
 Current concrete exceptions:
@@ -72,7 +72,7 @@ Current concrete exceptions:
 Required enforcement rule:
 
 - non-secret config stays in `vars`
-- long-lived secrets move through 1Password → Cloudflare Secrets
+- long-lived secrets move through chittysecrets → Cloudflare Secrets
 - short-lived rotated values live in KV only when rotation requires it
 - all three environments must be first-class in Wrangler config
 - Ollama-specific secrets follow the same model as every other integration
@@ -106,9 +106,9 @@ ssh chittyserv-dev 'echo "export OP_SERVICE_ACCOUNT_TOKEN=\"ops_xxxxx\"" >> ~/.b
 
 Verify: `op user get --me` and `op environment read <ENV_ID>`
 
-### 2. 1Password Environments
+### 2. chittysecrets Environments
 
-Create 3 environments in 1Password web console (Developer → Environments):
+Create 3 environments in chittysecrets web console (Developer → Environments):
 - `chitty-app-dev`
 - `chitty-app-stage`
 - `chitty-app-prod`
@@ -117,7 +117,7 @@ Populate each with the secrets its Workers need.
 
 ### 3. Deployment Hook
 
-`~/.claude/hooks/1password-validate-env.sh` gates `wrangler deploy` commands:
+`~/.claude/hooks/chittysecrets-validate-env.sh` gates `cf deploy` commands:
 - Checks `OP_SERVICE_ACCOUNT_TOKEN` on VM for SSH commands
 - Allows `--dry-run` without token
 - Handles SSH with flags (`ssh -o ... chittyserv-dev`)
@@ -143,7 +143,7 @@ separate Wrangler config files.
   "observability": { "enabled": true },
 
   // Secrets: NEON_DATABASE_URL, JWT_SECRET, service tokens
-  // Injected by: op run --environment <ID> -- npx wrangler deploy --env prod
+  // Injected by: chittysecrets run --environment <ID> -- npx cf deploy --env prod
 
   "env": {
     "dev": {
@@ -174,7 +174,7 @@ Full template: `process-ops/state/wrangler-template.jsonc`
 ### Phase 2: First Worker ✅ partial
 - [x] Migrate chittyauth wrangler.jsonc (env blocks, dry-run validated)
 - [ ] Sync chittyauth secrets to CF Secrets Store
-- [ ] Deploy: `op run --env chitty-app-prod -- npx wrangler deploy --env prod`
+- [ ] Deploy: `chittysecrets run --env chitty-app-prod -- npx cf deploy --env prod`
 - [ ] Verify: `curl https://auth.chitty.cc/health`
 
 ### Phase 3: Shared Secrets ⬜
@@ -195,12 +195,12 @@ Full template: `process-ops/state/wrangler-template.jsonc`
 
 ### Phase 5: Cleanup ⬜
 - [ ] Remove obsolete `ONEPASSWORD_*` names/usages from chittyconnect and keep only canonical runtime config
-- [ ] Remove `op run` from legacy deploy scripts
+- [ ] Remove `chittysecrets run` from legacy deploy scripts
 - [ ] Move ~30 service URLs to plain `vars`
 - [ ] Move ~12 Notion DB IDs to plain `vars`
 - [ ] Update 6 stale compatibility dates
 - [ ] Port sync-secrets.sh to GitHub Actions
-- [ ] Uninstall 1Password Desktop App
+- [ ] Uninstall chittysecrets Desktop App
 
 ---
 
@@ -265,10 +265,10 @@ After each phase, verify:
 |-------|---------|----------|
 | SA auth works | `op user get --me` | Returns SA details |
 | Environment readable | `op environment read <ID>` | Returns JSON variables |
-| Worker config valid | `npx wrangler deploy --dry-run --env prod` | No errors, correct vars listed |
+| Worker config valid | `npx cf deploy --dry-run --env prod` | No errors, correct vars listed |
 | Secrets synced | `npx wrangler secret list --name <worker>` | Lists expected secret names |
 | Service healthy | `curl https://<svc>.chitty.cc/health` | `{"status":"ok"}` |
-| No 1P Desktop dependency | `pkill 1Password && op environment read <ID>` | Still works |
+| No 1P Desktop dependency | `pkill chittysecrets && op environment read <ID>` | Still works |
 
 ---
 
@@ -282,7 +282,7 @@ ssh chittyserv-dev "cp ~/projects/github.com/CHITTYFOUNDATION/chittyauth/wrangle
   ~/projects/github.com/CHITTYFOUNDATION/chittyauth/wrangler.jsonc"
 
 # 2. Redeploy without --env flag (uses top-level config)
-ssh chittyserv-dev "cd ~/projects/github.com/CHITTYFOUNDATION/chittyauth && npx wrangler deploy"
+ssh chittyserv-dev "cd ~/projects/github.com/CHITTYFOUNDATION/chittyauth && npx cf deploy"
 
 # 3. Verify
 curl -s https://auth.chitty.cc/health | jq .

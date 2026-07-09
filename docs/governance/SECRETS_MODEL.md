@@ -8,7 +8,7 @@ Canonical source: `wrangler.jsonc` secrets manifest comments.
 ## Architecture
 
 ```
-1Password (cold)  ──►  wrangler secret put --env <env>  ──►  Cloudflare Secrets (hot)
+chittysecrets (cold)  ──►  wrangler secret put --env <env>  ──►  Cloudflare Secrets (hot)
                                                                │
                                                                ▼
                                                          Worker env.<NAME>
@@ -16,7 +16,7 @@ Canonical source: `wrangler.jsonc` secrets manifest comments.
 
 | Layer | Purpose | Scope |
 |-------|---------|-------|
-| **1Password** | Source of truth. All secrets originate here. | Per-vault (infrastructure, services, integrations, emergency) |
+| **chittysecrets** | Source of truth. All secrets originate here. | Per-vault (infrastructure, services, integrations, emergency) |
 | **Cloudflare Secrets** | Runtime delivery. Injected into Worker `env` at deploy. | Per-environment (dev / staging / production) |
 | **KV** | Short-lived rotated values only. Never long-lived secrets. | Ephemeral cache with TTL |
 | **`[vars]`** | Non-secret configuration only. | Per-environment in wrangler.jsonc |
@@ -38,8 +38,8 @@ Reference: [Credential Ownership Law](./CREDENTIAL_OWNERSHIP_LAW.md)
 | Environment | Deploy Command | Worker Name |
 |-------------|---------------|-------------|
 | **dev** | `wrangler dev` | local |
-| **staging** | `wrangler deploy --env staging` | chittyconnect-staging |
-| **production** | `wrangler deploy --env production` | chittyconnect |
+| **staging** | `cf deploy --env staging` | chittyconnect-staging |
+| **production** | `cf deploy --env production` | chittyconnect |
 
 All `wrangler secret put` commands **must** include `--env <environment>`. Bare `wrangler secret put` (no env flag) is never correct.
 
@@ -119,13 +119,13 @@ Policy:
 | `NEON_BRANCH_ID` | Neon branch ID |
 | `NEON_HOST` | Neon host |
 
-### Credential Provisioning & 1Password (7)
+### Credential Provisioning & chittysecrets (7)
 
 | Name | Description |
 |------|-------------|
-| `ONEPASSWORD_CONNECT_TOKEN` | 1Password Connect JWT |
-| `OP_EVENTS_API_TOKEN` | 1Password Events API token |
-| `CLOUDFLARE_MAKE_API_KEY` | CF API fallback (if 1Password down) |
+| `ONEPASSWORD_CONNECT_TOKEN` | chittysecrets Connect JWT |
+| `OP_EVENTS_API_TOKEN` | chittysecrets Events API token |
+| `CLOUDFLARE_MAKE_API_KEY` | CF API fallback (if chittysecrets down) |
 | `CLOUDFLARE_ACCOUNT_ID` | CF account fallback |
 | `EMERGENCY_REVOKE_TOKEN` | Emergency credential revocation |
 | `ENCRYPTION_KEY` | 32-byte key for KV cache encryption |
@@ -188,7 +188,7 @@ Provision when features are promoted to production.
 
 | Category | Interval | Method |
 |----------|----------|--------|
-| Service tokens | 90 days | 1Password rotate + `wrangler secret put --env` |
+| Service tokens | 90 days | chittysecrets rotate + `wrangler secret put --env` |
 | OAuth tokens | Per-provider expiry | SecretRotationService (cron every 50 min) |
 | Neon passwords | 7 days | SecretRotationService |
 | Emergency | Immediate on incident | `EMERGENCY_REVOKE_TOKEN` + audit all provisions |
@@ -196,7 +196,7 @@ Provision when features are promoted to production.
 ## Provisioning Workflow
 
 ```bash
-# 1. Create/update in 1Password (source of truth)
+# 1. Create/update in chittysecrets (source of truth)
 op item edit "ChittyConnect - <SECRET_NAME>" --vault ChittyOS-Core
 
 # 2. Deploy to Cloudflare (runtime delivery)

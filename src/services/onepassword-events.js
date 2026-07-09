@@ -1,18 +1,18 @@
 /**
- * 1Password Events API Client
+ * chittysecrets Events API Client
  *
- * Fetches audit events from 1Password Events API and transforms them
+ * Fetches audit events from chittysecrets Events API and transforms them
  * for ChittyChronicle integration.
  *
- * Based on: https://github.com/1Password/events-api-elastic
+ * Based on: https://github.com/chittysecrets/events-api-elastic
  *
  * @module services/onepassword-events
  */
 
-const EVENTS_API_BASE = "https://events.1password.com/api/v1";
+const EVENTS_API_BASE = "https://events.chittysecrets.com/api/v1";
 
 /**
- * Event types from 1Password Events API
+ * Event types from chittysecrets Events API
  */
 export const EventTypes = {
   SIGN_IN_ATTEMPTS: "signinattempts",
@@ -21,11 +21,11 @@ export const EventTypes = {
 };
 
 /**
- * 1Password Events API Client
+ * chittysecrets Events API Client
  */
 export class OnePasswordEventsClient {
   /**
-   * @param {string} token - 1Password Events API bearer token
+   * @param {string} token - chittysecrets Events API bearer token
    */
   constructor(token) {
     this.token = token;
@@ -131,7 +131,7 @@ export class OnePasswordEventsClient {
     return {
       type: "onepassword.signin",
       timestamp: event.timestamp,
-      source: "1password-events-api",
+      source: "chittysecrets-events-api",
       data: {
         uuid: event.uuid,
         sessionUuid: event.session_uuid,
@@ -166,7 +166,7 @@ export class OnePasswordEventsClient {
     return {
       type: "onepassword.item_usage",
       timestamp: event.timestamp,
-      source: "1password-events-api",
+      source: "chittysecrets-events-api",
       data: {
         uuid: event.uuid,
         userUuid: event.user?.uuid,
@@ -197,7 +197,7 @@ export class OnePasswordEventsClient {
     return {
       type: "onepassword.audit",
       timestamp: event.timestamp,
-      source: "1password-events-api",
+      source: "chittysecrets-events-api",
       data: {
         uuid: event.uuid,
         actorUuid: event.actor_uuid,
@@ -260,7 +260,7 @@ export function createEventsClient(env) {
 }
 
 /**
- * Sync 1Password events to ChittyChronicle
+ * Sync chittysecrets events to ChittyChronicle
  *
  * @param {object} env - Environment bindings
  * @param {object} options - Sync options
@@ -307,14 +307,14 @@ export async function syncEventsToChronicle(env, options = {}) {
       synced++;
     } catch (error) {
       console.error(
-        `[1Password Events] Failed to sync event ${event.data.uuid}:`,
+        `[chittysecrets Events] Failed to sync event ${event.data.uuid}:`,
         error,
       );
       errors++;
     }
   }
 
-  console.log(`[1Password Events] Synced ${synced} events, ${errors} errors`);
+  console.log(`[chittysecrets Events] Synced ${synced} events, ${errors} errors`);
 
   return { synced, errors, total: events.length };
 }

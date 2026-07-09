@@ -2,7 +2,7 @@
 # safe-deploy.sh — the ONLY sanctioned deploy path for chittyconnect.
 #
 # Why this exists (issue #216 / repeated incidents):
-#   Bare `wrangler deploy` (no --env) deploys the top-level wrangler.jsonc,
+#   Bare `cf deploy` (no --env) deploys the top-level wrangler.jsonc,
 #   which intentionally has minimal bindings. That silently overwrites the
 #   prod worker, stripping every binding declared in env.production
 #   (API_KEYS KV, D1 DB, R2, vectorize, service bindings, AI, ...).
@@ -13,7 +13,7 @@
 #
 # This wrapper:
 #   1. REFUSES if --env is missing (unsafe, would wipe bindings).
-#   2. Runs `wrangler deploy` with the requested env.
+#   2. Runs `cf deploy` with the requested env.
 #   3. Audits the deployed bindings against wrangler.jsonc and FAILS LOUD
 #      if anything declared is missing on the live worker.
 #
@@ -54,7 +54,7 @@ fi
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   echo "::error::safe-deploy: CLOUDFLARE_API_TOKEN is not set" >&2
-  echo "  hint: 'op run --env-file=.env.op -- npm run deploy' or export the token" >&2
+  echo "  hint: 'chittysecrets run --env-file=.env.op -- npm run deploy' or export the token" >&2
   exit 66
 fi
 
@@ -70,8 +70,8 @@ echo "[safe-deploy] env=$ENV worker=$DEPLOYED_NAME"
 # ── 1. Deploy with explicit --env ────────────────────────────────────────────
 # CHITTYCONNECT_SAFE_DEPLOY=1 is required by wrangler.jsonc's build.command
 # guard (#219). Without it, wrangler aborts before writing any binding.
-echo "[safe-deploy] running: npx wrangler deploy --env $ENV"
-CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV"
+echo "[safe-deploy] running: npx cf deploy --env $ENV"
+CHITTYCONNECT_SAFE_DEPLOY=1 npx cf deploy --env "$ENV"
 
 # ── 2. Audit declared vs attached bindings ───────────────────────────────────
 echo "[safe-deploy] auditing bindings on live worker $DEPLOYED_NAME ..."
@@ -108,7 +108,7 @@ if [ -n "$MISSING" ]; then
   echo "::error::safe-deploy: BINDING DRIFT DETECTED on $DEPLOYED_NAME" >&2
   echo "  Declared in wrangler.jsonc (env.$ENV) but NOT attached to live worker:" >&2
   while IFS= read -r m; do [ -n "$m" ] && echo "  - $m" >&2; done <<<"$MISSING"
-  echo "  This usually means a bare 'wrangler deploy' (no --env) was run somewhere." >&2
+  echo "  This usually means a bare 'cf deploy' (no --env) was run somewhere." >&2
   echo "  See issue #216 for context." >&2
   exit 72
 fi

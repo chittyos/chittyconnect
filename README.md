@@ -46,7 +46,7 @@ The package exposes a Hono app at `src/index.js` that can be used as your Worker
 
 ```bash
 wrangler dev
-wrangler deploy
+cf deploy
 ```
 
 ### CLI (MCP Server)
