@@ -9,7 +9,6 @@
 import { Hono } from "hono";
 import { ChittyIDClient, EntityType } from "../../lib/chittyid-client.js";
 import { getServiceToken } from "../../lib/credential-helper.js";
-import { ChittyCertClient } from "@chittycorp/chittycanon-sdk";
 
 const chittyidRoutes = new Hono();
 
@@ -71,7 +70,6 @@ chittyidRoutes.post("/mint", async (c) => {
     return c.json({ error: error.message }, 500);
   }
 });
-
 
 /**
  * POST /api/chittyid/validate

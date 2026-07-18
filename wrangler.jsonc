@@ -46,7 +46,7 @@
   // Migrations are global to the DO class, not per-env
   "migrations": [
     { "tag": "v3", "new_classes": ["MCPSessionDurableObject"] },
-    { "tag": "v4", "deleted_classes": ["MCPSessionDurableObject"], "new_sqlite_classes": ["McpConnectAgent"] },
+    { "tag": "v4", "renamed_classes": [{"from": "MCPSessionDurableObject", "to": "MCPSessionGraveyard"}], "new_sqlite_classes": ["McpConnectAgent"] },
     { "tag": "v5", "new_sqlite_classes": ["SessionStateActor"] }
   ],
 
