@@ -7,6 +7,56 @@
  * @module services/chittysecrets-connect-client
  */
 
+const PATH_TO_ENV = {
+  // Infrastructure
+  "infrastructure/cloudflare/make_api_key": "CLOUDFLARE_MAKE_API_KEY",
+  "infrastructure/cloudflare/api_token": "CLOUDFLARE_API_TOKEN",
+  "infrastructure/neon/credential": "NEON_API_KEY",
+  "infrastructure/neon/database_url": "NEON_DATABASE_URL",
+  "infrastructure/neon/connection_string": "NEON_CONNECTION_STRING",
+
+  // Integrations
+  "integrations/openai/credential": "OPENAI_API_KEY",
+  "integrations/openai/api_key": "OPENAI_API_KEY",
+  "integrations/anthropic/credential": "ANTHROPIC_API_KEY",
+  "integrations/notion/credential": "NOTION_TOKEN",
+  "integrations/notion/token": "NOTION_TOKEN",
+  "integrations/github/credential": "GITHUB_TOKEN",
+  "integrations/github/token": "GITHUB_TOKEN",
+  "integrations/twilio/account_sid": "TWILIO_ACCOUNT_SID",
+  "integrations/twilio/auth_token": "TWILIO_AUTH_TOKEN",
+  "integrations/twilio/phone_number": "TWILIO_PHONE_NUMBER",
+  "integrations/stripe/secret_key": "STRIPE_SECRET_KEY",
+  "integrations/stripe/webhook_secret": "STRIPE_WEBHOOK_SECRET",
+  "integrations/plaid/client_id": "PLAID_CLIENT_ID",
+  "integrations/plaid/secret": "PLAID_SECRET",
+  "integrations/mercury/api_token": "MERCURY_API_TOKEN",
+
+  // Services
+  "services/chittyauth/jwt_secret": "JWT_SECRET",
+  "services/chittyauth/encryption_key": "ENCRYPTION_KEY",
+  "services/chittyauth/token_signing_key": "TOKEN_SIGNING_KEY",
+  "services/chittyauth/auth_salt": "AUTH_SALT",
+  "services/chittyconnect/service_token": "CHITTYCONNECT_SERVICE_TOKEN",
+  "services/chittyconnect/mcp_token": "CHITTYCONNECT_TOKEN",
+  "services/chittyid/service_token": "CHITTY_ID_TOKEN",
+  "services/chittyid/token": "CHITTY_ID_TOKEN",
+  "services/chittyregistry/token": "CHITTY_REGISTRY_TOKEN",
+  "services/chittyregistry/service_token": "CHITTY_REGISTRY_SERVICE_TOKEN",
+  "services/chittyregister/token": "CHITTY_REGISTER_TOKEN",
+  "services/chittyledger/token": "CHITTYLEDGER_TOKEN",
+  "services/chittyevidence/token": "CHITTY_EVIDENCE_TOKEN",
+  "services/chittyfinance/token": "CHITTY_FINANCE_TOKEN",
+  "services/chittycases/token": "CHITTY_CASES_TOKEN",
+  "services/chittychronicle/token": "CHITTY_CHRONICLE_TOKEN",
+  "services/chittydispute/service_token": "DISPUTES_API_TOKEN",
+  "services/chittydispute/token": "DISPUTES_API_TOKEN",
+  "services/chittytrack/api_token": "API_TOKEN",
+  "services/chittytrack/webhook_secret": "GITHUB_WEBHOOK_SECRET",
+  "services/chittymint/secret": "CHITTYAUTH_ISSUED_MINT_API_KEY",
+  "services/chittymint/service_token": "CHITTYAUTH_ISSUED_MINT_API_KEY",
+};
+
 export class OnePasswordConnectClient {
   constructor(env) {
     this.env = env;
@@ -94,15 +144,21 @@ export class OnePasswordConnectClient {
 
     const [vault, item, field] = parts;
 
-    // Validate vault
-    if (!this.vaults[vault]) {
+    // Validate vault name
+    const validVaults = [
+      "infrastructure",
+      "services",
+      "integrations",
+      "emergency",
+    ];
+    if (!validVaults.includes(vault)) {
       console.error(`[chittysecrets] Unknown vault: ${vault}`);
       return null;
     }
 
     return {
       vault,
-      vaultId: this.vaults[vault],
+      vaultId: this.vaults[vault] || "legacy-vault",
       item,
       field,
       fullPath: path,
@@ -118,83 +174,74 @@ export class OnePasswordConnectClient {
    */
   async fetchFromConnect(parsed) {
     try {
-      // Step 1: List items in vault to find the item ID
-      const itemsUrl = `${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`;
+      const secretsUrl =
+        this.env.CHITTYSECRETS_URL || "https://secrets.chitty.cc";
 
-      const itemsResponse = await fetch(itemsUrl, {
-        method: "GET",
+      // Map path to secret name
+      const pathKey = `${parsed.vault}/${parsed.item}/${parsed.field}`;
+      let secretName = PATH_TO_ENV[pathKey];
+      if (!secretName) {
+        secretName = `${parsed.item}_${parsed.field}`
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "_");
+      }
+
+      // Resolve Access client credentials
+      const clientId =
+        this.env.CF_ACCESS_CLIENT_ID ||
+        this.env.CF_ACCESS_CLIENT_ID_CHITTYAGENT ||
+        this.env.CHITTY_CF_ACCESS_CLIENT_ID;
+      const clientSecret =
+        this.env.CF_ACCESS_CLIENT_SECRET ||
+        this.env.CF_ACCESS_CLIENT_SECRET_CHITTYAGENT ||
+        this.env.CHITTY_CF_ACCESS_CLIENT_SECRET;
+
+      if (!clientId || !clientSecret) {
+        throw new Error(
+          `CF Access Client Credentials (CF_ACCESS_CLIENT_ID/SECRET) not found in environment`,
+        );
+      }
+
+      const res = await fetch(`${secretsUrl}/mcp?action=reveal`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${this.connectToken}`,
+          "CF-Access-Client-Id": clientId,
+          "CF-Access-Client-Secret": clientSecret,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ name: secretName }),
       });
 
-      if (!itemsResponse.ok) {
-        throw new Error(
-          `Failed to list items in vault ${parsed.vault}: ${itemsResponse.status} ${itemsResponse.statusText}`,
-        );
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status} ${res.statusText}`;
+        try {
+          const errJson = await res.json();
+          errMsg = errJson.error || errJson.reason || errMsg;
+        } catch (e) {
+          // Ignore JSON parse errors on failed HTTP responses
+        }
+        throw new Error(`ChittySecrets reveal failed: ${errMsg}`);
       }
 
-      const items = await itemsResponse.json();
-
-      // Find item by title (case-insensitive match)
-      const item = items.find(
-        (i) => i.title.toLowerCase() === parsed.item.toLowerCase(),
-      );
-
-      if (!item) {
-        throw new Error(
-          `Item not found in vault ${parsed.vault}: ${parsed.item}`,
-        );
-      }
-
-      // Step 2: Get full item details including fields
-      const itemUrl = `${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${item.id}`;
-
-      const itemResponse = await fetch(itemUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${this.connectToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!itemResponse.ok) {
-        throw new Error(
-          `Failed to get item details: ${itemResponse.status} ${itemResponse.statusText}`,
-        );
-      }
-
-      const itemDetails = await itemResponse.json();
-
-      // Step 3: Extract the requested field
-      const field = itemDetails.fields?.find(
-        (f) =>
-          f.label?.toLowerCase() === parsed.field.toLowerCase() ||
-          f.id?.toLowerCase() === parsed.field.toLowerCase(),
-      );
-
-      if (!field) {
-        throw new Error(
-          `Field not found in item ${parsed.item}: ${parsed.field}`,
-        );
-      }
-
-      const value = field.value;
+      const data = await res.json();
+      const value = data.value;
 
       if (!value) {
         throw new Error(
-          `Field ${parsed.field} in item ${parsed.item} has no value`,
+          `ChittySecrets returned no value for secret ${secretName}`,
         );
       }
 
       console.log(
-        `[chittysecrets] Successfully retrieved ${parsed.fullPath} (${value.length} chars)`,
+        `[chittysecrets] Successfully retrieved ${parsed.fullPath} via secret ${secretName} (${value.length} chars)`,
       );
 
       return value;
     } catch (error) {
-      console.error(`[chittysecrets] Fetch error for ${parsed.fullPath}:`, error);
+      console.error(
+        `[chittysecrets] Fetch error for ${parsed.fullPath}:`,
+        error,
+      );
 
       // Check if we should failover to environment variable
       if (this.env.CREDENTIAL_FAILOVER_ENABLED === "true") {
@@ -334,7 +381,9 @@ export class OnePasswordConnectClient {
       ["encrypt", "decrypt"],
     );
 
-    console.log("[chittysecrets] Encryption key cached for improved performance");
+    console.log(
+      "[chittysecrets] Encryption key cached for improved performance",
+    );
     return this.cachedEncryptionKey;
   }
 
@@ -480,7 +529,10 @@ export class OnePasswordConnectClient {
         credentialMap.set(path, result.value);
         console.log(`[chittysecrets] Prefetch SUCCESS: ${path}`);
       } else {
-        console.error(`[chittysecrets] Prefetch FAILED: ${path}`, result.reason);
+        console.error(
+          `[chittysecrets] Prefetch FAILED: ${path}`,
+          result.reason,
+        );
       }
     });
 
@@ -552,57 +604,12 @@ export default OnePasswordConnectClient;
  * @param {string} [options.notes] - Item notes
  * @returns {Promise<{stored: boolean, action: string, item: string}>}
  */
-OnePasswordConnectClient.prototype.put = async function (credentialPath, value, options = {}) {
-  const parsed = this.parseCredentialPath(credentialPath);
-  if (!parsed) throw new Error(`Invalid credential path: ${credentialPath}`);
-  if (!this.connectUrl || !this.connectToken) throw new Error("chittysecrets Connect not configured");
-
-  const headers = { Authorization: `Bearer ${this.connectToken}`, "Content-Type": "application/json" };
-
-  // List items in vault
-  const itemsResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`, { headers });
-  if (!itemsResp.ok) throw new Error(`Failed to list items: ${itemsResp.status}`);
-  const items = await itemsResp.json();
-  const existing = items.find(i => i.title.toLowerCase() === parsed.item.toLowerCase());
-
-  if (existing) {
-    // Update existing item
-    const detailResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${existing.id}`, { headers });
-    if (!detailResp.ok) throw new Error(`Failed to get item: ${detailResp.status}`);
-    const itemDetails = await detailResp.json();
-
-    let fieldFound = false;
-    for (const f of itemDetails.fields || []) {
-      if (f.label?.toLowerCase() === parsed.field.toLowerCase()) { f.value = value; fieldFound = true; break; }
-    }
-    if (!fieldFound) {
-      itemDetails.fields = itemDetails.fields || [];
-      itemDetails.fields.push({ id: parsed.field, type: "CONCEALED", label: parsed.field, value });
-    }
-    if (options.notes) {
-      const nf = itemDetails.fields.find(f => f.purpose === "NOTES");
-      if (nf) nf.value = options.notes;
-    }
-
-    const updateResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items/${existing.id}`, {
-      method: "PUT", headers, body: JSON.stringify(itemDetails),
-    });
-    if (!updateResp.ok) { const err = await updateResp.text(); throw new Error(`Update failed: ${updateResp.status} ${err}`); }
-    await this.invalidateCache(credentialPath);
-    return { stored: true, action: "updated", item: parsed.item };
-  } else {
-    // Create new item
-    const newItem = {
-      vaultId: parsed.vaultId, title: parsed.item, category: "API_CREDENTIAL",
-      fields: [
-        { id: "notesPlain", type: "STRING", purpose: "NOTES", label: "notesPlain", value: options.notes || `Stored via ChittyConnect ${new Date().toISOString()}` },
-        { id: parsed.field, type: "CONCEALED", label: parsed.field, value },
-      ],
-    };
-    const createResp = await fetch(`${this.connectUrl}/v1/vaults/${parsed.vaultId}/items`, {
-      method: "POST", headers, body: JSON.stringify(newItem),
-    });
-    if (!createResp.ok) { const err = await createResp.text(); throw new Error(`Create failed: ${createResp.status} ${err}`); }
-    return { stored: true, action: "created", item: parsed.item };
-  }
+OnePasswordConnectClient.prototype.put = async function (
+  credentialPath,
+  value,
+  options = {},
+) {
+  throw new Error(
+    "Writing secrets at runtime is not supported by ChittySecrets. Deploy secrets via sync-secrets.sh instead.",
+  );
 };
