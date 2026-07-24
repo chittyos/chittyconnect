@@ -17,7 +17,6 @@
  * @module lib/credential-broker
  */
 
-import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
 import { ChittyServClient } from "../services/chittyserv-client.js";
 import { CloudflareSecretsClient } from "../services/cloudflare-secrets-client.js";
 
@@ -38,9 +37,6 @@ export function createCredentialBroker(env) {
 
     case "chittyserv":
       return new ChittyServBroker(env);
-
-    case "1password":
-      return new OnePasswordBroker(env);
 
     case "auto":
       return new AutoBroker(env);
@@ -103,30 +99,6 @@ class ChittyServBroker {
   }
 }
 
-// ─── 1Password Broker (Legacy — Deprecated) ─────────────────────────────────
-
-class OnePasswordBroker {
-  constructor(env) {
-    this.client = new OnePasswordConnectClient(env);
-    this.type = "1password";
-  }
-
-  async get(credentialPath, options = {}) {
-    return this.client.get(credentialPath, options);
-  }
-
-  async prefetch(credentialPaths) {
-    return this.client.prefetch(credentialPaths);
-  }
-
-  async invalidateCache(credentialPath) {
-    return this.client.invalidateCache(credentialPath);
-  }
-
-  async healthCheck() {
-    return this.client.healthCheck();
-  }
-}
 
 // ─── Auto Broker (cloudflare-secrets → chittyserv → 1password) ──────────────
 
@@ -135,7 +107,6 @@ class AutoBroker {
     this.env = env;
     this.cfSecrets = new CloudflareSecretsBroker(env);
     this.chittyserv = new ChittyServBroker(env);
-    this.onePassword = new OnePasswordBroker(env);
     this.type = "auto";
   }
 
@@ -157,8 +128,7 @@ class AutoBroker {
       );
     }
 
-    // 3. Fall back to 1Password Connect
-    return this.onePassword.get(credentialPath, options);
+    return undefined;
   }
 
   async prefetch(credentialPaths) {
@@ -169,15 +139,13 @@ class AutoBroker {
   async invalidateCache(credentialPath) {
     await Promise.allSettled([
       this.chittyserv.invalidateCache(credentialPath),
-      this.onePassword.invalidateCache(credentialPath),
     ]);
   }
 
   async healthCheck() {
-    const [cfHealth, csHealth, opHealth] = await Promise.allSettled([
+    const [cfHealth, csHealth] = await Promise.allSettled([
       this.cfSecrets.healthCheck(),
       this.chittyserv.healthCheck(),
-      this.onePassword.healthCheck(),
     ]);
 
     const cfOk = cfHealth.status === "fulfilled" &&
@@ -188,7 +156,6 @@ class AutoBroker {
       backends: {
         "cloudflare-secrets": cfHealth.status === "fulfilled" ? cfHealth.value : { status: "down" },
         chittyserv: csHealth.status === "fulfilled" ? csHealth.value : { status: "down" },
-        onePassword: opHealth.status === "fulfilled" ? opHealth.value : { status: "down" },
       },
       activeBackend: cfOk ? "cloudflare-secrets" : "fallback",
       timestamp: Date.now(),

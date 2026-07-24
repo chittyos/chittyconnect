@@ -679,43 +679,16 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
  * Body: { "value": "secret", "notes": "optional context" }
  */
 credentialsRoutes.put("/:vault/:item/:field", async (c) => {
-  try {
-    const vault = c.req.param("vault");
-    const item = c.req.param("item");
-    const field = c.req.param("field");
-
-    const validVaults = ["infrastructure", "services", "integrations", "emergency"];
-    if (!validVaults.includes(vault)) {
-      return c.json({ success: false, error: { code: "INVALID_VAULT", message: `Invalid vault: ${vault}` } }, 400);
-    }
-
-    const body = await c.req.json();
-    if (!body.value) {
-      return c.json({ success: false, error: { code: "MISSING_VALUE", message: "Request body must include value" } }, 400);
-    }
-
-    const apiKeyMeta = c.get("apiKey") || {};
-    const requestingService = apiKeyMeta.service || apiKeyMeta.name || "unknown";
-
-    console.log(`[Credentials] Storing ${vault}/${item}/${field} (by ${requestingService})`);
-
-    const { OnePasswordConnectClient } = await import("../../services/1password-connect-client.js");
-    const client = new OnePasswordConnectClient(c.env);
-    const result = await client.put(`${vault}/${item}/${field}`, body.value, { notes: body.notes });
-
-    try {
-      await c.env.DB.prepare(
-        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
-      ).bind("1password_store", item, field, requestingService).run();
-    } catch (dbErr) {
-      console.warn("[Credentials] Audit log failed:", dbErr.message);
-    }
-
-    return c.json({ success: true, ...result, metadata: { vault, item, field, timestamp: new Date().toISOString() } }, result.action === "created" ? 201 : 200);
-  } catch (error) {
-    console.error("[Credentials] Store error:", error);
-    return c.json({ success: false, error: { code: "STORE_FAILED", message: error.message } }, 500);
-  }
+  return c.json(
+    {
+      success: false,
+      error: {
+        code: "DECOMMISSIONED",
+        message: "1Password write endpoint is decommissioned. 1Password integration is sunsetted.",
+      },
+    },
+    410,
+  );
 });
 
 /**
