@@ -137,9 +137,9 @@
         { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
         { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
       ],
-      "ai_search_namespaces": [
-        { "binding": "AI_SEARCH", "namespace": "default" }
-      ],
+      // "ai_search_namespaces": [
+      //   { "binding": "AI_SEARCH", "namespace": "default" }
+      // ],
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
@@ -257,9 +257,9 @@
         { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
         { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
       ],
-      "ai_search_namespaces": [
-        { "binding": "AI_SEARCH", "namespace": "default" }
-      ],
+      // "ai_search_namespaces": [
+      //   { "binding": "AI_SEARCH", "namespace": "default" }
+      // ],
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
@@ -385,9 +385,9 @@
         { "binding": "RATE_LIMIT", "id": "1ab2c1114f5c4e248b8eba157615a125" },
         { "binding": "TENANT_CONNECTIONS", "id": "a1a42192fca34c7cbec8dd3df3d53d54" }
       ],
-      "ai_search_namespaces": [
-        { "binding": "AI_SEARCH", "namespace": "default" }
-      ],
+      // "ai_search_namespaces": [
+      //   { "binding": "AI_SEARCH", "namespace": "default" }
+      // ],
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
