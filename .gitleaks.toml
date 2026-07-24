@@ -27,8 +27,8 @@ title = "ChittyConnect Gitleaks Configuration"
   secretGroup = 1
 
 [[rules]]
-  id = "1password-token"
-  description = "1Password Connect Token"
+  id = "chittysecrets-token"
+  description = "chittysecrets Connect Token"
   regex = '''(?i)op[_\-]?connect[_\-]?token\s*[:=]\s*["\']([^\s"\']{20,})'''
   secretGroup = 1
 

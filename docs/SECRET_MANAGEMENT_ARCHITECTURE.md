@@ -14,7 +14,7 @@ visibility: INTERNAL
 
 Machine-orchestrated credential management for a 100% synthetic development team. Secrets flow through a three-layer storage model (Cold → Hot → Cache) with strict role separation between provisioning, brokering, and consumption.
 
-No human intervention is required for routine secret access or rotation. The 1Password desktop app is not used — all access is headless via Service Account tokens over HTTPS.
+No human intervention is required for routine secret access or rotation. The chittysecrets desktop app is not used — all access is headless via Service Account tokens over HTTPS.
 
 **Deployment model clarification:** the target is **one Worker codebase with one
 `wrangler.jsonc`** using explicit `dev`, `stage`, and `prod` environment
@@ -26,7 +26,7 @@ files.
 1. **Data Diode** — Admin SAs read from many vaults, write to exactly one. A compromised admin can only corrupt its own target vault.
 2. **Least Privilege** — Runtime SAs are read-only everywhere. Workers cannot modify vault contents.
 3. **No Secret Sprawl** — Secrets never appear in git history, shell logs, or general LLM prompt context. They are injected just-in-time via `op run`, environment bindings, or authenticated machine-to-machine credential responses.
-4. **Kill Switch** — Any SA token can be revoked instantly in the 1Password web UI, cutting off access globally without redeployment.
+4. **Kill Switch** — Any SA token can be revoked instantly in the chittysecrets web UI, cutting off access globally without redeployment.
 5. **Separation of Concerns** — Provisioning, brokering, and orchestration are handled by different systems with different access levels.
 
 ---
@@ -35,7 +35,7 @@ files.
 
 ### 1. Provisioning Bot (GitHub Actions)
 
-**Purpose:** One-shot or on-demand transfer of secrets from 1Password into Cloudflare's encrypted edge.
+**Purpose:** One-shot or on-demand transfer of secrets from chittysecrets into Cloudflare's encrypted edge.
 
 **Identity:** `sa-chitty-admin-{env}` Service Account tokens, stored as GH Actions secrets.
 
@@ -46,7 +46,7 @@ files.
 # Set admin SA token for target environment
 export OP_SERVICE_ACCOUNT_TOKEN="<sa-chitty-admin-stage token>"
 
-# Read from 1Password environment, write to Cloudflare Secrets
+# Read from chittysecrets environment, write to Cloudflare Secrets
 op run --environment chitty-app-stage -- sh -c \
   'echo "$NEON_DATABASE_URL" | npx wrangler secret put NEON_DATABASE_URL --name chittyconnect'
 ```
@@ -57,9 +57,9 @@ op run --environment chitty-app-stage -- sh -c \
 - After credential rotation that affects Cloudflare Secrets (not KV-cached tokens)
 
 **Access scope:**
-- Reads from 1Password environments (`chitty-app-{env}`)
+- Reads from chittysecrets environments (`chitty-app-{env}`)
 - Writes to Cloudflare Secrets Store via `wrangler secret put`
-- Does NOT write back to 1Password (one-way diode)
+- Does NOT write back to chittysecrets (one-way diode)
 
 **Secret catalog** (defined in workflow):
 ```
@@ -68,15 +68,15 @@ GDRIVE_CLIENT_ID           — Google OAuth2 client ID
 GDRIVE_CLIENT_SECRET       — Google OAuth2 client secret
 GDRIVE_REFRESH_TOKEN       — Google OAuth2 refresh token (long-lived)
 CHITTY_AUTH_SERVICE_TOKEN   — ChittyAuth bearer token
-ONEPASSWORD_CONNECT_TOKEN  — 1Password Connect API token
-ONEPASSWORD_CONNECT_URL    — 1Password Connect server URL
+ONEPASSWORD_CONNECT_TOKEN  — chittysecrets Connect API token
+ONEPASSWORD_CONNECT_URL    — chittysecrets Connect server URL
 ```
 
 ---
 
 ### 2. Credential Broker (ChittyConnect)
 
-**Purpose:** Runtime secret access for all ChittyOS agents. Serves credentials from hot storage (Cloudflare Secrets / env vars) or cache (Workers KV). Falls back to 1Password Connect API for on-demand retrieval.
+**Purpose:** Runtime secret access for all ChittyOS agents. Serves credentials from hot storage (Cloudflare Secrets / env vars) or cache (Workers KV). Falls back to chittysecrets Connect API for on-demand retrieval.
 
 **Current delivery model:** ChittyConnect is a broker, but authenticated machine callers may still receive raw credential material on some `/api/credentials/*` routes. This is current implementation behavior, not an opaque-handle-only design.
 
@@ -88,11 +88,11 @@ ONEPASSWORD_CONNECT_URL    — 1Password Connect server URL
 
 | Module | Path | Purpose |
 |--------|------|---------|
-| `EnhancedCredentialProvisioner` | `src/services/credential-provisioner-enhanced.js` | Context-aware credential provisioning with 1Password integration |
-| `CredentialBroker` | `src/lib/credential-broker.js` | Unified abstraction over credential backends (1Password, ChittyServ) |
+| `EnhancedCredentialProvisioner` | `src/services/credential-provisioner-enhanced.js` | Context-aware credential provisioning with chittysecrets integration |
+| `CredentialBroker` | `src/lib/credential-broker.js` | Unified abstraction over credential backends (chittysecrets, ChittyServ) |
 | `SecretRotationService` | `src/services/secret-rotation.js` | Cron-based rotation of cached tokens (OAuth, DB passwords) |
 | `CREDENTIAL_CACHE` | KV namespace | Hot cache for rotated tokens |
-| `credential-paths.js` | `src/lib/credential-paths.js` | Maps logical names to 1Password item paths |
+| `credential-paths.js` | `src/lib/credential-paths.js` | Maps logical names to chittysecrets item paths |
 
 **How agents access secrets:**
 ```
@@ -101,7 +101,7 @@ Agent (e.g., chittyagent-finance)
     → CredentialBroker.get("integrations/neon/database_url")
       → Check KV cache (CREDENTIAL_CACHE)
         → Hit: return cached value
-        → Miss: fetch from 1Password Connect API, cache, return
+        → Miss: fetch from chittysecrets Connect API, cache, return
 ```
 
 **REST API:**
@@ -134,14 +134,14 @@ User request
   → chittyagent-orchestrator (decides: "finance agent handles this")
     → chittyagent-finance (needs Neon credentials)
       → ChittyConnect credential broker (serves credentials)
-        → KV cache or 1Password
+        → KV cache or chittysecrets
 ```
 
 ---
 
 ## Storage Layers
 
-### Layer 1: Cold Storage (1Password)
+### Layer 1: Cold Storage (chittysecrets)
 
 **What:** Long-term source of truth for all credentials.
 
@@ -170,7 +170,7 @@ User request
 
 **Access:** Worker `env` object only. Hidden from Cloudflare dashboard UI after creation.
 
-**How secrets arrive:** Pushed from 1Password via `sync-secrets.yml` workflow using `wrangler secret put`.
+**How secrets arrive:** Pushed from chittysecrets via `sync-secrets.yml` workflow using `wrangler secret put`.
 
 **Lifecycle:** Static until explicitly re-synced. Used for long-lived credentials that don't rotate frequently (API keys, client IDs, refresh tokens).
 
@@ -222,7 +222,7 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    1Password                             │
+│                    chittysecrets                             │
 │                                                         │
 │  Runtime SAs (READ-ONLY)        Admin SAs (READ many,   │
 │  ┌──────────────────┐           WRITE to one vault)     │
@@ -265,7 +265,7 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 | Token expiry | Currently: doesn't expire. **Recommended: 90 days for admin SAs** |
 | Token format | Service Account tokens (headless, HTTPS-only) |
 | Desktop dependency | None. `op` CLI uses SA tokens directly |
-| Memory footprint | <20MB (`op` CLI) vs ~500MB (1Password Desktop) |
+| Memory footprint | <20MB (`op` CLI) vs ~500MB (chittysecrets Desktop) |
 
 ---
 
@@ -347,7 +347,7 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 
 ```
 ┌─────────────┐    op run     ┌─────────────┐   wrangler    ┌─────────────┐
-│  1Password  │──────────────→│  GH Actions  │──secret put──→│  Cloudflare  │
+│  chittysecrets  │──────────────→│  GH Actions  │──secret put──→│  Cloudflare  │
 │  Vault      │  (admin SA)   │  Workflow     │              │  Secrets     │
 └─────────────┘               └─────────────┘               └─────────────┘
      cold                      provisioning                      hot
@@ -363,7 +363,7 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
                         │               │─────────→│ CF Secret │ ← hot
                         │               │          └──────────┘
                         │               │  1P API   ┌──────────┐
-                        │               │─────────→│ 1Password │ ← cold
+                        │               │─────────→│ chittysecrets │ ← cold
                         └──────────────┘           └──────────┘
 ```
 
@@ -389,7 +389,7 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 ```bash
 # 1. Add admin SA token to GH Actions secrets
 #    Secret name: OP_ADMIN_SA_TOKEN
-#    Value: <sa-chitty-admin-stage token from 1Password web UI>
+#    Value: <sa-chitty-admin-stage token from chittysecrets web UI>
 
 # 2. Add Cloudflare API token to GH Actions secrets
 #    Secret name: CLOUDFLARE_API_TOKEN
@@ -417,7 +417,7 @@ curl -s https://connect.chitty.cc/api/v1/secrets/status | jq .
 
 ### Emergency: Revoke a Compromised SA
 
-1. Go to 1Password web UI → Developer → Service Accounts
+1. Go to chittysecrets web UI → Developer → Service Accounts
 2. Find the compromised SA (e.g., `sa-chitty-admin-stage`)
 3. Click "Revoke Token" → instant global revocation
 4. Generate new token
@@ -430,7 +430,7 @@ curl -s https://connect.chitty.cc/api/v1/secrets/status | jq .
 |-------|-----|-----------|
 | Secret freshness | `GET /api/v1/secrets/status` | On demand |
 | Rotation failures | Cloudflare Worker logs (`wrangler tail chittyconnect`) | Real-time |
-| 1Password access patterns | 1Password audit logs in web console | Weekly |
+| chittysecrets access patterns | chittysecrets audit logs in web console | Weekly |
 | Secret catalog drift | `onepassword-rotation-audit.yml` workflow | Weekly (Monday 6am) |
 
 ---
@@ -441,8 +441,8 @@ curl -s https://connect.chitty.cc/api/v1/secrets/status | jq .
 |------|------|---------|
 | `src/services/secret-rotation.js` | chittyconnect | Rotation engine + registry |
 | `src/services/credential-provisioner-enhanced.js` | chittyconnect | Runtime credential broker |
-| `src/lib/credential-broker.js` | chittyconnect | Backend abstraction (1Password / ChittyServ) |
-| `src/lib/credential-paths.js` | chittyconnect | Logical → 1Password path mapping |
+| `src/lib/credential-broker.js` | chittyconnect | Backend abstraction (chittysecrets / ChittyServ) |
+| `src/lib/credential-paths.js` | chittyconnect | Logical → chittysecrets path mapping |
 | `.github/workflows/sync-secrets.yml` | chittyconnect | Provisioning workflow (1P → CF) |
 | `.github/workflows/onepassword-rotation-audit.yml` | chittyconnect | Weekly catalog freshness check |
 | `wrangler.jsonc` (triggers section) | chittyconnect | Cron schedule definitions |

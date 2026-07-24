@@ -185,7 +185,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
           content: [
             {
               type: "text",
-              text: "Cloudflare API token not configured (set CLOUDFLARE_MAKE_API_KEY or 1Password path infrastructure/cloudflare/api_token)",
+              text: "Cloudflare API token not configured (set CLOUDFLARE_MAKE_API_KEY or chittysecrets path infrastructure/cloudflare/api_token)",
             },
           ],
           isError: true,

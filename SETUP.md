@@ -72,7 +72,7 @@ wrangler queues create github-events
 ```bash
 # Core services
 wrangler secret put CHITTY_ID_TOKEN --env production
-# Enter token from 1Password: mcp_auth_9b69455f5f799a73f16484eb268aea50
+# Enter token from chittysecrets: mcp_auth_9b69455f5f799a73f16484eb268aea50
 
 wrangler secret put CHITTY_AUTH_TOKEN --env production
 wrangler secret put CHITTY_CASES_TOKEN --env production

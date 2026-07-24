@@ -125,9 +125,9 @@ executeRoutes.post("/sql/batch", async (c) => {
  *
  * Body: { url: string, method?: string, headers?: object, body?: string,
  *         credential?: string }
- *   credential: 1Password path (e.g. "integrations/notion/api_key") — injected as Bearer token
+ *   credential: chittysecrets path (e.g. "integrations/notion/api_key") — injected as Bearer token
  */
-// Allowlist of (alias → 1Password path) pairs for /fetch credential injection.
+// Allowlist of (alias → chittysecrets path) pairs for /fetch credential injection.
 // Callers reference an alias; the server maps to a path. This prevents callers
 // from naming arbitrary credential paths and exfiltrating tokens.
 const FETCH_CREDENTIAL_ALIASES = {
@@ -237,7 +237,7 @@ async function resolveNeonConnection(env, database) {
     if (cached) return cached;
   }
 
-  // Try credential broker (1Password)
+  // Try credential broker (chittysecrets)
   const cred = await getCredential(env, known.credentialPath, known.envFallback);
   return cred || null;
 }

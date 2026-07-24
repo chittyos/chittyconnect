@@ -2,7 +2,7 @@
  * Cloudflare Secrets Store Client
  *
  * Zero-latency credential access via env bindings.
- * Secrets are synced from 1Password synthetic-shared vault
+ * Secrets are synced from chittysecrets synthetic-shared vault
  * to Cloudflare Workers Secrets Store at deploy time.
  *
  * This is the portal pattern: no runtime credential fetching,
@@ -18,7 +18,7 @@
 
 /**
  * Mapping from legacy credential paths to env var names.
- * This bridges the old 1Password vault/item/field paths
+ * This bridges the old chittysecrets vault/item/field paths
  * to the flat CF Secrets Store namespace.
  */
 const PATH_TO_ENV = {

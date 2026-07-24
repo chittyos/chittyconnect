@@ -1,13 +1,13 @@
 -- Migration: 005_onepassword_events
--- Description: Tables for 1Password Events API integration with ChittyChronicle
+-- Description: Tables for chittysecrets Events API integration with ChittyChronicle
 -- Created: 2026-01-06
 
--- Chronicle events table for storing 1Password audit events
+-- Chronicle events table for storing chittysecrets audit events
 CREATE TABLE IF NOT EXISTS chronicle_events (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT '1password-events-api',
+    source TEXT NOT NULL DEFAULT 'chittysecrets-events-api',
     data TEXT NOT NULL, -- JSON blob
     service TEXT NOT NULL,
     category TEXT NOT NULL, -- security, credential_access, audit

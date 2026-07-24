@@ -1,4 +1,4 @@
-# Phase 3 Migration Guide: 1Password Connect Server Deployment
+# Phase 3 Migration Guide: chittysecrets Connect Server Deployment
 
 **Status:** Ready to Execute
 **Prerequisites:** Phase 1 & 2 Complete (✅)
@@ -8,11 +8,11 @@
 
 ## Overview
 
-This guide walks through deploying a 1Password Connect server and migrating all ChittyConnect credentials from environment variables to 1Password vaults. The implementation is designed to be executed gradually with zero downtime.
+This guide walks through deploying a chittysecrets Connect server and migrating all ChittyConnect credentials from environment variables to chittysecrets vaults. The implementation is designed to be executed gradually with zero downtime.
 
-**Current State:** All code is deployed and ready. The system currently uses automatic failover to environment variables because the 1Password Connect server is not yet deployed.
+**Current State:** All code is deployed and ready. The system currently uses automatic failover to environment variables because the chittysecrets Connect server is not yet deployed.
 
-**After Phase 3:** All credentials will be retrieved dynamically from 1Password vaults at runtime, with environment variables serving as emergency fallback only.
+**After Phase 3:** All credentials will be retrieved dynamically from chittysecrets vaults at runtime, with environment variables serving as emergency fallback only.
 
 ---
 
@@ -24,7 +24,7 @@ ChittyConnect Routes
 getServiceToken() / getCredential()
     ↓
 OnePasswordConnectClient
-    ├─→ [1] Try 1Password Connect Server (NEW in Phase 3)
+    ├─→ [1] Try chittysecrets Connect Server (NEW in Phase 3)
     └─→ [2] Fallback to environment variables (CURRENT)
     ↓
 ContextConsciousness™ Risk Analysis
@@ -38,8 +38,8 @@ Encrypted KV Cache (TTL-based)
 
 ### Required Tools
 - [ ] Docker or cloud hosting platform
-- [ ] 1Password CLI (`op`) installed locally
-- [ ] Access to 1Password account with admin permissions
+- [ ] chittysecrets CLI (`op`) installed locally
+- [ ] Access to chittysecrets account with admin permissions
 - [ ] `wrangler` CLI for Cloudflare Workers
 - [ ] `openssl` for generating encryption keys
 
@@ -68,40 +68,40 @@ You should have these already set in Cloudflare Workers:
 
 ---
 
-## Step 1: Deploy 1Password Connect Server
+## Step 1: Deploy chittysecrets Connect Server
 
 ### Option A: Docker Deployment (Recommended for Testing)
 
 ```bash
-# 1. Create a 1Password Connect credentials file
-# Log into 1Password and generate a credentials file from:
-# https://my.1password.com/integrations/active
+# 1. Create a chittysecrets Connect credentials file
+# Log into chittysecrets and generate a credentials file from:
+# https://my.chittysecrets.com/integrations/active
 
 # Save the credentials.json file to a secure location
-mkdir -p ~/1password-connect
-cd ~/1password-connect
+mkdir -p ~/chittysecrets-connect
+cd ~/chittysecrets-connect
 
-# 2. Run 1Password Connect server
+# 2. Run chittysecrets Connect server
 docker run -d \
-  --name 1password-connect \
+  --name chittysecrets-connect \
   -p 8080:8080 \
   -v $(pwd)/1op-sessions:/home/opuser/.op/data \
   -v $(pwd)/credentials.json:/home/opuser/.op/credentials.json \
-  1password/connect-api:latest
+  chittysecrets/connect-api:latest
 
 # 3. Verify it's running
-docker ps | grep 1password-connect
+docker ps | grep chittysecrets-connect
 
 # 4. Test health endpoint
 curl http://localhost:8080/health
-# Should return: {"name":"1Password Connect API","version":"1.x.x"}
+# Should return: {"name":"chittysecrets Connect API","version":"1.x.x"}
 ```
 
 ### Option B: Cloud Deployment (Recommended for Production)
 
 **AWS ECS:**
 ```bash
-# Create ECS task definition with 1password/connect-api:latest
+# Create ECS task definition with chittysecrets/connect-api:latest
 # Mount credentials.json as secret
 # Expose port 8080
 # Set up Application Load Balancer with SSL
@@ -128,12 +128,12 @@ curl http://localhost:8080/health
 
 ---
 
-## Step 2: Create 1Password Vaults and Organize Credentials
+## Step 2: Create chittysecrets Vaults and Organize Credentials
 
 ### 2.1 Create Vaults
 
 ```bash
-# Using 1Password CLI
+# Using chittysecrets CLI
 op vault create "ChittyOS Infrastructure" --allow-admins-to-manage=true
 op vault create "ChittyOS Services" --allow-admins-to-manage=true
 op vault create "ChittyOS Integrations" --allow-admins-to-manage=true
@@ -227,19 +227,19 @@ op item get "Cloudflare API Credentials" --vault="ChittyOS Infrastructure" --fie
 
 ---
 
-## Step 3: Configure ChittyConnect with 1Password Connect
+## Step 3: Configure ChittyConnect with chittysecrets Connect
 
 ### 3.1 Generate Service Account Token
 
 ```bash
-# In 1Password web interface:
-# 1. Go to Integrations → 1Password Connect
+# In chittysecrets web interface:
+# 1. Go to Integrations → chittysecrets Connect
 # 2. Create new service account
 # 3. Grant access to all four vaults (Infrastructure, Services, Integrations, Emergency)
 # 4. Copy the token (you'll only see it once!)
 
 # Save the token securely
-echo "your-1password-connect-token" > ~/1password-connect-token.txt
+echo "your-chittysecrets-connect-token" > ~/chittysecrets-connect-token.txt
 ```
 
 ### 3.2 Generate Encryption Key
@@ -268,13 +268,13 @@ op vault list --format=json | jq '.[] | {name: .name, id: .id}'
 ### 3.4 Set Wrangler Secrets
 
 ```bash
-# Set 1Password Connect URL (update if using custom domain)
+# Set chittysecrets Connect URL (update if using custom domain)
 # Default assumes localhost for testing
 # For production, use your actual domain
 
-# Set 1Password Connect token
-cat ~/1password-connect-token.txt | wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env=staging
-cat ~/1password-connect-token.txt | wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env=production
+# Set chittysecrets Connect token
+cat ~/chittysecrets-connect-token.txt | wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env=staging
+cat ~/chittysecrets-connect-token.txt | wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env=production
 
 # Set encryption key
 openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY --env=staging
@@ -288,20 +288,20 @@ wrangler secret list --env=production | grep -E "(ONEPASSWORD|ENCRYPTION)"
 ### 3.5 Update ONEPASSWORD_CONNECT_URL for Production
 
 ```toml
-# In wrangler.toml, update for your actual 1Password Connect server:
+# In wrangler.toml, update for your actual chittysecrets Connect server:
 
 [env.staging.vars]
-ONEPASSWORD_CONNECT_URL = "https://1password-connect-staging.chitty.cc"  # Your staging URL
+ONEPASSWORD_CONNECT_URL = "https://chittysecrets-connect-staging.chitty.cc"  # Your staging URL
 
 [env.production.vars]
-ONEPASSWORD_CONNECT_URL = "https://1password-connect.chitty.cc"  # Your production URL
+ONEPASSWORD_CONNECT_URL = "https://chittysecrets-connect.chitty.cc"  # Your production URL
 ```
 
 ---
 
 ## Step 4: Testing
 
-### 4.1 Test 1Password Connect Retrieval Locally
+### 4.1 Test chittysecrets Connect Retrieval Locally
 
 ```bash
 # Test with curl
@@ -333,7 +333,7 @@ curl -X POST https://chittyconnect-staging.workers.dev/api/credentials/provision
     }
   }'
 
-# Should return credential successfully retrieved from 1Password
+# Should return credential successfully retrieved from chittysecrets
 
 # Check health endpoint
 curl https://chittyconnect-staging.workers.dev/api/credentials/health \
@@ -345,8 +345,8 @@ curl https://chittyconnect-staging.workers.dev/api/credentials/health \
 ### 4.3 Test Automatic Failover
 
 ```bash
-# Stop 1Password Connect server temporarily
-docker stop 1password-connect
+# Stop chittysecrets Connect server temporarily
+docker stop chittysecrets-connect
 
 # Test that ChittyConnect still works (should fall back to env vars)
 curl -X POST https://chittyconnect-staging.workers.dev/api/credentials/provision \
@@ -361,12 +361,12 @@ curl -X POST https://chittyconnect-staging.workers.dev/api/credentials/provision
   }'
 
 # Should still succeed (using environment variable fallback)
-# Check logs - should see warning about 1Password fallback
+# Check logs - should see warning about chittysecrets fallback
 
-# Restart 1Password Connect
-docker start 1password-connect
+# Restart chittysecrets Connect
+docker start chittysecrets-connect
 
-# Verify it switches back to 1Password
+# Verify it switches back to chittysecrets
 # (may take up to cache TTL - 15 min for integrations)
 ```
 
@@ -391,14 +391,14 @@ curl -X POST https://chittyconnect-staging.workers.dev/api/thirdparty/openai/cha
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Hello"}]}'
 
-# All should succeed using 1Password-retrieved credentials
+# All should succeed using chittysecrets-retrieved credentials
 ```
 
 ---
 
 ## Step 5: Production Deployment
 
-### 5.1 Deploy Production 1Password Connect Server
+### 5.1 Deploy Production chittysecrets Connect Server
 
 ```bash
 # Use production-grade hosting (AWS ECS, GKE, etc.)
@@ -440,12 +440,12 @@ npm run tail --env=production
 
 ### Phase 3A: Monitor (Week 1)
 
-- ✅ 1Password Connect deployed and tested
+- ✅ chittysecrets Connect deployed and tested
 - ✅ All credentials in vaults
-- ✅ ChittyConnect retrieving from 1Password
+- ✅ ChittyConnect retrieving from chittysecrets
 - ✅ Environment variables still in place as failback
 - 📊 Monitor cache hit rates
-- 📊 Monitor 1Password Connect uptime
+- 📊 Monitor chittysecrets Connect uptime
 - 📊 Monitor for any failover events
 
 ### Phase 3B: Optimize (Week 2-3)
@@ -461,7 +461,7 @@ npm run tail --env=production
 
 ```bash
 # Begin removing environment variable fallbacks (optional)
-# This makes the system fully dependent on 1Password Connect
+# This makes the system fully dependent on chittysecrets Connect
 
 # Start with non-critical integrations
 wrangler secret delete NOTION_TOKEN --env=production
@@ -515,7 +515,7 @@ ORDER BY average_risk_score DESC;
 
 ### 7.2 Set Up Alerts
 
-- Alert on 1Password Connect health check failures
+- Alert on chittysecrets Connect health check failures
 - Alert on high cache miss rates (> 20%)
 - Alert on high-risk credential requests (score >= 70)
 - Alert on anomaly detection
@@ -543,20 +543,20 @@ ORDER BY average_risk_score DESC;
 
 ## Disaster Recovery
 
-### Scenario 1: 1Password Connect Server Down
+### Scenario 1: chittysecrets Connect Server Down
 
 **Automatic:** System automatically falls back to environment variables (if still set)
 
 **Manual Steps:**
-1. Check 1Password Connect server logs
-2. Restart 1Password Connect container/service
+1. Check chittysecrets Connect server logs
+2. Restart chittysecrets Connect container/service
 3. Verify health endpoint
 4. Monitor ChittyConnect logs for automatic recovery
 
-### Scenario 2: Lost 1Password Connect Token
+### Scenario 2: Lost chittysecrets Connect Token
 
 **Steps:**
-1. Generate new service account token in 1Password web interface
+1. Generate new service account token in chittysecrets web interface
 2. Update Wrangler secrets:
    ```bash
    echo "new-token" | wrangler secret put ONEPASSWORD_CONNECT_TOKEN --env=production
@@ -566,24 +566,24 @@ ORDER BY average_risk_score DESC;
 
 ### Scenario 3: Vault Corruption or Deletion
 
-**Prevention:** Regular backups of 1Password vaults
+**Prevention:** Regular backups of chittysecrets vaults
 
 **Recovery:**
-1. Restore vault from 1Password backup
+1. Restore vault from chittysecrets backup
 2. Verify all credentials are present
 3. Update vault UUID in wrangler.toml if changed
 4. Redeploy ChittyConnect
 5. Test all integrations
 
-### Scenario 4: Complete 1Password Outage
+### Scenario 4: Complete chittysecrets Outage
 
 **If environment variables still set:** Automatic failover, zero downtime
 
 **If environment variables removed:**
 1. Emergency restore environment variables from secure backup
 2. Deploy with environment variables
-3. Investigate 1Password outage
-4. Restore 1Password Connect when available
+3. Investigate chittysecrets outage
+4. Restore chittysecrets Connect when available
 
 ---
 
@@ -591,8 +591,8 @@ ORDER BY average_risk_score DESC;
 
 ✅ **Phase 3 Complete When:**
 
-1. 1Password Connect server deployed and healthy
-2. All credentials migrated to 1Password vaults
+1. chittysecrets Connect server deployed and healthy
+2. All credentials migrated to chittysecrets vaults
 3. ChittyConnect successfully retrieving credentials from vaults
 4. Cache hit rate > 80%
 5. Zero production incidents related to credentials
@@ -608,8 +608,8 @@ ORDER BY average_risk_score DESC;
 If Phase 3 needs to be rolled back:
 
 ```bash
-# 1. Stop 1Password Connect server
-docker stop 1password-connect
+# 1. Stop chittysecrets Connect server
+docker stop chittysecrets-connect
 
 # 2. Verify automatic failover to environment variables works
 # (Should be seamless if env vars still set)
@@ -625,12 +625,12 @@ npm run deploy:production
 
 ## Cost Analysis
 
-**1Password Connect Server:**
+**chittysecrets Connect Server:**
 - Docker (self-hosted): ~$10-50/month (VM costs)
 - AWS ECS: ~$30-100/month (container + load balancer)
 - Google Cloud Run: ~$20-80/month (container + ingress)
 
-**1Password Business Account:**
+**chittysecrets Business Account:**
 - Required for Connect API
 - ~$8-20/user/month
 
@@ -641,7 +641,7 @@ npm run deploy:production
 - **Total KV: ~$1/month**
 
 **Total Estimated Monthly Cost: $40-170**
-(Mainly 1Password subscription + hosting)
+(Mainly chittysecrets subscription + hosting)
 
 **ROI:** Enhanced security, centralized credential management, automated rotation, comprehensive audit trail
 
@@ -651,8 +651,8 @@ npm run deploy:production
 
 ### Common Issues
 
-**Issue:** "1Password Connect not healthy"
-- Check 1Password Connect server logs
+**Issue:** "chittysecrets Connect not healthy"
+- Check chittysecrets Connect server logs
 - Verify network connectivity
 - Verify credentials.json is valid
 - Check service account token hasn't expired
@@ -674,8 +674,8 @@ npm run deploy:production
 - **Documentation:** See 1PASSWORD_ARCHITECT_IMPLEMENTATION.md
 - **Logs:** `npm run tail --env=production`
 - **Database Queries:** Use D1 to query credential_access_patterns
-- **1Password Support:** https://support.1password.com
+- **chittysecrets Support:** https://support.chittysecrets.com
 
 ---
 
-**Phase 3 migration complete! ChittyConnect is now a fully operational context-aware credential orchestration platform powered by 1Password Connect. 🎉**
+**Phase 3 migration complete! ChittyConnect is now a fully operational context-aware credential orchestration platform powered by chittysecrets Connect. 🎉**

@@ -1,5 +1,5 @@
 /**
- * 1Password credential paths for ChittyOS integrations.
+ * chittysecrets credential paths for ChittyOS integrations.
  *
  * @module lib/credential-paths
  */

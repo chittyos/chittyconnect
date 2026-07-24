@@ -1522,7 +1522,7 @@ Apple data sources.
 | Type | Service | Purpose |
 |------|---------|---------|
 | Storage | Neon PostgreSQL | ChittyLedger-Messaging project |
-| Credential | 1Password | Database URL injection |
+| Credential | chittysecrets | Database URL injection |
 
 ## Ownership
 

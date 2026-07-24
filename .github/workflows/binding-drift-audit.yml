@@ -1,7 +1,7 @@
 name: Binding Drift Audit
 
 # Detects when the live chittyconnect worker is missing bindings declared in
-# wrangler.jsonc — i.e. someone (or some tool) ran `wrangler deploy` without
+# wrangler.jsonc — i.e. someone (or some tool) ran `cf deploy` without
 # `--env production` and silently wiped prod bindings. See issue #216.
 
 on:
@@ -42,7 +42,7 @@ jobs:
             const body = [
               "Automated audit (`scripts/audit-bindings.sh production`) found bindings",
               "declared in `wrangler.jsonc` env.production that are NOT attached to the",
-              "live worker. This usually means someone ran a bare `wrangler deploy`",
+              "live worker. This usually means someone ran a bare `cf deploy`",
               "(no `--env`) and silently stripped bindings. See issue #216.",
               "",
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,

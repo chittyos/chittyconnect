@@ -3,7 +3,7 @@
  *
  * Machine-orchestrated credential rotation for the synthetic dev team.
  * Manages hot/cold/cache secret layers:
- *   - Cold: 1Password (source of truth via credential broker)
+ *   - Cold: chittysecrets (source of truth via credential broker)
  *   - Hot:  Cloudflare Secrets (env vars, pushed at deploy)
  *   - Cache: Workers KV (rotated tokens like OAuth access tokens)
  *

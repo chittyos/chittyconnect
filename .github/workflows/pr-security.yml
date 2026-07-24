@@ -27,7 +27,7 @@ jobs:
 
           # Patterns that should NOT be in code
           PATTERNS=(
-            'op://[^"'"'"'[:space:]]+'  # 1Password refs (ok in workflows, not in src)
+            'op://[^"'"'"'[:space:]]+'  # chittysecrets refs (ok in workflows, not in src)
             'AKIA[0-9A-Z]{16}'          # AWS Access Key
             'sk-[a-zA-Z0-9]{48}'        # OpenAI API Key
             'ghp_[a-zA-Z0-9]{36}'       # GitHub PAT
@@ -45,7 +45,7 @@ jobs:
 
           if [ $FOUND -eq 1 ]; then
             echo "❌ Potential secrets detected in source code!"
-            echo "Please use 1Password secret references or environment variables instead."
+            echo "Please use chittysecrets secret references or environment variables instead."
             exit 1
           fi
 

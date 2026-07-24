@@ -1,4 +1,4 @@
-# 1Password Zero-Trust Migration Plan
+# chittysecrets Zero-Trust Migration Plan
 
 **Date:** 2026-01-19
 **Status:** 🔴 CRITICAL - Wide-open access needs segmentation
@@ -81,7 +81,7 @@ Currently, you have admin access to everything. Zero-trust requires:
 | Identity | Tier 0 | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Tier 5 |
 |----------|--------|--------|--------|--------|--------|--------|
 | **Human Admin (You)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **1Password Connect** | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **chittysecrets Connect** | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | **ChittyConnect Service** | ❌ | ❌ | ✅ | Own items | ❌ | ❌ |
 | **GitHub Actions** | ❌ | Deploy only | ❌ | ❌ | ❌ | ❌ |
 | **Claude Code (AI)** | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
@@ -104,7 +104,7 @@ Currently, you have admin access to everything. Zero-trust requires:
 4. [ ] Archive old project vaults (DIRECTV, etc.)
 
 ### Phase 3: Access Restriction (Next Week)
-1. [ ] Configure 1Password Connect with vault-specific access
+1. [ ] Configure chittysecrets Connect with vault-specific access
 2. [ ] Update all services to use correct vaults
 3. [ ] Remove direct vault access from services (use Connect only)
 4. [ ] Enable audit logging
@@ -116,7 +116,7 @@ Currently, you have admin access to everything. Zero-trust requires:
 
 ---
 
-## 1Password Connect Configuration
+## chittysecrets Connect Configuration
 
 The Connect server should ONLY have access to:
 ```
@@ -204,7 +204,7 @@ Tier 3: ChittyOS, ChittyConnect Only
 
 Run the cleanup script:
 ```bash
-bash /Volumes/chitty/workspace/scripts/1password-cleanup.sh
+bash /Volumes/chitty/workspace/scripts/chittysecrets-cleanup.sh
 ```
 
 This will:

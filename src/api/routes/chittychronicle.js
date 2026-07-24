@@ -1,9 +1,9 @@
 /**
  * ChittyChronicle API Routes
- * Event logging and audit trails with 1Password Connect integration
+ * Event logging and audit trails with chittysecrets Connect integration
  *
- * Database connection retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Database connection retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  */
 
 import { Hono } from "hono";
@@ -70,7 +70,7 @@ chittychronicleRoutes.post("/events", async (c) => {
         {
           error: "Database connection not configured",
           details:
-            "Neither 1Password Connect nor environment variable available",
+            "Neither chittysecrets Connect nor environment variable available",
         },
         503,
       );

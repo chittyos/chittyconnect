@@ -4,7 +4,7 @@
  * Proxies Google Drive and Gmail APIs using auto-rotated OAuth tokens.
  * Token source priority:
  *   1. CREDENTIAL_CACHE KV (rotated every 50 min by secret-rotation.js)
- *   2. 1Password broker (integrations/google/access_token)
+ *   2. chittysecrets broker (integrations/google/access_token)
  *   3. GOOGLE_ACCESS_TOKEN env var (fallback)
  *
  * Supports: Drive Files API, Gmail Messages API
@@ -25,7 +25,7 @@ const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
 /**
  * Get a valid Google access token — tries KV rotation cache first (fastest),
- * falls back to 1Password broker, then env var.
+ * falls back to chittysecrets broker, then env var.
  *
  * scope: "gmail" (default, requires delegated token with a user sub) or "drive"
  * (accepts a delegated token first, then a non-delegated app-only token).
@@ -43,7 +43,7 @@ async function getGoogleToken(env, { scope = "gmail" } = {}) {
     }
   }
 
-  // Fallback: 1Password broker or env var
+  // Fallback: chittysecrets broker or env var
   return getCredential(env, "integrations/google/access_token", "GOOGLE_ACCESS_TOKEN");
 }
 

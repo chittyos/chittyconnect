@@ -102,7 +102,7 @@ Operator-specific message IDs, mailbox addresses, client IDs, and secret referen
 
 - GAM is a local operator tool, not a ChittyOS service.
 - Domain-wide Delegation is high-trust access. Limit operator scope and review `gam oauth info` regularly.
-- Keep service-account credentials in 1Password or equivalent secret storage. Do not commit credential paths, keys, or tokens.
+- Keep service-account credentials in chittysecrets or equivalent secret storage. Do not commit credential paths, keys, or tokens.
 - Prefer forwarding into the most specific ChittyRouter intake address available instead of relying on the catch-all route.
 
 ## Future MCP Work

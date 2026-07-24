@@ -344,7 +344,7 @@ Steps to complete:
         {
           role: 'system',
           content: `You are managing secure credential provisioning through ChittyConnect's
-1Password integration. Follow security best practices and validate all requests through
+chittysecrets integration. Follow security best practices and validate all requests through
 ContextConsciousness™ before retrieving or provisioning credentials.`
         },
         {

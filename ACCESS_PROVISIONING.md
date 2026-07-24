@@ -32,7 +32,7 @@ ChittyConnect is an **access provisioning broker**, not an executor. It authenti
    Observe context (what, where, when)
    Validate authority (ChittyAuth)
    ↓
-   Provision credentials via 1Password
+   Provision credentials via chittysecrets
    ↓
    Return: { credential_path, expires_at, instructions }
 
@@ -139,7 +139,7 @@ ChittyConnect is an **access provisioning broker**, not an executor. It authenti
 {
   "success": true,
   "provision_id": "prov_def456...",
-  "credential_source": "1password",
+  "credential_source": "chittysecrets",
   "credential_reference": "op://ChittyOS/github-chittyos-data/token",
   "service_account": "chittyos-automation@github.com",
   "expires_at": "2025-10-21T18:00:00Z",
@@ -154,7 +154,7 @@ ChittyConnect is an **access provisioning broker**, not an executor. It authenti
 **Implementation**:
 - Validate session token and observation
 - Check ChittyAuth for authorization
-- Provision credentials via 1Password Connect API
+- Provision credentials via chittysecrets Connect API
 - Create access record in D1
 - Return credential reference (NOT the credential itself)
 
@@ -208,13 +208,13 @@ export default {
 
 ---
 
-## Integration with 1Password
+## Integration with chittysecrets
 
-### 1Password Connect API
+### chittysecrets Connect API
 
 **Setup**:
 ```bash
-# Store 1Password Connect credentials
+# Store chittysecrets Connect credentials
 wrangler secret put ONEPASSWORD_CONNECT_HOST
 wrangler secret put ONEPASSWORD_CONNECT_TOKEN
 ```
@@ -244,7 +244,7 @@ async function provisionCredential(resource, chittyid, env) {
 **Revocation**:
 ```javascript
 async function revokeAccess(provision, env) {
-  // Revoke 1Password access token
+  // Revoke chittysecrets access token
   await revoke1PasswordAccessToken(provision.access_token, env);
 
   // Update database
@@ -326,7 +326,7 @@ async function revokeAccess(provision, env) {
 8. **provision_github_access** - GitHub repo access
 9. **provision_sendgrid_access** - SendGrid API access
 10. **provision_notion_access** - Notion API access
-11. **provision_1password_access** - 1Password vault access
+11. **provision_1password_access** - chittysecrets vault access
 
 ---
 
@@ -393,7 +393,7 @@ op run --env-file=- -- git push origin main
 
 ### Credential Isolation
 - Credentials never returned directly to user
-- Accessed via 1Password CLI or environment injection
+- Accessed via chittysecrets CLI or environment injection
 - Automatic revocation on expiry
 - No long-lived tokens
 
@@ -405,7 +405,7 @@ ChittyConnect (Broker)
   ↓
 ChittyAuth (Authorization)
   ↓
-1Password (Credential Store)
+chittysecrets (Credential Store)
   ↓
 External Service (GitHub, etc.)
 ```
@@ -428,7 +428,7 @@ External Service (GitHub, etc.)
 
 ### Phase 3: Provisioning
 - [ ] Context observer implementation
-- [ ] 1Password Connect API integration
+- [ ] chittysecrets Connect API integration
 - [ ] Credential provisioning flow
 - [ ] Resource-to-credential mapping
 
@@ -476,7 +476,7 @@ External Service (GitHub, etc.)
 - **ChittyAuth**: Authorization and policy enforcement
 - **ChittyID**: Identity authority and minting
 - **ChittyChronicle**: Audit logging
-- **1Password**: Credential storage and provisioning
+- **chittysecrets**: Credential storage and provisioning
 - **ChittyRegistry**: Service discovery
 
 ---

@@ -2552,7 +2552,7 @@ ${errorInfo.stack}`);
     },
 
     // Scheduled handler for cron triggers
-    // - "0 * * * *"     (hourly)  → 1Password event sync to ChittyChronicle
+    // - "0 * * * *"     (hourly)  → chittysecrets event sync to ChittyChronicle
     // - every 5 min     → Connection health checks
     async scheduled(event, env, ctx) {
       console.log(
@@ -2586,7 +2586,7 @@ ${errorInfo.stack}`);
         return;
       }
 
-      // Hourly cron — secret rotation + 1Password sync
+      // Hourly cron — secret rotation + chittysecrets sync
       if (event.cron === "0 * * * *") {
         // Secret rotation check (runs due rotations only)
         try {
@@ -2599,12 +2599,12 @@ ${errorInfo.stack}`);
           console.error(`[Scheduled] Secret rotation failed:`, err);
         }
 
-        // 1Password event sync
+        // chittysecrets event sync
         try {
           const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
           if (!chronicleUrl)
             throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-          const response = await fetch(`${chronicleUrl}/api/sync/1password`, {
+          const response = await fetch(`${chronicleUrl}/api/sync/chittysecrets`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -2619,13 +2619,13 @@ ${errorInfo.stack}`);
           });
           if (!response.ok) {
             console.error(
-              `[Scheduled] 1Password sync failed: ${response.status}`,
+              `[Scheduled] chittysecrets sync failed: ${response.status}`,
             );
           } else {
-            console.log(`[Scheduled] 1Password sync: ${response.status}`);
+            console.log(`[Scheduled] chittysecrets sync: ${response.status}`);
           }
         } catch (err) {
-          console.error(`[Scheduled] 1Password sync failed:`, err);
+          console.error(`[Scheduled] chittysecrets sync failed:`, err);
         }
         return;
       }

@@ -212,7 +212,7 @@ export default function ConnectionDetail() {
                       { key: "base_url", label: "Base URL" },
                       { key: "health_endpoint", label: "Health Endpoint" },
                       { key: "api_version", label: "API Version" },
-                      { key: "credential_path", label: "1Password Path" },
+                      { key: "credential_path", label: "chittysecrets Path" },
                       { key: "credential_env_var", label: "Env Variable" },
                       {
                         key: "service_token_pattern",
@@ -245,7 +245,7 @@ export default function ConnectionDetail() {
                         }
                       >
                         <option value="env">Environment Variable</option>
-                        <option value="onepassword">1Password</option>
+                        <option value="onepassword">chittysecrets</option>
                         <option value="oauth">OAuth</option>
                         <option value="none">None</option>
                       </select>
@@ -297,7 +297,7 @@ export default function ConnectionDetail() {
                       value={conn.credential_source}
                     />
                     <DetailRow
-                      label="1Password Path"
+                      label="chittysecrets Path"
                       value={conn.credential_path}
                       mono
                     />

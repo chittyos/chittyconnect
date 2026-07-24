@@ -168,24 +168,24 @@ POST   /api/v1/documents/multipart/:id/complete
 
 ---
 
-## 3. Cloudflare Tunnel + 1Password Connect
+## 3. Cloudflare Tunnel + chittysecrets Connect
 
 ### Quick Deploy
 
 ```bash
-# 1. Provision 1Password credentials
+# 1. Provision chittysecrets credentials
 op signin
 op connect server create "ChittyOS Infrastructure" \
   --vaults "infrastructure,services,integrations,emergency" \
-  > infrastructure/1password-connect/credentials/1password-credentials.json
+  > infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 
 # 2. Create Cloudflare Tunnel
 # Via dashboard: https://one.dash.cloudflare.com/ > Zero Trust > Tunnels
-# Name: "1password-connect-chittyos"
+# Name: "chittysecrets-connect-chittyos"
 # Copy tunnel token
 
 # 3. Configure .env
-cd infrastructure/1password-connect
+cd infrastructure/chittysecrets-connect
 cat > .env << 'EOF'
 OP_SESSION=your-session-token
 CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token
@@ -195,7 +195,7 @@ EOF
 docker-compose up -d
 
 # 5. Verify
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $CONNECT_TOKEN"
 
 # 6. Update ChittyConnect
@@ -242,14 +242,14 @@ curl http://localhost:8081/health
 curl http://localhost:2000/ready
 
 # External (via tunnel)
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Cost
 
 **Cloudflare Tunnel**: FREE
-**1Password Connect**: $8/month
+**chittysecrets Connect**: $8/month
 **Hetzner VPS (2GB)**: $5/month
 **Total**: **$13/month**
 
@@ -276,10 +276,10 @@ curl https://1password-connect.chitty.cc/v1/health \
 - [ ] Monitor for 24-48 hours
 - [ ] Production deployment
 
-### 1Password Connect
-- [ ] Provision 1Password credentials
+### chittysecrets Connect
+- [ ] Provision chittysecrets credentials
 - [ ] Create Cloudflare Tunnel
-- [ ] Configure DNS (1password-connect.chitty.cc)
+- [ ] Configure DNS (chittysecrets-connect.chitty.cc)
 - [ ] Set up .env file
 - [ ] Deploy Docker stack
 - [ ] Verify all services healthy
@@ -319,7 +319,7 @@ wrangler r2 object put chittyconnect-documents-staging/test.txt \
   --file=test.txt
 ```
 
-### 1Password Connect Issues
+### chittysecrets Connect Issues
 
 ```bash
 # Check containers
@@ -366,7 +366,7 @@ curl https://connect.chitty.cc/api/v1/documents/stats \
   -H "X-ChittyID: YOUR_CHITTYID"
 ```
 
-### 1Password Connect
+### chittysecrets Connect
 
 ```bash
 # Check all container health
@@ -379,7 +379,7 @@ docker-compose logs cloudflare-tunnel | tail -20
 docker-compose logs connect-api | tail -20
 
 # Check external access
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -412,7 +412,7 @@ wrangler secret put ENABLE_R2_STORAGE --env production
 # Enter: false
 wrangler deploy --env production
 
-# Rollback 1Password Connect only
+# Rollback chittysecrets Connect only
 docker-compose down
 wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty)
@@ -435,7 +435,7 @@ wrangler deploy --env production
 - Download: 300ms → 90ms (70% improvement, edge cache)
 - Cost: $50/month → $0/month (100% savings)
 
-**Credential Access (1Password vs static)**:
+**Credential Access (chittysecrets vs static)**:
 - Security: Static → Dynamic (90% improvement)
 - Audit: None → Complete
 - Rotation: Manual → Automated
@@ -450,7 +450,7 @@ wrangler deploy --env production
 - **Cloudflare Tunnel**: $0 (unlimited)
 
 ### Paid Services
-- **1Password Connect**: $8/month
+- **chittysecrets Connect**: $8/month
 - **Hetzner VPS**: $5/month
 
 ### Total Cost
@@ -478,8 +478,8 @@ wrangler deploy --env production
 
 ### Configuration
 - `wrangler-durable-objects.toml`
-- `infrastructure/1password-connect/docker-compose.yml`
-- `infrastructure/1password-connect/nginx/nginx.conf`
+- `infrastructure/chittysecrets-connect/docker-compose.yml`
+- `infrastructure/chittysecrets-connect/nginx/nginx.conf`
 
 ### Database
 - `migrations/003_document_storage.sql`
@@ -497,7 +497,7 @@ wrangler deploy --env production
 - Durable Objects: https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
 - R2 Storage: https://developers.cloudflare.com/r2/
 - Cloudflare Tunnel: https://developers.cloudflare.com/cloudflare-one/
-- 1Password Connect: https://developer.1password.com/docs/connect/
+- chittysecrets Connect: https://developer.chittysecrets.com/docs/connect/
 - ChittyOS Docs: `/Users/nb/Projects/development/CLAUDE.md`
 
 ---

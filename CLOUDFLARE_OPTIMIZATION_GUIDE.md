@@ -6,7 +6,7 @@ This document provides detailed implementation guidance for three major Cloudfla
 
 1. **Durable Objects for ContextConsciousness™ Session State** - Real-time, stateful session management
 2. **R2 Document Storage with D1 Metadata** - Scalable document storage with search
-3. **Cloudflare Tunnel + 1Password Connect** - Secure credential management
+3. **Cloudflare Tunnel + chittysecrets Connect** - Secure credential management
 
 **Total Implementation Time**: 3-6 weeks
 **Total Cost**: $13-23/month
@@ -32,8 +32,8 @@ All implementations are production-ready with complete fallback strategies and z
 - `/migrations/003_document_storage.sql` - Document metadata schema (161 lines)
 
 ### Infrastructure
-- `/infrastructure/1password-connect/docker-compose.yml` - Complete Docker stack (275 lines)
-- `/infrastructure/1password-connect/nginx/nginx.conf` - Nginx proxy config (191 lines)
+- `/infrastructure/chittysecrets-connect/docker-compose.yml` - Complete Docker stack (275 lines)
+- `/infrastructure/chittysecrets-connect/nginx/nginx.conf` - Nginx proxy config (191 lines)
 
 ### Configuration
 - `/wrangler-durable-objects.toml` - Durable Objects configuration
@@ -48,8 +48,8 @@ All implementations are production-ready with complete fallback strategies and z
 ```bash
 # Verify tools
 wrangler --version       # Should be latest
-docker --version         # For 1Password Connect
-op --version             # For 1Password CLI
+docker --version         # For chittysecrets Connect
+op --version             # For chittysecrets CLI
 
 # Login to Cloudflare
 wrangler login
@@ -105,19 +105,19 @@ curl -X POST https://connect-staging.chitty.cc/api/v1/documents/upload \
   -F "type=evidence"
 ```
 
-**Week 5-6: 1Password Connect**
+**Week 5-6: chittysecrets Connect**
 ```bash
-# 1. Provision 1Password credentials
+# 1. Provision chittysecrets credentials
 op signin
 op connect server create "ChittyOS Infrastructure" \
   --vaults "infrastructure,services,integrations,emergency" \
-  > infrastructure/1password-connect/credentials/1password-credentials.json
+  > infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 
 # 2. Create Cloudflare Tunnel
 # Via dashboard: https://one.dash.cloudflare.com/ > Zero Trust > Tunnels
 
 # 3. Configure .env
-cd infrastructure/1password-connect
+cd infrastructure/chittysecrets-connect
 cat > .env << 'EOF'
 OP_SESSION=your-session-token
 CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token
@@ -127,7 +127,7 @@ EOF
 docker-compose up -d
 
 # 5. Verify health
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $CONNECT_TOKEN"
 
 # 6. Update ChittyConnect
@@ -420,20 +420,20 @@ A: **Implemented multipart flow**:
 
 ---
 
-## 3. Cloudflare Tunnel + 1Password Connect
+## 3. Cloudflare Tunnel + chittysecrets Connect
 
 ### Architecture
 
 ```
 Cloudflare Network (DDoS protection, HTTPS)
          ↓
-Cloudflare Tunnel (1password-connect.chitty.cc)
+Cloudflare Tunnel (chittysecrets-connect.chitty.cc)
          ↓
 Infrastructure Server (Docker)
    ├─ cloudflared (tunnel client)
    ├─ Nginx (reverse proxy, caching, rate limiting)
-   ├─ 1Password Connect API (:8080)
-   ├─ 1Password Connect Sync (:8081)
+   ├─ chittysecrets Connect API (:8080)
+   ├─ chittysecrets Connect Sync (:8081)
    └─ Health check aggregator
 ```
 
@@ -441,8 +441,8 @@ Infrastructure Server (Docker)
 
 ```yaml
 services:
-  connect-api:        # 1Password Connect API
-  connect-sync:       # 1Password Connect Sync
+  connect-api:        # chittysecrets Connect API
+  connect-sync:       # chittysecrets Connect Sync
   cloudflare-tunnel:  # Tunnel client
   nginx-proxy:        # Reverse proxy + caching
   connect-exporter:   # Prometheus metrics
@@ -452,24 +452,24 @@ services:
 ### Deployment Steps
 
 ```bash
-# 1. Provision 1Password Connect credentials
+# 1. Provision chittysecrets Connect credentials
 op signin
 op connect server create "ChittyOS Infrastructure" \
   --vaults "infrastructure,services,integrations,emergency" \
-  > infrastructure/1password-connect/credentials/1password-credentials.json
+  > infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 
-chmod 600 infrastructure/1password-connect/credentials/1password-credentials.json
+chmod 600 infrastructure/chittysecrets-connect/credentials/chittysecrets-credentials.json
 
 # 2. Create Cloudflare Tunnel (via dashboard)
 # Go to: https://one.dash.cloudflare.com/ > Zero Trust > Networks > Tunnels
-# Create tunnel: "1password-connect-chittyos"
+# Create tunnel: "chittysecrets-connect-chittyos"
 # Copy tunnel token
 
 # 3. Configure DNS
-# Route: 1password-connect.chitty.cc → Tunnel
+# Route: chittysecrets-connect.chitty.cc → Tunnel
 
 # 4. Set up .env
-cd infrastructure/1password-connect
+cd infrastructure/chittysecrets-connect
 cat > .env << 'EOF'
 OP_SESSION=your-session-token-here
 OP_LOG_LEVEL=info
@@ -487,7 +487,7 @@ docker-compose ps
 docker-compose logs -f
 
 # 7. Test health
-curl https://1password-connect.chitty.cc/v1/health \
+curl https://chittysecrets-connect.chitty.cc/v1/health \
   -H "Authorization: Bearer $CONNECT_TOKEN"
 
 # 8. Update ChittyConnect
@@ -522,7 +522,7 @@ curl -X POST https://connect.chitty.cc/api/v1/credentials/provision \
 ### Cost Estimate
 
 **Cloudflare Tunnel**: FREE
-**1Password Connect**: $8/month (Business plan)
+**chittysecrets Connect**: $8/month (Business plan)
 **Infrastructure Server**:
 - **Hetzner VPS (2GB)**: €4.51/month (~$5/month) ✅ Recommended
 - DigitalOcean Droplet (2GB): $12/month
@@ -532,7 +532,7 @@ curl -X POST https://connect.chitty.cc/api/v1/credentials/provision \
 
 ### Specific Q&A
 
-**Q: Should 1Password Connect run on same server as other infrastructure?**
+**Q: Should chittysecrets Connect run on same server as other infrastructure?**
 A: **Separate server recommended** for:
 - Security isolation (credentials separate)
 - Independent scaling
@@ -595,7 +595,7 @@ For high availability:
 - Days 2-3: Migrate existing documents
 - Days 4-7: Monitor, optimize
 
-### Phase 3: 1Password Connect (Weeks 5-6)
+### Phase 3: chittysecrets Connect (Weeks 5-6)
 
 **Week 5: Infrastructure**
 - Days 1-2: Provision credentials, setup server
@@ -626,7 +626,7 @@ Total: 64 hours
 - **Subtotal: $0/month**
 
 **Third-Party Services**:
-- 1Password Connect: $8/month
+- chittysecrets Connect: $8/month
 - Hetzner VPS (2GB): $5/month
 - **Subtotal: $13/month**
 
@@ -676,7 +676,7 @@ wrangler secret put ENABLE_DURABLE_OBJECTS --env production
 wrangler secret put ENABLE_R2_STORAGE --env production
 # Enter: false
 
-# Disable 1Password Connect
+# Disable chittysecrets Connect
 wrangler secret put ONEPASSWORD_CONNECT_URL --env production
 # Enter: (empty)
 
@@ -708,7 +708,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 - Presigned URL generation
 - Quota violations
 
-**1Password Connect**:
+**chittysecrets Connect**:
 - API response time
 - Cache hit rate
 - Failed auth attempts
@@ -724,7 +724,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 # Create custom dashboards for:
 # 1. Session State Performance (DO metrics)
 # 2. Document Storage Usage (R2 metrics)
-# 3. Credential Access Patterns (1Password)
+# 3. Credential Access Patterns (chittysecrets)
 ```
 
 ### Configure Alerts
@@ -733,7 +733,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 # Alert thresholds
 - DO requests >10K/min
 - R2 storage >8GB (80% of free tier)
-- 1Password Connect downtime >5min
+- chittysecrets Connect downtime >5min
 - Abnormal credential access patterns
 ```
 
@@ -754,7 +754,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 ✅ CORS restrictions
 ⚠️ Customer-managed encryption keys
 
-### 1Password Connect
+### chittysecrets Connect
 ✅ Zero-trust access (Tunnel)
 ✅ Cloudflare Access policies
 ✅ Rate limiting (100 req/min)
@@ -775,7 +775,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 ### Performance
 - [ ] Session latency <15ms p95
 - [ ] Document upload >99% success
-- [ ] 1Password uptime >99.9%
+- [ ] chittysecrets uptime >99.9%
 - [ ] Costs within free tier
 
 ### Business
@@ -807,7 +807,7 @@ See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#rollback-procedures) for complet
 - [Durable Objects Docs](https://developers.cloudflare.com/workers/runtime-apis/durable-objects/)
 - [R2 Storage Docs](https://developers.cloudflare.com/r2/)
 - [Cloudflare Tunnel Docs](https://developers.cloudflare.com/cloudflare-one/)
-- [1Password Connect Docs](https://developer.1password.com/docs/connect/)
+- [chittysecrets Connect Docs](https://developer.chittysecrets.com/docs/connect/)
 
 ### Implementation Files
 All implementation files are in `/Users/nb/Projects/development/chittyconnect/`:
@@ -822,9 +822,9 @@ All implementation files are in `/Users/nb/Projects/development/chittyconnect/`:
 - `src/api/routes/documents.js`
 - `migrations/003_document_storage.sql`
 
-**1Password Connect**:
-- `infrastructure/1password-connect/docker-compose.yml`
-- `infrastructure/1password-connect/nginx/nginx.conf`
+**chittysecrets Connect**:
+- `infrastructure/chittysecrets-connect/docker-compose.yml`
+- `infrastructure/chittysecrets-connect/nginx/nginx.conf`
 
 **Guides**:
 - `DEPLOYMENT_GUIDE.md`

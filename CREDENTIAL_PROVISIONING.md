@@ -2,20 +2,20 @@
 
 ## Architecture
 
-Secrets are synced from 1Password synthetic-shared vault to Cloudflare Secrets Store at deploy time. Workers read env.SECRET_NAME directly — zero network calls, zero latency.
+Secrets are synced from chittysecrets synthetic-shared vault to Cloudflare Secrets Store at deploy time. Workers read env.SECRET_NAME directly — zero network calls, zero latency.
 
-Fallback: ChittyConnect credential broker can fetch from ChittyServ or 1Password Connect for legacy paths.
+Fallback: ChittyConnect credential broker can fetch from ChittyServ or chittysecrets Connect for legacy paths.
 
 ## Credential Broker Backends
 
 - cloudflare-secrets (DEFAULT): env binding reads, 0ms latency, no config needed
 - chittyserv: HTTP API, ~50ms, set CREDENTIAL_BROKER_TYPE=chittyserv
-- 1password: HTTP API, ~200ms, CREDENTIAL_BROKER_TYPE=1password (DEPRECATED)
-- auto: cascading cloudflare-secrets then chittyserv then 1password
+- chittysecrets: HTTP API, ~200ms, CREDENTIAL_BROKER_TYPE=chittysecrets (DEPRECATED)
+- auto: cascading cloudflare-secrets then chittyserv then chittysecrets
 
 ## Secret Lifecycle
 
-1. Create: Add to 1Password synthetic-shared vault
+1. Create: Add to chittysecrets synthetic-shared vault
 2. Sync: Run sync-secrets.sh (op CLI reads 1P, CF API pushes to workers)
 3. Deploy: Workers pick up new values on next deploy
 4. Rotate: Update in 1P, re-sync, redeploy
@@ -32,5 +32,5 @@ Fallback: ChittyConnect credential broker can fetch from ChittyServ or 1Password
 - src/services/cloudflare-secrets-client.js: CF Secrets Store backend (NEW)
 - src/lib/credential-broker.js: Backend selector (UPDATED — default changed to cloudflare-secrets)
 - src/services/chittyserv-client.js: ChittyServ backend
-- src/services/1password-connect-client.js: 1Password backend (DEPRECATED)
+- src/services/chittysecrets-connect-client.js: chittysecrets backend (DEPRECATED)
 - src/api/routes/credentials.js: REST API credential provisioning routes

@@ -2,7 +2,7 @@
  * Credential Helper
  *
  * Shared utility functions for retrieving credentials via the credential broker.
- * Backend selection (ChittyServ vs 1Password) is controlled by env.CREDENTIAL_BROKER_TYPE.
+ * Backend selection (ChittyServ vs chittysecrets) is controlled by env.CREDENTIAL_BROKER_TYPE.
  * Falls back to environment variables if the broker is unavailable.
  *
  * @module lib/credential-helper

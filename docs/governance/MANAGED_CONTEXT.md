@@ -238,7 +238,7 @@ The verify response distinguishes **Granted** (the entity holds this scope per m
      d. Returns { value, attestation_id, expires_at, scope, cypher_update? } to ChittyConnect
 
 4. ChittyConnect:
-     a. write value to 1Password (cold)
+     a. write value to chittysecrets (cold)
      b. if delivery target specified, push to Cloudflare Secrets via wrangler API for that worker
      c. append `credential.issued` reference event to ChittyLedger (catalog reference only — NEVER the value)
      d. update entity's managed.context
@@ -367,7 +367,7 @@ Canonical env var: `CHITTYCONNECT_MINTING_TOKEN`. Role: minting. Holder: chittyc
 ```json
 {
   "name": "CHITTYCONNECT_MINTING_TOKEN",
-  "source": "1password",
+  "source": "chittysecrets",
   "vault": "ChittyConnect Only",
   "vault_id": "shl646vf4snnrkx6linyk3yis4",
   "item": "NPM MINTING TOKEN",
@@ -412,7 +412,7 @@ R and W capabilities for any consumer service are distinct credentials issued th
 
 | Layer | Role | Lifetime | Stores |
 |-------|------|----------|--------|
-| **1Password** | Cold source-of-truth for every credential value | indefinite | values + provenance metadata |
+| **chittysecrets** | Cold source-of-truth for every credential value | indefinite | values + provenance metadata |
 | **Cloudflare Secrets Store** | Hot runtime delivery into worker `env` | per-deploy | values |
 | **KV (`CREDENTIAL_CACHE`)** | Short-lived encrypted broker cache | ≤5min | encrypted values + TTL |
 | **ChittyLedger** | Two-Store Rule store #1 — per-entity events | indefinite | catalog references, lineage events, attestation ids — **never values** |

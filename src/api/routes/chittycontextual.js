@@ -1,9 +1,9 @@
 /**
  * ChittyContextual API Routes
- * Contextual analysis and AI-powered insights with 1Password Connect integration
+ * Contextual analysis and AI-powered insights with chittysecrets Connect integration
  *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Service token retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  */
 
 import { Hono } from "hono";
