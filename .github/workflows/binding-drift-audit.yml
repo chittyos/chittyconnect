@@ -33,41 +33,176 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: ./scripts/audit-bindings.sh production
+      # ---------------------------------------------------------------------
+      # Incident lifecycle.
+      #
+      # A stale open `binding-drift` issue must never suppress a fresh alert.
+      # Issue #223 (opened 2026-06-03) absorbed 519 comments from a SECOND,
+      # distinct drift that ran 2026-06-16 → 2026-07-09 and consequently never
+      # raised an incident of its own. Three rules prevent a repeat:
+      #
+      #   1. De-dupe only inside DEDUP_WINDOW_HOURS, measured from the issue's
+      #      creation. Sustained drift therefore rolls over to a new, dated
+      #      issue each day instead of burying itself in a months-old thread.
+      #   2. Throttle comments to one per COMMENT_THROTTLE_MINUTES so an open
+      #      incident stays readable rather than accruing ~96 comments/day.
+      #   3. Close the incident automatically on the first green audit, so
+      #      staleness is removed at the source rather than managed by hand.
+      # ---------------------------------------------------------------------
       - name: Notify on drift
         if: failure()
         uses: actions/github-script@v7
+        env:
+          DEDUP_WINDOW_HOURS: "24"
+          COMMENT_THROTTLE_MINUTES: "60"
         with:
           script: |
-            const title = "binding drift detected on chittyconnect (production)";
+            const dedupWindowMs = Number(process.env.DEDUP_WINDOW_HOURS) * 3600e3;
+            const throttleMs = Number(process.env.COMMENT_THROTTLE_MINUTES) * 60e3;
+            const now = Date.now();
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = [
               "Automated audit (`scripts/audit-bindings.sh production`) found bindings",
               "declared in `wrangler.jsonc` env.production that are NOT attached to the",
               "live worker. This usually means someone ran a bare `cf deploy`",
               "(no `--env`) and silently stripped bindings. See issue #216.",
               "",
-              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `Run: ${runUrl}`,
               "",
               "Recover with `npm run deploy` from main.",
             ].join("\n");
-            const { data: open } = await github.rest.issues.listForRepo({
+
+            const open = (await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
               labels: "binding-drift",
+              per_page: 100,
+            })).filter((i) => !i.pull_request);
+
+            // Only an issue opened inside the dedup window represents "this"
+            // incident. Anything older is a previous incident someone forgot
+            // to close, and must not swallow the alert.
+            const current = open
+              .filter((i) => now - Date.parse(i.created_at) < dedupWindowMs)
+              .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+
+            if (!current) {
+              const today = new Date().toISOString().slice(0, 10);
+              const stale = open.length
+                ? `\n\nPre-existing open \`binding-drift\` issue(s) not updated by this alert: ${open.map((i) => "#" + i.number).join(", ")}.`
+                : "";
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `binding drift detected on chittyconnect (production) — ${today}`,
+                body: body + stale,
+                labels: ["binding-drift", "incident"],
+              });
+              core.notice(`Opened incident #${created.number}`);
+              return;
+            }
+
+            // Throttle: skip the comment if this incident was already annotated
+            // within the throttle window. The issue is open and visible either
+            // way; another identical comment adds no signal.
+            const since = new Date(now - throttleMs).toISOString();
+            const recent = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: current.number,
+              since,
+              per_page: 100,
             });
-            if (open.length > 0) {
+            if (recent.length > 0) {
+              core.notice(`Drift persists on #${current.number}; comment throttled. ${runUrl}`);
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: current.number,
+              body,
+            });
+
+      - name: Resolve incident on green audit
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const open = (await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "binding-drift",
+              per_page: 100,
+            })).filter((i) => !i.pull_request);
+
+            for (const issue of open) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: open[0].number,
-                body,
+                issue_number: issue.number,
+                body: [
+                  "Audit is green — every binding declared in `wrangler.jsonc` env.production",
+                  "is attached to the live worker. Closing automatically.",
+                  "",
+                  `Run: ${runUrl}`,
+                ].join("\n"),
               });
-            } else {
-              await github.rest.issues.create({
+              await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title,
-                body,
-                labels: ["binding-drift", "incident"],
+                issue_number: issue.number,
+                state: "closed",
+                state_reason: "completed",
               });
+              core.notice(`Closed resolved incident #${issue.number}`);
+            }
+
+      # Backstop for the case where auto-close never ran (audit erroring out on
+      # config/permissions rather than drift, or the close call failing). A
+      # binding-drift issue open this long is itself the anomaly.
+      - name: Escalate long-lived incidents
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          STALE_ESCALATE_DAYS: "3"
+        with:
+          script: |
+            const staleMs = Number(process.env.STALE_ESCALATE_DAYS) * 86400e3;
+            const now = Date.now();
+            const open = (await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "binding-drift",
+              per_page: 100,
+            })).filter((i) => !i.pull_request);
+
+            for (const issue of open) {
+              const ageDays = Math.floor((now - Date.parse(issue.created_at)) / 86400e3);
+              if (now - Date.parse(issue.created_at) < staleMs) continue;
+              if (issue.labels.some((l) => (l.name || l) === "stale-incident")) continue;
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ["stale-incident"],
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  `This binding-drift incident has been open for ${ageDays} days.`,
+                  "",
+                  "Either production drift is genuinely unresolved, or this issue outlived",
+                  "the incident and should be closed. It no longer suppresses new alerts —",
+                  "the notifier de-dupes only within a 24h window — but a long-lived incident",
+                  "still means the audit never returned green.",
+                ].join("\n"),
+              });
+              core.warning(`binding-drift issue #${issue.number} open ${ageDays} days`);
             }
