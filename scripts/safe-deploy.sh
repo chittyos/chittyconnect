@@ -67,11 +67,19 @@ fi
 
 echo "[safe-deploy] env=$ENV worker=$DEPLOYED_NAME"
 
-# ── 1. Deploy with explicit --env ────────────────────────────────────────────
+# ── 1. Deploy with explicit --env and explicit --config ──────────────────────
 # CHITTYCONNECT_SAFE_DEPLOY=1 is required by wrangler.jsonc's build.command
 # guard (#219). Without it, wrangler aborts before writing any binding.
-echo "[safe-deploy] running: npx wrangler deploy --env $ENV"
-CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV"
+#
+# --config is REQUIRED, not cosmetic. Wrangler's config discovery prefers
+# `wrangler.json` over `wrangler.jsonc` and walks up parent directories. A
+# stray untracked `wrangler.json` at the repo root (it is gitignored, so it
+# never appears in CI) silently shadowed the tracked config: this script
+# audited wrangler.jsonc while deploying whatever wrangler happened to find.
+# Pinning --config makes the tracked, code-reviewed file authoritative for
+# every deploy path — repo root, git worktrees, and CI alike.
+echo "[safe-deploy] running: npx wrangler deploy --env $ENV --config $WRANGLER_CFG"
+CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV" --config "$WRANGLER_CFG"
 
 # ── 2. Audit declared vs attached bindings ───────────────────────────────────
 echo "[safe-deploy] auditing bindings on live worker $DEPLOYED_NAME ..."
