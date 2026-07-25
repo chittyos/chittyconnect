@@ -21,7 +21,6 @@
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
-  "legacy_env": false,
   "main": "src/index.js",
   "compatibility_date": "2026-03-02",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -300,6 +299,11 @@
     // PRODUCTION — `wrangler deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
+      // Deploy to the base script name, not the default `chittyconnect-production`.
+      // Required: this env owns connect.chitty.cc, the 41 script-level secrets, and
+      // the McpConnectAgent / SessionStateActor DO namespaces — all of which bind by
+      // script name. Without this override the worker would be renamed and orphaned.
+      "name": "chittyconnect",
       // workers.dev URL is enabled so post-deploy CI can probe /health without
       // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
       // public surface is connect.chitty.cc. mcp.chitty.cc is owned by the
