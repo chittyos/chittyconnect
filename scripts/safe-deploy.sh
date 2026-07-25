@@ -86,15 +86,55 @@ if [ -z "$DECLARED" ]; then
   exit 70
 fi
 
-ATTACHED_JSON="$(
-  curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/services/$WORKER_NAME/environments/$ENV/bindings"
+# Workers Builds stores bindings on Versions, not on the legacy
+# /scripts/.../bindings endpoint. We must:
+#   1. GET the active deployment → find the version_id
+#   2. GET that version → extract binding names from its metadata
+CF_API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$DEPLOYED_NAME"
+AUTH_HDR="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+DEPLOY_JSON="$(
+  curl -sf -H "$AUTH_HDR" "$CF_API/deployments"
 )" || {
-  echo "::error::safe-deploy: failed to fetch live bindings from CF API" >&2
+  echo "::error::safe-deploy: failed to fetch deployments from CF API" >&2
   exit 71
 }
 
-ATTACHED="$(echo "$ATTACHED_JSON" | jq -r '.result[].name // empty' | sort -u)"
+# Extract the version ID from the active deployment.
+# Deployments response: { result: { versions: [{ version_id, percentage }] } }
+# The version with percentage > 0 (or the first one) is the active one.
+ACTIVE_VERSION="$(echo "$DEPLOY_JSON" | jq -r '
+  .result.versions
+  | map(select(.percentage > 0))
+  | first
+  | .version_id // empty
+')"
+
+if [ -z "$ACTIVE_VERSION" ]; then
+  echo "::warning::safe-deploy: could not determine active version from deployments response" >&2
+  echo "  Falling back to legacy /bindings endpoint" >&2
+  ATTACHED_JSON="$(
+    curl -sf -H "$AUTH_HDR" "$CF_API/bindings"
+  )" || {
+    echo "::error::safe-deploy: fallback bindings fetch also failed" >&2
+    exit 71
+  }
+  ATTACHED="$(echo "$ATTACHED_JSON" | jq -r '.result[].name // empty' | sort -u)"
+else
+  echo "[safe-deploy] active version: $ACTIVE_VERSION"
+  VERSION_JSON="$(
+    curl -sf -H "$AUTH_HDR" "$CF_API/versions/$ACTIVE_VERSION"
+  )" || {
+    echo "::error::safe-deploy: failed to fetch version $ACTIVE_VERSION from CF API" >&2
+    exit 71
+  }
+  # Version response nests bindings under .result.resources.bindings[]
+  # or .result.bindings[] depending on API version — try both.
+  ATTACHED="$(echo "$VERSION_JSON" | jq -r '
+    (.result.resources.bindings // .result.bindings // [])[]
+    | .name // empty
+  ' | sort -u)"
+fi
 
 MISSING=""
 while IFS= read -r name; do

@@ -25,11 +25,27 @@ WORKER_NAME="$(node -e "const fs=require('fs');const r=fs.readFileSync('$WRANGLE
 
 DECLARED="$(node "$REPO_ROOT/scripts/lib/extract-declared-bindings.mjs" "$ENV")"
 
-ATTACHED="$(
-  curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/services/$WORKER_NAME/environments/$ENV/bindings" \
-  | jq -r '.result[].name // empty' | sort -u
-)" || { echo "::error::CF API binding fetch failed" >&2; exit 71; }
+# Workers Builds: bindings live on Versions, not legacy /bindings.
+CF_API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$DEPLOYED"
+AUTH_HDR="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+ACTIVE_VERSION="$(
+  curl -sf -H "$AUTH_HDR" "$CF_API/deployments" \
+  | jq -r '.result.versions | map(select(.percentage > 0)) | first | .version_id // empty'
+)" || true
+
+if [ -n "$ACTIVE_VERSION" ]; then
+  ATTACHED="$(
+    curl -sf -H "$AUTH_HDR" "$CF_API/versions/$ACTIVE_VERSION" \
+    | jq -r '(.result.resources.bindings // .result.bindings // [])[] | .name // empty' | sort -u
+  )" || { echo "::error::CF API version fetch failed" >&2; exit 71; }
+else
+  # Fallback to legacy endpoint
+  ATTACHED="$(
+    curl -sf -H "$AUTH_HDR" "$CF_API/bindings" \
+    | jq -r '.result[].name // empty' | sort -u
+  )" || { echo "::error::CF API binding fetch failed" >&2; exit 71; }
+fi
 
 MISSING=""
 while IFS= read -r n; do
