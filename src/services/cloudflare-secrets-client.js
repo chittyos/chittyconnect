@@ -139,13 +139,29 @@ export class CloudflareSecretsClient {
       candidates.push(field.toUpperCase());
     }
 
+    // Each candidate is isolated: one broken binding must not hide a working
+    // one. Adversarial review found the unguarded form — if a Secrets Store
+    // .get() rejects (entry deleted, store unreachable), the exception escaped
+    // get() entirely and the REMAINING candidates were never tried. Mid-
+    // migration, when a mapped Secrets Store name and a literal `wrangler
+    // secret put` name both exist, a transient store failure on candidate #1
+    // took down a lookup that had a working candidate #2.
+    const attempts = [];
     for (const name of candidates) {
-      const value = await resolveBinding(this.env[name]);
-      if (value !== undefined) return value;
+      try {
+        const value = await resolveBinding(this.env[name]);
+        if (value !== undefined) return value;
+        attempts.push(`${name}: absent`);
+      } catch (err) {
+        // Record and continue. The binding NAME is safe to log; the value is
+        // never touched.
+        attempts.push(`${name}: ${err?.message ?? "resolution failed"}`);
+      }
     }
 
     throw new Error(
       `Credential not found in env bindings: ${credentialPath}. ` +
+        `Tried ${attempts.length ? attempts.join("; ") : "no candidates"}. ` +
         `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`,
     );
   }

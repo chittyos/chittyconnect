@@ -102,3 +102,39 @@ describe("CloudflareSecretsClient.prefetch", () => {
     expect(got.has("MISSING_TOKEN")).toBe(false);
   });
 });
+
+describe("CloudflareSecretsClient.get — one broken candidate must not hide a working one", () => {
+  /** A binding whose .get() rejects — deleted store entry, or store unreachable. */
+  const brokenBinding = () => ({
+    get: async () => {
+      throw new Error("secrets store unavailable");
+    },
+  });
+
+  it("continues to the next candidate when the first throws", async () => {
+    // The realistic mid-migration state: a mapped Secrets Store name AND a
+    // literal `wrangler secret put` name both present. Before this fix, a
+    // transient store failure on candidate #1 escaped get() entirely and the
+    // working candidate #2 was never tried.
+    const c = new CloudflareSecretsClient({
+      MERCURY_API_TOKEN: brokenBinding(), // mapped candidate, broken
+      "integrations/mercury/api_token": "literal-fallback-value", // literal candidate, fine
+    });
+    await expect(c.get("integrations/mercury/api_token")).resolves.toBe("literal-fallback-value");
+  });
+
+  it("reports every candidate it tried when all fail", async () => {
+    const c = new CloudflareSecretsClient({ MY_SECRET: brokenBinding() });
+    // The error must name the attempts, so an operator can tell a broken
+    // binding from a missing mapping — the debugging trap the review flagged.
+    await expect(c.get("MY_SECRET")).rejects.toThrow(/Tried .*MY_SECRET/);
+    await expect(c.get("MY_SECRET")).rejects.toThrow(/secrets store unavailable/);
+  });
+
+  it("never leaks a value into the aggregate error", async () => {
+    const c = new CloudflareSecretsClient({ OTHER: "s3cr3t-should-not-appear" });
+    await expect(c.get("nothing/here/at_all")).rejects.toThrow(
+      expect.not.stringContaining("s3cr3t-should-not-appear"),
+    );
+  });
+});
