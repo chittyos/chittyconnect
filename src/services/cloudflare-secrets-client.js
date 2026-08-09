@@ -71,6 +71,43 @@ const PATH_TO_ENV = {
   "services/chittymint/service_token": "CHITTYAUTH_ISSUED_MINT_API_KEY",
 };
 
+/**
+ * Resolve one env entry to a secret STRING.
+ *
+ * Two binding shapes land on `env` and they are not interchangeable:
+ *
+ *   wrangler secret put  -> a plain string
+ *   secrets_store_secrets -> an object with an async .get()
+ *
+ * Every lookup below used to be `if (this.env[X]) return this.env[X]`. A
+ * Secrets Store binding is an object, and an object is truthy, so that
+ * returned the BINDING where callers expect the secret — silently, with no
+ * type error, producing "[object Object]" wherever the value got
+ * interpolated into a header or a connection string.
+ *
+ * The defect is dormant only because no consumer binds Secrets Store today
+ * (0 of 51 tracked wrangler configs in chittyentity). It fires on the first
+ * worker that adopts the documented policy — i.e. it punishes exactly the
+ * person doing the right thing, and would read as "Secrets Store is broken"
+ * rather than "the broker never supported it".
+ *
+ * Duck-typed rather than instanceof-checked because the binding class is not
+ * exported by the runtime. Same shape as
+ * chittyentity/packages/agent-cf/src/adapters/env-secret-provider.ts, which
+ * already got this right.
+ *
+ * @param {unknown} bound
+ * @returns {Promise<string|undefined>} the secret, or undefined if absent
+ */
+async function resolveBinding(bound) {
+  if (typeof bound === "string") return bound.length > 0 ? bound : undefined;
+  if (bound && typeof bound === "object" && typeof bound.get === "function") {
+    const value = await bound.get();
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  }
+  return undefined;
+}
+
 export class CloudflareSecretsClient {
   constructor(env) {
     this.env = env;
@@ -85,35 +122,31 @@ export class CloudflareSecretsClient {
    * @returns {Promise<string>} Credential value
    */
   async get(credentialPath, options = {}) {
-    // Try mapped path first
+    // Each candidate is resolved through resolveBinding so a Secrets Store
+    // binding yields its VALUE rather than the binding object. Order is
+    // unchanged: mapped path, then literal name, then derived names.
+    const candidates = [];
+
     const envName = PATH_TO_ENV[credentialPath];
-    if (envName && this.env[envName]) {
-      return this.env[envName];
-    }
+    if (envName) candidates.push(envName);
 
-    // Try direct env var name (e.g., "NEON_DATABASE_URL")
-    if (this.env[credentialPath]) {
-      return this.env[credentialPath];
-    }
+    candidates.push(credentialPath);
 
-    // Try constructing env var from path components
     const parts = credentialPath.split("/");
     if (parts.length === 3) {
       const [, item, field] = parts;
-      // Try ITEM_FIELD pattern
-      const envGuess = `${item.toUpperCase()}_${field.toUpperCase()}`;
-      if (this.env[envGuess]) {
-        return this.env[envGuess];
-      }
-      // Try just FIELD
-      if (this.env[field.toUpperCase()]) {
-        return this.env[field.toUpperCase()];
-      }
+      candidates.push(`${item.toUpperCase()}_${field.toUpperCase()}`);
+      candidates.push(field.toUpperCase());
+    }
+
+    for (const name of candidates) {
+      const value = await resolveBinding(this.env[name]);
+      if (value !== undefined) return value;
     }
 
     throw new Error(
       `Credential not found in env bindings: ${credentialPath}. ` +
-      `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`
+        `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`,
     );
   }
 
@@ -153,14 +186,16 @@ export class CloudflareSecretsClient {
       "ENCRYPTION_KEY",
     ];
 
-    const present = required.filter(k => !!this.env[k]);
-    const missing = required.filter(k => !this.env[k]);
+    const present = required.filter((k) => !!this.env[k]);
+    const missing = required.filter((k) => !this.env[k]);
 
     return {
       status: missing.length === 0 ? "healthy" : "degraded",
       type: "cloudflare-secrets",
       bindings: {
-        total: Object.keys(this.env).filter(k => k === k.toUpperCase() && k.length > 3).length,
+        total: Object.keys(this.env).filter(
+          (k) => k === k.toUpperCase() && k.length > 3,
+        ).length,
         required: required.length,
         present: present.length,
         missing,
