@@ -55,6 +55,34 @@ export function createCredentialBroker(env) {
 
 // ─── Cloudflare Secrets Broker (Default — Portal Pattern) ────────────────────
 
+
+/**
+ * Adapter for the 1Password-shaped call signature the provisioner still uses.
+ *
+ * The 1Password retirement repointed `EnhancedCredentialProvisioner.onePassword`
+ * at the broker ("Keep .onePassword as alias for backward compat"), but only
+ * OnePasswordConnectClient ever implemented getInfrastructureCredential(). Every
+ * broker class exposes get(path) instead, so with the production setting
+ * CREDENTIAL_BROKER_TYPE="cloudflare-secrets" the provisioner threw TypeError at
+ * call time — silently, because nothing exercises it until a token mint is
+ * attempted. That severed Cloudflare API-token minting, which is the sanctioned
+ * path for issuing scoped tokens.
+ *
+ * Path convention is the existing one in cloudflare-secrets-client.js PATH_TO_ENV:
+ *   infrastructure/{service}/{field}
+ */
+function attachInfrastructureCredentialAdapter(cls) {
+  cls.prototype.getInfrastructureCredential = async function (service, field, options = {}) {
+    if (!service || !field) {
+      throw new Error(
+        `E_CREDENTIAL_BAD_REF: getInfrastructureCredential requires (service, field); got (${service}, ${field})`,
+      );
+    }
+    const path = `infrastructure/${service}/${field}`;
+    return this.get(path, options);
+  };
+}
+
 class CloudflareSecretsBroker {
   constructor(env) {
     this.client = new CloudflareSecretsClient(env);
@@ -195,3 +223,10 @@ class AutoBroker {
     };
   }
 }
+
+// Every broker speaks the provisioner's legacy call shape.
+attachInfrastructureCredentialAdapter(CloudflareSecretsBroker);
+attachInfrastructureCredentialAdapter(ChittyServBroker);
+attachInfrastructureCredentialAdapter(OnePasswordBroker);
+attachInfrastructureCredentialAdapter(AutoBroker);
+
