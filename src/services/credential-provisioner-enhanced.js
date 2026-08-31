@@ -355,7 +355,12 @@ export class EnhancedCredentialProvisioner {
    * @param {string} apiKey - Cloudflare API key
    * @returns {Promise<object>} Permission groups mapped by name
    */
-  async fetchCloudflarePermissions(apiKey) {
+  async fetchCloudflarePermissions(apiKey, accountId) {
+    if (!accountId) {
+      throw new Error(
+        "fetchCloudflarePermissions requires accountId — the permission-groups catalog is account-scoped",
+      );
+    }
     try {
       // Check cache first
       if (
@@ -370,8 +375,12 @@ export class EnhancedCredentialProvisioner {
         "[EnhancedCredentialProvisioner] Fetching Cloudflare permission groups from API",
       );
 
+      // Account-owned tokens must read the account-scoped catalog. The
+      // /user/tokens/* family answers 403 code 9109 "Valid user-level
+      // authentication not found" for an account-owned bearer, which is
+      // how this call had been failing into the static fallback below.
       const response = await fetch(
-        "https://api.cloudflare.com/client/v4/user/tokens/permission_groups",
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/permission_groups`,
         {
           method: "GET",
           headers: {
@@ -464,6 +473,12 @@ export class EnhancedCredentialProvisioner {
         ...this.cloudflarePermissionsFallback,
         ...permissions,
       };
+      // Provenance: which groups came from the live catalog vs. the
+      // hardcoded fallback. A token minted entirely from fallback IDs
+      // carries permissions nobody verified against this account.
+      this.permissionGroupsSource = Object.keys(permissions).length > 0
+        ? "account-catalog"
+        : "fallback";
 
       // Cache the results
       this.permissionGroupsCache = mergedPermissions;
@@ -478,9 +493,10 @@ export class EnhancedCredentialProvisioner {
         "[EnhancedCredentialProvisioner] Failed to fetch permissions dynamically:",
         error,
       );
-      console.log(
-        "[EnhancedCredentialProvisioner] Using fallback permission IDs",
+      console.warn(
+        "[EnhancedCredentialProvisioner] Using fallback permission IDs — these were NOT verified against this account's catalog; the minted token's effective scope is unverified",
       );
+      this.permissionGroupsSource = "fallback";
       return this.cloudflarePermissionsFallback;
     }
   }
@@ -492,10 +508,12 @@ export class EnhancedCredentialProvisioner {
    * @param {string} apiKey - Cloudflare API key
    * @returns {Promise<object>} Permission groups
    */
-  async getCloudflarePermissions(apiKey) {
+  async getCloudflarePermissions(apiKey, accountId) {
     if (!this.cloudflarePermissions) {
-      this.cloudflarePermissions =
-        await this.fetchCloudflarePermissions(apiKey);
+      this.cloudflarePermissions = await this.fetchCloudflarePermissions(
+        apiKey,
+        accountId,
+      );
     }
     return this.cloudflarePermissions;
   }
@@ -543,9 +561,11 @@ export class EnhancedCredentialProvisioner {
       );
     }
 
-    // Get permission groups dynamically
-    const cloudflarePermissions =
-      await this.getCloudflarePermissions(makeApiKey);
+    // Get permission groups dynamically (account-scoped catalog)
+    const cloudflarePermissions = await this.getCloudflarePermissions(
+      makeApiKey,
+      accountId,
+    );
 
     // Get type configuration
     const typeConfig = this.credentialTypes[type];
@@ -638,7 +658,7 @@ export class EnhancedCredentialProvisioner {
 
     // Create token via Cloudflare API
     const response = await fetch(
-      "https://api.cloudflare.com/client/v4/user/tokens",
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens`,
       {
         method: "POST",
         headers: {
@@ -675,6 +695,7 @@ export class EnhancedCredentialProvisioner {
       scopes: permissions.map((p) => p.name),
       environment,
       contextAnalysis: true, // Flag that context was validated
+      permissionSource: this.permissionGroupsSource || "unknown",
     });
 
     return {
@@ -693,6 +714,7 @@ export class EnhancedCredentialProvisioner {
         provisioned_by: "ChittyConnect Enhanced",
         context_validated: true,
         retrieved_from: "chittysecrets",
+        permission_source: this.permissionGroupsSource || "unknown",
         timestamp: new Date().toISOString(),
       },
     };
