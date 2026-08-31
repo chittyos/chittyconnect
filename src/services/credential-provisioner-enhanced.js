@@ -483,6 +483,11 @@ export class EnhancedCredentialProvisioner {
       // stand in for a group the live catalog did not resolve, so a
       // whole-object flag is too coarse to gate a mint on.
       this.catalogResolvedKeys = new Set(Object.keys(permissions));
+      // Names only, no IDs. Without this, a catalog that reads fine but
+      // whose group names miss the normalizer's substring patterns below
+      // is indistinguishable from a missing grant — both surface as a
+      // refusal to mint, and you cannot tell which from the error.
+      this.catalogGroupNames = data.result.map((g) => g.name);
 
       // Cache the results
       this.permissionGroupsCache = mergedPermissions;
@@ -504,6 +509,7 @@ export class EnhancedCredentialProvisioner {
       // cannot verify its own scope must not happen.
       this.permissionGroupsSource = "unavailable";
       this.catalogResolvedKeys = new Set();
+      this.catalogGroupNames = null;
       throw new Error(
         `POLICY_BLOCKED_PERMISSION_CATALOG_UNAVAILABLE: cannot read the account permission-groups catalog, so a minted token's effective scope would be unverified (${error.message})`,
       );
@@ -595,8 +601,15 @@ export class EnhancedCredentialProvisioner {
       (name) => !this.catalogResolvedKeys?.has(name),
     );
     if (unverified.length > 0) {
+      // Two very different causes reach this throw: the catalog was read
+      // but its group names did not match the normalizer's patterns, or
+      // it was never read at all. Say which, and name what came back —
+      // otherwise this is a 403-shaped blocker that is not a 403.
+      const diagnosis = this.catalogGroupNames
+        ? `catalog read OK and returned ${this.catalogGroupNames.length} groups (${this.catalogGroupNames.join(" | ") || "none"}) — none of them normalized to the required keys, so this is a name-matching gap, NOT a missing grant`
+        : `catalog was never successfully read, so this is upstream of name matching`;
       throw new Error(
-        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified`,
+        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified. Diagnosis: ${diagnosis}`,
       );
     }
 

@@ -112,4 +112,29 @@ describe('Cloudflare API token family', () => {
       ),
     ).rejects.toThrow(/POLICY_BLOCKED_PERMISSION_UNVERIFIED/);
   });
+
+  it('says WHICH failure it is — a name-matching gap reads differently from an unread catalog', async () => {
+    // Catalog answers 200 with real-looking groups whose names do not
+    // match the normalizer's substring patterns. Scope is still
+    // unverified, but the cause is entirely different from a 403 — and
+    // an operator reading the error must be able to tell them apart.
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: [{ id: 'abc', name: 'Some Group The Normalizer Misses' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    const p = makeProvisioner();
+    await p.getCloudflarePermissions('k', ACCOUNT_ID);
+
+    await expect(
+      p.provisionCloudflareToken(
+        'cloudflare_workers_deploy',
+        { service: 'chittyconnect', purpose: 'test', environment: 'production' },
+        'chittyconnect',
+      ),
+    ).rejects.toThrow(/name-matching gap, NOT a missing grant/);
+  });
 });
