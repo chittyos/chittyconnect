@@ -479,6 +479,10 @@ export class EnhancedCredentialProvisioner {
       this.permissionGroupsSource = Object.keys(permissions).length > 0
         ? "account-catalog"
         : "fallback";
+      // Per-key provenance. The merge below lets a hardcoded fallback ID
+      // stand in for a group the live catalog did not resolve, so a
+      // whole-object flag is too coarse to gate a mint on.
+      this.catalogResolvedKeys = new Set(Object.keys(permissions));
 
       // Cache the results
       this.permissionGroupsCache = mergedPermissions;
@@ -493,11 +497,16 @@ export class EnhancedCredentialProvisioner {
         "[EnhancedCredentialProvisioner] Failed to fetch permissions dynamically:",
         error,
       );
-      console.warn(
-        "[EnhancedCredentialProvisioner] Using fallback permission IDs — these were NOT verified against this account's catalog; the minted token's effective scope is unverified",
+      // Fail closed. This catch previously swallowed every error — the
+      // 403 included — and returned hardcoded permission-group IDs, so
+      // a token could be minted from a catalog nobody had read. Two
+      // separated reviews landed on this independently. A mint that
+      // cannot verify its own scope must not happen.
+      this.permissionGroupsSource = "unavailable";
+      this.catalogResolvedKeys = new Set();
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_CATALOG_UNAVAILABLE: cannot read the account permission-groups catalog, so a minted token's effective scope would be unverified (${error.message})`,
       );
-      this.permissionGroupsSource = "fallback";
-      return this.cloudflarePermissionsFallback;
     }
   }
 
@@ -576,6 +585,18 @@ export class EnhancedCredentialProvisioner {
     if (missingPermissions.length > 0) {
       throw new Error(
         `Unable to resolve all Cloudflare permission groups for ${type}`,
+      );
+    }
+    // Every group must have come from this account's live catalog. A
+    // hardcoded fallback ID may be absent from, or mean something
+    // narrower in, the account-scoped catalog — which mints an
+    // under-scoped token successfully instead of erroring.
+    const unverified = typeConfig.permissions.filter(
+      (name) => !this.catalogResolvedKeys?.has(name),
+    );
+    if (unverified.length > 0) {
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified`,
       );
     }
 

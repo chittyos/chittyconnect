@@ -59,7 +59,10 @@ describe('Cloudflare API token family', () => {
     expect(seen[0].url).toBe(
       `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/tokens/permission_groups`,
     );
-    expect(seen[0].url).not.toContain('/client/v4/user/tokens');
+    // Not just the first call: no request in the whole exchange may touch
+    // the user family, so a "try /user, fall back to /accounts" shape
+    // cannot pass this test.
+    expect(seen.every((r) => !r.url.includes('/client/v4/user/tokens'))).toBe(true);
   });
 
   it('refuses to fetch the catalog without an account — the catalog is account-scoped', async () => {
@@ -70,14 +73,15 @@ describe('Cloudflare API token family', () => {
     expect(seen).toHaveLength(0);
   });
 
-  it('records permission provenance so a fallback-sourced token is not mistaken for a verified one', async () => {
+  it('records per-group provenance, not a single coarse flag', async () => {
     const p = makeProvisioner();
     // Empty catalog result => nothing resolved dynamically => fallback IDs.
     await p.fetchCloudflarePermissions('k', ACCOUNT_ID);
     expect(p.permissionGroupsSource).toBe('fallback');
+    expect(p.catalogResolvedKeys.size).toBe(0);
   });
 
-  it('marks provenance as fallback when the catalog call fails outright', async () => {
+  it('fails closed when the catalog is unreadable instead of minting from unread IDs', async () => {
     globalThis.fetch = async () =>
       new Response(
         JSON.stringify({
@@ -87,10 +91,25 @@ describe('Cloudflare API token family', () => {
         { status: 403, headers: { 'Content-Type': 'application/json' } },
       );
     const p = makeProvisioner();
-    const perms = await p.fetchCloudflarePermissions('k', ACCOUNT_ID);
-    expect(p.permissionGroupsSource).toBe('fallback');
-    // Still returns the static fallback rather than throwing — preserved
-    // behavior, but now observable.
-    expect(Object.keys(perms).length).toBeGreaterThan(0);
+    await expect(p.fetchCloudflarePermissions('k', ACCOUNT_ID)).rejects.toThrow(
+      /POLICY_BLOCKED_PERMISSION_CATALOG_UNAVAILABLE/,
+    );
+    expect(p.permissionGroupsSource).toBe('unavailable');
+  });
+
+  it('refuses to mint when a required group resolved from the static fallback', async () => {
+    // Catalog answers 200 but resolves nothing — exactly the shape that
+    // previously let hardcoded IDs stand in silently.
+    const p = makeProvisioner();
+    await p.getCloudflarePermissions('k', ACCOUNT_ID);
+    expect(p.catalogResolvedKeys.size).toBe(0);
+
+    await expect(
+      p.provisionCloudflareToken(
+        'cloudflare_workers_deploy',
+        { service: 'chittyconnect', purpose: 'test', environment: 'production' },
+        'chittyconnect',
+      ),
+    ).rejects.toThrow(/POLICY_BLOCKED_PERMISSION_UNVERIFIED/);
   });
 });
