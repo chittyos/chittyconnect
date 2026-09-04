@@ -235,16 +235,24 @@
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
         "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
-        // Cloudflare Access application fronting connect.chitty.cc/secrets-portal
-        // (app d80ff72b-fc89-4fba-a822-886f632bc5df). Scoped to THIS app on
-        // purpose: a generically-named audience var reused by a second app is
-        // the drift that produced the chittysecrets defect fixed in 7d946b0.
-        "SECRETS_PORTAL_ACCESS_AUTH_DOMAIN": "chittycorp.cloudflareaccess.com",
-        "SECRETS_PORTAL_ACCESS_AUD": "27d61f1a1143bec18325a5acd65a9d49ac381a450bbb9d610e682bdd3679eaba",
-        // Access service-token Client IDs (identifiers, NOT credentials) admitted
-        // on the non-identity write path. Empty/unset => deny, never allow.
-        // 142a1994... = "ChittyOS MCP Admin Portal".
-        "SECRETS_PORTAL_ACCESS_SERVICE_TOKENS": "142a1994adbbbf34550eaa1792bcd1b6.access"
+        // STAGING HAS NO ACCESS APPLICATION AND NO SERVICE TOKEN OF ITS OWN.
+        //
+        // The Access app (d80ff72b-fc89-4fba-a822-886f632bc5df) is scoped to
+        // connect.chitty.cc/secrets-portal, and env.staging declares no
+        // `routes`, so nothing fronts staging. Deliberately left EMPTY rather
+        // than copying production's audience tag and Client ID: sharing them
+        // would mean one token authenticates to both environments and could not
+        // be revoked from staging without simultaneously killing the production
+        // rotation path this change exists to enable.
+        //
+        // Empty => the service-token path denies unconditionally (fail closed).
+        // To enable staging, provision a SEPARATE Access application and a
+        // SEPARATE service token via the ChittyConnect concierge, then fill in
+        // that app's own auth domain, audience tag, and Client ID here. Do not
+        // paste production's values.
+        "SECRETS_PORTAL_ACCESS_AUTH_DOMAIN": "",
+        "SECRETS_PORTAL_ACCESS_AUD": "",
+        "SECRETS_PORTAL_ACCESS_SERVICE_TOKENS": ""
       },
       "triggers": {
         "crons": [
@@ -374,9 +382,10 @@
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
         "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
         // Cloudflare Access application fronting connect.chitty.cc/secrets-portal
-        // (app d80ff72b-fc89-4fba-a822-886f632bc5df). Scoped to THIS app on
-        // purpose: a generically-named audience var reused by a second app is
-        // the drift that produced the chittysecrets defect fixed in 7d946b0.
+        // (app d80ff72b-fc89-4fba-a822-886f632bc5df). Scoped to THIS app and
+        // THIS environment on purpose: a generically-named or cross-environment
+        // audience var is the drift that produced the chittysecrets defect fixed
+        // in 7d946b0, and a shared token cannot be revoked per-environment.
         "SECRETS_PORTAL_ACCESS_AUTH_DOMAIN": "chittycorp.cloudflareaccess.com",
         "SECRETS_PORTAL_ACCESS_AUD": "27d61f1a1143bec18325a5acd65a9d49ac381a450bbb9d610e682bdd3679eaba",
         // Access service-token Client IDs (identifiers, NOT credentials) admitted
