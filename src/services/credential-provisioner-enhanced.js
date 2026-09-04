@@ -444,9 +444,17 @@ export class EnhancedCredentialProvisioner {
         ) {
           key = "workersDurableObjectsWrite";
         } else if (
-          normalizedName.includes("d1Database") &&
-          normalizedName.includes("Write")
+          normalizedName.includes("Write") &&
+          (normalizedName.includes("d1Database") ||
+            normalizedName.startsWith("d1"))
         ) {
+          // Cloudflare's account catalog names group
+          // 5e2c30acd1434ea2adfb8442c3cbbbea "D1 Write", while the static
+          // fallback spells it "D1 Database Write". Matching only
+          // "d1Database" left every real catalog read with
+          // d1DatabaseWrite unresolved, so the provenance gate below
+          // permanently blocked cloudflare_d1_access. Accept both
+          // spellings; requiring "Write" keeps "D1 Read" out.
           key = "d1DatabaseWrite";
         } else if (
           normalizedName.includes("workersRoutes") &&
@@ -584,56 +592,79 @@ export class EnhancedCredentialProvisioner {
 
     // Get type configuration
     const typeConfig = this.credentialTypes[type];
-    const permissions = typeConfig.permissions.map(
-      (p) => cloudflarePermissions[p],
-    );
-    const missingPermissions = permissions.filter((p) => !p);
+    // Carry the config key alongside the resolved group. The provenance
+    // gate below reports on keys and the scope partition needs the
+    // group, so a bare array of groups loses half of what is needed.
+    const resolved = typeConfig.permissions.map((key) => ({
+      key,
+      group: cloudflarePermissions[key],
+    }));
+    const missingPermissions = resolved.filter((p) => !p.group);
     if (missingPermissions.length > 0) {
       throw new Error(
         `Unable to resolve all Cloudflare permission groups for ${type}`,
       );
     }
-    // Every group must have come from this account's live catalog. A
-    // hardcoded fallback ID may be absent from, or mean something
-    // narrower in, the account-scoped catalog — which mints an
-    // under-scoped token successfully instead of erroring.
-    const unverified = typeConfig.permissions.filter(
-      (name) => !this.catalogResolvedKeys?.has(name),
-    );
-    if (unverified.length > 0) {
-      // Two very different causes reach this throw: the catalog was read
-      // but its group names did not match the normalizer's patterns, or
-      // it was never read at all. Say which, and name what came back —
-      // otherwise this is a 403-shaped blocker that is not a 403.
-      const diagnosis = this.catalogGroupNames
-        ? `catalog read OK and returned ${this.catalogGroupNames.length} groups (${this.catalogGroupNames.join(" | ") || "none"}) — none of them normalized to the required keys, so this is a name-matching gap, NOT a missing grant`
-        : `catalog was never successfully read, so this is upstream of name matching`;
-      throw new Error(
-        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified. Diagnosis: ${diagnosis}`,
-      );
-    }
 
-    // Partition permissions by scope. Account-scoped permissions go in
-    // a single policy block keyed by the account; zone-scoped ones
-    // need a separate policy block per zone with a zone-keyed
-    // resources object — Cloudflare rejects mixing scopes in one block.
-    const accountPermissions = permissions.filter(
-      (p) => (p.scope || "account") === "account",
-    );
-    const zonePermissions = permissions.filter((p) => p.scope === "zone");
-
+    // Partition by scope BEFORE the provenance gate. Account-scoped
+    // permissions go in a single policy block keyed by the account;
+    // zone-scoped ones need a separate policy block per zone with a
+    // zone-keyed resources object — Cloudflare rejects mixing scopes in
+    // one block. The order matters: zone-scoped permissions are dropped
+    // when the caller supplies no zones, and a permission that never
+    // reaches the token must not be able to block the mint.
     const requestedZones = Array.isArray(context.zones)
       ? context.zones.filter((z) => typeof z === "string" && z.length > 0)
       : [];
 
-    if (zonePermissions.length > 0 && requestedZones.length === 0) {
+    const accountEntries = resolved.filter(
+      (p) => (p.group.scope || "account") === "account",
+    );
+    const zoneEntries = resolved.filter((p) => p.group.scope === "zone");
+
+    if (zoneEntries.length > 0 && requestedZones.length === 0) {
       // Drop zone-scoped perms when no zones provided. Caller still
       // gets the account-scoped subset. If the dropped perms are load-
       // bearing (e.g. wrangler deploy of a worker with `routes`), the
       // resulting deploy will fail with code 10000 — which is the
       // existing behavior, so no regression.
       console.warn(
-        `[EnhancedCredentialProvisioner] Dropping zone-scoped permissions ${zonePermissions.map((p) => p.name).join(", ")} from token for ${type} — caller did not provide context.zones`,
+        `[EnhancedCredentialProvisioner] Dropping zone-scoped permissions ${zoneEntries.map((p) => p.group.name).join(", ")} from token for ${type} — caller did not provide context.zones`,
+      );
+    }
+
+    const includedEntries =
+      requestedZones.length > 0 ? resolved : accountEntries;
+    const accountPermissions = accountEntries.map((p) => p.group);
+    const zonePermissions =
+      requestedZones.length > 0 ? zoneEntries.map((p) => p.group) : [];
+
+    // Every group that actually lands in the token must have come from
+    // this account's live catalog. A hardcoded fallback ID may be absent
+    // from, or mean something narrower in, the account-scoped catalog —
+    // which mints an under-scoped token successfully instead of
+    // erroring. Permissions dropped just above are excluded on purpose:
+    // they are not in the token, so their provenance is not a claim the
+    // mint is making.
+    const requiredKeys = includedEntries.map((p) => p.key);
+    const unverified = requiredKeys.filter(
+      (name) => !this.catalogResolvedKeys?.has(name),
+    );
+    if (unverified.length > 0) {
+      const verifiedKeys = requiredKeys.filter((name) =>
+        this.catalogResolvedKeys?.has(name),
+      );
+      // Two very different causes reach this throw: the catalog was
+      // never read at all, or it was read and some required keys did not
+      // come back under a name the normalizer recognizes. In the second
+      // case this error genuinely cannot tell a renamed group from an
+      // ungranted one — report the partial result instead of asserting
+      // either cause.
+      const diagnosis = this.catalogGroupNames
+        ? `catalog read OK and returned ${this.catalogGroupNames.length} groups (${this.catalogGroupNames.join(" | ") || "none"}); ${verifiedKeys.length} of ${requiredKeys.length} required keys resolved from it (${verifiedKeys.join(", ") || "none"}). The unresolved ones are either named differently than the normalizer expects or not granted on this account — this error cannot distinguish those two`
+        : `catalog was never successfully read, so this is upstream of name matching`;
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified. Diagnosis: ${diagnosis}`,
       );
     }
 
@@ -717,6 +748,20 @@ export class EnhancedCredentialProvisioner {
 
     const token = result.result;
 
+    // Provenance reported to callers and to Chronicle is derived from the
+    // groups actually in this token, not from the catalog-wide flag. The
+    // catalog-wide flag reads "account-catalog" as soon as ONE group
+    // resolves, so it can claim a token was verified against the account
+    // while some of its IDs came from the static fallback. The gate above
+    // makes that impossible for the included set — this makes the reported
+    // value provably derived from it rather than merely consistent with it.
+    const includedScopeNames = includedEntries.map((p) => p.group.name);
+    const permissionSource =
+      includedEntries.length > 0 &&
+      includedEntries.every((p) => this.catalogResolvedKeys?.has(p.key))
+        ? "account-catalog"
+        : this.permissionGroupsSource || "unknown";
+
     // Log provision event
     await this.logProvisionEvent({
       type,
@@ -726,10 +771,10 @@ export class EnhancedCredentialProvisioner {
       tokenId: token.id,
       tokenName: token.name,
       expiresAt: token.expires_on,
-      scopes: permissions.map((p) => p.name),
+      scopes: includedScopeNames,
       environment,
       contextAnalysis: true, // Flag that context was validated
-      permissionSource: this.permissionGroupsSource || "unknown",
+      permissionSource,
     });
 
     return {
@@ -738,7 +783,7 @@ export class EnhancedCredentialProvisioner {
         type: "cloudflare_api_token",
         value: token.value,
         expires_at: token.expires_on,
-        scopes: permissions.map((p) => p.name),
+        scopes: includedScopeNames,
         account_id: accountId,
         token_id: token.id,
         environment,
@@ -748,7 +793,7 @@ export class EnhancedCredentialProvisioner {
         provisioned_by: "ChittyConnect Enhanced",
         context_validated: true,
         retrieved_from: "chittysecrets",
-        permission_source: this.permissionGroupsSource || "unknown",
+        permission_source: permissionSource,
         timestamp: new Date().toISOString(),
       },
     };
