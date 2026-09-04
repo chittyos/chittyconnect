@@ -83,6 +83,50 @@ function attachInfrastructureCredentialAdapter(cls) {
   };
 }
 
+/**
+ * Adapter for the second 1Password-shaped signature the provisioner uses.
+ *
+ * provisionServiceToken() (credential type `chittyos_service_token`) calls
+ * this.onePassword.getServiceToken(target_service, ...). Only
+ * OnePasswordConnectClient ever implemented it, so every broker configuration
+ * threw `TypeError: this.onePassword.getServiceToken is not a function` —
+ * the same severed-call-site class as getInfrastructureCredential above, in
+ * the one code path the infrastructure adapter does not cover.
+ *
+ * PATH_TO_ENV in cloudflare-secrets-client.js spells the field both ways
+ * depending on the service (services/chittyconnect/service_token vs
+ * services/chittyledger/token), so try the more specific name first. get()
+ * throws on a miss rather than returning undefined, hence the try/fallback.
+ */
+function attachServiceTokenAdapter(cls) {
+  cls.prototype.getServiceToken = async function (service, options = {}) {
+    if (!service) {
+      throw new Error(
+        `E_CREDENTIAL_BAD_REF: getServiceToken requires (service); got (${service})`,
+      );
+    }
+
+    const paths = [
+      `services/${service}/service_token`,
+      `services/${service}/token`,
+    ];
+
+    const failures = [];
+    for (const path of paths) {
+      try {
+        return await this.get(path, options);
+      } catch (err) {
+        // Path and binding names are safe to log; the value is never touched.
+        failures.push(`${path}: ${err?.message ?? "lookup failed"}`);
+      }
+    }
+
+    throw new Error(
+      `E_CREDENTIAL_NOT_FOUND: no service token for ${service}. Tried ${failures.join("; ")}`,
+    );
+  };
+}
+
 class CloudflareSecretsBroker {
   constructor(env) {
     this.client = new CloudflareSecretsClient(env);
@@ -229,4 +273,9 @@ attachInfrastructureCredentialAdapter(CloudflareSecretsBroker);
 attachInfrastructureCredentialAdapter(ChittyServBroker);
 attachInfrastructureCredentialAdapter(OnePasswordBroker);
 attachInfrastructureCredentialAdapter(AutoBroker);
+
+attachServiceTokenAdapter(CloudflareSecretsBroker);
+attachServiceTokenAdapter(ChittyServBroker);
+attachServiceTokenAdapter(OnePasswordBroker);
+attachServiceTokenAdapter(AutoBroker);
 
