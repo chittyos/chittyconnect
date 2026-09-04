@@ -34,6 +34,11 @@ import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
+import {
+  ACCESS_JWT_HEADER,
+  verifyAccessJwt,
+  serviceTokenPrincipal,
+} from "./auth/access-jwt.js";
 import { SecretRotationService } from "./services/secret-rotation.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { withSentry } from "@sentry/cloudflare";
@@ -252,7 +257,18 @@ function parseCsvEnv(value) {
     .filter(Boolean);
 }
 
-function isCloudflareAccessAllowed(c) {
+/**
+ * Human (identity) path — UNCHANGED behaviour, byte-for-byte the same
+ * decisions as before service-token support was added, including the
+ * "no allow-list configured => trust the Access identity header" branch.
+ *
+ * Note this still trusts `CF-Access-Authenticated-User-Email` without
+ * verifying the JWT. That is pre-existing behaviour and is deliberately left
+ * alone here: it can only be reached behind the Access application, and
+ * tightening it blind (nobody in this change can authenticate as a human)
+ * risks locking the operator out of the secrets portal. Tracked as follow-up.
+ */
+function isCloudflareAccessEmailAllowed(c) {
   const email = (
     c.req.header("CF-Access-Authenticated-User-Email") || ""
   ).toLowerCase();
@@ -274,8 +290,76 @@ function isCloudflareAccessAllowed(c) {
   return true;
 }
 
+/**
+ * Service-token (non-identity) path.
+ *
+ * Cloudflare Access service tokens carry NO identity, so no
+ * `CF-Access-Authenticated-User-Email` header ever arrives for them — which
+ * is why the email check above rejected every service token unconditionally
+ * and left incident-response rotations with no non-human write path.
+ *
+ * Trust here rests solely on the cryptographically verified
+ * `Cf-Access-Jwt-Assertion`. `CF-Access-Client-Id` is NOT consulted: Access
+ * strips it before the origin, so its presence proves nothing, and trusting
+ * it bare is exactly the defect chittysecrets removed in commit 7d946b0.
+ *
+ * Fails closed on every error — a JWKS fetch failure, malformed token, or
+ * misconfiguration yields the same 401 as an absent token, never a 500.
+ *
+ * @returns {Promise<string|null>} allowlisted client ID, or null to deny
+ */
+async function resolveAccessServiceTokenPrincipal(c) {
+  try {
+    // Unset or empty allowlist MUST mean deny, not allow.
+    const allowedClientIds = parseCsvEnv(
+      c.env.SECRETS_PORTAL_ACCESS_SERVICE_TOKENS,
+    );
+    if (allowedClientIds.length === 0) return null;
+
+    const authDomain = String(
+      c.env.SECRETS_PORTAL_ACCESS_AUTH_DOMAIN || "",
+    ).trim();
+    const audienceTag = String(c.env.SECRETS_PORTAL_ACCESS_AUD || "").trim();
+    if (!authDomain || !audienceTag) return null;
+
+    const jwt = c.req.header(ACCESS_JWT_HEADER);
+    if (!jwt) return null;
+
+    const payload = await verifyAccessJwt(jwt, { authDomain, audienceTag });
+    return serviceTokenPrincipal(payload, allowedClientIds);
+  } catch (err) {
+    // Never log the token itself — only the reason.
+    console.warn(
+      "[secrets-portal] Access service-token verification denied:",
+      err?.message || String(err),
+    );
+    return null;
+  }
+}
+
+/**
+ * Resolve the calling principal for the secrets-portal write path.
+ *
+ * @returns {Promise<{type: "human"|"service", name: string}|null>}
+ *          null means deny.
+ */
+async function resolveSecretsPortalPrincipal(c) {
+  if (isCloudflareAccessEmailAllowed(c)) {
+    return {
+      type: "human",
+      name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+    };
+  }
+
+  const clientId = await resolveAccessServiceTokenPrincipal(c);
+  if (clientId) return { type: "service", name: clientId };
+
+  return null;
+}
+
 app.use("/secrets-portal", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
+  const principal = await resolveSecretsPortalPrincipal(c);
+  if (!principal) {
     return c.json(
       {
         ok: false,
@@ -284,6 +368,7 @@ app.use("/secrets-portal", async (c, next) => {
       401,
     );
   }
+  c.set("accessPrincipal", principal);
   await next();
 });
 
@@ -293,7 +378,8 @@ app.use("/api/v1/secrets/*", async (c, next) => {
   const isPortalUpsertPath = c.req.path === "/api/v1/secrets/upsert";
 
   if (accessOnly && isPortalUpsertPath) {
-    if (!isCloudflareAccessAllowed(c)) {
+    const principal = await resolveSecretsPortalPrincipal(c);
+    if (!principal) {
       return c.json(
         {
           ok: false,
@@ -302,9 +388,13 @@ app.use("/api/v1/secrets/*", async (c, next) => {
         401,
       );
     }
+    c.set("accessPrincipal", principal);
     c.set("apiKey", {
       type: "cloudflare-access",
-      name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+      // For a service token this is the Access Client ID (an identifier, not
+      // a credential — Access strips the Client Secret before the origin).
+      name: principal.name,
+      identityType: principal.type,
       service: "secrets-portal",
       status: "active",
     });
@@ -1679,15 +1769,18 @@ app.get("/secrets-portal", (c) => {
 });
 
 app.use("/secrets-portal/upsert", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
+  const principal = await resolveSecretsPortalPrincipal(c);
+  if (!principal) {
     return c.json(
       { ok: false, error: "Cloudflare Access required for secrets portal" },
       401,
     );
   }
+  c.set("accessPrincipal", principal);
   c.set("apiKey", {
     type: "cloudflare-access",
-    name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
+    name: principal.name,
+    identityType: principal.type,
     service: "secrets-portal",
     status: "active",
   });
@@ -2604,19 +2697,22 @@ ${errorInfo.stack}`);
           const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
           if (!chronicleUrl)
             throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-          const response = await fetch(`${chronicleUrl}/api/sync/chittysecrets`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(env.CHITTY_CHRONICLE_TOKEN
-                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-                : {}),
+          const response = await fetch(
+            `${chronicleUrl}/api/sync/chittysecrets`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(env.CHITTY_CHRONICLE_TOKEN
+                  ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+                  : {}),
+              },
+              body: JSON.stringify({
+                source: "chittyconnect-cron",
+                timestamp: new Date().toISOString(),
+              }),
             },
-            body: JSON.stringify({
-              source: "chittyconnect-cron",
-              timestamp: new Date().toISOString(),
-            }),
-          });
+          );
           if (!response.ok) {
             console.error(
               `[Scheduled] chittysecrets sync failed: ${response.status}`,

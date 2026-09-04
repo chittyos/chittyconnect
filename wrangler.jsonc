@@ -234,7 +234,17 @@
         "NEON_DATABASE": "neondb",
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
-        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
+        // Cloudflare Access application fronting connect.chitty.cc/secrets-portal
+        // (app d80ff72b-fc89-4fba-a822-886f632bc5df). Scoped to THIS app on
+        // purpose: a generically-named audience var reused by a second app is
+        // the drift that produced the chittysecrets defect fixed in 7d946b0.
+        "SECRETS_PORTAL_ACCESS_AUTH_DOMAIN": "chittycorp.cloudflareaccess.com",
+        "SECRETS_PORTAL_ACCESS_AUD": "27d61f1a1143bec18325a5acd65a9d49ac381a450bbb9d610e682bdd3679eaba",
+        // Access service-token Client IDs (identifiers, NOT credentials) admitted
+        // on the non-identity write path. Empty/unset => deny, never allow.
+        // 142a1994... = "ChittyOS MCP Admin Portal".
+        "SECRETS_PORTAL_ACCESS_SERVICE_TOKENS": "142a1994adbbbf34550eaa1792bcd1b6.access"
       },
       "triggers": {
         "crons": [
@@ -362,7 +372,17 @@
         "NEON_DATABASE": "neondb",
         "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
         "SECRETS_PORTAL_ACCESS_ONLY": "true",
-        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com"
+        "SECRETS_PORTAL_ACCESS_EMAILS": "nick@chittycorp.com",
+        // Cloudflare Access application fronting connect.chitty.cc/secrets-portal
+        // (app d80ff72b-fc89-4fba-a822-886f632bc5df). Scoped to THIS app on
+        // purpose: a generically-named audience var reused by a second app is
+        // the drift that produced the chittysecrets defect fixed in 7d946b0.
+        "SECRETS_PORTAL_ACCESS_AUTH_DOMAIN": "chittycorp.cloudflareaccess.com",
+        "SECRETS_PORTAL_ACCESS_AUD": "27d61f1a1143bec18325a5acd65a9d49ac381a450bbb9d610e682bdd3679eaba",
+        // Access service-token Client IDs (identifiers, NOT credentials) admitted
+        // on the non-identity write path. Empty/unset => deny, never allow.
+        // 142a1994... = "ChittyOS MCP Admin Portal".
+        "SECRETS_PORTAL_ACCESS_SERVICE_TOKENS": "142a1994adbbbf34550eaa1792bcd1b6.access"
       },
       "triggers": {
         "crons": [
