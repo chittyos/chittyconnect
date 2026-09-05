@@ -21,7 +21,6 @@
 
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chittyconnect",
-  "legacy_env": false,
   "main": "src/index.js",
   "compatibility_date": "2026-08-07",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -178,6 +177,11 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
+      // Explicit worker name. Without service environments, staging is its own
+      // top-level Worker script — NOT a `staging` environment of `chittyconnect`.
+      // This is what unblocks deploys: the account cannot create new non-production
+      // service environments (API error 10223).
+      "name": "chittyconnect-staging",
       // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
       // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
       // is owned by the chittymcp worker). Closes #192.
@@ -318,6 +322,12 @@
     // PRODUCTION — `wrangler deploy --env production`
     // ════════════════════════════════════════════════════════════════
     "production": {
+      // CRITICAL — pins this env to the EXISTING production Worker script.
+      // Without service environments wrangler name-suffixes by default, so an
+      // unnamed env.production would target a NEW worker `chittyconnect-production`
+      // and strand the live script plus its connect.chitty.cc/* route.
+      // This name MUST stay identical to the top-level "name".
+      "name": "chittyconnect",
       // workers.dev URL is enabled so post-deploy CI can probe /health without
       // hitting the zone WAF (which 403's GitHub Actions runner IPs). The
       // public surface is connect.chitty.cc. mcp.chitty.cc is owned by the

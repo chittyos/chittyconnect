@@ -67,11 +67,59 @@ fi
 
 echo "[safe-deploy] env=$ENV worker=$DEPLOYED_NAME"
 
-# ── 1. Deploy with explicit --env ────────────────────────────────────────────
+# ── 1. Deploy with explicit --env and explicit --config ──────────────────────
 # CHITTYCONNECT_SAFE_DEPLOY=1 is required by wrangler.jsonc's build.command
 # guard (#219). Without it, wrangler aborts before writing any binding.
-echo "[safe-deploy] running: npx wrangler deploy --env $ENV"
-CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV"
+#
+# --config is REQUIRED, not cosmetic. Wrangler's config discovery prefers
+# `wrangler.json` over `wrangler.jsonc` and walks up parent directories. A
+# stray untracked `wrangler.json` at the repo root (it is gitignored, so it
+# never appears in CI) silently shadowed the tracked config: this script
+# audited wrangler.jsonc while deploying whatever wrangler happened to find.
+# Pinning --config makes the tracked, code-reviewed file authoritative for
+# every deploy path — repo root, git worktrees, and CI alike.
+echo "[safe-deploy] running: npx wrangler deploy --env $ENV --config $WRANGLER_CFG"
+DEPLOY_LOG="$(mktemp)"
+trap 'rm -f "$DEPLOY_LOG"' EXIT
+set +e
+CHITTYCONNECT_SAFE_DEPLOY=1 npx wrangler deploy --env "$ENV" --config "$WRANGLER_CFG" 2>&1 | tee "$DEPLOY_LOG"
+WRANGLER_RC="${PIPESTATUS[0]}"
+set -e
+
+# ── 1a. Detect a CI-side Worker name override ────────────────────────────────
+# Cloudflare Workers Builds IGNORES the name in wrangler.jsonc and forces the
+# name of the script its build trigger is bound to. It prints a warning and
+# then deploys anyway:
+#
+#   ▲ [WARNING] Failed to match Worker name. Your config file is using the
+#     Worker name "chittyconnect-staging", but the CI system expected
+#     "chittyconnect". Overriding using the CI provided Worker name.
+#
+# On 2026-07-25 that override put the *staging* var set onto the *production*
+# script, because both build triggers were bound to the same script id. Nothing
+# in this script noticed: the audit below checks the name we COMPUTED, not the
+# name wrangler actually shipped to. Fail loud so a clobber is diagnosed in the
+# build that caused it rather than discovered later in prod.
+if grep -q "Failed to match Worker name" "$DEPLOY_LOG"; then
+  echo "::error::safe-deploy: CI overrode the Worker name. This deploy may have written env.$ENV config onto a DIFFERENT worker than intended." >&2
+  echo "  Expected to deploy: $DEPLOYED_NAME" >&2
+  grep -m1 "but the CI system expected" "$DEPLOY_LOG" >&2 || true
+  echo "  Fix the Workers Builds trigger so it is bound to a script named '$DEPLOYED_NAME', then redeploy." >&2
+  echo "  If this ran against production, restore it before doing anything else." >&2
+  exit 72
+fi
+
+# Cross-check the name wrangler reported uploading against the one we intended.
+UPLOADED_NAME="$(sed -n 's/^Uploaded \([A-Za-z0-9_-]*\).*/\1/p' "$DEPLOY_LOG" | head -1)"
+if [ -n "$UPLOADED_NAME" ] && [ "$UPLOADED_NAME" != "$DEPLOYED_NAME" ]; then
+  echo "::error::safe-deploy: wrangler uploaded '$UPLOADED_NAME' but this script targeted '$DEPLOYED_NAME'" >&2
+  exit 72
+fi
+
+if [ "$WRANGLER_RC" -ne 0 ]; then
+  echo "::error::safe-deploy: wrangler deploy failed (exit $WRANGLER_RC)" >&2
+  exit "$WRANGLER_RC"
+fi
 
 # ── 2. Audit declared vs attached bindings ───────────────────────────────────
 echo "[safe-deploy] auditing bindings on live worker $DEPLOYED_NAME ..."
@@ -86,15 +134,22 @@ if [ -z "$DECLARED" ]; then
   exit 70
 fi
 
+# Audit the SCRIPT, not a service environment. The old path here was
+#   /workers/services/$WORKER_NAME/environments/$ENV/bindings
+# which only resolves for a grandfathered service environment — it 404s for any
+# real top-level worker (that 404 is what failed build fe9061f3). Now that
+# staging is its own script rather than a service environment, the script-scoped
+# settings endpoint is the only one that works for both envs.
 ATTACHED_JSON="$(
   curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/services/$WORKER_NAME/environments/$ENV/bindings"
+    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$DEPLOYED_NAME/settings"
 )" || {
-  echo "::error::safe-deploy: failed to fetch live bindings from CF API" >&2
+  echo "::error::safe-deploy: failed to fetch live bindings for script '$DEPLOYED_NAME' from CF API" >&2
+  echo "  If this is the first deploy of a new worker, confirm the script exists and the token can read it." >&2
   exit 71
 }
 
-ATTACHED="$(echo "$ATTACHED_JSON" | jq -r '.result[].name // empty' | sort -u)"
+ATTACHED="$(echo "$ATTACHED_JSON" | jq -r '.result.bindings[].name // empty' | sort -u)"
 
 MISSING=""
 while IFS= read -r name; do
