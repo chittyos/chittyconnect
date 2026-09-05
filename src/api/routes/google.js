@@ -94,6 +94,13 @@ googleRoutes.get("/gdrive/files", async (c) => {
   if (fields) params.set("fields", fields);
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
+  // Shared-drive support for files.list: supportsAllDrives, includeItemsFromAllDrives,
+  // and corpora are all required here; the latter two are list-only params and are
+  // not forwarded to files.get or download calls. supportsAllDrives is also set on
+  // those routes separately.
+  params.set("supportsAllDrives", "true");
+  params.set("includeItemsFromAllDrives", "true");
+  params.set("corpora", "allDrives");
 
   const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`, { scope: "drive" });
   if (!result.ok) return c.json({ error: result.error }, result.status);
@@ -110,6 +117,8 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 
   const params = new URLSearchParams();
   if (fields) params.set("fields", fields);
+  // Shared-drive support — required for files that live in a shared drive.
+  params.set("supportsAllDrives", "true");
 
   const encodedFileId = encodeURIComponent(fileId);
   const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`, { scope: "drive" });
@@ -130,7 +139,7 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
 
   // First, fetch file metadata to determine mimeType
   const encodedFileId = encodeURIComponent(fileId);
-  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType`, {
+  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType&supportsAllDrives=true`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -152,10 +161,10 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   if (googleNativeTypes.includes(mimeType)) {
     // Use export endpoint for Google-native files (export as PDF by default)
     const exportMimeType = encodeURIComponent("application/pdf");
-    downloadUrl = `${DRIVE_API}/files/${encodedFileId}/export?mimeType=${exportMimeType}`;
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}/export?mimeType=${exportMimeType}&supportsAllDrives=true`;
   } else {
     // Use alt=media for binary-backed files
-    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?alt=media`;
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?alt=media&supportsAllDrives=true`;
   }
 
   const response = await fetch(downloadUrl, {
