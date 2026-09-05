@@ -11,8 +11,20 @@
 import { Hono } from "hono";
 import { EnhancedCredentialProvisioner } from "../../services/credential-provisioner-enhanced.js";
 import { createCredentialBroker } from "../../lib/credential-broker.js";
+import {
+  requireScope,
+  requireScopeFrom,
+  revealScopeFor,
+} from "../middleware/require-scope.js";
 
 const credentialsRoutes = new Hono();
+
+/**
+ * Vaults reachable through the reveal route. Also the source of the scope
+ * vocabulary — the reveal guard derives `credentials:reveal:<vault>` from this
+ * same list, so an unlisted vault has no grantable scope and is denied.
+ */
+const VALID_VAULTS = ["infrastructure", "services", "integrations"];
 
 /**
  * POST /api/credentials/provision
@@ -478,7 +490,12 @@ credentialsRoutes.delete("/revoke", async (c) => {
  *   "phoneNumber": "+1..."
  * }
  */
-credentialsRoutes.get("/twilio", async (c) => {
+// Returns live Twilio credentials in the response body — gated on the
+// integrations reveal scope. Deny-by-default; see middleware/require-scope.js.
+credentialsRoutes.get(
+  "/twilio",
+  requireScope(revealScopeFor("integrations")),
+  async (c) => {
   try {
     const serviceName =
       c.req.header("X-Service-Name") || c.get("apiKey")?.service || "unknown";
@@ -556,8 +573,9 @@ credentialsRoutes.get("/twilio", async (c) => {
       },
       500,
     );
-  }
-});
+    }
+  },
+);
 
 /**
  * GET /api/credentials/:vault/:item/:field
@@ -584,14 +602,23 @@ credentialsRoutes.get("/twilio", async (c) => {
  *   }
  * }
  */
-credentialsRoutes.get("/:vault/:item/:field", async (c) => {
+// Returns broker-resolved credential material in the response body — gated on
+// the per-vault reveal scope. The guard runs ahead of the handler's own vault
+// validation and denies an unrecognised vault rather than guessing a scope.
+credentialsRoutes.get(
+  "/:vault/:item/:field",
+  requireScopeFrom((c) => {
+    const vault = c.req.param("vault");
+    return VALID_VAULTS.includes(vault) ? revealScopeFor(vault) : undefined;
+  }),
+  async (c) => {
   try {
     const vault = c.req.param("vault");
     const item = c.req.param("item");
     const field = c.req.param("field");
 
     // Validate vault name
-    const validVaults = ["infrastructure", "services", "integrations"];
+    const validVaults = VALID_VAULTS;
     if (!validVaults.includes(vault)) {
       return c.json(
         {
@@ -681,8 +708,9 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       },
       status,
     );
-  }
-});
+    }
+  },
+);
 
 /**
  * PUT /api/credentials/:vault/:item/:field
