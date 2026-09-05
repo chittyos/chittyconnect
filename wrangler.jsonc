@@ -178,7 +178,7 @@
     // STAGING — `wrangler deploy --env staging`
     // ════════════════════════════════════════════════════════════════
     "staging": {
-      // Staging is reachable at https://chittyconnect-staging.chittyos.workers.dev
+      // Staging is reachable at https://chittyconnect-staging.ccorp.workers.dev
       // No `routes` block — production owns connect.chitty.cc/* (mcp.chitty.cc/*
       // is owned by the chittymcp worker). Closes #192.
       "workers_dev": true,
@@ -218,7 +218,7 @@
         "CHITTYMINT_URL": "https://mint.chitty.cc",
         "CHITTY_MINT_URL": "https://mint.chitty.cc/chittymint/v1/mint-fact",
         "DOCUMINT_MINT_URL": "https://documint.chitty.cc/documint/v1/mint",
-        "CHITTYCONNECT_URL": "https://chittyconnect-staging.chittyos.workers.dev",
+        "CHITTYCONNECT_URL": "https://chittyconnect-staging.ccorp.workers.dev",
         "CHITTYROUTER_URL": "https://router.chitty.cc",
         "CHITTY_FALLBACK_URL": "https://fallback.id.chitty.cc",
         "OLLAMA_URL": "https://ollama.chitty.cc/v1/chat/completions",
