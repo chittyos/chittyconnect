@@ -171,3 +171,44 @@ describe("RelationshipEngine", () => {
     );
   });
 });
+
+describe("RelationshipEngine summary — blank-envelope guard", () => {
+  // Same class of silent failure as the MemoryCloude summary cache: `|| null`
+  // treats " " as a real summary, so a blank envelope surfaces as relationship
+  // intelligence rather than as an absent summary.
+  function engineReturning(aiResponse) {
+    return new RelationshipEngine({
+      DB: null,
+      AI: { run: async () => aiResponse },
+    });
+  }
+
+  const args = {
+    entity: { chitty_id: "03-1-USA-0650-T-2606-1-24" },
+    direct: [],
+    inferred: [],
+    temporal: [],
+    contextual: [],
+    strength: { score: 0.5 },
+  };
+
+  it("returns null for a whitespace-only summary", async () => {
+    await expect(
+      engineReturning({ response: " \n " }).generateSummary(args),
+    ).resolves.toBeNull();
+  });
+
+  it("returns null for an empty summary", async () => {
+    await expect(
+      engineReturning({ response: "" }).generateSummary(args),
+    ).resolves.toBeNull();
+  });
+
+  it("returns a real summary unchanged", async () => {
+    await expect(
+      engineReturning({ response: "Strong direct signal." }).generateSummary(
+        args,
+      ),
+    ).resolves.toBe("Strong direct signal.");
+  });
+});

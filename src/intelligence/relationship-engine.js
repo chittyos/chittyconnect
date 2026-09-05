@@ -471,7 +471,10 @@ export class RelationshipEngine {
         ],
       });
 
-      return extractAiText(response) || null;
+      // Same whitespace trap as the summary cache in memory-cloude: `|| null`
+      // passes " " through as a real summary.
+      const text = extractAiText(response);
+      return text.trim() ? text : null;
     } catch (error) {
       console.warn(
         "[RelationshipEngine] Summary generation failed:",

@@ -31,8 +31,18 @@ export function resolveAiModel(env) {
 export function extractAiText(result) {
   if (typeof result === "string") return result;
   if (!result || typeof result !== "object") return "";
-  if (typeof result.response === "string") return result.response;
+  // Prefer `response`, but only when it actually carries text. An empty or
+  // whitespace-only `response` sitting next to a populated `choices` array is
+  // the envelope disagreeing with itself; returning the blank half there would
+  // discard text the model did generate — the exact silent degradation reading
+  // both shapes exists to prevent.
+  if (typeof result.response === "string" && result.response.trim() !== "") {
+    return result.response;
+  }
   const choice = Array.isArray(result.choices) ? result.choices[0] : null;
   const content = choice?.message?.content;
-  return typeof content === "string" ? content : "";
+  if (typeof content === "string" && content.trim() !== "") return content;
+  // Neither shape carried text. Return the blank `response` when there was one
+  // so the contract "never undefined" still holds.
+  return typeof result.response === "string" ? result.response : "";
 }

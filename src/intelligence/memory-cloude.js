@@ -377,9 +377,12 @@ export class MemoryCloude {
       });
 
       const summary = extractAiText(response);
-      if (!summary) {
+      if (!summary.trim()) {
         // An empty envelope must not be cached as a valid summary — fall through
         // to the catch below so the failure stays visible instead of persisting "".
+        // Whitespace-only counts as empty: a blank summary cached for the full
+        // retention period is the silent failure this guard exists to prevent,
+        // and `!summary` alone would let " " through.
         throw new Error("Workers AI returned no summary text");
       }
 

@@ -74,6 +74,24 @@ describe("extractAiText", () => {
     expect(extractAiText(choicesOnly)).toBe("ok");
   });
 
+  it("falls back to choices when `response` is present but blank", () => {
+    // The two shapes can disagree. Returning the blank half discards text the
+    // model did generate — a silent degradation, which is what reading both
+    // shapes exists to prevent in the first place.
+    expect(
+      extractAiText({
+        response: "",
+        choices: [{ message: { content: "real text" } }],
+      }),
+    ).toBe("real text");
+    expect(
+      extractAiText({
+        response: "   \n ",
+        choices: [{ message: { content: "real text" } }],
+      }),
+    ).toBe("real text");
+  });
+
   it("returns empty string — never undefined — for an envelope carrying no text", () => {
     // A caller that stores undefined turns a loud failure into a silent one.
     for (const empty of [
@@ -85,5 +103,17 @@ describe("extractAiText", () => {
     ]) {
       expect(extractAiText(empty)).toBe("");
     }
+  });
+
+  it("keeps the blank `response` when neither shape carries text", () => {
+    // The contract is "never undefined". When both halves are blank there is
+    // nothing to prefer, so the original value stands and callers apply their
+    // own emptiness check.
+    expect(
+      extractAiText({
+        response: "  ",
+        choices: [{ message: { content: "" } }],
+      }),
+    ).toBe("  ");
   });
 });

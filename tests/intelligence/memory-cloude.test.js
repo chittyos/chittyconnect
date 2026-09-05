@@ -74,3 +74,45 @@ describe("MemoryCloude user history", () => {
     expect(history[0].content).toBe("legacy payload");
   });
 });
+
+describe("MemoryCloude session summary — blank-envelope guard", () => {
+  // Regression for the silent failure this whole change exists to close: a
+  // summary that is empty (or only whitespace) must never reach KV, because the
+  // retention TTL would keep a blank string standing as a valid summary for 90
+  // days. `if (!summary)` alone let " " through.
+  async function summarizeWith(aiResponse) {
+    const kv = new MockKV();
+    const memory = new MemoryCloude({
+      TOKEN_KV: kv,
+      AI: { run: async () => aiResponse },
+    });
+    await memory.initialize();
+    await memory.persistInteraction("session-blank", {
+      userId: "user-1",
+      type: "request",
+      content: "anything",
+    });
+    const summary = await memory.summarizeSession("session-blank");
+    return { summary, cached: await kv.get("session:session-blank:summary") };
+  }
+
+  it("refuses to cache a whitespace-only summary", async () => {
+    const { summary, cached } = await summarizeWith({ response: "   \n\t " });
+    expect(summary).toBe("Failed to generate summary.");
+    expect(cached).toBeNull();
+  });
+
+  it("refuses to cache an empty summary", async () => {
+    const { summary, cached } = await summarizeWith({ response: "" });
+    expect(summary).toBe("Failed to generate summary.");
+    expect(cached).toBeNull();
+  });
+
+  it("still caches a real summary", async () => {
+    const { summary, cached } = await summarizeWith({
+      response: "The session covered credential provisioning.",
+    });
+    expect(summary).toBe("The session covered credential provisioning.");
+    expect(cached).toBe("The session covered credential provisioning.");
+  });
+});
