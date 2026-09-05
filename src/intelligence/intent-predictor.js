@@ -7,6 +7,8 @@
  * @module intelligence/intent-predictor
  */
 
+import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
+
 export class IntentPredictor {
   constructor(env, deps = {}) {
     this.env = env;
@@ -582,7 +584,7 @@ Prediction: ${JSON.stringify(prediction)}
 
 Return strict JSON with keys:
 intent, candidateIntents, suggestedServices, preloadData, nextActions, confidence, signals, historySummary`;
-      const response = await this.ai.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.ai.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -596,7 +598,7 @@ intent, candidateIntents, suggestedServices, preloadData, nextActions, confidenc
         ],
       });
 
-      const text = String(response?.response || "").trim();
+      const text = extractAiText(response).trim();
       const json = this.extractJson(text);
       if (!json) return null;
 

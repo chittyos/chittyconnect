@@ -7,6 +7,8 @@
  * @module intelligence/relationship-engine
  */
 
+import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
+
 export class RelationshipEngine {
   constructor(env) {
     this.env = env;
@@ -448,7 +450,7 @@ export class RelationshipEngine {
     if (!this.ai) return null;
 
     try {
-      const response = await this.ai.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.ai.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -469,7 +471,10 @@ export class RelationshipEngine {
         ],
       });
 
-      return response?.response || null;
+      // Same whitespace trap as the summary cache in memory-cloude: `|| null`
+      // passes " " through as a real summary.
+      const text = extractAiText(response);
+      return text.trim() ? text : null;
     } catch (error) {
       console.warn(
         "[RelationshipEngine] Summary generation failed:",

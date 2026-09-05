@@ -16,6 +16,7 @@
  */
 
 import { Hono } from "hono";
+import { resolveAiModel, extractAiText } from "../../lib/ai-model.js";
 
 export const promptRoutes = new Hono();
 
@@ -356,7 +357,7 @@ promptRoutes.post("/execute", async (c) => {
       // Direct AI proxy via Workers AI
       if (c.env.AI) {
         const aiResult = await c.env.AI.run(
-          c.env.AI_MODEL_PRIMARY || "@cf/meta/llama-4-scout-17b-16e-instruct",
+          resolveAiModel(c.env),
           {
             messages: [
               { role: "system", content: composedPrompt },
@@ -365,7 +366,7 @@ promptRoutes.post("/execute", async (c) => {
             max_tokens: body.maxTokens || 4096,
           }
         );
-        result = aiResult.response;
+        result = extractAiText(aiResult);
         executedBy = "chittyconnect/workers-ai";
       } else {
         throw new Error("No AI binding or dispatch target available");
