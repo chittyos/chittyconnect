@@ -72,7 +72,7 @@ sleep 5
 if [ "$ENV" = "production" ]; then
     URL="https://connect.chitty.cc"
 else
-    URL="https://chittyconnect-staging.chitty.workers.dev"
+    URL="https://chittyconnect-staging.ccorp.workers.dev"
 fi
 
 echo "  Testing: $URL/health"
