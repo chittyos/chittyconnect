@@ -22,9 +22,20 @@
 #   scripts/safe-deploy.sh staging
 #   npm run deploy            (which calls this script)
 #
-# Required env:
-#   CLOUDFLARE_API_TOKEN  — for both wrangler and the post-deploy audit
-#   CLOUDFLARE_ACCOUNT_ID — defaults to chittyconnect account if unset
+# Credentials:
+#   NONE beyond whatever already authenticates wrangler. The audit in step 3 reads
+#   the live bindings THROUGH wrangler, so it inherits the same authentication that
+#   just performed the deploy.
+#
+#   This matters because it is what lets the guard run in CI at all. The audit used
+#   to be a direct `curl` to the Cloudflare REST API needing CLOUDFLARE_API_TOKEN —
+#   a SECOND credential. Cloudflare Workers Builds authenticates wrangler by its own
+#   internal mechanism and injects only CI, WORKERS_CI, WORKERS_CI_BUILD_UUID,
+#   WORKERS_CI_COMMIT_SHA and WORKERS_CI_BRANCH, so that token never existed on the
+#   automated path — the guard could only ever run on a developer's laptop, which is
+#   the one place the incidents above did NOT originate.
+#
+#   CLOUDFLARE_ACCOUNT_ID — optional, informational only.
 
 set -euo pipefail
 
@@ -50,12 +61,6 @@ ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-0bc21e3a5a9de1a4cc843be9c3e98121}"
 if [ ! -f "$WRANGLER_CFG" ]; then
   echo "::error::safe-deploy: wrangler.jsonc not found at $WRANGLER_CFG" >&2
   exit 65
-fi
-
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  echo "::error::safe-deploy: CLOUDFLARE_API_TOKEN is not set" >&2
-  echo "  hint: 'op run --env-file=.env.op -- npm run deploy' or export the token" >&2
-  exit 66
 fi
 
 WORKER_NAME="$(node -e "const fs=require('fs');const r=fs.readFileSync('$WRANGLER_CFG','utf8').replace(/\\/\\*[\\s\\S]*?\\*\\//g,'').split('\\n').map(l=>l.replace(/^\\s*\\/\\/.*$/,'')).join('\\n');const m=r.match(/\"name\"\\s*:\\s*\"([^\"]+)\"/);console.log(m?m[1]:'')")"
@@ -86,15 +91,13 @@ if [ -z "$DECLARED" ]; then
   exit 70
 fi
 
-ATTACHED_JSON="$(
-  curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/services/$WORKER_NAME/environments/$ENV/bindings"
-)" || {
-  echo "::error::safe-deploy: failed to fetch live bindings from CF API" >&2
+# Reads the ACTIVELY-SERVING version through wrangler — no second credential, and
+# no jq dependency. Exits non-zero rather than printing an empty list, so a failed
+# read can never be mistaken for "no drift".
+ATTACHED="$(node "$REPO_ROOT/scripts/lib/audit-live-bindings.mjs" "$ENV")" || {
+  echo "::error::safe-deploy: could not read live bindings for env=$ENV" >&2
   exit 71
 }
-
-ATTACHED="$(echo "$ATTACHED_JSON" | jq -r '.result[].name // empty' | sort -u)"
 
 MISSING=""
 while IFS= read -r name; do
