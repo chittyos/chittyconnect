@@ -23,8 +23,19 @@
 #   npm run deploy            (which calls this script)
 #
 # Required env:
-#   CLOUDFLARE_API_TOKEN  — for both wrangler and the post-deploy audit
+#   CLOUDFLARE_API_TOKEN  — required for the post-deploy binding AUDIT (step 3).
+#                           Under Cloudflare Workers Builds, wrangler itself is
+#                           authenticated by Builds' own internal mechanism and does
+#                           NOT need this — but the audit is a direct CF API call and
+#                           still does. Builds injects only CI, WORKERS_CI,
+#                           WORKERS_CI_BUILD_UUID, WORKERS_CI_COMMIT_SHA and
+#                           WORKERS_CI_BRANCH, so it must be supplied as a build secret.
 #   CLOUDFLARE_ACCOUNT_ID — defaults to chittyconnect account if unset
+#
+# Why the audit is NOT skipped when the token is absent:
+#   Skipping it would leave the ONLY automated deploy path with no binding guard —
+#   a check that is paid for and never received. The three incidents above are what
+#   that costs. This script fails closed BEFORE deploying instead.
 
 set -euo pipefail
 
@@ -52,9 +63,22 @@ if [ ! -f "$WRANGLER_CFG" ]; then
   exit 65
 fi
 
+# Fail BEFORE deploying, not after. The token gates the post-deploy audit, and a
+# deploy whose bindings cannot be verified is the exact state this script exists to
+# prevent — so an unverifiable deploy must not happen at all.
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  echo "::error::safe-deploy: CLOUDFLARE_API_TOKEN is not set" >&2
-  echo "  hint: 'op run --env-file=.env.op -- npm run deploy' or export the token" >&2
+  echo "::error::safe-deploy: CLOUDFLARE_API_TOKEN is not set — refusing to deploy unverifiably" >&2
+  if [ -n "${WORKERS_CI:-}" ]; then
+    # Running under Cloudflare Workers Builds. wrangler would have authenticated fine;
+    # it is the audit leg that cannot run. Name the actual remedy — a build-time secret.
+    echo "  context: Workers Builds (build ${WORKERS_CI_BUILD_UUID:-unknown}, branch ${WORKERS_CI_BRANCH:-unknown})" >&2
+    echo "  Workers Builds does not inject CLOUDFLARE_API_TOKEN. Add it as a build secret on the" >&2
+    echo "  trigger for this Worker, scoped to read Workers services bindings, then re-run." >&2
+    echo "  Do NOT 'fix' this by skipping the audit: it is the only guard on the automated path." >&2
+  else
+    echo "  hint: export CLOUDFLARE_API_TOKEN, brokered via ChittySecrets / ChittyConnect." >&2
+    echo "  (1Password is RETIRED — 'op run' does not work on this host.)" >&2
+  fi
   exit 66
 fi
 
