@@ -11,11 +11,23 @@
 
 import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
 
+/**
+ * Instances that are NOT per-entity and must never be resolved from caller input.
+ * These are the pre-scoping shared buckets; reaching one is a cross-entity read.
+ */
+const MEMORY_INSTANCE_DENYLIST = new Set(["memory-cloude", "memory-context-embeddings"]);
+
 export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
     this.searchNamespace = env.AI_SEARCH; // Cloudflare AI Search namespace binding
+    // Derived here, NOT in initialize(). src/index.js calls initialize() without
+    // awaiting it (`.initialize().catch(...)`), so a request arriving first would see
+    // this undefined and silently skip indexing — the same silent-skip that left
+    // storeEmbedding dead behind `this.hasVectorize`. It is a synchronous derivation
+    // from env; it has no reason to depend on an async call having completed.
+    this.hasAiSearch = !!this.searchNamespace;
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year
@@ -29,9 +41,8 @@ export class MemoryCloude {
   async initialize() {
     console.log("[MemoryCloude™] Initializing perpetual context system...");
 
-    // Check for AI Search availability
-    this.hasAiSearch = !!this.searchNamespace;
-
+    // hasAiSearch is set in the constructor; re-deriving here would reintroduce the
+    // ordering dependency this deliberately removed.
     if (!this.hasAiSearch) {
       console.warn(
         "[MemoryCloude™] AI Search not available, using KV-only mode",
@@ -98,13 +109,28 @@ export class MemoryCloude {
    * Search path entirely rather than fall back to a shared instance — an unscoped
    * write is how one entity's context becomes another's recall.
    *
+   * THIS SCOPES; IT DOES NOT AUTHORIZE. It maps an entity id to that entity's
+   * instance and validates the id's shape. It cannot know whether the caller is
+   * entitled to that entity — the route must pass an entity from authenticated
+   * context, never straight from a request body. Validation here bounds the damage
+   * of a caller mistake; it is not a substitute for authorization at the edge.
+   *
    * @param {{entityId?: string, userId?: string}} interaction
    * @returns {string|null} instance id, or null when unscoped
    */
   memoryInstanceFor(interaction) {
     const entity = interaction?.entityId || interaction?.userId || this.env?.CHITTY_ENTITY_ID;
     if (!entity || typeof entity !== "string") return null;
-    return `memory-${entity}`;
+    // Reject anything that is not a plain identifier. The value reaches here from
+    // request-shaped objects, so it is attacker-influenceable: unconstrained, a caller
+    // could pick a name that resolves to an instance it does not own. The `memory-`
+    // prefix already makes an evidence instance unreachable, but not a sibling one.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(entity)) return null;
+    const instance = `memory-${entity}`;
+    // Legacy shared instances predate per-entity scoping and belong to no entity.
+    // Without this, entityId "cloude" resolves to the old everyone-bucket.
+    if (MEMORY_INSTANCE_DENYLIST.has(instance)) return null;
+    return instance;
   }
 
   async storeEmbedding(interactionId, sessionId, interaction) {

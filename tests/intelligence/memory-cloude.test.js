@@ -149,6 +149,31 @@ describe("MemoryCloude entity scoping", () => {
     expect(m.memoryInstanceFor({ entityId: { toString: () => "x" } })).toBeNull();
   });
 
+  it("refuses the legacy shared instances a caller could name directly", () => {
+    const m = build();
+    // entityId "cloude" would otherwise resolve to `memory-cloude`, the pre-scoping
+    // everyone-bucket. Naming it must not be a way back into shared memory.
+    expect(m.memoryInstanceFor({ entityId: "cloude" })).toBeNull();
+    expect(m.memoryInstanceFor({ entityId: "context-embeddings" })).toBeNull();
+  });
+
+  it("rejects entity ids that are not plain identifiers", () => {
+    const m = build();
+    for (const bad of ["../evidence", "a/b", "x y", "a".repeat(80), "ab", "-lead", "has.dot"]) {
+      expect(m.memoryInstanceFor({ entityId: bad })).toBeNull();
+    }
+  });
+
+  it("has AI Search state before initialize() is awaited", () => {
+    // src/index.js calls initialize() without awaiting it. If hasAiSearch were only
+    // set there, a request arriving first would silently skip indexing — exactly the
+    // dead-flag bug this file's fix removed. Derive it in the constructor.
+    const m = new MemoryCloude({ TOKEN_KV: new MockKV(), AI_SEARCH: {} });
+    expect(m.hasAiSearch).toBe(true);
+    const off = new MemoryCloude({ TOKEN_KV: new MockKV() });
+    expect(off.hasAiSearch).toBe(false);
+  });
+
   it("falls back to keyword recall — not a shared instance — when unscoped", async () => {
     const m = build();
     m.hasAiSearch = true;
