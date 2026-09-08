@@ -116,3 +116,75 @@ describe("MemoryCloude session summary — blank-envelope guard", () => {
     expect(cached).toBe("The session covered credential provisioning.");
   });
 });
+
+describe("MemoryCloude entity scoping", () => {
+  // Scope is the instance, never a filter. These assert the boundary itself, so they
+  // are written to FAIL if the resolver ever falls back to a shared instance.
+  const build = (env = {}) => new MemoryCloude({ TOKEN_KV: new MockKV(), ...env });
+
+  it("derives one instance per primary synthetic entity", () => {
+    const m = build();
+    expect(m.memoryInstanceFor({ entityId: "03-1-USA-0650-P-2606-1-24" })).toBe(
+      "memory-03-1-USA-0650-P-2606-1-24",
+    );
+  });
+
+  it("gives two entities two different instances", () => {
+    const m = build();
+    const a = m.memoryInstanceFor({ entityId: "03-1-USA-0650-P-2606-1-24" });
+    const b = m.memoryInstanceFor({ entityId: "03-1-USA-0651-P-2606-1-25" });
+    expect(a).not.toBe(b);
+  });
+
+  it("returns null rather than a shared instance when no entity is identifiable", () => {
+    const m = build();
+    for (const input of [{}, undefined, null, { entityId: "" }, { entityId: 42 }]) {
+      expect(m.memoryInstanceFor(input)).toBeNull();
+    }
+  });
+
+  it("does not let a non-string entity id coerce into an instance name", () => {
+    const m = build();
+    // `memory-[object Object]` would be a single shared bucket every caller lands in.
+    expect(m.memoryInstanceFor({ entityId: { toString: () => "x" } })).toBeNull();
+  });
+
+  it("refuses the legacy shared instances a caller could name directly", () => {
+    const m = build();
+    // entityId "cloude" would otherwise resolve to `memory-cloude`, the pre-scoping
+    // everyone-bucket. Naming it must not be a way back into shared memory.
+    expect(m.memoryInstanceFor({ entityId: "cloude" })).toBeNull();
+    expect(m.memoryInstanceFor({ entityId: "context-embeddings" })).toBeNull();
+  });
+
+  it("rejects entity ids that are not plain identifiers", () => {
+    const m = build();
+    for (const bad of ["../evidence", "a/b", "x y", "a".repeat(80), "ab", "-lead", "has.dot"]) {
+      expect(m.memoryInstanceFor({ entityId: bad })).toBeNull();
+    }
+  });
+
+  it("has AI Search state before initialize() is awaited", () => {
+    // src/index.js calls initialize() without awaiting it. If hasAiSearch were only
+    // set there, a request arriving first would silently skip indexing — exactly the
+    // dead-flag bug this file's fix removed. Derive it in the constructor.
+    const m = new MemoryCloude({ TOKEN_KV: new MockKV(), AI_SEARCH: {} });
+    expect(m.hasAiSearch).toBe(true);
+    const off = new MemoryCloude({ TOKEN_KV: new MockKV() });
+    expect(off.hasAiSearch).toBe(false);
+  });
+
+  it("falls back to keyword recall — not a shared instance — when unscoped", async () => {
+    const m = build();
+    m.hasAiSearch = true;
+    m.searchNamespace = {
+      get() {
+        throw new Error("semantic path must not be reached without an entity");
+      },
+    };
+    // No entityId in options => must take the KV keyword path, which cannot cross
+    // an entity boundary because it reads session:{id}:* directly.
+    const out = await m.recallContext("session-1", "anything", { limit: 1 });
+    expect(Array.isArray(out)).toBe(true);
+  });
+});

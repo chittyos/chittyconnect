@@ -11,11 +11,23 @@
 
 import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
 
+/**
+ * Instances that are NOT per-entity and must never be resolved from caller input.
+ * These are the pre-scoping shared buckets; reaching one is a cross-entity read.
+ */
+const MEMORY_INSTANCE_DENYLIST = new Set(["memory-cloude", "memory-context-embeddings"]);
+
 export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
     this.searchNamespace = env.AI_SEARCH; // Cloudflare AI Search namespace binding
+    // Derived here, NOT in initialize(). src/index.js calls initialize() without
+    // awaiting it (`.initialize().catch(...)`), so a request arriving first would see
+    // this undefined and silently skip indexing — the same silent-skip that left
+    // storeEmbedding dead behind `this.hasVectorize`. It is a synchronous derivation
+    // from env; it has no reason to depend on an async call having completed.
+    this.hasAiSearch = !!this.searchNamespace;
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year
@@ -29,9 +41,8 @@ export class MemoryCloude {
   async initialize() {
     console.log("[MemoryCloude™] Initializing perpetual context system...");
 
-    // Check for AI Search availability
-    this.hasAiSearch = !!this.searchNamespace;
-
+    // hasAiSearch is set in the constructor; re-deriving here would reintroduce the
+    // ordering dependency this deliberately removed.
     if (!this.hasAiSearch) {
       console.warn(
         "[MemoryCloude™] AI Search not available, using KV-only mode",
@@ -60,7 +71,7 @@ export class MemoryCloude {
     );
 
     // 2. Generate and store embedding (if Vectorize available)
-    if (this.hasVectorize) {
+    if (this.hasAiSearch) {
       await this.storeEmbedding(interactionId, sessionId, interaction);
     }
 
@@ -86,11 +97,54 @@ export class MemoryCloude {
   /**
    * Store interaction in AI Search
    */
+  /**
+   * Resolve the AI Search instance for one primary synthetic entity.
+   *
+   * Scope is the instance, never a query filter — see
+   * chittysearch/docs/NAMESPACE-STRATEGY.md rule 1. Between entities is a real trust
+   * boundary and gets a separate instance; between sessions of one entity is the
+   * product (90-day continuity), so session narrowing is ranking, not scope.
+   *
+   * Returns null when no entity can be identified. Callers must then skip the AI
+   * Search path entirely rather than fall back to a shared instance — an unscoped
+   * write is how one entity's context becomes another's recall.
+   *
+   * THIS SCOPES; IT DOES NOT AUTHORIZE. It maps an entity id to that entity's
+   * instance and validates the id's shape. It cannot know whether the caller is
+   * entitled to that entity — the route must pass an entity from authenticated
+   * context, never straight from a request body. Validation here bounds the damage
+   * of a caller mistake; it is not a substitute for authorization at the edge.
+   *
+   * @param {{entityId?: string, userId?: string}} interaction
+   * @returns {string|null} instance id, or null when unscoped
+   */
+  memoryInstanceFor(interaction) {
+    const entity = interaction?.entityId || interaction?.userId || this.env?.CHITTY_ENTITY_ID;
+    if (!entity || typeof entity !== "string") return null;
+    // Reject anything that is not a plain identifier. The value reaches here from
+    // request-shaped objects, so it is attacker-influenceable: unconstrained, a caller
+    // could pick a name that resolves to an instance it does not own. The `memory-`
+    // prefix already makes an evidence instance unreachable, but not a sibling one.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(entity)) return null;
+    const instance = `memory-${entity}`;
+    // Legacy shared instances predate per-entity scoping and belong to no entity.
+    // Without this, entityId "cloude" resolves to the old everyone-bucket.
+    if (MEMORY_INSTANCE_DENYLIST.has(instance)) return null;
+    return instance;
+  }
+
   async storeEmbedding(interactionId, sessionId, interaction) {
     try {
       if (this.hasAiSearch) {
+        const instanceId = this.memoryInstanceFor(interaction);
+        if (!instanceId) {
+          console.warn(
+            "[MemoryCloude™] No entity id on interaction; skipping AI Search index (unscoped write refused)",
+          );
+          return;
+        }
         const text = this.extractTextContent(interaction);
-        const instance = this.searchNamespace.get("memory-cloude");
+        const instance = this.searchNamespace.get(instanceId);
         await instance.items.upload(
           interactionId,
           text,
@@ -216,24 +270,38 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
-    const useSemanticSearch = options.semantic !== false && this.hasAiSearch;
+    // Semantic recall requires a resolvable entity, because the entity's instance IS
+    // the scope. Unscoped, the only safe answer is the KV-backed keyword path, which
+    // reads `session:{sessionId}:*` and therefore cannot cross an entity boundary.
+    const instanceId = this.memoryInstanceFor(options);
+    const useSemanticSearch =
+      options.semantic !== false && this.hasAiSearch && !!instanceId;
 
     if (useSemanticSearch) {
-      return await this.semanticRecall(sessionId, query, limit);
+      return await this.semanticRecall(sessionId, query, limit, instanceId);
     } else {
       return await this.keywordRecall(sessionId, query, limit);
     }
   }
 
   /**
-   * Semantic search using AI Search cross-instance capabilities
+   * Semantic search within ONE entity's memory instance.
+   *
+   * Federation is deliberately absent. An earlier revision passed
+   * `instance_ids: ["memory-cloude", "context-embeddings"]` and then isolated sessions
+   * with a post-hoc `chunk.item.metadata.sessionId === sessionId` filter. Both halves
+   * were wrong: chittysearch's CHARTER forbids fanning out across instances, and a
+   * caller-supplied filter is not a scope boundary because it fails open the moment it
+   * is omitted. The session filter below is retained only as *ranking* — every chunk it
+   * sees already belongs to this entity, so dropping it would widen recall within the
+   * entity, never across entities.
    */
-  async semanticRecall(sessionId, query, limit) {
+  async semanticRecall(sessionId, query, limit, instanceId) {
     try {
-      const searchResults = await this.searchNamespace.search({
+      const instance = this.searchNamespace.get(instanceId);
+      const searchResults = await instance.search({
         messages: [{ role: "user", content: query }],
         ai_search_options: {
-          instance_ids: ["memory-cloude", "context-embeddings"],
           retrieval: { top_k: limit * 2 }
         }
       });
@@ -521,11 +589,17 @@ export class MemoryCloude {
       return [];
     }
 
+    // Same rule as semanticRecall: no entity, no instance, no search. Returning []
+    // is correct here — a decomposition hint is an optimisation, and losing it costs
+    // nothing next to answering from another entity's memory.
+    const instanceId = this.memoryInstanceFor(subtask);
+    if (!instanceId) return [];
+
     try {
-      const searchResults = await this.searchNamespace.search({
+      const instance = this.searchNamespace.get(instanceId);
+      const searchResults = await instance.search({
         messages: [{ role: "user", content: JSON.stringify(subtask) }],
         ai_search_options: {
-          instance_ids: ["memory-cloude"],
           retrieval: {
             top_k: 5,
             filters: { type: "task_decomposition" }
