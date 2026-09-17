@@ -190,7 +190,9 @@ export class ChittyOSEcosystem {
     console.log(`[ChittyID] Minting new ${entityType} ChittyID...`);
 
     try {
-      // Canonical path is /mint. /v1/mint is a 308 alias (sunset 2027-05-27).
+      // Canonical path is /mint. /v1/mint is NOT broken — it 308s here and a
+      // 308 preserves method and body — but it is deprecated (sunset
+      // 2027-05-27), so this is hygiene, not a bug fix.
       const response = await resilientFetch(`${this.baseUrls.chittyid}/mint`, {
         method: "POST",
         headers: {
@@ -200,30 +202,30 @@ export class ChittyOSEcosystem {
         body: JSON.stringify({ ...args, entityType }),
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(
-          `ChittyID minting failed: ${response.status} - ${error}`,
-        );
-      }
-
+      // No `!response.ok` branch: resilientFetch already throws on non-2xx
+      // (src/utils/error-handling.js:325-338), so such a block is unreachable.
       const result = await response.json();
 
-      // The response field is `chitty_id` (chittyid README). Reading `id` here
+      // The response field is `chittyId` (camelCase) — captured live from
+      // POST https://id.chitty.cc/mint on 2026-09-17:
+      //   {"success":true,"chittyId":"03-1-USA-4448-P-2609-0-88","components":…}
+      // chittyid's README:61 documents `result.chitty_id`; that README is
+      // STALE and neither `chitty_id` nor `id` appears in the live response.
+      // Verify against the service, not the doc. Reading `id` here
       // yielded undefined on every call, and because this returned it instead
       // of throwing, callers went on to build ChittyDNA and ChittyAuth requests
       // with the literal string "undefined" as the ChittyID — producing a 404
       // cascade logged as "non-critical" roughly once a second in production.
-      // `?? result.id` is defensive, matching the reader at
-      // src/intelligence/context-resolver.js:571.
-      const chittyId = result.chitty_id ?? result.id;
+      // The snake_case and `id` arms are defensive only — neither is emitted
+      // by id.chitty.cc today.
+      const chittyId = result.chittyId ?? result.chitty_id ?? result.id;
 
       // Fail closed. A 2xx that carries no ChittyID is a failed mint, and
       // returning undefined converts it into a silent, cascading one.
       if (typeof chittyId !== "string" || chittyId.length === 0) {
         throw new Error(
-          `ChittyID minting returned ${response.status} without a chitty_id ` +
-            `(fields: ${Object.keys(result || {}).join(", ") || "none"})`,
+          `ChittyID minting returned ${response.status} without a chittyId ` +
+            `(fields: ${Object.keys(result || {}).sort().join(", ") || "none"})`,
         );
       }
 

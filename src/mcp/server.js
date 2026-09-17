@@ -644,13 +644,18 @@ mcp.get("/resources/read", async (c) => {
  */
 
 async function mintChittyID(args, env) {
-  const response = await fetch("https://id.chitty.cc/v1/mint", {
+  // id.chitty.cc reads `entityType` and IGNORES `entity`, defaulting to "T".
+  // Verified live 2026-09-17: {"entity":"P"} -> T, {} -> T, {"entityType":"P"} -> P.
+  // Passing args through raw meant this tool minted Things no matter what the
+  // MCP client asked for. @canon: chittycanon://gov/governance#core-types
+  const entityType = args.entityType ?? args.entity;
+  const response = await fetch("https://id.chitty.cc/mint", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.CHITTY_ID_TOKEN}`,
     },
-    body: JSON.stringify(args),
+    body: JSON.stringify({ ...args, entityType }),
   });
   return await response.json();
 }
