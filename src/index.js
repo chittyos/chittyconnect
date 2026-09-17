@@ -1450,6 +1450,7 @@ app.post("/intelligence/relationships/discover", async (c) => {
 import { discoveryRoutes } from "./api/routes/discovery.js";
 import { githubActionsRoutes } from "./api/routes/github-actions.js";
 import { gitConfirmRoutes } from "./api/routes/git-confirm.js";
+import { normalizeEnv } from "./lib/normalize-env.js";
 
 app.route("/.well-known", discoveryRoutes);
 
@@ -2231,6 +2232,11 @@ export default withSentry(
   }),
   {
     async fetch(request, env, ctx) {
+      // Resolve Secrets Store bindings to strings before ANY handler reads env.
+      // See src/lib/normalize-env.js — a binding is an object with .get(), and
+      // `Bearer ${env.NAME}` on one yields "[object Object]".
+      env = await normalizeEnv(env);
+
       const url = new URL(request.url);
       const host = (url.hostname || "").toLowerCase();
 
@@ -2469,6 +2475,8 @@ ${errorInfo.stack}`);
      * Queue consumer for async event processing
      */
     async queue(batch, env) {
+      env = await normalizeEnv(env);
+
       if (batch.queue === "documint-proofs") {
         const { proofQueueConsumer } =
           await import("./handlers/proof-queue.js");
@@ -2482,6 +2490,8 @@ ${errorInfo.stack}`);
     // - "0 * * * *"     (hourly)  → chittysecrets event sync to ChittyChronicle
     // - every 5 min     → Connection health checks
     async scheduled(event, env, ctx) {
+      env = await normalizeEnv(env);
+
       console.log(
         `[Scheduled] Cron trigger: ${event.cron} at ${new Date().toISOString()}`,
       );
