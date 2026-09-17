@@ -27,7 +27,7 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "account_id": "0bc21e3a5a9de1a4cc843be9c3e98121",
 
-  "observability": { "enabled": true },
+  "observability": { "enabled": false },
 
   // ──────────────────────────────────────────────────────────────────
   // BARE DEPLOY GUARD (#219)
