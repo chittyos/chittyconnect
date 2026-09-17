@@ -30,16 +30,118 @@ const failingBinding = (message) => ({
   },
 });
 
+/**
+ * Faithful method surfaces for the Cloudflare binding types this worker
+ * actually declares. These are the reason the predicate cannot be a bare
+ * `typeof v.get === "function"` check: KV, R2 and Durable Object namespaces
+ * all expose `.get`, with completely different meanings.
+ *
+ * An earlier revision of this file asserted that a bare `{ get(){} }` object
+ * SHOULD match, which encoded the bug as the intended contract — the suite
+ * agreed with the implementation because the same pass wrote both. These
+ * fakes exist so the test can disagree.
+ */
+const RUNTIME_BINDINGS = {
+  SecretsStoreSecret: () => ({ get: async () => "v" }),
+  KVNamespace: () => ({
+    get: async () => null,
+    getWithMetadata: async () => ({}),
+    put: async () => {},
+    list: async () => ({}),
+    delete: async () => {},
+  }),
+  R2Bucket: () => ({
+    get: async () => null,
+    head: async () => null,
+    put: async () => {},
+    delete: async () => {},
+    list: async () => ({}),
+    createMultipartUpload: async () => ({}),
+  }),
+  DurableObjectNamespace: () => ({
+    get: () => ({}),
+    idFromName: () => ({}),
+    idFromString: () => ({}),
+    newUniqueId: () => ({}),
+    jurisdiction: () => ({}),
+  }),
+  D1Database: () => ({
+    prepare: () => ({}),
+    batch: async () => [],
+    exec: async () => ({}),
+  }),
+  Queue: () => ({ send: async () => {}, sendBatch: async () => {} }),
+  ServiceBinding: () => ({ fetch: async () => new Response("") }),
+  Hyperdrive: () => ({ connect: () => ({}), connectionString: "postgres://x" }),
+  Ai: () => ({ run: async () => ({}) }),
+};
+
 describe("isSecretsStoreBinding", () => {
-  it("detects an object with .get() and rejects strings and nullish", () => {
+  it("matches a Secrets Store secret and rejects strings and nullish", () => {
     expect(isSecretsStoreBinding(binding("x"))).toBe(true);
     expect(isSecretsStoreBinding("a-plain-secret_text-value")).toBe(false);
     expect(isSecretsStoreBinding(null)).toBe(false);
     expect(isSecretsStoreBinding(undefined)).toBe(false);
     expect(isSecretsStoreBinding({})).toBe(false);
-    // A KV namespace also has .get(), so name-based selection would be unsound;
-    // we only ever consult keys we then overwrite with the resolved string.
-    expect(isSecretsStoreBinding({ get: () => {} })).toBe(true);
+  });
+
+  // THE critical test. KV, R2 and Durable Object namespaces all have .get().
+  // Matching them would make normalizeEnv call kv.get() with no key and then
+  // overwrite the binding with the result — destroying env.IDEMP_KV,
+  // env.TOKEN_KV, env.API_KEYS, env.OAUTH_KV, env.CREDENTIAL_CACHE, env.FILES,
+  // env.MCP_AGENT and env.SESSION_STATE. Total outage, not degradation.
+  it.each(Object.keys(RUNTIME_BINDINGS))(
+    "classifies %s correctly",
+    (kind) => {
+      const expected = kind === "SecretsStoreSecret";
+      expect(isSecretsStoreBinding(RUNTIME_BINDINGS[kind]())).toBe(expected);
+    },
+  );
+
+  it("never normalizes a KV, R2 or DO binding away", async () => {
+    const env = {
+      IDEMP_KV: RUNTIME_BINDINGS.KVNamespace(),
+      CREDENTIAL_CACHE: RUNTIME_BINDINGS.KVNamespace(),
+      FILES: RUNTIME_BINDINGS.R2Bucket(),
+      MCP_AGENT: RUNTIME_BINDINGS.DurableObjectNamespace(),
+      SESSION_STATE: RUNTIME_BINDINGS.DurableObjectNamespace(),
+      DB: RUNTIME_BINDINGS.D1Database(),
+      PROOF_QUEUE: RUNTIME_BINDINGS.Queue(),
+      SVC_LEDGER: RUNTIME_BINDINGS.ServiceBinding(),
+      AI: RUNTIME_BINDINGS.Ai(),
+      REAL_SECRET: binding("resolved"),
+    };
+    const out = await normalizeEnv(env);
+
+    // Every resource binding must come through byte-identical...
+    for (const name of [
+      "IDEMP_KV",
+      "CREDENTIAL_CACHE",
+      "FILES",
+      "MCP_AGENT",
+      "SESSION_STATE",
+      "DB",
+      "PROOF_QUEUE",
+      "SVC_LEDGER",
+      "AI",
+    ]) {
+      expect(out[name]).toBe(env[name]);
+      expect(typeof out[name]).toBe("object");
+    }
+    // ...and still be usable.
+    expect(typeof out.IDEMP_KV.put).toBe("function");
+    expect(typeof out.FILES.createMultipartUpload).toBe("function");
+    expect(typeof out.MCP_AGENT.idFromName).toBe("function");
+
+    // ...while the actual secret is resolved.
+    expect(out.REAL_SECRET).toBe("resolved");
+  });
+
+  it("does not invoke .get() on a non-secret binding", async () => {
+    const kv = RUNTIME_BINDINGS.KVNamespace();
+    const spy = vi.spyOn(kv, "get");
+    await normalizeEnv({ TOKEN_KV: kv, S: binding("v") });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 

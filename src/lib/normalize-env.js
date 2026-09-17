@@ -55,13 +55,73 @@
  * Secret VALUES are never logged. Only binding NAMES appear in diagnostics.
  */
 
-/** @param {unknown} v */
+/**
+ * Methods that positively identify a binding as something OTHER than a
+ * Secrets Store secret.
+ *
+ * This list is the load-bearing part of this module. A Secrets Store binding
+ * is identified by having `.get()` — but so do several bindings whose `.get`
+ * means something entirely different:
+ *
+ *   KVNamespace            get(key), getWithMetadata, put, list, delete
+ *   R2Bucket               get(key), head, put, delete, list, createMultipartUpload
+ *   DurableObjectNamespace get(id), idFromName, idFromString, newUniqueId
+ *
+ * A naive `typeof v.get === "function"` test matches all three. Normalizing on
+ * that basis would call `kv.get()` with no key and then REPLACE the binding
+ * with the result — destroying `env.IDEMP_KV`, `env.TOKEN_KV`, `env.API_KEYS`,
+ * `env.OAUTH_KV`, `env.CREDENTIAL_CACHE`, `env.FILES`, `env.MCP_AGENT` and
+ * `env.SESSION_STATE` on this worker. That is a total outage, not a
+ * degradation, and it is the exact mistake the first revision of this file
+ * made. Do not "simplify" this back to a bare `.get` check.
+ *
+ * Detecting by absence rather than presence is deliberate: a false negative
+ * leaves a secret unresolved (the pre-existing bug, loud at the call site),
+ * whereas a false positive destroys a live binding. The asymmetry decides the
+ * direction of the test.
+ */
+const NON_SECRET_BINDING_METHODS = Object.freeze([
+  // KV
+  "getWithMetadata",
+  "put",
+  "list",
+  "delete",
+  // R2
+  "head",
+  "createMultipartUpload",
+  "resumeMultipartUpload",
+  // Durable Objects
+  "idFromName",
+  "idFromString",
+  "newUniqueId",
+  "jurisdiction",
+  // D1
+  "prepare",
+  "batch",
+  "exec",
+  // Queues
+  "send",
+  "sendBatch",
+  // Service bindings / Hyperdrive / AI
+  "fetch",
+  "connect",
+  "run",
+]);
+
+/**
+ * True only for a Cloudflare Secrets Store binding: an object exposing an
+ * async `get()` and none of the methods that mark it as a different resource.
+ *
+ * @param {unknown} v
+ */
 export function isSecretsStoreBinding(v) {
-  return (
-    !!v &&
-    typeof v === "object" &&
-    typeof (/** @type {{get?: unknown}} */ (v).get) === "function"
-  );
+  if (!v || typeof v !== "object") return false;
+  const o = /** @type {Record<string, unknown>} */ (v);
+  if (typeof o.get !== "function") return false;
+  for (const method of NON_SECRET_BINDING_METHODS) {
+    if (typeof o[method] === "function") return false;
+  }
+  return true;
 }
 
 /**
