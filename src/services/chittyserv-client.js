@@ -99,9 +99,13 @@ export class ChittyServClient {
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "");
-      throw new Error(
+      const err = new Error(
         `ChittyServ credential fetch failed for ${credentialPath}: ${response.status} ${response.statusText}${errorBody ? ` — ${errorBody}` : ""}`,
       );
+      // A 404 is "this credential does not exist", not "the broker is down".
+      // Only the former may request operator provisioning. See #303.
+      if (response.status === 404) err.code = "CREDENTIAL_NOT_FOUND";
+      throw err;
     }
 
     const data = await response.json();
@@ -110,7 +114,11 @@ export class ChittyServClient {
     const value = data.value || data.credential;
 
     if (!value) {
-      throw new Error(`ChittyServ returned no value for ${credentialPath}`);
+      const err = new Error(
+        `ChittyServ returned no value for ${credentialPath}`,
+      );
+      err.code = "CREDENTIAL_NOT_FOUND";
+      throw err;
     }
 
     console.log(

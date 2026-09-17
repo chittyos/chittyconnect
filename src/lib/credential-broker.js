@@ -121,9 +121,11 @@ function attachServiceTokenAdapter(cls) {
       }
     }
 
-    throw new Error(
+    const err = new Error(
       `E_CREDENTIAL_NOT_FOUND: no service token for ${service}. Tried ${failures.join("; ")}`,
     );
+    err.code = "CREDENTIAL_NOT_FOUND";
+    throw err;
   };
 }
 
@@ -212,17 +214,24 @@ class AutoBroker {
   }
 
   async get(credentialPath, options = {}) {
+    // Tracks whether EVERY tier reported a clean miss. If so the composite
+    // error keeps code CREDENTIAL_NOT_FOUND, so the caller can still tell
+    // "absent everywhere" from "a tier is down". Swallowing the tag here was
+    // what made the classifier inert under `auto`. See #303.
+    let allMisses = true;
+
     // 1. Try env bindings first (zero latency)
     try {
       return await this.cfSecrets.get(credentialPath, options);
-    } catch {
-      // Not in env bindings
+    } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
     }
 
     // 2. Try ChittyServ
     try {
       return await this.chittyserv.get(credentialPath, options);
     } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
       console.warn(
         `[CredentialBroker:auto] ChittyServ failed for ${credentialPath}:`,
         err.message,
@@ -230,7 +239,16 @@ class AutoBroker {
     }
 
     // 3. Fall back to chittysecrets Connect
-    return this.onePassword.get(credentialPath, options);
+    try {
+      return await this.onePassword.get(credentialPath, options);
+    } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
+      if (allMisses && err && err.code !== "CREDENTIAL_NOT_FOUND") {
+        err.code = "CREDENTIAL_NOT_FOUND";
+      }
+      if (!allMisses && err) delete err.code;
+      throw err;
+    }
   }
 
   async prefetch(credentialPaths) {

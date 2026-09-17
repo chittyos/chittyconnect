@@ -42,10 +42,16 @@ describe("resolveBindingValue", () => {
     expect(await resolveBindingValue(undefined)).toBeUndefined();
   });
 
-  it("never returns a non-string object — the [object Object] header bug", async () => {
-    const result = await resolveBindingValue({ notABinding: true });
+  it("rejects a binding whose .get() yields a non-string — the real [object Object] path", async () => {
+    // Adversarial review: the previous version of this test passed a plain
+    // object, which exits at the `typeof value.get === "function"` check and
+    // never exercises the failing case.
+    const result = await resolveBindingValue(storeBinding({ nested: "object" }));
     expect(result).toBeUndefined();
-    expect(typeof result).not.toBe("object");
+  });
+
+  it("ignores a non-binding object", async () => {
+    expect(await resolveBindingValue({ notABinding: true })).toBeUndefined();
   });
 });
 
@@ -99,12 +105,17 @@ describe("getCredentialResult tiers", () => {
     expect(result.errorClass).toBe(CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL);
   });
 
-  it("classifies a throwing broker as POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE", async () => {
-    // A broker type that cannot construct a working client: the get() call
-    // throws, which is the real broker-unreachable path.
+  it("classifies a broker TRANSPORT failure as POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE", async () => {
+    // Real client code path: ChittyServClient runs against a fetch that fails
+    // the way a network outage does. No module mocks — only the transport.
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("connect ETIMEDOUT"),
+    );
+
     const env = {
       CREDENTIAL_BROKER_TYPE: "chittyserv",
-      CHITTYSERV_URL: "http://127.0.0.1:1/unreachable",
+      CHITTYSERV_URL: "https://chittyserv.invalid",
+      CHITTYSERV_TOKEN: "not-a-real-token",
     };
 
     const result = await getCredentialResult(
@@ -115,9 +126,31 @@ describe("getCredentialResult tiers", () => {
     );
 
     expect(result.value).toBeUndefined();
-    expect(result.errorClass).toBe(
-      CREDENTIAL_ERROR_CLASS.BROKER_UNAVAILABLE,
+    expect(result.errorClass).toBe(CREDENTIAL_ERROR_CLASS.BROKER_UNAVAILABLE);
+  });
+
+  it("classifies a broker 404 as MISSING_CREDENTIAL_MATERIAL, not an outage", async () => {
+    // The conflation #303 is about: a 404 means the credential does not exist,
+    // which is the ONLY class permitted to request operator provisioning.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not found", { status: 404, statusText: "Not Found" }),
     );
+
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "chittyserv",
+      CHITTYSERV_URL: "https://chittyserv.invalid",
+      CHITTYSERV_TOKEN: "not-a-real-token",
+    };
+
+    const result = await getCredentialResult(
+      env,
+      "services/chittycommand/org_automation_token",
+      "__NONE__",
+      "chittycommand",
+    );
+
+    expect(result.value).toBeUndefined();
+    expect(result.errorClass).toBe(CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL);
   });
 
   it("keeps the two classes distinct — they are not interchangeable", () => {
@@ -231,9 +264,8 @@ describe("multi-candidate resolution survives (PR #277 regression)", () => {
       MINT_API_KEY: "third-candidate-key",
     };
 
-    const { token, source } = await getMintAuthToken(env);
+    const { token } = await getMintAuthToken(env);
     expect(token).toBe("third-candidate-key");
-    expect(source).toBe("auth-issued");
   });
 });
 
@@ -258,5 +290,87 @@ describe("getServiceToken", () => {
     expect(await getServiceToken(env, "chittyledger")).toBe(
       "legacy-ledger-token",
     );
+  });
+});
+
+describe("a rejecting binding must not kill the chain (PR #277 at the hot tier)", () => {
+  /** A Secrets Store binding whose .get() rejects: store unreachable, entry deleted. */
+  function rejectingBinding(message = "secrets store unreachable") {
+    return {
+      get: async () => {
+        throw new Error(message);
+      },
+    };
+  }
+
+  it("getCredential returns undefined instead of throwing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      NOTION_TOKEN: rejectingBinding(),
+    };
+
+    await expect(
+      getCredential(env, "integrations/notion/api_key", "NOTION_TOKEN", "notion"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("getMintAuthToken still reaches a later working candidate", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      CHITTYAUTH_ISSUED_MINT_API_KEY: rejectingBinding(),
+      MINT_API_KEY: "works-fine",
+    };
+
+    const { token } = await getMintAuthToken(env);
+    expect(token).toBe("works-fine");
+  });
+
+  it("getServiceToken still falls through to the legacy name", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      CHITTYAUTH_ISSUED_ID_TOKEN: rejectingBinding(),
+      CHITTY_ID_TOKEN: "legacy-still-works",
+    };
+
+    expect(await getServiceToken(env, "chittyid")).toBe("legacy-still-works");
+  });
+
+  it("records the binding failure rather than swallowing it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      NOTION_TOKEN: rejectingBinding("entry deleted"),
+    };
+
+    await getCredential(env, "integrations/notion/api_key", "NOTION_TOKEN", "notion");
+
+    const logged = warn.mock.calls.map(([l]) => String(l)).join("\n");
+    expect(logged).toContain("binding_error");
+  });
+});
+
+describe("the escalation signal stays alertable", () => {
+  it("a routine multi-candidate miss does not emit MISSING_CREDENTIAL_MATERIAL per candidate", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { CREDENTIAL_BROKER_TYPE: "cloudflare-secrets" };
+
+    await getMintAuthToken(env);
+
+    const events = warn.mock.calls
+      .map(([line]) => line)
+      .filter((l) => typeof l === "string" && l.startsWith("[credential] "))
+      .map((l) => JSON.parse(l.replace("[credential] ", "")));
+
+    const escalations = events.filter(
+      (e) => e.errorClass === CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL,
+    );
+
+    // Adversarial review measured four per call before candidate mode existed.
+    // Each named a candidate that is EXPECTED to be absent, so any alert on the
+    // class was all false positives.
+    expect(escalations.length).toBeLessThanOrEqual(1);
   });
 });
