@@ -159,11 +159,18 @@ export class CloudflareSecretsClient {
       }
     }
 
-    throw new Error(
+    // Tagged so callers can tell "this credential does not exist anywhere" from
+    // "the broker could not be reached". Those map to different canonical error
+    // classes, and only the former may request operator provisioning
+    // (MISSING_CREDENTIAL_MATERIAL). Matching on the message string would be
+    // brittle; the code is the contract. See chittyos/chittyconnect#303.
+    const notFound = new Error(
       `Credential not found in env bindings: ${credentialPath}. ` +
         `Tried ${attempts.length ? attempts.join("; ") : "no candidates"}. ` +
         `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`,
     );
+    notFound.code = "CREDENTIAL_NOT_FOUND";
+    throw notFound;
   }
 
   /**
