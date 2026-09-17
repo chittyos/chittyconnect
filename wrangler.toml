@@ -84,4 +84,4 @@ CHITTYOS_DOMAIN = "chitty.cc"
 
 # Analytics and logging
 [observability]
-enabled = true
+enabled = false
