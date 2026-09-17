@@ -9,17 +9,34 @@
  *     [Retry] Non-retryable error (not_found): HTTP 404: Not Found
  *     [ChittyConnect] Background initialization error (non-critical): HTTP 404
  *
- * Three contract errors and one posture error produced that:
- *   - the body sent `entity`, but the canonical field is `entityType`
- *   - the path used `/v1/mint`, a 308 alias (sunset 2027-05-27)
- *   - the response was read as `result.id`, but the field is `result.chitty_id`
- *   - and on finding nothing it RETURNED undefined instead of throwing, so the
- *     failure propagated as the literal string "undefined" into downstream
- *     ChittyDNA/ChittyAuth calls and was logged as "non-critical"
+ * TWO contract errors and one posture error produced it — all three verified
+ * against the running service, not against documentation:
  *
- * Canonical contract: CHITTYFOUNDATION/chittyid README "Request a ChittyID" —
- * POST https://id.chitty.cc/mint, body { entityType: 'P' }, response
- * result.chitty_id. @canon: chittycanon://gov/governance#core-types
+ *   - the body sent `entity`; id.chitty.cc reads `entityType` and IGNORES
+ *     `entity`, defaulting to "T". So every ID this worker caused to be minted
+ *     is a Thing, including contexts canon requires to be Person.
+ *   - the response was read as `result.id`; the field is `result.chittyId`
+ *     (camelCase).
+ *   - and on finding nothing it RETURNED undefined instead of throwing, so the
+ *     failure propagated as the string "undefined" into downstream ChittyDNA
+ *     and ChittyAuth calls and was logged as "non-critical".
+ *
+ * A PREVIOUS REVISION OF THIS FILE ASSERTED `result.chitty_id`, citing
+ * CHITTYFOUNDATION/chittyid README.md:61. That README is STALE and the claim
+ * was withdrawn. It is recorded here because the wrong version of this docblock
+ * shipped once already: a fixture invented from a doc is not evidence about a
+ * service, and every assertion built on it measured agreement between two
+ * artifacts written in the same pass.
+ *
+ * `/v1/mint` is NOT among the defects. It 308-redirects to /mint and a 308
+ * preserves method and body, so the old path worked. Moving to /mint is
+ * deprecation hygiene (sunset 2027-05-27), not a bug fix.
+ *
+ * LIMIT OF THIS SUITE, stated because it is the failure that caused all of the
+ * above: a local fixture catches CODE regressions and structurally cannot catch
+ * SERVICE drift. If id.chitty.cc renames `chittyId` tomorrow, all of these
+ * still pass and production breaks exactly as it did this week. Only a live
+ * smoke test against /mint would catch that.
  *
  * These drive the real ChittyOSEcosystem and the real resilientFetch/retry
  * path. Only `globalThis.fetch` — the network boundary we do not own — is
@@ -41,13 +58,41 @@ import { ChittyOSEcosystem } from "../../src/integrations/chittyos-ecosystem.js"
 const LIVE_MINT_RESPONSE = Object.freeze({
   success: true,
   chittyId: "03-1-USA-4448-P-2609-0-88",
-  components: {},
-  mintProof: {},
-  trust: {},
-  geo: {},
-  drand: {},
-  certificateStatus: "pending",
+  components: Object.freeze({
+    version: "03",
+    entityType: "P",
+    jurisdiction: "USA",
+    region: "1",
+    sequential: "4448",
+    yearMonth: "2609",
+    trustLevel: 0,
+    checksum: "88",
+  }),
+  mintProof: Object.freeze({}),
+  trust: Object.freeze({}),
+  geo: Object.freeze({}),
+  drand: Object.freeze({}),
+  certificateStatus: Object.freeze({
+    issued: false,
+    reason: "not-configured",
+    detail:
+      "neither CHITTYCERT_SERVICE_TOKEN nor CHITTY_SERVICE_TOKEN is configured",
+  }),
   timestamp: "2026-09-17T23:00:00.000Z",
+  service: "id.chitty.cc",
+  mintedBy: "mint.chitty.cc",
+});
+
+/**
+ * The FAILURE path is an HTTP 200 carrying {success:false, error} — captured
+ * from POST /mint with {"entityType":"PEO"}. resilientFetch cannot catch it,
+ * because 200 is ok. Neither revision of this file covered this shape; it is
+ * the reason the fail-closed throw earns its place.
+ */
+const LIVE_ERROR_ENVELOPE = Object.freeze({
+  success: false,
+  error:
+    'Invalid entityType: "peo". Must be one of: person, place, thing, event, authority',
   service: "id.chitty.cc",
   mintedBy: "mint.chitty.cc",
 });
@@ -162,6 +207,30 @@ describe("ChittyID mint contract", () => {
     expect(LIVE_MINT_RESPONSE).not.toHaveProperty("chitty_id");
     expect(LIVE_MINT_RESPONSE).not.toHaveProperty("id");
     expect(LIVE_MINT_RESPONSE).toHaveProperty("chittyId");
+    // certificateStatus is an OBJECT on the wire. A previous revision invented
+    // the string "pending" here — in a fixture whose whole claim to authority
+    // was that it came from the wire.
+    expect(typeof LIVE_MINT_RESPONSE.certificateStatus).toBe("object");
+  });
+
+  it("throws on the 200 error envelope and surfaces the service's reason", async () => {
+    stubFetch(200, LIVE_ERROR_ENVELOPE);
+    const err = await ecosystem()
+      .mintChittyID({ entity: "P" })
+      .catch((e) => e);
+    // The operator needs the reason, not just the fact that a reason exists.
+    expect(err.message).toContain("Invalid entityType");
+    expect(err.message).toContain("person, place, thing, event, authority");
+  });
+
+  it("refuses to mint when entityType is absent, rather than defaulting to T", async () => {
+    // JSON.stringify drops an undefined value, so the service would receive no
+    // entityType and silently mint a Thing.
+    const calls = stubFetch(200, LIVE_MINT_RESPONSE);
+    await expect(ecosystem().mintChittyID({ metadata: {} })).rejects.toThrow(
+      /requires an entityType/,
+    );
+    expect(calls).toHaveLength(0);
   });
 
   // NOTE: a 5xx is retryable, so this drives real backoff sleeps and records

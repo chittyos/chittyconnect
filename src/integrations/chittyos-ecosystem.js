@@ -187,6 +187,16 @@ export class ChittyOSEcosystem {
     // ChittyID"); callers in this repo historically passed { entity }, which the
     // service does not read. Accept both and send the canonical name.
     const entityType = args.entityType ?? args.entity;
+
+    // An absent entityType is DROPPED by JSON.stringify, and id.chitty.cc then
+    // silently defaults to "T" — the same silent-Thing bug, reached a
+    // different way. Refuse rather than mint the wrong type.
+    if (typeof entityType !== "string" || entityType.length === 0) {
+      throw new Error(
+        `ChittyID minting requires an entityType (got ${JSON.stringify(entityType)})`,
+      );
+    }
+
     console.log(`[ChittyID] Minting new ${entityType} ChittyID...`);
 
     try {
@@ -223,9 +233,19 @@ export class ChittyOSEcosystem {
       // Fail closed. A 2xx that carries no ChittyID is a failed mint, and
       // returning undefined converts it into a silent, cascading one.
       if (typeof chittyId !== "string" || chittyId.length === 0) {
+        // The failure path is HTTP 200 carrying {success:false, error}.
+        // Verified live: {"entityType":"PEO"} -> 200
+        //   {"success":false,"error":"Invalid entityType: \"peo\". Must be one
+        //    of: person, place, thing, event, authority", ...}
+        // resilientFetch cannot catch that — 200 is ok — so this throw is the
+        // only thing between an error envelope and another undefined cascade.
+        // Surface `error` itself: naming the field while hiding its contents
+        // tells the next person an answer exists and withholds it.
+        const detail = result?.error
+          ? `: ${result.error}`
+          : ` (fields: ${Object.keys(result || {}).sort().join(", ") || "none"})`;
         throw new Error(
-          `ChittyID minting returned ${response.status} without a chittyId ` +
-            `(fields: ${Object.keys(result || {}).sort().join(", ") || "none"})`,
+          `ChittyID minting returned ${response.status} without a chittyId${detail}`,
         );
       }
 
