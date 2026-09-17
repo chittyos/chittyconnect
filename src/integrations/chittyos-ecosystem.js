@@ -182,16 +182,22 @@ export class ChittyOSEcosystem {
    * NO local generation - always calls id.chitty.cc
    */
   async mintChittyID(args) {
-    console.log(`[ChittyID] Minting new ${args.entity} ChittyID...`);
+    // Canonical mint contract — @canon: chittycanon://gov/governance#core-types
+    // Body is { entityType } (CHITTYFOUNDATION/chittyid README "Request a
+    // ChittyID"); callers in this repo historically passed { entity }, which the
+    // service does not read. Accept both and send the canonical name.
+    const entityType = args.entityType ?? args.entity;
+    console.log(`[ChittyID] Minting new ${entityType} ChittyID...`);
 
     try {
-      const response = await resilientFetch(`${this.baseUrls.chittyid}/v1/mint`, {
+      // Canonical path is /mint. /v1/mint is a 308 alias (sunset 2027-05-27).
+      const response = await resilientFetch(`${this.baseUrls.chittyid}/mint`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN}`,
         },
-        body: JSON.stringify(args),
+        body: JSON.stringify({ ...args, entityType }),
       });
 
       if (!response.ok) {
@@ -202,8 +208,27 @@ export class ChittyOSEcosystem {
       }
 
       const result = await response.json();
-      console.log(`[ChittyID] Minted: ${result.id}`);
-      return result.id;
+
+      // The response field is `chitty_id` (chittyid README). Reading `id` here
+      // yielded undefined on every call, and because this returned it instead
+      // of throwing, callers went on to build ChittyDNA and ChittyAuth requests
+      // with the literal string "undefined" as the ChittyID — producing a 404
+      // cascade logged as "non-critical" roughly once a second in production.
+      // `?? result.id` is defensive, matching the reader at
+      // src/intelligence/context-resolver.js:571.
+      const chittyId = result.chitty_id ?? result.id;
+
+      // Fail closed. A 2xx that carries no ChittyID is a failed mint, and
+      // returning undefined converts it into a silent, cascading one.
+      if (typeof chittyId !== "string" || chittyId.length === 0) {
+        throw new Error(
+          `ChittyID minting returned ${response.status} without a chitty_id ` +
+            `(fields: ${Object.keys(result || {}).join(", ") || "none"})`,
+        );
+      }
+
+      console.log(`[ChittyID] Minted: ${chittyId}`);
+      return chittyId;
     } catch (error) {
       console.error(`[ChittyID] Minting error:`, error);
       throw error;
