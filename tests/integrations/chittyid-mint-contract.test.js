@@ -48,13 +48,19 @@ import { ChittyOSEcosystem } from "../../src/integrations/chittyos-ecosystem.js"
 /**
  * Captured from POST https://id.chitty.cc/mint with {"entityType":"P"} on
  * 2026-09-17. `mintProof`, `trust`, `geo` and `drand` are elided to {} because
- * nothing reads them; every retained field is byte-for-byte from the wire,
- * types included — `components.trustLevel` is the STRING "0", not the number 0,
- * and `certificateStatus` is an object, not a status string.
+ * nothing reads them, and `timestamp` is ROUNDED to the hour — it is the one
+ * retained field that is not the captured value. Nothing reads it either; it is
+ * kept only so the fixture has the right shape. Every OTHER retained field is
+ * byte-for-byte from the wire, types included — `components.trustLevel` is the
+ * STRING "0", not the number 0, and `certificateStatus` is an object, not a
+ * status string.
  *
  * Both of those were wrong in earlier revisions of this file, inside a block
  * headed "VERBATIM". A trim you declare is evidence; a trim you call verbatim
- * is an over-claim, and this one took three rounds to stop making. The earlier revision of this file
+ * is an over-claim, and this one took three rounds to stop making — a separated
+ * review then caught the rounded `timestamp` above still sitting under a
+ * blanket "byte-for-byte" claim, which is the same mistake a fourth time and is
+ * why the elision is now named explicitly. The earlier revision of this file
  * invented a `{ chitty_id: ... }` fixture from chittyid's README:61 — a shape
  * the service has NEVER emitted — so every assertion measured agreement
  * between two artifacts written in the same pass, and the suite stayed green

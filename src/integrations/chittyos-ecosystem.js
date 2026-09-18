@@ -188,9 +188,13 @@ export class ChittyOSEcosystem {
     // service does not read. Accept both and send the canonical name.
     const entityType = args.entityType ?? args.entity;
 
-    // An absent entityType is DROPPED by JSON.stringify, and id.chitty.cc then
-    // silently defaults to "T" — the same silent-Thing bug, reached a
-    // different way. Refuse rather than mint the wrong type.
+    // An absent entityType is DROPPED by JSON.stringify, so the request would
+    // carry no entityType at all. Refuse here rather than find out what the
+    // service does with that: a malformed body was measured returning 200 with
+    // a "T" id, while chittymint's own source rejects an undefined entityType
+    // with { success: false }. Those are different inputs and this guard should
+    // not depend on which path an absent field takes — it fails closed either
+    // way, before the fetch.
     if (typeof entityType !== "string" || entityType.length === 0) {
       throw new Error(
         `ChittyID minting requires an entityType (got ${JSON.stringify(entityType)})`,
