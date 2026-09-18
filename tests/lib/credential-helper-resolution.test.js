@@ -338,6 +338,46 @@ describe("a rejecting binding must not kill the chain (PR #277 at the hot tier)"
     expect(await getServiceToken(env, "chittyid")).toBe("legacy-still-works");
   });
 
+  it("classifies a FAILING binding as an outage, not as missing material", async () => {
+    // The defect round 2 found: resolveBindingSafely caught the rejection but
+    // left brokerUnavailable false, so a Secrets Store outage was reported as
+    // MISSING_CREDENTIAL_MATERIAL — telling an operator to provision a
+    // credential that already exists. This is the assertion the first
+    // rejecting-binding suite omitted.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = {
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      NOTION_TOKEN: rejectingBinding("secrets store 503"),
+    };
+
+    const result = await getCredentialResult(
+      env,
+      "integrations/notion/api_key",
+      "NOTION_TOKEN",
+      "notion",
+    );
+
+    expect(result.value).toBeUndefined();
+    expect(result.errorClass).toBe(CREDENTIAL_ERROR_CLASS.BROKER_UNAVAILABLE);
+    expect(result.errorClass).not.toBe(CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL);
+  });
+
+  it("still reports a clean absence as MISSING_CREDENTIAL_MATERIAL", async () => {
+    // The other direction: the outage classification must not swallow the
+    // genuine provisioning case.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { CREDENTIAL_BROKER_TYPE: "cloudflare-secrets" };
+
+    const result = await getCredentialResult(
+      env,
+      "services/chittycommand/org_automation_token",
+      "ORG_AUTOMATION_TOKEN",
+      "chittycommand",
+    );
+
+    expect(result.errorClass).toBe(CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL);
+  });
+
   it("records the binding failure rather than swallowing it", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const env = {
@@ -370,7 +410,8 @@ describe("the escalation signal stays alertable", () => {
 
     // Adversarial review measured four per call before candidate mode existed.
     // Each named a candidate that is EXPECTED to be absent, so any alert on the
-    // class was all false positives.
-    expect(escalations.length).toBeLessThanOrEqual(1);
+    // class was all false positives. Exactly one: `<= 1` also passes at ZERO,
+    // which would mean the escalation signal had gone silent entirely.
+    expect(escalations.length).toBe(1);
   });
 });

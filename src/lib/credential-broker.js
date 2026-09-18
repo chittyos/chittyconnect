@@ -243,9 +243,8 @@ class AutoBroker {
       return await this.onePassword.get(credentialPath, options);
     } catch (err) {
       if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
-      if (allMisses && err && err.code !== "CREDENTIAL_NOT_FOUND") {
-        err.code = "CREDENTIAL_NOT_FOUND";
-      }
+      // If any tier failed rather than cleanly missed, the composite is an
+      // availability problem — strip the tag so it is not reported as absence.
       if (!allMisses && err) delete err.code;
       throw err;
     }

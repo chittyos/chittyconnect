@@ -77,10 +77,15 @@ export async function resolveBindingValue(value) {
  * @param {object} context - for the failure event; never carries a value
  * @returns {Promise<string|undefined>}
  */
-async function resolveBindingSafely(value, context) {
+async function resolveBindingSafely(value, context, state) {
   try {
     return await resolveBindingValue(value);
   } catch (error) {
+    // A binding that FAILS is an availability problem, not an absence. Leaving
+    // this unrecorded classified a Secrets Store outage as
+    // MISSING_CREDENTIAL_MATERIAL — telling an operator to provision a
+    // credential that already exists.
+    if (state) state.bindingFailed = true;
     emitCredentialEvent({
       ...context,
       tier: "binding",
@@ -169,10 +174,12 @@ export async function getCredentialResult(
 
   // Hot tier: Worker binding or managed secret. Guarded — a rejecting binding
   // must not escape and kill the caller's remaining candidates (PR #277).
-  const hot = await resolveBindingSafely(env[fallbackEnvVar], {
-    ...base,
-    binding: fallbackEnvVar,
-  });
+  const hotState = { bindingFailed: false };
+  const hot = await resolveBindingSafely(
+    env[fallbackEnvVar],
+    { ...base, binding: fallbackEnvVar },
+    hotState,
+  );
   if (hot) {
     if (!candidate) {
       emitCredentialEvent({
@@ -188,7 +195,7 @@ export async function getCredentialResult(
 
   // Absent from every authority. This is the one class permitted to request
   // operator provisioning — do not collapse it into broker-unavailable.
-  const errorClass = brokerUnavailable
+  const errorClass = brokerUnavailable || hotState.bindingFailed
     ? CREDENTIAL_ERROR_CLASS.BROKER_UNAVAILABLE
     : CREDENTIAL_ERROR_CLASS.MISSING_MATERIAL;
 
@@ -260,14 +267,14 @@ export async function getServiceToken(env, serviceName) {
 
   // Transitional aliases (service-specific).
   if (normalized === "MINT") {
-    for (const alias of [
-      env.CHITTYAUTH_ISSUED_MINT_API_KEY,
-      env.CHITTYAUTH_ISSUED_MINT_TOKEN,
-      env.MINT_API_KEY,
+    for (const aliasName of [
+      "CHITTYAUTH_ISSUED_MINT_API_KEY",
+      "CHITTYAUTH_ISSUED_MINT_TOKEN",
+      "MINT_API_KEY",
     ]) {
-      const value = await resolveBindingSafely(alias, {
+      const value = await resolveBindingSafely(env[aliasName], {
         service: serviceName,
-        binding: "mint-alias",
+        binding: aliasName,
       });
       if (value) return value;
     }
