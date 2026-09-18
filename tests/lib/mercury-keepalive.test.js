@@ -75,6 +75,46 @@ describe("binding discovery", () => {
     expect(mercuryTokenBindings(a)).toEqual(mercuryTokenBindings(b));
   });
 
+  it("finds a NON-ENUMERABLE Secrets Store binding — the production shape", () => {
+    // A secrets_store_secret binding is not guaranteed to appear in
+    // Object.keys(env); chittyagent-finance documents exactly that. A prefix
+    // scan alone would discover nothing here and the sweep would ping no token
+    // while reporting a clean run.
+    const env = { TOKEN_KV: makeKV() };
+    Object.defineProperty(env, "MERCURY_TOKEN_ARIBIA_LLC", {
+      enumerable: false,
+      value: { get: async () => "secret-value" },
+    });
+
+    expect(Object.keys(env)).not.toContain("MERCURY_TOKEN_ARIBIA_LLC");
+    expect(mercuryTokenBindings(env)).toEqual(["MERCURY_TOKEN_ARIBIA_LLC"]);
+  });
+
+  it("sweeps a non-enumerable binding end to end", async () => {
+    const env = { TOKEN_KV: makeKV() };
+    Object.defineProperty(env, "MERCURY_TOKEN_CHITTY_SERVICES", {
+      enumerable: false,
+      value: { get: async () => "secret-value" },
+    });
+
+    const report = await runMercuryKeepalive(
+      env,
+      deps({ resolveBinding: async (b) => (b?.get ? await b.get() : b) }),
+    );
+    expect(report).toMatchObject({ checked: 1, pinged: 1, failed: 0 });
+  });
+
+  it("unions canonical names with prefix-discovered ones, without duplicates", () => {
+    const env = envWithTokens([
+      "MERCURY_TOKEN_ARIBIA_LLC", // canonical AND enumerable
+      "MERCURY_TOKEN_ARIBIA", // ad-hoc inline name, prefix only
+    ]);
+    const found = mercuryTokenBindings(env);
+    expect(found).toContain("MERCURY_TOKEN_ARIBIA_LLC");
+    expect(found).toContain("MERCURY_TOKEN_ARIBIA");
+    expect(new Set(found).size).toBe(found.length);
+  });
+
   it("maps binding names to Mercury org slugs", () => {
     expect(bindingToSlug("MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO")).toBe(
       "aribia-llc-city-studio",

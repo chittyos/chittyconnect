@@ -43,6 +43,30 @@ const DEFAULT_INTERVAL_DAYS = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * The canonical per-entity token bindings, declared in wrangler.jsonc as
+ * secrets_store_secrets against the ChittySecrets store.
+ *
+ * This list is NOT redundant with the prefix scan below. A Secrets Store binding
+ * is not guaranteed to be enumerable via Object.keys(env) — chittyagent-finance
+ * documents exactly that, which is why it carries its own MERCURY_BINDING_NAMES
+ * array. If the sweep relied on enumeration alone and that premise holds in
+ * production, it would discover zero tokens every hour, ping nothing, and report
+ * it only through a log line on a Worker with observability disabled.
+ *
+ * Named lookup does not depend on enumerability, so the two mechanisms together
+ * are correct whichever way the runtime behaves.
+ */
+const CANONICAL_TOKEN_BINDINGS = [
+  "MERCURY_TOKEN_ARIBIA_LLC",
+  "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO",
+  "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE",
+  "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS",
+  "MERCURY_TOKEN_IT_CAN_BE_LLC",
+  "MERCURY_TOKEN_CHITTY_SERVICES",
+  "MERCURY_TOKEN_JEAN_ARLENE_VENTURING",
+];
+
+/**
  * Binding names that start with MERCURY_TOKEN_ but are not per-entity read tokens.
  * Empty today — MERCURY_WRITE_TOKEN_* and MERCURY_OIDC_* do not share the prefix —
  * but kept explicit so a future MERCURY_TOKEN_SOMETHING_GLOBAL cannot silently
@@ -65,14 +89,30 @@ const NON_ENTITY_BINDINGS = new Set([]);
  */
 export function mercuryTokenBindings(env) {
   const e = env || {};
-  return Object.keys(e)
-    .filter(
-      (k) =>
-        k.startsWith(MERCURY_TOKEN_PREFIX) &&
-        !NON_ENTITY_BINDINGS.has(k) &&
-        e[k] != null,
-    )
-    .sort();
+  const names = [];
+  const seen = new Set();
+
+  // Named lookup first: works whether or not the binding is enumerable.
+  for (const key of CANONICAL_TOKEN_BINDINGS) {
+    if (e[key] != null && !seen.has(key)) {
+      seen.add(key);
+      names.push(key);
+    }
+  }
+
+  // Then anything else carrying the prefix — inline `wrangler secret put` values
+  // and any entity added to the store but not yet added to the list above.
+  const discovered = [];
+  for (const key of Object.keys(e)) {
+    if (!key.startsWith(MERCURY_TOKEN_PREFIX)) continue;
+    if (NON_ENTITY_BINDINGS.has(key) || seen.has(key)) continue;
+    if (e[key] == null) continue;
+    seen.add(key);
+    discovered.push(key);
+  }
+  discovered.sort();
+
+  return names.concat(discovered);
 }
 
 /**
