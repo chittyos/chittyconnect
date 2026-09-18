@@ -182,28 +182,79 @@ export class ChittyOSEcosystem {
    * NO local generation - always calls id.chitty.cc
    */
   async mintChittyID(args) {
-    console.log(`[ChittyID] Minting new ${args.entity} ChittyID...`);
+    // Canonical mint contract — @canon: chittycanon://gov/governance#core-types
+    // Body is { entityType } (CHITTYFOUNDATION/chittyid README "Request a
+    // ChittyID"); callers in this repo historically passed { entity }, which the
+    // service does not read. Accept both and send the canonical name.
+    const entityType = args.entityType ?? args.entity;
+
+    // An absent entityType is DROPPED by JSON.stringify, so the request would
+    // carry no entityType at all. Refuse here rather than find out what the
+    // service does with that: a malformed body was measured returning 200 with
+    // a "T" id, while chittymint's own source rejects an undefined entityType
+    // with { success: false }. Those are different inputs and this guard should
+    // not depend on which path an absent field takes — it fails closed either
+    // way, before the fetch.
+    if (typeof entityType !== "string" || entityType.length === 0) {
+      throw new Error(
+        `ChittyID minting requires an entityType (got ${JSON.stringify(entityType)})`,
+      );
+    }
+
+    console.log(`[ChittyID] Minting new ${entityType} ChittyID...`);
 
     try {
-      const response = await resilientFetch(`${this.baseUrls.chittyid}/v1/mint`, {
+      // Canonical path is /mint. /v1/mint is NOT broken — it 308s here and a
+      // 308 preserves method and body — but it is deprecated (sunset
+      // 2027-05-27), so this is hygiene, not a bug fix.
+      const response = await resilientFetch(`${this.baseUrls.chittyid}/mint`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.env.CHITTY_ID_TOKEN}`,
         },
-        body: JSON.stringify(args),
+        body: JSON.stringify({ ...args, entityType }),
       });
 
-      if (!response.ok) {
-        const error = await response.text();
+      // No `!response.ok` branch: resilientFetch already throws on non-2xx
+      // (src/utils/error-handling.js:325-338), so such a block is unreachable.
+      const result = await response.json();
+
+      // The response field is `chittyId` (camelCase) — captured live from
+      // POST https://id.chitty.cc/mint on 2026-09-17:
+      //   {"success":true,"chittyId":"03-1-USA-4448-P-2609-0-88","components":…}
+      // chittyid's README:61 documents `result.chitty_id`; that README is
+      // STALE and neither `chitty_id` nor `id` appears in the live response.
+      // Verify against the service, not the doc. Reading `id` here
+      // yielded undefined on every call, and because this returned it instead
+      // of throwing, callers went on to build ChittyDNA and ChittyAuth requests
+      // with the literal string "undefined" as the ChittyID — producing a 404
+      // cascade logged as "non-critical" roughly once a second in production.
+      // The snake_case and `id` arms are defensive only — neither is emitted
+      // by id.chitty.cc today.
+      const chittyId = result.chittyId ?? result.chitty_id ?? result.id;
+
+      // Fail closed. A 2xx that carries no ChittyID is a failed mint, and
+      // returning undefined converts it into a silent, cascading one.
+      if (typeof chittyId !== "string" || chittyId.length === 0) {
+        // The failure path is HTTP 200 carrying {success:false, error}.
+        // Verified live: {"entityType":"PEO"} -> 200
+        //   {"success":false,"error":"Invalid entityType: \"peo\". Must be one
+        //    of: person, place, thing, event, authority", ...}
+        // resilientFetch cannot catch that — 200 is ok — so this throw is the
+        // only thing between an error envelope and another undefined cascade.
+        // Surface `error` itself: naming the field while hiding its contents
+        // tells the next person an answer exists and withholds it.
+        const detail = result?.error
+          ? `: ${result.error}`
+          : ` (fields: ${Object.keys(result || {}).sort().join(", ") || "none"})`;
         throw new Error(
-          `ChittyID minting failed: ${response.status} - ${error}`,
+          `ChittyID minting returned ${response.status} without a chittyId${detail}`,
         );
       }
 
-      const result = await response.json();
-      console.log(`[ChittyID] Minted: ${result.id}`);
-      return result.id;
+      console.log(`[ChittyID] Minted: ${chittyId}`);
+      return chittyId;
     } catch (error) {
       console.error(`[ChittyID] Minting error:`, error);
       throw error;
