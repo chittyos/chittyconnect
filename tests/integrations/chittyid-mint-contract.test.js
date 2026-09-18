@@ -46,8 +46,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ChittyOSEcosystem } from "../../src/integrations/chittyos-ecosystem.js";
 
 /**
- * VERBATIM live response from POST https://id.chitty.cc/mint with
- * {"entityType":"P"}, captured 2026-09-17. The earlier revision of this file
+ * Captured from POST https://id.chitty.cc/mint with {"entityType":"P"} on
+ * 2026-09-17. `mintProof`, `trust`, `geo` and `drand` are elided to {} because
+ * nothing reads them; every retained field is byte-for-byte from the wire,
+ * types included — `components.trustLevel` is the STRING "0", not the number 0,
+ * and `certificateStatus` is an object, not a status string.
+ *
+ * Both of those were wrong in earlier revisions of this file, inside a block
+ * headed "VERBATIM". A trim you declare is evidence; a trim you call verbatim
+ * is an over-claim, and this one took three rounds to stop making. The earlier revision of this file
  * invented a `{ chitty_id: ... }` fixture from chittyid's README:61 — a shape
  * the service has NEVER emitted — so every assertion measured agreement
  * between two artifacts written in the same pass, and the suite stayed green
@@ -65,7 +72,7 @@ const LIVE_MINT_RESPONSE = Object.freeze({
     region: "1",
     sequential: "4448",
     yearMonth: "2609",
-    trustLevel: 0,
+    trustLevel: "0",
     checksum: "88",
   }),
   mintProof: Object.freeze({}),
@@ -162,7 +169,7 @@ describe("ChittyID mint contract", () => {
   // ---- THE regression: a 2xx carrying no ChittyID ------------------------
 
   it("THROWS on a 200 that carries no chittyId, instead of returning undefined", async () => {
-    // Exactly the production shape: response.ok true, no chitty_id field.
+    // Exactly the production shape: response.ok true, no chittyId field.
     stubFetch(200, { ok: true, status: "queued" });
 
     await expect(ecosystem().mintChittyID({ entity: "P" })).rejects.toThrow(

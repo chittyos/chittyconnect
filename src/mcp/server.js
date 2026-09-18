@@ -57,24 +57,27 @@ mcp.get("/tools/list", (c) => {
         inputSchema: {
           type: "object",
           properties: {
-            // @canon: chittycanon://gov/governance#core-types
-            // The five core types are exactly P/L/T/E/A. The previous enum
-            // (PEO, PLACE, PROP, EVNT, AUTH, INFO, FACT, CONTEXT, ACTOR) is
-            // non-canonical, and id.chitty.cc rejects 7 of those 9 values with
-            // a 200 error envelope — so most schema-valid inputs could never
-            // mint anything.
-            entityType: {
+            entity: {
               type: "string",
-              enum: ["P", "L", "T", "E", "A"],
-              description:
-                "Entity type: P=Person, L=Location, T=Thing, E=Event, A=Authority",
+              enum: [
+                "PEO",
+                "PLACE",
+                "PROP",
+                "EVNT",
+                "AUTH",
+                "INFO",
+                "FACT",
+                "CONTEXT",
+                "ACTOR",
+              ],
+              description: "Entity type for ChittyID",
             },
             metadata: {
               type: "object",
               description: "Contextual metadata",
             },
           },
-          required: ["entityType"],
+          required: ["entity"],
         },
       },
       {
@@ -640,46 +643,16 @@ mcp.get("/resources/read", async (c) => {
  * Tool implementations
  */
 
-const CANONICAL_ENTITY_TYPES = Object.freeze(["P", "L", "T", "E", "A"]);
-
 async function mintChittyID(args, env) {
-  // id.chitty.cc reads `entityType` and IGNORES `entity`, defaulting to "T".
-  // Verified live 2026-09-17: {"entity":"P"} -> T, {} -> T, {"entityType":"P"} -> P.
-  // @canon: chittycanon://gov/governance#core-types
-  const entityType = args.entityType ?? args.entity;
-
-  // Reject rather than forward. An absent entityType is dropped by
-  // JSON.stringify, and the service then silently defaults to "T" — the exact
-  // bug this change exists to kill. An invalid one comes back as a 200 error
-  // envelope, which would otherwise be returned to the MCP client as success.
-  if (!CANONICAL_ENTITY_TYPES.includes(entityType)) {
-    throw new Error(
-      `Invalid entityType ${JSON.stringify(entityType)} — must be one of ` +
-        CANONICAL_ENTITY_TYPES.join(", "),
-    );
-  }
-
-  const response = await fetch("https://id.chitty.cc/mint", {
+  const response = await fetch("https://id.chitty.cc/v1/mint", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.CHITTY_ID_TOKEN}`,
     },
-    body: JSON.stringify({ ...args, entityType }),
+    body: JSON.stringify(args),
   });
-
-  const result = await response.json();
-
-  // The failure path is HTTP 200 with {success:false, error}. Verified live:
-  //   {"entityType":"PEO"} -> 200 {"success":false,"error":"Invalid entityType…"}
-  // Returning that verbatim hands the MCP client an error dressed as a result.
-  if (result?.success === false || !result?.chittyId) {
-    throw new Error(
-      `ChittyID minting failed: ${result?.error ?? "no chittyId in response"}`,
-    );
-  }
-
-  return result;
+  return await response.json();
 }
 
 async function analyzeContext(args, env) {
