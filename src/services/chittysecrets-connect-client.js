@@ -227,9 +227,11 @@ export class OnePasswordConnectClient {
       const value = data.value;
 
       if (!value) {
-        throw new Error(
+        const err = new Error(
           `ChittySecrets returned no value for secret ${secretName}`,
         );
+        err.code = "CREDENTIAL_NOT_FOUND";
+        throw err;
       }
 
       console.log(
