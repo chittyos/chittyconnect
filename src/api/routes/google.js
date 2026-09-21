@@ -56,6 +56,13 @@ const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
  * Default is CLOSED. An unset or empty allowlist authorizes nobody, and an
  * unauthorized caller gets a byte-identical request to the pre-change behaviour.
  *
+ * NOTE ON `type`: an earlier revision rejected every record carrying a `type`,
+ * on the stated premise that only fabricated principals have one. That premise was
+ * false — production API_KEYS holds hand-written service records (`type: "service"`)
+ * that never passed through generateAPIKey, including chittystorage, a documented
+ * consumer of this proxy. The gate could therefore never open for the callers it
+ * exists for. The test is now against the fabricated type names themselves.
+ *
  * files.export takes only `mimeType` and is deliberately left untouched.
  * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list
  * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get
@@ -66,16 +73,42 @@ function parseAllowlist(raw) {
 }
 
 /**
+ * Principal `type` values that middleware synthesises for a caller that has no
+ * API_KEYS record of its own. A record is only trusted for this grant if its type
+ * is NOT one of these — a `type` that is merely unfamiliar (e.g. the hand-written
+ * `service` records in production) is a real key record, not a synthetic principal.
+ *
+ * Enumerated from every `c.set("apiKey", …)` in src/ rather than assumed:
+ *   api/middleware/auth.js:79   → "public"            (policy-bundle, unauthenticated)
+ *   api/middleware/auth.js:86   → "cloudflare-access" (context-sync via Access headers)
+ *   api/middleware/auth.js:121  → "oauth"             (MCP OAuth bearer token)
+ *   auth/secrets-portal-guard.js:147 → "cloudflare-access"
+ *   auth/github-oidc.js:215     → "oidc"              (GitHub Actions workflow identity)
+ * and two that set no type at all: auth.js:165 and middleware/mcp-auth.js:107, both
+ * of which pass through a real KV record.
+ *
+ * Only auth.js's three can currently reach this route — router.js:94 applies
+ * `authenticate` to all of /api/*, and googleRoutes mounts at router.js:163, so the
+ * portal guard and the OIDC middleware never run here. "oidc" is listed anyway:
+ * which middleware runs on which path is not a property of this file, and the bug
+ * this replaces was caused by exactly that kind of unchecked assumption.
+ */
+const FABRICATED_PRINCIPAL_TYPES = new Set([
+  "public",
+  "cloudflare-access",
+  "oauth",
+  "oidc",
+]);
+
+/**
  * Is this caller authorized to reach shared-drive content?
  *
- * Requires a real KV-backed API key record: auth.js sets `type` only on the
- * principals it fabricates itself (public / cloudflare-access / oauth), and
- * generateAPIKey never sets it. Excluding them keeps OAuth users who happen to
- * share a userId, and every synthetic principal, out of this grant.
+ * Requires a real API_KEYS record (not a synthetic principal) whose `userId` —
+ * the one identity field a caller cannot choose — is on the configured allowlist.
  */
 function sharedDriveAuthorized(c) {
   const keyInfo = c.get("apiKey");
-  if (!keyInfo || keyInfo.type) return false;
+  if (!keyInfo || FABRICATED_PRINCIPAL_TYPES.has(keyInfo.type)) return false;
 
   const { userId } = keyInfo;
   if (typeof userId !== "string" || !userId) return false;
