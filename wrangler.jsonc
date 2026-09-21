@@ -97,6 +97,11 @@
     "dev": {
       "vars": {
         "ENVIRONMENT": "development",
+        // Principals (API-key record `userId`) authorized to reach Google shared
+        // drives through /gdrive/*. Comma-separated; empty authorizes nobody.
+        // A principal identifier, not a secret. Deploy-time only: the grant must
+        // not live anywhere a caller can write (see routes/google.js).
+        "GDRIVE_SHARED_DRIVE_USER_IDS": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -209,6 +214,11 @@
       ],
       "vars": {
         "ENVIRONMENT": "staging",
+        // Principals (API-key record `userId`) authorized to reach Google shared
+        // drives through /gdrive/*. Comma-separated; empty authorizes nobody.
+        // A principal identifier, not a secret. Deploy-time only: the grant must
+        // not live anywhere a caller can write (see routes/google.js).
+        "GDRIVE_SHARED_DRIVE_USER_IDS": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
@@ -355,6 +365,11 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
+        // Principals (API-key record `userId`) authorized to reach Google shared
+        // drives through /gdrive/*. Comma-separated; empty authorizes nobody.
+        // A principal identifier, not a secret. Deploy-time only: the grant must
+        // not live anywhere a caller can write (see routes/google.js).
+        "GDRIVE_SHARED_DRIVE_USER_IDS": "",
         "MERCURY_EGRESS_PROFILE": "direct",
         "MERCURY_EGRESS_URL": "",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",

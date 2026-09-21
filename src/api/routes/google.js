@@ -7,7 +7,7 @@
  *   2. chittysecrets broker (integrations/google/access_token)
  *   3. GOOGLE_ACCESS_TOKEN env var (fallback)
  *
- * Supports: Drive Files API, Gmail Messages API
+ * Supports: Drive Files API (shared drives for authorized callers), Gmail Messages API
  * Consumers: chittystorage (source inventory), chittyevidence-db (intake)
  *
  * @canonical-uri chittycanon://core/services/chittyconnect#google-proxy
@@ -22,6 +22,74 @@ const googleRoutes = new Hono();
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
+
+/**
+ * Shared-drive support — gated authorization.
+ *
+ * Drive v3 omits shared-drive content unless the caller declares it can handle it.
+ * `supportsAllDrives` is an app-capability declaration accepted by files.list and
+ * files.get; `includeItemsFromAllDrives` is a results filter accepted by files.list
+ * only ("If not present or set to false, then shared drive items are not returned"
+ * — https://developers.google.com/workspace/drive/api/guides/enable-shareddrives).
+ *
+ * Without them a listing of a shared-drive folder returns HTTP 200 with zero files —
+ * indistinguishable from an empty folder — and a metadata/content read of a file that
+ * lives on a shared drive 404s.
+ *
+ * WHY THIS IS GATED RATHER THAN ALWAYS-ON:
+ * `authenticate` (src/api/middleware/auth.js) checks only that the key exists in
+ * API_KEYS KV and that `status === "active"`. There is no scope enforcement and no
+ * per-route authorization — `scopes` is captured at auth.js:124 for OAuth tokens and
+ * never read. Sending these parameters unconditionally would let any holder of any
+ * active API key enumerate and read every shared drive the service account can see,
+ * including litigation evidence. That is a privilege expansion on privileged material.
+ *
+ * WHY THE GRANT IS NOT A FIELD ON THE KEY RECORD:
+ * `POST /api/auth/keys` (router.js:194 → routes/auth-keys.js) mints a key with
+ * `scopes` and `name` taken verbatim from the request body, with no allowlist. Any
+ * grant carried in those fields is self-servable in one request. `userId` is the only
+ * identity on a KV key record a caller cannot choose: it is inherited from the minting
+ * key, never read from the body. The allowlist therefore lives in worker config
+ * (GDRIVE_SHARED_DRIVE_USER_IDS, a deploy-time var — a principal identifier, not a
+ * secret) and is matched against `userId` alone.
+ *
+ * Default is CLOSED. An unset or empty allowlist authorizes nobody, and an
+ * unauthorized caller gets a byte-identical request to the pre-change behaviour.
+ *
+ * files.export takes only `mimeType` and is deliberately left untouched.
+ * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list
+ * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get
+ */
+function parseAllowlist(raw) {
+  if (typeof raw !== "string") return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Is this caller authorized to reach shared-drive content?
+ *
+ * Requires a real KV-backed API key record: auth.js sets `type` only on the
+ * principals it fabricates itself (public / cloudflare-access / oauth), and
+ * generateAPIKey never sets it. Excluding them keeps OAuth users who happen to
+ * share a userId, and every synthetic principal, out of this grant.
+ */
+function sharedDriveAuthorized(c) {
+  const keyInfo = c.get("apiKey");
+  if (!keyInfo || keyInfo.type) return false;
+
+  const { userId } = keyInfo;
+  if (typeof userId !== "string" || !userId) return false;
+
+  return parseAllowlist(c.env?.GDRIVE_SHARED_DRIVE_USER_IDS).includes(userId);
+}
+
+/** Add shared-drive parameters, but only for an authorized caller. */
+function withAllDrives(c, params, { includeItems = false } = {}) {
+  if (!sharedDriveAuthorized(c)) return params;
+  params.set("supportsAllDrives", "true");
+  if (includeItems) params.set("includeItemsFromAllDrives", "true");
+  return params;
+}
 
 /**
  * Get a valid Google access token — tries KV rotation cache first (fastest),
@@ -83,17 +151,28 @@ async function googleProxy(env, googleUrl, opts = {}) {
 
 /**
  * GET /gdrive/files
- * List files in Google Drive. Supports query, fields, pageSize, pageToken.
- * Maps directly to https://developers.google.com/drive/api/v3/reference/files/list
+ * List files in Google Drive. Supports q, fields, pageSize, pageToken, and the
+ * optional shared-drive scoping pair corpora/driveId, which are forwarded only for
+ * a caller authorized for shared drives — see sharedDriveAuthorized above.
+ * Maps directly to https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list
  */
 googleRoutes.get("/gdrive/files", async (c) => {
-  const { q, fields, pageSize, pageToken } = c.req.query();
+  const { q, fields, pageSize, pageToken, corpora, driveId } = c.req.query();
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (fields) params.set("fields", fields);
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
+
+  if (sharedDriveAuthorized(c)) {
+    withAllDrives(c, params, { includeItems: true });
+    // Optional: scope a search to one shared drive (corpora=drive requires driveId).
+    // Not needed to see a folder's children, which `q` already scopes. Inside the
+    // gate so an unauthorized request stays byte-identical to pre-change.
+    if (corpora) params.set("corpora", corpora);
+    if (driveId) params.set("driveId", driveId);
+  }
 
   const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`, { scope: "drive" });
   if (!result.ok) return c.json({ error: result.error }, result.status);
@@ -110,6 +189,7 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 
   const params = new URLSearchParams();
   if (fields) params.set("fields", fields);
+  withAllDrives(c, params);
 
   const encodedFileId = encodeURIComponent(fileId);
   const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`, { scope: "drive" });
@@ -130,7 +210,8 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
 
   // First, fetch file metadata to determine mimeType
   const encodedFileId = encodeURIComponent(fileId);
-  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType`, {
+  const metadataParams = withAllDrives(c, new URLSearchParams({ fields: "mimeType" }));
+  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?${metadataParams}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -150,12 +231,14 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
 
   let downloadUrl;
   if (googleNativeTypes.includes(mimeType)) {
-    // Use export endpoint for Google-native files (export as PDF by default)
+    // Use export endpoint for Google-native files (export as PDF by default).
+    // files.export documents only `mimeType`; supportsAllDrives is NOT added here.
     const exportMimeType = encodeURIComponent("application/pdf");
     downloadUrl = `${DRIVE_API}/files/${encodedFileId}/export?mimeType=${exportMimeType}`;
   } else {
-    // Use alt=media for binary-backed files
-    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?alt=media`;
+    // alt=media is files.get, which accepts supportsAllDrives.
+    const mediaParams = withAllDrives(c, new URLSearchParams({ alt: "media" }));
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?${mediaParams}`;
   }
 
   const response = await fetch(downloadUrl, {
