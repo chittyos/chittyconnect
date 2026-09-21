@@ -686,3 +686,117 @@ describe("googleProxy shared error handling", () => {
     expect(res.status).toBe(502);
   });
 });
+// ----------------------------------------------------------------
+// Shared-drive passthrough
+//
+// Drive v3 omits shared-drive content unless the request declares support for it,
+// returning HTTP 200 with zero files — indistinguishable from an empty folder.
+// These assert what ChittyConnect EMITS upstream; they cannot and do not verify
+// Google's behaviour, which needs a live call against a real shared drive.
+// ----------------------------------------------------------------
+
+describe("shared-drive parameters", () => {
+  let env;
+  let originalFetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    env = makeEnv();
+    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  /** Parse the query of the Nth upstream fetch. */
+  function queryOf(callIndex = 0) {
+    const [url] = globalThis.fetch.mock.calls[callIndex];
+    return new URL(url).searchParams;
+  }
+
+  it("files.list declares shared-drive support and includes shared-drive items", async () => {
+    await get("/gdrive/files", env, "q=%27folder%27+in+parents");
+    const params = queryOf();
+    expect(params.get("supportsAllDrives")).toBe("true");
+    expect(params.get("includeItemsFromAllDrives")).toBe("true");
+    // The caller's own params survive alongside them.
+    expect(params.get("q")).toBe("'folder' in parents");
+  });
+
+  it("sets the flags even when the caller passes none of its own", async () => {
+    await get("/gdrive/files", env);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+    expect(queryOf().get("includeItemsFromAllDrives")).toBe("true");
+  });
+
+  it("a caller cannot opt back out of shared-drive visibility", async () => {
+    await get("/gdrive/files", env, "supportsAllDrives=false&includeItemsFromAllDrives=false");
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+    expect(queryOf().get("includeItemsFromAllDrives")).toBe("true");
+  });
+
+  it("forwards corpora and driveId for searches scoped to one shared drive", async () => {
+    await get("/gdrive/files", env, "corpora=drive&driveId=0ABCdef");
+    expect(queryOf().get("corpora")).toBe("drive");
+    expect(queryOf().get("driveId")).toBe("0ABCdef");
+  });
+
+  it("omits corpora and driveId when the caller does not send them", async () => {
+    await get("/gdrive/files", env);
+    expect(queryOf().has("corpora")).toBe(false);
+    expect(queryOf().has("driveId")).toBe(false);
+  });
+
+  it("files.get metadata declares support but sends no list-only filter", async () => {
+    await get("/gdrive/files/abc123", env, "fields=id,name");
+    const params = queryOf();
+    expect(params.get("supportsAllDrives")).toBe("true");
+    // includeItemsFromAllDrives is a files.list parameter; files.get does not accept it.
+    expect(params.has("includeItemsFromAllDrives")).toBe(false);
+  });
+
+  it("the content route's metadata probe declares shared-drive support", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/png" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+
+    await get("/gdrive/files/img-id/content", env);
+    const params = queryOf(0);
+    expect(params.get("supportsAllDrives")).toBe("true");
+    expect(params.get("fields")).toBe("mimeType");
+  });
+
+  it("the alt=media download declares shared-drive support", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/png" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+
+    await get("/gdrive/files/img-id/content", env);
+    const params = queryOf(1);
+    expect(params.get("alt")).toBe("media");
+    expect(params.get("supportsAllDrives")).toBe("true");
+  });
+
+  it("files.export is left alone — it documents only mimeType", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "application/vnd.google-apps.document" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+
+    await get("/gdrive/files/doc-id/content", env);
+    // The metadata probe that precedes the export still declares support.
+    expect(queryOf(0).get("supportsAllDrives")).toBe("true");
+    const exportParams = queryOf(1);
+    expect(exportParams.get("mimeType")).toBe("application/pdf");
+    expect(exportParams.has("supportsAllDrives")).toBe(false);
+  });
+
+  it("Gmail routes are untouched by the Drive parameters", async () => {
+    await get("/email/messages", env, "q=from:nobody");
+    const params = queryOf();
+    expect(params.has("supportsAllDrives")).toBe(false);
+    expect(params.has("includeItemsFromAllDrives")).toBe(false);
+  });
+});

@@ -7,7 +7,7 @@
  *   2. chittysecrets broker (integrations/google/access_token)
  *   3. GOOGLE_ACCESS_TOKEN env var (fallback)
  *
- * Supports: Drive Files API, Gmail Messages API
+ * Supports: Drive Files API (including shared drives), Gmail Messages API
  * Consumers: chittystorage (source inventory), chittyevidence-db (intake)
  *
  * @canonical-uri chittycanon://core/services/chittyconnect#google-proxy
@@ -22,6 +22,31 @@ const googleRoutes = new Hono();
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
+
+/**
+ * Shared-drive support.
+ *
+ * Drive v3 omits shared-drive content unless the caller declares it can handle it.
+ * `supportsAllDrives` is an app-capability declaration accepted by files.list and
+ * files.get; `includeItemsFromAllDrives` is a results filter accepted by files.list
+ * only ("If not present or set to false, then shared drive items are not returned"
+ * — https://developers.google.com/workspace/drive/api/guides/enable-shareddrives).
+ *
+ * Without them a listing of a shared-drive folder returns HTTP 200 with zero files —
+ * indistinguishable from an empty folder — and a metadata/content read of a file that
+ * lives on a shared drive 404s. Both are set unconditionally rather than forwarded from
+ * the caller: they widen what is visible and never narrow it, so no caller can be made
+ * worse off, and no caller can accidentally opt back into the silent-empty failure.
+ *
+ * files.export takes only `mimeType` and is deliberately left untouched.
+ * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list
+ * https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get
+ */
+function withAllDrives(params, { includeItems = false } = {}) {
+  params.set("supportsAllDrives", "true");
+  if (includeItems) params.set("includeItemsFromAllDrives", "true");
+  return params;
+}
 
 /**
  * Get a valid Google access token — tries KV rotation cache first (fastest),
@@ -83,17 +108,25 @@ async function googleProxy(env, googleUrl, opts = {}) {
 
 /**
  * GET /gdrive/files
- * List files in Google Drive. Supports query, fields, pageSize, pageToken.
- * Maps directly to https://developers.google.com/drive/api/v3/reference/files/list
+ * List files in Google Drive. Supports q, fields, pageSize, pageToken, and the
+ * optional shared-drive scoping pair corpora/driveId. Shared-drive support is
+ * always on — see withAllDrives above.
+ * Maps directly to https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list
  */
 googleRoutes.get("/gdrive/files", async (c) => {
-  const { q, fields, pageSize, pageToken } = c.req.query();
+  const { q, fields, pageSize, pageToken, corpora, driveId } = c.req.query();
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (fields) params.set("fields", fields);
   if (pageSize) params.set("pageSize", pageSize);
   if (pageToken) params.set("pageToken", pageToken);
+  // Optional: scope a search to one shared drive (corpora=drive requires driveId).
+  // Not needed to see a folder's children, which `q` already scopes.
+  if (corpora) params.set("corpora", corpora);
+  if (driveId) params.set("driveId", driveId);
+
+  withAllDrives(params, { includeItems: true });
 
   const result = await googleProxy(c.env, `${DRIVE_API}/files?${params.toString()}`, { scope: "drive" });
   if (!result.ok) return c.json({ error: result.error }, result.status);
@@ -110,6 +143,7 @@ googleRoutes.get("/gdrive/files/:fileId", async (c) => {
 
   const params = new URLSearchParams();
   if (fields) params.set("fields", fields);
+  withAllDrives(params);
 
   const encodedFileId = encodeURIComponent(fileId);
   const result = await googleProxy(c.env, `${DRIVE_API}/files/${encodedFileId}?${params.toString()}`, { scope: "drive" });
@@ -130,7 +164,8 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
 
   // First, fetch file metadata to determine mimeType
   const encodedFileId = encodeURIComponent(fileId);
-  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?fields=mimeType`, {
+  const metadataParams = withAllDrives(new URLSearchParams({ fields: "mimeType" }));
+  const metadataResponse = await fetch(`${DRIVE_API}/files/${encodedFileId}?${metadataParams}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -150,12 +185,14 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
 
   let downloadUrl;
   if (googleNativeTypes.includes(mimeType)) {
-    // Use export endpoint for Google-native files (export as PDF by default)
+    // Use export endpoint for Google-native files (export as PDF by default).
+    // files.export documents only `mimeType`; supportsAllDrives is NOT added here.
     const exportMimeType = encodeURIComponent("application/pdf");
     downloadUrl = `${DRIVE_API}/files/${encodedFileId}/export?mimeType=${exportMimeType}`;
   } else {
-    // Use alt=media for binary-backed files
-    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?alt=media`;
+    // alt=media is files.get, which accepts supportsAllDrives.
+    const mediaParams = withAllDrives(new URLSearchParams({ alt: "media" }));
+    downloadUrl = `${DRIVE_API}/files/${encodedFileId}?${mediaParams}`;
   }
 
   const response = await fetch(downloadUrl, {
