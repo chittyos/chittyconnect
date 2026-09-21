@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  pull-requests: read
 
 jobs:
   governance:
@@ -48,23 +50,86 @@ jobs:
             echo "critical=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify required labels for critical changes
+      # Critical changes are gated on AUTOMATED review evidence, not human labels.
+      #
+      # This repository is operated by one person. A required-approval rule cannot be
+      # self-satisfied by a solo operator: the `security-approved` / `docs-approved` /
+      # `access-reviewed` labels this step used to demand were assigned by CODEOWNERS to
+      # @chittyos/security, @chittyos/platform and @chittyos/docs — none of which exist
+      # (the API returns 404 for all three), in an org with exactly one member. The gate
+      # was therefore unsatisfiable except by self-certification, which is not a gate.
+      #
+      # The substitute is the one the development defaults already name: separated
+      # adversarial AI review plus automated checks. Those run on every PR and can
+      # genuinely fail. This step requires them to have PASSED on this exact head SHA
+      # before a critical path may merge.
+      - name: Verify automated review evidence for critical changes
         if: github.event_name == 'pull_request' && steps.changes.outputs.critical == 'true'
         env:
-          EVENT_PATH: ${{ github.event_path }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CRITICAL_FILES: ${{ steps.changes.outputs.critical_files }}
         run: |
-          set -e
-          labels=$(jq -r '.pull_request.labels[].name' "$EVENT_PATH" | tr '\n' ' ')
-          echo "PR labels: $labels"
-          missing=0
-          need=(security-approved docs-approved access-reviewed)
-          for l in "${need[@]}"; do
-            echo "$labels" | grep -qw "$l" || { echo "Missing required label: $l"; missing=1; }
+          set -euo pipefail
+
+          echo "Critical paths in this PR:"
+          echo "$CRITICAL_FILES"
+          echo
+
+          # Automated reviewers that must pass. Each is a real check that can fail;
+          # none can be satisfied by the author asserting something about themselves.
+          required=("Adversarial Diff Review" "Security Scan" "CodeQL")
+
+          # These run concurrently with this job, so poll rather than racing them.
+          # Bounded: ~15 min, then fail. A gate that waits forever is not a gate.
+          deadline=$(( SECONDS + 900 ))
+
+          while :; do
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs" \
+                     --paginate -q '.check_runs[] | "\(.name)\t\(.status)\t\(.conclusion // "")"' \
+                   || echo "")
+
+            pending=0
+            failed=0
+            missing=0
+
+            for name in "${required[@]}"; do
+              line=$(printf '%s\n' "$runs" | awk -F'\t' -v n="$name" '$1 == n {print; exit}')
+              if [ -z "$line" ]; then
+                echo "  $name: not reported yet"
+                missing=1
+                continue
+              fi
+              status=$(printf '%s' "$line" | cut -f2)
+              concl=$(printf '%s' "$line" | cut -f3)
+              if [ "$status" != "completed" ]; then
+                echo "  $name: $status"
+                pending=1
+              elif [ "$concl" = "success" ] || [ "$concl" = "neutral" ] || [ "$concl" = "skipped" ]; then
+                echo "  $name: $concl"
+              else
+                echo "::error::$name concluded '$concl' — a critical change cannot merge over a failed automated review."
+                failed=1
+              fi
+            done
+
+            if [ "$failed" -ne 0 ]; then
+              exit 1
+            fi
+            if [ "$pending" -eq 0 ] && [ "$missing" -eq 0 ]; then
+              echo
+              echo "All required automated reviews passed on ${HEAD_SHA}."
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for automated review evidence on ${HEAD_SHA}."
+              echo "::error::A critical change must not merge without it. Re-run the reviewers, or"
+              echo "::error::if a required reviewer no longer exists, update 'required' in this step"
+              echo "::error::deliberately rather than removing the gate."
+              exit 1
+            fi
+            sleep 20
           done
-          if [ $missing -ne 0 ]; then
-            echo "Add required labels before merge." >&2
-            exit 1
-          fi
 
       - name: Validate Authority service entries against schema (per entity_type)
         run: |
