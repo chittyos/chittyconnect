@@ -985,6 +985,51 @@
         }
       }
     },
+    "/api/registry/register": {
+      "post": {
+        "summary": "Register a service/entity with ChittyOS",
+        "description": "Mandated registry-write broker per the system-wide sensitive-intent contract. Validates the entity envelope (P/L/T/E/A) against the canonical contract, forwards to register.chitty.cc, audits the attempt, and returns the downstream result (including any minted ChittyID) faithfully.",
+        "operationId": "registerEntity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entity_type": {
+                    "type": "string",
+                    "enum": ["P", "L", "T", "E", "A"]
+                  },
+                  "subtype": { "type": "string" },
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "metadata": { "type": "object" }
+                },
+                "required": ["entity_type", "name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registration accepted; downstream chittyregister response returned verbatim, including minted chitty_id."
+          },
+          "202": {
+            "description": "Pending auth handoff (P/natural, P/legal)."
+          },
+          "400": {
+            "description": "Broker validation failed (entity envelope) or chittyregister validation failed."
+          },
+          "412": {
+            "description": "Proof-of-control failed."
+          },
+          "502": {
+            "description": "register.chitty.cc unreachable."
+          }
+        }
+      }
+    },
     "/api/services/status": {
       "get": {
         "summary": "Check ChittyOS Services Status",
@@ -1113,11 +1158,9 @@
     "/api/v1/identity/{chittyId}/policy-bundle": {
       "get": {
         "summary": "Get Identity Policy Bundle",
-        "description": "Return the system-wide governance policy bundle keyed by ChittyID so the governance contract travels with the identity across any channel (Claude, Desktop, Mobile, web, ChatGPT). Public, non-secret governance \u2014 no authentication required. Supports conditional requests via the ETag header (derived from the bundle's content hash): send a matching If-None-Match to receive 304 Not Modified.",
+        "description": "Return the system-wide governance policy bundle keyed by ChittyID so the governance contract travels with the identity across any channel (Claude, Desktop, Mobile, web, ChatGPT). Public, non-secret governance — no authentication required. Supports conditional requests via the ETag header (derived from the bundle's content hash): send a matching If-None-Match to receive 304 Not Modified.",
         "operationId": "getIdentityPolicyBundle",
-        "tags": [
-          "Identity"
-        ],
+        "tags": ["Identity"],
         "security": [],
         "parameters": [
           {
@@ -1125,18 +1168,14 @@
             "in": "path",
             "required": true,
             "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "If-None-Match",
             "in": "header",
             "required": false,
             "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
@@ -1145,15 +1184,11 @@
             "headers": {
               "ETag": {
                 "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string" }
               },
               "Cache-Control": {
                 "description": "public, max-age=300, must-revalidate",
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string" }
               }
             },
             "content": {
@@ -1161,33 +1196,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "chittyId": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string",
-                      "example": "v1"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "example": "system-wide"
-                    },
-                    "sha256": {
-                      "type": "string",
-                      "description": "SHA-256 of the bundle file contents"
-                    },
+                    "chittyId": { "type": "string" },
+                    "version": { "type": "string", "example": "v1" },
+                    "scope": { "type": "string", "example": "system-wide" },
+                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" },
                     "bundle": {
                       "type": "object",
                       "description": "Map of bundle file keys to { name, content }.",
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "content": {
-                            "type": "string"
-                          }
+                          "name": { "type": "string" },
+                          "content": { "type": "string" }
                         }
                       }
                     }
@@ -1197,13 +1217,11 @@
             }
           },
           "304": {
-            "description": "Not Modified \u2014 the supplied If-None-Match matches the current bundle ETag. No body is returned; the ETag header is echoed.",
+            "description": "Not Modified — the supplied If-None-Match matches the current bundle ETag. No body is returned; the ETag header is echoed.",
             "headers": {
               "ETag": {
                 "description": "Current bundle ETag (W/\"<sha256>\").",
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string" }
               }
             }
           },
@@ -1214,13 +1232,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "string",
-                      "example": "INVALID_CHITTYID"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
+                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
+                    "message": { "type": "string" }
                   }
                 }
               }
@@ -1232,11 +1245,9 @@
     "/api/v1/identity/{chittyId}/policy-bundle/check": {
       "get": {
         "summary": "Check Identity Policy Bundle Version",
-        "description": "Lightweight version probe for the identity policy bundle. Returns the bundle version and content hash without the full file payload so a client can detect drift cheaply. Public, non-secret governance \u2014 no authentication required. Supports conditional requests via ETag/If-None-Match (304 Not Modified).",
+        "description": "Lightweight version probe for the identity policy bundle. Returns the bundle version and content hash without the full file payload so a client can detect drift cheaply. Public, non-secret governance — no authentication required. Supports conditional requests via ETag/If-None-Match (304 Not Modified).",
         "operationId": "checkIdentityPolicyBundle",
-        "tags": [
-          "Identity"
-        ],
+        "tags": ["Identity"],
         "security": [],
         "parameters": [
           {
@@ -1244,18 +1255,14 @@
             "in": "path",
             "required": true,
             "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "If-None-Match",
             "in": "header",
             "required": false,
             "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
@@ -1264,9 +1271,7 @@
             "headers": {
               "ETag": {
                 "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string" }
               }
             },
             "content": {
@@ -1274,30 +1279,20 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "chittyId": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string",
-                      "example": "v1"
-                    },
-                    "sha256": {
-                      "type": "string",
-                      "description": "SHA-256 of the bundle file contents"
-                    }
+                    "chittyId": { "type": "string" },
+                    "version": { "type": "string", "example": "v1" },
+                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" }
                   }
                 }
               }
             }
           },
           "304": {
-            "description": "Not Modified \u2014 the supplied If-None-Match matches the current bundle ETag.",
+            "description": "Not Modified — the supplied If-None-Match matches the current bundle ETag.",
             "headers": {
               "ETag": {
                 "description": "Current bundle ETag (W/\"<sha256>\").",
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string" }
               }
             }
           },
@@ -1308,13 +1303,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "string",
-                      "example": "INVALID_CHITTYID"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
+                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
+                    "message": { "type": "string" }
                   }
                 }
               }
@@ -1328,9 +1318,7 @@
         "summary": "Provision Tenant Database",
         "description": "Provision an isolated Neon database project for a tenant. Creates physical data isolation with base migrations for evidence storage and client data.",
         "operationId": "provisionTenant",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "requestBody": {
           "required": true,
           "content": {
@@ -1338,22 +1326,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "tenantId": {
-                    "type": "string",
-                    "description": "Unique tenant identifier (ChittyID, org slug, or case ID)"
-                  },
-                  "region": {
-                    "type": "string",
-                    "description": "Neon region (default: aws-us-east-2)"
-                  },
-                  "pgVersion": {
-                    "type": "string",
-                    "description": "PostgreSQL version (default: 16)"
-                  }
+                  "tenantId": { "type": "string", "description": "Unique tenant identifier (ChittyID, org slug, or case ID)" },
+                  "region": { "type": "string", "description": "Neon region (default: aws-us-east-2)" },
+                  "pgVersion": { "type": "string", "description": "PostgreSQL version (default: 16)" }
                 },
-                "required": [
-                  "tenantId"
-                ]
+                "required": ["tenantId"]
               }
             }
           }
@@ -1366,33 +1343,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": {
-                      "type": "string"
-                    },
-                    "neonProjectId": {
-                      "type": "string"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "migrationsApplied": {
-                      "type": "integer"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "status": { "type": "string" },
+                    "migrationsApplied": { "type": "integer" },
+                    "createdAt": { "type": "string", "format": "date-time" }
                   }
                 }
               }
             }
           },
-          "409": {
-            "description": "Tenant already provisioned"
-          }
+          "409": { "description": "Tenant already provisioned" }
         }
       }
     },
@@ -1401,18 +1363,9 @@
         "summary": "Get Tenant Details",
         "description": "Retrieve details of a provisioned tenant's Neon project including project ID, region, and status.",
         "operationId": "getTenant",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
           "200": {
@@ -1422,55 +1375,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": {
-                      "type": "string"
-                    },
-                    "neonProjectId": {
-                      "type": "string"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "pgVersion": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "status": { "type": "string" },
+                    "pgVersion": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "updatedAt": { "type": "string", "format": "date-time" }
                   }
                 }
               }
             }
           },
-          "404": {
-            "description": "Tenant not found"
-          }
+          "404": { "description": "Tenant not found" }
         }
       },
       "delete": {
         "summary": "Deprovision Tenant",
         "description": "Deprovision a tenant's Neon project. Deletes the project and marks the tenant as deprovisioned. This is destructive.",
         "operationId": "deprovisionTenant",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
           "200": {
@@ -1480,20 +1406,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
+                    "tenantId": { "type": "string" },
+                    "status": { "type": "string" }
                   }
                 }
               }
             }
           },
-          "404": {
-            "description": "Tenant not found"
-          }
+          "404": { "description": "Tenant not found" }
         }
       }
     },
@@ -1502,38 +1422,11 @@
         "summary": "List Tenant Projects",
         "description": "List all provisioned tenant Neon projects with pagination. Connection strings are never exposed.",
         "operationId": "listTenants",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "active",
-                "suspended",
-                "deprovisioned"
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 50
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 0
-            }
-          }
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "suspended", "deprovisioned"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
         ],
         "responses": {
           "200": {
@@ -1543,15 +1436,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenants": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    },
-                    "total": {
-                      "type": "integer"
-                    }
+                    "tenants": { "type": "array", "items": { "type": "object" } },
+                    "total": { "type": "integer" }
                   }
                 }
               }
@@ -1565,18 +1451,9 @@
         "summary": "Export Tenant Project",
         "description": "Export tenant Neon project metadata for portability review. Does not expose connection credentials.",
         "operationId": "exportTenant",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
           "200": {
@@ -1586,30 +1463,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenantId": {
-                      "type": "string"
-                    },
-                    "neonProjectId": {
-                      "type": "string"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "project": {
-                      "type": "object"
-                    },
-                    "exportedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
+                    "tenantId": { "type": "string" },
+                    "neonProjectId": { "type": "string" },
+                    "region": { "type": "string" },
+                    "project": { "type": "object" },
+                    "exportedAt": { "type": "string", "format": "date-time" }
                   }
                 }
               }
             }
           },
-          "404": {
-            "description": "Tenant not found"
-          }
+          "404": { "description": "Tenant not found" }
         }
       }
     },
@@ -1618,18 +1482,9 @@
         "summary": "Replicate Record to Tenant",
         "description": "Replicate a data record to a tenant's isolated Neon database. Supports evidence_documents, evidence_custody_log, document_families, client_documents, and financial_records tables. Column allowlists prevent SQL injection.",
         "operationId": "replicateToTenant",
-        "tags": [
-          "Tenant Management"
-        ],
+        "tags": ["Tenant Management"],
         "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "requestBody": {
           "required": true,
@@ -1638,25 +1493,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "table": {
-                    "type": "string",
-                    "enum": [
-                      "evidence_documents",
-                      "evidence_custody_log",
-                      "document_families",
-                      "client_documents",
-                      "financial_records"
-                    ]
-                  },
-                  "record": {
-                    "type": "object",
-                    "description": "Record data with column names as keys"
-                  }
+                  "table": { "type": "string", "enum": ["evidence_documents", "evidence_custody_log", "document_families", "client_documents", "financial_records"] },
+                  "record": { "type": "object", "description": "Record data with column names as keys" }
                 },
-                "required": [
-                  "table",
-                  "record"
-                ]
+                "required": ["table", "record"]
               }
             }
           }
@@ -1669,84 +1509,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "replicated": {
-                      "type": "boolean"
-                    },
-                    "table": {
-                      "type": "string"
-                    },
-                    "recordId": {
-                      "type": "string"
-                    },
-                    "layer": {
-                      "type": "string"
-                    }
+                    "replicated": { "type": "boolean" },
+                    "table": { "type": "string" },
+                    "recordId": { "type": "string" },
+                    "layer": { "type": "string" }
                   }
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/registry/register": {
-      "post": {
-        "summary": "Register a service/entity with ChittyOS",
-        "description": "Mandated registry-write broker per the system-wide sensitive-intent contract. Validates the entity envelope (P/L/T/E/A) against the canonical contract, forwards to register.chitty.cc, audits the attempt, and returns the downstream result (including any minted ChittyID) faithfully.",
-        "operationId": "registerEntity",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "entity_type": {
-                    "type": "string",
-                    "enum": [
-                      "P",
-                      "L",
-                      "T",
-                      "E",
-                      "A"
-                    ]
-                  },
-                  "subtype": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "metadata": {
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "entity_type",
-                  "name"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Registration accepted; downstream chittyregister response returned verbatim, including minted chitty_id."
-          },
-          "202": {
-            "description": "Pending auth handoff (P/natural, P/legal)."
-          },
-          "400": {
-            "description": "Broker validation failed (entity envelope) or chittyregister validation failed."
-          },
-          "412": {
-            "description": "Proof-of-control failed."
-          },
-          "502": {
-            "description": "register.chitty.cc unreachable."
           }
         }
       }
@@ -2150,7 +1920,7 @@
     },
     {
       "name": "Tenant Management",
-      "description": "Project-per-tenant Neon database isolation \u2014 provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
+      "description": "Project-per-tenant Neon database isolation — provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
     }
   ]
 }
