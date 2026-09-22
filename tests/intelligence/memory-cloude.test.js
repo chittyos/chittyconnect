@@ -84,7 +84,9 @@ describe("MemoryCloude user history", () => {
       (key) => key.startsWith("session:session-idem:id:"),
     );
     expect(rawKeys).toHaveLength(1);
-    expect(rawKeys[0]).toContain(first.interactionId.split("-idem-")[1]);
+    expect(rawKeys[0]).toBe(
+      memory.interactionStorageKey("session-idem", first.interactionId),
+    );
   });
 
   it("supports legacy string interaction index entries", async () => {
