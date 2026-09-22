@@ -21,7 +21,8 @@ import { chittyevidenceRoutes } from "./routes/chittyevidence.js";
 import { registryRoutes } from "./routes/registry.js";
 import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
-import { googleRoutes } from "./routes/google.js";\nimport { githubBrokerRoutes } from "./routes/github-broker.js";
+import { googleRoutes } from "./routes/google.js";
+import { githubBrokerRoutes } from "./routes/github-broker.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
@@ -160,7 +161,8 @@ api.route("/api/registry", registryRoutes);
 api.route("/api/services", servicesRoutes);
 api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
-api.route("/api/google", googleRoutes);\napi.route("/api/github", githubBrokerRoutes);
+api.route("/api/google", googleRoutes);
+api.route("/api/github", githubBrokerRoutes);
 
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
 // Rewrites to /api/thirdparty/mercury/* so the thirdparty handler picks them up.
