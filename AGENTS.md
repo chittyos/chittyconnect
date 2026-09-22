@@ -46,6 +46,6 @@ This guide helps contributors work effectively in this repository. It summarizes
 
 ## Security & Configuration Tips
 
-- Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys\n- GitHub write authority stays in ChittyConnect: service callers use `/api/github/issues`; installation tokens are minted and consumed here and must never be returned to callers.
+- Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys\n- GitHub issue-write authority stays in ChittyConnect behind the private `GitHubIssueBrokerService` WorkerEntrypoint; installation tokens are minted and consumed here and must never be returned to callers.
 - For npm publish, CI loads tokens via GitHub/chittysecrets; local publishes require `--access public` for scoped packages
 
