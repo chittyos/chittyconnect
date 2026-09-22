@@ -985,6 +985,51 @@
         }
       }
     },
+    "/api/registry/register": {
+      "post": {
+        "summary": "Register a service/entity with ChittyOS",
+        "description": "Mandated registry-write broker per the system-wide sensitive-intent contract. Validates the entity envelope (P/L/T/E/A) against the canonical contract, forwards to register.chitty.cc, audits the attempt, and returns the downstream result (including any minted ChittyID) faithfully.",
+        "operationId": "registerEntity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entity_type": {
+                    "type": "string",
+                    "enum": ["P", "L", "T", "E", "A"]
+                  },
+                  "subtype": { "type": "string" },
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "metadata": { "type": "object" }
+                },
+                "required": ["entity_type", "name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registration accepted; downstream chittyregister response returned verbatim, including minted chitty_id."
+          },
+          "202": {
+            "description": "Pending auth handoff (P/natural, P/legal)."
+          },
+          "400": {
+            "description": "Broker validation failed (entity envelope) or chittyregister validation failed."
+          },
+          "412": {
+            "description": "Proof-of-control failed."
+          },
+          "502": {
+            "description": "register.chitty.cc unreachable."
+          }
+        }
+      }
+    },
     "/api/services/status": {
       "get": {
         "summary": "Check ChittyOS Services Status",
