@@ -81,14 +81,10 @@ describe("MemoryCloude user history", () => {
     expect(userIndex.interactions[0].id).toBe(first.interactionId);
 
     const rawKeys = [...kv.store.keys()].filter(
-      (key) => key.startsWith("session:session-idem:") && key !== "session:session-idem:index",
+      (key) => key.startsWith("session:session-idem:id:"),
     );
     expect(rawKeys).toHaveLength(1);
-
-    const idemKeys = [...kv.store.keys()].filter((key) =>
-      key.startsWith("memory-idem:session-idem:"),
-    );
-    expect(idemKeys).toHaveLength(1);
+    expect(rawKeys[0]).toContain(first.interactionId.split("-idem-")[1]);
   });
 
   it("supports legacy string interaction index entries", async () => {
