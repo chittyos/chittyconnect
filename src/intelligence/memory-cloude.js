@@ -55,13 +55,49 @@ export class MemoryCloude {
   /**
    * Persist an interaction to memory
    */
-  async persistInteraction(sessionId, interaction) {
-    const timestamp = Date.now();
-    const interactionId = `${sessionId}-${timestamp}`;
+  async idempotencyDigest(value) {
+    const bytes = new TextEncoder().encode(String(value));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
 
-    // 1. Store raw interaction in KV
+  async persistInteraction(sessionId, interaction, options = {}) {
+    const idempotencyKey =
+      options.idempotencyKey || interaction?.idempotencyKey || interaction?.idempotency_key;
+
+    let timestamp = Date.now();
+    let deduplicated = false;
+    let idempotencyMapKey = null;
+
+    if (idempotencyKey) {
+      const digest = await this.idempotencyDigest(idempotencyKey);
+      idempotencyMapKey = `memory-idem:${sessionId}:${digest}`;
+      const existing = await this.kv.get(idempotencyMapKey, "json");
+      if (existing?.timestamp) {
+        timestamp = existing.timestamp;
+        deduplicated = true;
+      } else {
+        // Write the deterministic timestamp mapping before the side effects. If
+        // the invocation dies part-way through, replay resumes against the same
+        // raw interaction key and AI Search item id instead of minting another.
+        await this.kv.put(
+          idempotencyMapKey,
+          JSON.stringify({ timestamp, sessionId }),
+          { expirationTtl: this.retention.conversations * 86400 },
+        );
+      }
+    }
+
+    const interactionId = `${sessionId}-${timestamp}`;
+    const rawKey = `session:${sessionId}:${timestamp}`;
+    const existingRaw = idempotencyKey ? await this.kv.get(rawKey, "json") : null;
+    if (existingRaw) deduplicated = true;
+
+    // 1. Raw interaction converges on one KV key for an idempotent replay.
     await this.kv.put(
-      `session:${sessionId}:${timestamp}`,
+      rawKey,
       JSON.stringify({
         ...interaction,
         id: interactionId,
@@ -70,28 +106,31 @@ export class MemoryCloude {
       { expirationTtl: this.retention.conversations * 86400 },
     );
 
-    // 2. Generate and store embedding (if Vectorize available)
+    // 2. AI Search upload uses the same interaction id, so replay overwrites /
+    // converges on the same item rather than creating a second semantic record.
     if (this.hasAiSearch) {
       await this.storeEmbedding(interactionId, sessionId, interaction);
     }
 
-    // 3. Extract and persist entities
-    if (interaction.entities) {
-      await this.persistEntities(interaction.entities, sessionId);
+    // Entity occurrence/decision counters predate idempotent transport and are
+    // not intrinsically replay-safe. Run them only on the first raw write.
+    if (!existingRaw) {
+      if (interaction.entities) {
+        await this.persistEntities(interaction.entities, sessionId);
+      }
+      if (interaction.decisions) {
+        await this.persistDecisions(sessionId, interaction.decisions);
+      }
     }
 
-    // 4. Record decisions
-    if (interaction.decisions) {
-      await this.persistDecisions(sessionId, interaction.decisions);
-    }
-
-    // 5. Update session index
+    // Index updates are themselves deduplicated below.
     await this.updateSessionIndex(sessionId, interactionId);
-
-    // 6. Update user index for cross-session history
     await this.updateUserIndex(interaction.userId, sessionId, interactionId);
 
-    console.log(`[MemoryCloude™] Persisted interaction ${interactionId}`);
+    console.log(
+      `[MemoryCloude™] Persisted interaction ${interactionId}${deduplicated ? " (deduplicated)" : ""}`,
+    );
+    return { interactionId, deduplicated };
   }
 
   /**
@@ -231,7 +270,9 @@ export class MemoryCloude {
     const existing = (await this.kv.get(indexKey, "json")) || {
       interactions: [],
     };
-    existing.interactions.push(interactionId);
+    if (!existing.interactions.includes(interactionId)) {
+      existing.interactions.push(interactionId);
+    }
     existing.lastUpdate = Date.now();
 
     await this.kv.put(indexKey, JSON.stringify(existing), {
@@ -253,11 +294,15 @@ export class MemoryCloude {
     if (!existing.sessions.includes(sessionId)) {
       existing.sessions.push(sessionId);
     }
-    existing.interactions.push({
-      id: interactionId,
-      sessionId,
-      timestamp: Date.now(),
-    });
+    if (!existing.interactions.some((entry) =>
+      (typeof entry === "string" ? entry : entry?.id) === interactionId
+    )) {
+      existing.interactions.push({
+        id: interactionId,
+        sessionId,
+        timestamp: Date.now(),
+      });
+    }
     existing.lastUpdate = Date.now();
 
     await this.kv.put(indexKey, JSON.stringify(existing), {
