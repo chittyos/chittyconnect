@@ -205,6 +205,6 @@ export function makeApiSecretsGuard(authenticate) {
       return;
     }
 
-    await authenticate(c, next);
+    return authenticate(c, next);
   };
 }
