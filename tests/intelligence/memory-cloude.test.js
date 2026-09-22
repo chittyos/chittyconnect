@@ -51,6 +51,46 @@ describe("MemoryCloude user history", () => {
     expect(index.interactions.length).toBe(2);
   });
 
+  it("converges repeated idempotency keys on one interaction", async () => {
+    const interaction = {
+      userId: "user-1",
+      type: "memory",
+      content: "queue-safe memory payload",
+    };
+
+    const first = await memory.persistInteraction(
+      "session-idem",
+      interaction,
+      { idempotencyKey: "task-123" },
+    );
+    const second = await memory.persistInteraction(
+      "session-idem",
+      interaction,
+      { idempotencyKey: "task-123" },
+    );
+
+    expect(first.interactionId).toBe(second.interactionId);
+    expect(first.deduplicated).toBe(false);
+    expect(second.deduplicated).toBe(true);
+
+    const sessionIndex = await kv.get("session:session-idem:index", "json");
+    expect(sessionIndex.interactions).toEqual([first.interactionId]);
+
+    const userIndex = await kv.get("user:user-1:index", "json");
+    expect(userIndex.interactions).toHaveLength(1);
+    expect(userIndex.interactions[0].id).toBe(first.interactionId);
+
+    const rawKeys = [...kv.store.keys()].filter(
+      (key) => key.startsWith("session:session-idem:") && key !== "session:session-idem:index",
+    );
+    expect(rawKeys).toHaveLength(1);
+
+    const idemKeys = [...kv.store.keys()].filter((key) =>
+      key.startsWith("memory-idem:session-idem:"),
+    );
+    expect(idemKeys).toHaveLength(1);
+  });
+
   it("supports legacy string interaction index entries", async () => {
     const legacyId = "legacy-session-1700000000000";
     await kv.put(
