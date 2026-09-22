@@ -372,10 +372,8 @@ export class MemoryCloude {
       // Fetch full interaction data
       const contexts = [];
       for (const match of reranked.slice(0, limit)) {
-        const parts = match.id.split("-");
-        const timestamp = parts[parts.length - 1];
         const data = await this.kv.get(
-          `session:${sessionId}:${timestamp}`,
+          this.interactionStorageKey(sessionId, match.id),
           "json",
         );
 
