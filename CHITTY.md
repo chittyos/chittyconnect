@@ -82,7 +82,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 | `/api/chittyid/mint` | POST | Yes | Mint ChittyID |
 | `/api/chittyid/validate` | POST | Yes | Validate ChittyID |
 | `/api/services/status` | GET | Yes | All services status |
-| `/api/thirdparty/notion/query` | POST | Yes | Query Notion |
+| `/api/thirdparty/notion/query` | POST | Yes | Query Notion |\n| `/api/github/issues` | POST | Yes | Broker repository-scoped GitHub App issue creation with replay protection |
 | `/mcp/tools/list` | GET | Yes | MCP tools |
 | `/mcp/tools/call` | POST | Yes | Execute MCP tool |
 
