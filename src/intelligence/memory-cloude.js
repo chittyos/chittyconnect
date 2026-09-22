@@ -63,58 +63,57 @@ export class MemoryCloude {
       .join("");
   }
 
+  interactionStorageKey(sessionId, interactionId) {
+    const marker = `${sessionId}-idem-`;
+    if (interactionId.startsWith(marker)) {
+      return `session:${sessionId}:id:${interactionId.slice(marker.length)}`;
+    }
+
+    // Legacy format: interaction id ended in the millisecond timestamp and the
+    // raw KV key used that timestamp directly.
+    const parts = interactionId.split("-");
+    const timestamp = parts[parts.length - 1];
+    return `session:${sessionId}:${timestamp}`;
+  }
+
   async persistInteraction(sessionId, interaction, options = {}) {
     const idempotencyKey =
       options.idempotencyKey || interaction?.idempotencyKey || interaction?.idempotency_key;
+    const timestamp = Date.now();
 
-    let timestamp = Date.now();
-    let deduplicated = false;
-    let idempotencyMapKey = null;
-
+    let interactionId;
+    let rawKey;
     if (idempotencyKey) {
       const digest = await this.idempotencyDigest(idempotencyKey);
-      idempotencyMapKey = `memory-idem:${sessionId}:${digest}`;
-      const existing = await this.kv.get(idempotencyMapKey, "json");
-      if (existing?.timestamp) {
-        timestamp = existing.timestamp;
-        deduplicated = true;
-      } else {
-        // Write the deterministic timestamp mapping before the side effects. If
-        // the invocation dies part-way through, replay resumes against the same
-        // raw interaction key and AI Search item id instead of minting another.
-        await this.kv.put(
-          idempotencyMapKey,
-          JSON.stringify({ timestamp, sessionId }),
-          { expirationTtl: this.retention.conversations * 86400 },
-        );
-      }
+      interactionId = `${sessionId}-idem-${digest}`;
+      rawKey = `session:${sessionId}:id:${digest}`;
+    } else {
+      interactionId = `${sessionId}-${timestamp}`;
+      rawKey = `session:${sessionId}:${timestamp}`;
     }
 
-    const interactionId = `${sessionId}-${timestamp}`;
-    const rawKey = `session:${sessionId}:${timestamp}`;
     const existingRaw = idempotencyKey ? await this.kv.get(rawKey, "json") : null;
-    if (existingRaw) deduplicated = true;
+    const deduplicated = !!existingRaw;
 
-    // 1. Raw interaction converges on one KV key for an idempotent replay.
-    await this.kv.put(
-      rawKey,
-      JSON.stringify({
-        ...interaction,
-        id: interactionId,
-        timestamp,
-      }),
-      { expirationTtl: this.retention.conversations * 86400 },
-    );
-
-    // 2. AI Search upload uses the same interaction id, so replay overwrites /
-    // converges on the same item rather than creating a second semantic record.
-    if (this.hasAiSearch) {
-      await this.storeEmbedding(interactionId, sessionId, interaction);
-    }
-
-    // Entity occurrence/decision counters predate idempotent transport and are
-    // not intrinsically replay-safe. Run them only on the first raw write.
     if (!existingRaw) {
+      // 1. Deterministic raw key is the replay convergence point.
+      await this.kv.put(
+        rawKey,
+        JSON.stringify({
+          ...interaction,
+          id: interactionId,
+          timestamp,
+        }),
+        { expirationTtl: this.retention.conversations * 86400 },
+      );
+
+      // 2. AI Search item id is deterministic on idempotent writes.
+      if (this.hasAiSearch) {
+        await this.storeEmbedding(interactionId, sessionId, interaction);
+      }
+
+      // These derivative counters are legacy non-transactional behavior. They
+      // execute once for a normal first write; replays do not increment them.
       if (interaction.entities) {
         await this.persistEntities(interaction.entities, sessionId);
       }
@@ -123,7 +122,7 @@ export class MemoryCloude {
       }
     }
 
-    // Index updates are themselves deduplicated below.
+    // Index repair is safe on replay because both methods deduplicate by id.
     await this.updateSessionIndex(sessionId, interactionId);
     await this.updateUserIndex(interaction.userId, sessionId, interactionId);
 
@@ -411,10 +410,8 @@ export class MemoryCloude {
     const keywords = query.toLowerCase().split(/\s+/);
 
     for (const interactionId of index.interactions.slice(-20)) {
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
@@ -528,10 +525,8 @@ export class MemoryCloude {
     const toFetch = index.interactions.slice(-limit);
 
     for (const interactionId of toFetch) {
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
@@ -572,10 +567,8 @@ export class MemoryCloude {
       if (!sessionId || !interactionId) continue;
 
       // Extract timestamp from interaction ID (format: sessionId-timestamp)
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
