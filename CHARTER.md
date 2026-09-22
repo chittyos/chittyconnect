@@ -107,7 +107,13 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | `/api/chittyid/validate` | POST | Validate ChittyID |
 | `/api/services/status` | GET | All services status |
 | `/api/thirdparty/notion/query` | POST | Query Notion |
-| `/api/thirdparty/openai/chat` | POST | OpenAI proxy |\n| `/api/github/issues` | POST | Broker an idempotent GitHub App issue write for an authorized ChittyOS service |
+| `/api/thirdparty/openai/chat` | POST | OpenAI proxy |
+
+### Internal Service-Binding RPC
+
+| Entrypoint | Method | Reachability | Purpose |
+|------------|--------|--------------|---------|
+| `GitHubIssueBrokerService` | `createIssue(input)` | Explicit Cloudflare service binding only; no public HTTP route | Repository-scoped GitHub App issue creation with Durable Object serialization, replay recovery, and non-secret receipts |
 
 ### MCP Endpoints
 | Endpoint | Method | Purpose |
