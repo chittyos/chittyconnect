@@ -127,16 +127,28 @@ intelligence.post("/memory/persist", async (c) => {
 
     const body = await c.req.json();
     const { sessionId, interaction } = body;
+    const idempotencyKey =
+      c.req.header("Idempotency-Key") ||
+      body.idempotencyKey ||
+      interaction?.idempotencyKey ||
+      interaction?.idempotency_key;
 
     if (!sessionId || !interaction) {
       return c.json({ error: "sessionId and interaction required" }, 400);
     }
+    if (idempotencyKey && String(idempotencyKey).length > 256) {
+      return c.json({ error: "Idempotency-Key must be 256 characters or fewer" }, 400);
+    }
 
-    await memory.persistInteraction(sessionId, interaction);
+    const persisted = await memory.persistInteraction(sessionId, interaction, {
+      idempotencyKey,
+    });
 
     return c.json({
       success: true,
       message: "Interaction persisted to MemoryCloude™",
+      interactionId: persisted?.interactionId,
+      deduplicated: persisted?.deduplicated ?? false,
     });
   } catch (error) {
     return c.json(
