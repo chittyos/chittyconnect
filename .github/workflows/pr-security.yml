@@ -53,7 +53,22 @@ jobs:
 
       - name: Check dependencies for vulnerabilities
         run: |
-          npm audit --audit-level=high || echo "⚠️ Vulnerabilities found - review required"
+          set -euo pipefail
+          # This must FAIL, not warn. governance-checks.yml names "Security Scan"
+          # as a reviewer that gates critical changes; a reviewer that cannot say
+          # no is not a reviewer. Both workspaces are audited — dependabot counts
+          # alerts per manifest and ui/ has its own lockfile.
+          fail=0
+          for dir in . ui; do
+            [ -f "$dir/package-lock.json" ] || continue
+            echo "::group::npm audit ($dir)"
+            ( cd "$dir" && npm audit --audit-level=high ) || fail=1
+            echo "::endgroup::"
+          done
+          [ "$fail" -eq 0 ] || {
+            echo "::error::High or critical severity dependency vulnerabilities present."
+            exit 1
+          }
 
   ###########################################################################
   # Adversarial Diff Review (merged from adversarial-review.yml)
@@ -73,17 +88,35 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          set -e
-          diff_output=$(git diff "$PR_BASE_SHA" "$PR_HEAD_SHA" || true)
+          set -euo pipefail
+          # Findings here FAIL the job. This check is named as a required reviewer
+          # by governance-checks.yml, and a reviewer that only warns cannot gate
+          # anything. Lockfiles are excluded from the heuristics: they are machine
+          # generated and produce false positives on integrity/resolved fields.
+          diff_output=$(git diff "$PR_BASE_SHA" "$PR_HEAD_SHA" -- . \
+            ':(exclude)*package-lock.json' ':(exclude)*pnpm-lock.yaml' \
+            ':(exclude)*yarn.lock' || true)
+
+          findings=0
 
           # Check for hardcoded secrets patterns
-          if echo "$diff_output" | grep -iE '(password|secret|token|api_key)\s*[:=]\s*["'"'"'][^"'"'"']{8,}' | grep -v test | grep -v mock; then
-            echo "::warning::Potential hardcoded secret detected in diff"
+          # Anchored to added lines. Scanning the whole diff would fail a PR that
+          # REMOVES an exposed credential — the remediation would block itself.
+          if echo "$diff_output" | grep -iE '^\+.*(password|secret|token|api_key)\s*[:=]\s*["'"'"'][^"'"'"']{8,}' | grep -v test | grep -v mock; then
+            echo "::error::Potential hardcoded secret detected in diff"
+            findings=1
           fi
 
           # Check for eval/exec patterns
           if echo "$diff_output" | grep -E '^\+.*\b(eval|exec|Function)\s*\(' | grep -v test; then
-            echo "::warning::Dynamic code execution pattern detected"
+            echo "::error::Dynamic code execution pattern detected"
+            findings=1
           fi
 
-          echo "Adversarial review complete"
+          [ "$findings" -eq 0 ] || {
+            echo "A finding here blocks the PR. If it is a false positive, narrow the"
+            echo "pattern in this workflow deliberately rather than downgrading it to a warning."
+            exit 1
+          }
+
+          echo "Adversarial review complete - no findings"
