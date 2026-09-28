@@ -100,7 +100,9 @@ jobs:
           findings=0
 
           # Check for hardcoded secrets patterns
-          if echo "$diff_output" | grep -iE '(password|secret|token|api_key)\s*[:=]\s*["'"'"'][^"'"'"']{8,}' | grep -v test | grep -v mock; then
+          # Anchored to added lines. Scanning the whole diff would fail a PR that
+          # REMOVES an exposed credential — the remediation would block itself.
+          if echo "$diff_output" | grep -iE '^\+.*(password|secret|token|api_key)\s*[:=]\s*["'"'"'][^"'"'"']{8,}' | grep -v test | grep -v mock; then
             echo "::error::Potential hardcoded secret detected in diff"
             findings=1
           fi
