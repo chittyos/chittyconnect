@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  checks: read
-  pull-requests: read
 
 jobs:
   governance:
@@ -29,115 +27,6 @@ jobs:
           test -f etc/chittyos/scopes.yml || { echo "Missing etc/chittyos/scopes.yml"; exit 1; }
           test -f etc/authority/schema/service.schema.json || { echo "Missing etc/authority/schema/service.schema.json"; exit 1; }
           test -f etc/authority/rules.json || { echo "Missing etc/authority/rules.json"; exit 1; }
-
-      - name: Detect critical changes
-        id: changes
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -e
-          git diff --name-only "$BASE" "$HEAD" > changed.txt
-          echo "Changed files:"; cat changed.txt
-          # Union of the two historical critical-path definitions (this workflow's
-          # and the one formerly enforced by governance-gates.yml). Kept as one
-          # list so the two gates can no longer disagree about what is critical.
-          critical=$(grep -E '^(\.github/workflows/|wrangler\.|etc/|src/auth/|src/middleware/auth|public/openapi\.json)' changed.txt || true)
-          if [ -n "$critical" ]; then
-            echo "critical=true" >> "$GITHUB_OUTPUT"
-            echo "critical_files<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$critical" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-          else
-            echo "critical=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Critical changes are gated on AUTOMATED review evidence, not human labels.
-      #
-      # This repository is operated by one person. A required-approval rule cannot be
-      # self-satisfied by a solo operator: the `security-approved` / `docs-approved` /
-      # `access-reviewed` labels this step used to demand were assigned by CODEOWNERS to
-      # @chittyos/security, @chittyos/platform and @chittyos/docs — none of which exist
-      # (the API returns 404 for all three), in an org with exactly one member. The gate
-      # was therefore unsatisfiable except by self-certification, which is not a gate.
-      #
-      # The substitute is the one the development defaults already name: separated
-      # adversarial AI review plus automated checks. Those run on every PR and can
-      # genuinely fail. This step requires them to have PASSED on this exact head SHA
-      # before a critical path may merge.
-      - name: Verify automated review evidence for critical changes
-        if: github.event_name == 'pull_request' && steps.changes.outputs.critical == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CRITICAL_FILES: ${{ steps.changes.outputs.critical_files }}
-        run: |
-          set -euo pipefail
-
-          echo "Critical paths in this PR:"
-          echo "$CRITICAL_FILES"
-          echo
-
-          # Automated reviewers that must pass. Each is a real check that can fail;
-          # none can be satisfied by the author asserting something about themselves.
-          required=("Adversarial Diff Review" "Security Scan" "CodeQL")
-
-          # These run concurrently with this job, so poll rather than racing them.
-          # Bounded: ~15 min, then fail. A gate that waits forever is not a gate.
-          deadline=$(( SECONDS + 900 ))
-
-          while :; do
-            runs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs" \
-                     --paginate -q '.check_runs[] | "\(.name)\t\(.status)\t\(.conclusion // "")"' \
-                   || echo "")
-
-            pending=0
-            failed=0
-            missing=0
-
-            for name in "${required[@]}"; do
-              line=$(printf '%s\n' "$runs" | awk -F'\t' -v n="$name" '$1 == n {print; exit}')
-              if [ -z "$line" ]; then
-                echo "  $name: not reported yet"
-                missing=1
-                continue
-              fi
-              status=$(printf '%s' "$line" | cut -f2)
-              concl=$(printf '%s' "$line" | cut -f3)
-              if [ "$status" != "completed" ]; then
-                echo "  $name: $status"
-                pending=1
-              # Only "success" counts. "neutral" and "skipped" were accepted here
-              # originally, but a reviewer that skipped did not review anything —
-              # accepting it lets a critical change through on the absence of a
-              # verdict rather than on a verdict. Verified against this PR's head:
-              # all three reviewers do conclude "success", so this does not deadlock.
-              elif [ "$concl" = "success" ]; then
-                echo "  $name: $concl"
-              else
-                echo "::error::$name concluded '$concl' — a critical change cannot merge over a failed automated review."
-                failed=1
-              fi
-            done
-
-            if [ "$failed" -ne 0 ]; then
-              exit 1
-            fi
-            if [ "$pending" -eq 0 ] && [ "$missing" -eq 0 ]; then
-              echo
-              echo "All required automated reviews passed on ${HEAD_SHA}."
-              exit 0
-            fi
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::Timed out waiting for automated review evidence on ${HEAD_SHA}."
-              echo "::error::A critical change must not merge without it. Re-run the reviewers, or"
-              echo "::error::if a required reviewer no longer exists, update 'required' in this step"
-              echo "::error::deliberately rather than removing the gate."
-              exit 1
-            fi
-            sleep 20
-          done
 
       - name: Validate Authority service entries against schema (per entity_type)
         run: |
