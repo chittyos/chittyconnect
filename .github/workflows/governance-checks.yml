@@ -2,7 +2,7 @@ name: Governance Checks
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -40,7 +40,10 @@ jobs:
           set -e
           git diff --name-only "$BASE" "$HEAD" > changed.txt
           echo "Changed files:"; cat changed.txt
-          critical=$(grep -E '^(\.github/workflows/|wrangler\.toml|etc/chittyos/|src/auth/|public/openapi\.json)' changed.txt || true)
+          # Union of the two historical critical-path definitions (this workflow's
+          # and the one formerly enforced by governance-gates.yml). Kept as one
+          # list so the two gates can no longer disagree about what is critical.
+          critical=$(grep -E '^(\.github/workflows/|wrangler\.|etc/|src/auth/|src/middleware/auth|public/openapi\.json)' changed.txt || true)
           if [ -n "$critical" ]; then
             echo "critical=true" >> "$GITHUB_OUTPUT"
             echo "critical_files<<EOF" >> "$GITHUB_OUTPUT"
