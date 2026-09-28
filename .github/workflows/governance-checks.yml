@@ -108,7 +108,12 @@ jobs:
               if [ "$status" != "completed" ]; then
                 echo "  $name: $status"
                 pending=1
-              elif [ "$concl" = "success" ] || [ "$concl" = "neutral" ] || [ "$concl" = "skipped" ]; then
+              # Only "success" counts. "neutral" and "skipped" were accepted here
+              # originally, but a reviewer that skipped did not review anything —
+              # accepting it lets a critical change through on the absence of a
+              # verdict rather than on a verdict. Verified against this PR's head:
+              # all three reviewers do conclude "success", so this does not deadlock.
+              elif [ "$concl" = "success" ]; then
                 echo "  $name: $concl"
               else
                 echo "::error::$name concluded '$concl' — a critical change cannot merge over a failed automated review."
