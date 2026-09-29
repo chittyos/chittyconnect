@@ -3,7 +3,7 @@
  */
 
 import { Hono } from "hono";
-import { getCredential } from "../../lib/credential-helper.js";
+import { getCredential, resolveBindingValue } from "../../lib/credential-helper.js";
 import { ChronicleEngine } from "../../services/chronicle-engine.js";
 import { validateRegistrationEnvelope } from "../../lib/registry-entity-envelope.js";
 
@@ -26,12 +26,20 @@ const CHITTY_REGISTRY_TOOLS_URL = "https://registry.chitty.cc/api/v1/tools";
 // ChittyConnect.
 const CHITTY_REGISTER_URL = "https://register.chitty.cc/api/v1/register";
 
-function registryAuthHeaders(c) {
+// Upstream calls are bounded. Without this a hung register.chitty.cc holds the
+// broker's request open until the platform kills it, and the caller gets a
+// platform error instead of the broker's own 502 + audit record.
+const UPSTREAM_TIMEOUT_MS = 15_000;
+
+async function registryAuthHeaders(c) {
+  // CHITTY_REGISTRY_TOKEN may be a Cloudflare secrets_store_secrets binding,
+  // which is an object with an async .get() — interpolating it directly yields
+  // "Bearer [object Object]". resolveBindingValue() handles both shapes and
+  // returns undefined for anything that is not a non-empty string.
+  const token = await resolveBindingValue(c.env.CHITTY_REGISTRY_TOKEN);
   // Public endpoint — only attach a bearer token if one is actually
   // configured. Sending "Bearer undefined" is worse than sending nothing.
-  return c.env.CHITTY_REGISTRY_TOKEN
-    ? { Authorization: `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /**
@@ -77,7 +85,7 @@ async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, s
 registryRoutes.get("/services", async (c) => {
   try {
     const response = await fetch(CHITTY_REGISTRY_TOOLS_URL, {
-      headers: registryAuthHeaders(c),
+      headers: await registryAuthHeaders(c),
     });
 
     if (!response.ok) {
@@ -101,7 +109,7 @@ registryRoutes.get("/services/:serviceId", async (c) => {
 
     const response = await fetch(
       `${CHITTY_REGISTRY_TOOLS_URL}/${encodeURIComponent(serviceId)}`,
-      { headers: registryAuthHeaders(c) },
+      { headers: await registryAuthHeaders(c) },
     );
 
     if (!response.ok) {
@@ -180,8 +188,10 @@ registryRoutes.post("/register", async (c) => {
         "Content-Type": "application/json",
         "X-Source-Service": "chittyconnect",
         "X-Canonical-URI": "chittycanon://core/services/connect",
+        ...(await registryAuthHeaders(c)),
       },
       body: JSON.stringify(submission),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const rawBody = await downstreamResponse.text();
     try {
@@ -222,7 +232,17 @@ registryRoutes.post("/register", async (c) => {
   // Surface the downstream status and body faithfully — a 412 (failed
   // proof-of-control) or 400 (validation) from chittyregister is not
   // collapsed into a generic broker error.
-  return c.json({ ...downstreamBody, broker: { audit } }, downstreamResponse.status);
+  // Preserve the downstream body faithfully. Spreading it flattened arrays into
+  // index-keyed objects and erased primitives, empty bodies and null — the
+  // broker must not rewrite what chittyregister said.
+  const isPlainObject =
+    downstreamBody !== null &&
+    typeof downstreamBody === "object" &&
+    !Array.isArray(downstreamBody);
+  const payload = isPlainObject
+    ? { ...downstreamBody, broker: { audit } }
+    : { result: downstreamBody, broker: { audit } };
+  return c.json(payload, downstreamResponse.status);
 });
 
 /**

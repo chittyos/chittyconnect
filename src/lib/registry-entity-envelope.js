@@ -15,7 +15,7 @@
  * This is deliberately a MIRROR, not a fork: chittyregister remains the
  * authority. If the two drift, chittyregister wins — see
  * tests/lib/registry-entity-envelope.test.js for a live drift check against
- * `GET register.chitty.cc/api/v1/requirements`.
+ * `GET register.chitty.cc/api/v1/onboard`.
  *
  * @canon: chittycanon://gov/governance#core-types — all five entity types
  * (Person/Location/Thing/Event/Authority) MUST be present. Never omit
@@ -26,13 +26,17 @@
 export const VALID_ENTITY_TYPES = ["P", "L", "T", "E", "A"];
 
 // Source: chittyregister-worker.js:818-825
-export const VALID_SUBTYPES_BY_ENTITY = {
+// Null-prototype: `entity_type` is untrusted and is used as a key here. With a
+// normal object literal, `VALID_SUBTYPES_BY_ENTITY["__proto__"]` resolves to
+// Object.prototype — truthy, but `.includes` is undefined, so validation threw a
+// TypeError (500) on attacker-controlled input instead of rejecting it (400).
+export const VALID_SUBTYPES_BY_ENTITY = Object.assign(Object.create(null), {
   P: ["natural", "synthetic", "legal", "agent", "subagent", "channel", "user"],
   L: ["domain", "hostname", "node", "region", "venue"],
   T: ["service", "mcp-server", "skill", "plugin", "command", "library", "script", "document", "schema"],
   E: ["registration", "revocation", "certification", "deployment"],
   A: ["certificate", "manifest", "token", "badge"],
-};
+});
 
 // Source: chittyregister-worker.js:864 (AGENT_ENTITY_CLASSES)
 export const AGENT_ENTITY_CLASSES = ["Advocate", "Context", "Coordinator", "Agent"];
@@ -53,17 +57,37 @@ const AGENT_LIKE_SUBTYPES = ["synthetic", "agent", "subagent", "channel"];
  */
 export function validateEntityEnvelope(submission) {
   const errors = [];
-  const entityType = submission?.entity_type || "T";
-  const subtype = submission?.subtype || (entityType === "T" ? "service" : null);
+  const rawEntityType = submission?.entity_type;
+  const rawSubtype = submission?.subtype;
+
+  // Only an ABSENT value defaults. `||` previously treated `""`, `false` and `0`
+  // as omitted, so `entity_type: ""` silently normalised to a valid `T/service`
+  // envelope instead of being rejected.
+  const omitted = (v) => v === undefined || v === null;
+
+  if (!omitted(rawEntityType) && typeof rawEntityType !== "string") {
+    errors.push(`entity_type must be a string (got ${typeof rawEntityType}).`);
+    return { entityType: null, subtype: null, errors };
+  }
+  if (!omitted(rawSubtype) && typeof rawSubtype !== "string") {
+    errors.push(`subtype must be a string (got ${typeof rawSubtype}).`);
+    return { entityType: null, subtype: null, errors };
+  }
+
+  const entityType = omitted(rawEntityType) ? "T" : rawEntityType;
+  const subtype = omitted(rawSubtype) ? (entityType === "T" ? "service" : null) : rawSubtype;
 
   if (!VALID_ENTITY_TYPES.includes(entityType)) {
     errors.push(
       `entity_type must be one of P/L/T/E/A (got '${entityType}'). See chittycanon://gov/governance#core-types`,
     );
   }
-  if (subtype && VALID_SUBTYPES_BY_ENTITY[entityType] && !VALID_SUBTYPES_BY_ENTITY[entityType].includes(subtype)) {
+  const allowedSubtypes = Object.hasOwn(VALID_SUBTYPES_BY_ENTITY, entityType)
+    ? VALID_SUBTYPES_BY_ENTITY[entityType]
+    : null;
+  if (subtype && allowedSubtypes && !allowedSubtypes.includes(subtype)) {
     errors.push(
-      `subtype '${subtype}' not valid for entity_type '${entityType}'. Allowed: ${VALID_SUBTYPES_BY_ENTITY[entityType].join(", ")}`,
+      `subtype '${subtype}' not valid for entity_type '${entityType}'. Allowed: ${allowedSubtypes.join(", ")}`,
     );
   }
   if (AGENT_LIKE_SUBTYPES.includes(subtype) && entityType !== "P") {

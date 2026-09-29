@@ -999,14 +999,51 @@
                 "properties": {
                   "entity_type": {
                     "type": "string",
-                    "enum": ["P", "L", "T", "E", "A"]
+                    "enum": ["P", "L", "T", "E", "A"],
+                    "default": "T",
+                    "description": "Canonical entity type (chittycanon://gov/governance#core-types). Optional \u2014 if omitted it defaults to 'T'. An explicitly empty or non-string value is rejected rather than defaulted."
                   },
-                  "subtype": { "type": "string" },
+                  "subtype": {
+                    "type": "string",
+                    "description": "Optional \u2014 if omitted it defaults to 'service' when entity_type is 'T'. Agent-like subtypes (synthetic, agent, subagent, channel) require entity_type='P'; actors with agency are never Things."
+                  },
                   "name": { "type": "string" },
-                  "description": { "type": "string" },
-                  "metadata": { "type": "object" }
+                  "description": {
+                    "type": "string",
+                    "description": "Required for the T/service profile."
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Required for the T/service profile."
+                  },
+                  "endpoints": {
+                    "type": "object",
+                    "description": "Required for the T/service profile."
+                  },
+                  "schema": {
+                    "type": "object",
+                    "description": "Required for the T/service profile."
+                  },
+                  "triggers": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Required and non-empty for the T/skill profile."
+                  },
+                  "skill_file": {
+                    "type": "string",
+                    "description": "T/skill requires skill_file OR repository."
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "T/skill requires skill_file OR repository."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Non-service profiles require metadata.maintainer."
+                  }
                 },
-                "required": ["entity_type", "name"]
+                "description": "Required fields are conditional on the entity profile. Only 'name' is unconditionally required; the rest are enforced per profile by the broker and, authoritatively, by chittyregister.",
+                "required": ["name"]
               }
             }
           }
