@@ -3,19 +3,133 @@
  */
 
 import { Hono } from "hono";
+import { getCredential, resolveBindingValue } from "../../lib/credential-helper.js";
+import { ChronicleEngine } from "../../services/chronicle-engine.js";
+import { validateRegistrationEnvelope } from "../../lib/registry-entity-envelope.js";
 
 const registryRoutes = new Hono();
 
+// registry.chitty.cc's real KV-backed catalog. `/api/services`,
+// `/api/v1/search`, `/api/v1/categories` and `/api/v1/stats` either 404 or
+// (per operator findings) return hardcoded mock data — only `/api/v1/tools`
+// is backed by the live registry KV. See ~/.claude/CLAUDE.md "Ecosystem
+// Discovery (MANDATORY)".
+const CHITTY_REGISTRY_TOOLS_URL = "https://registry.chitty.cc/api/v1/tools";
+
+// register.chitty.cc is the compliance gateway that actually mints ChittyIDs
+// and writes the registry. `/api/v1/register` is intentionally an OPEN public
+// endpoint (chittyregister-worker.js:52-53) — proof-of-control + validation
+// gate issuance, not a pre-issued token — so no service token is attached
+// here. This broker's value is policy enforcement (fail fast on a malformed
+// envelope) and audit (Chronicle record of the attempt), per the
+// sensitive-intent contract's mandate that registry writes route through
+// ChittyConnect.
+const CHITTY_REGISTER_URL = "https://register.chitty.cc/api/v1/register";
+
+// Upstream calls are bounded. Without this a hung register.chitty.cc holds the
+// broker's request open until the platform kills it, and the caller gets a
+// platform error instead of the broker's own 502 + audit record.
+const UPSTREAM_TIMEOUT_MS = 15_000;
+
+// The audit sink is best-effort and must never outlast the request it records.
+const AUDIT_TIMEOUT_MS = 5_000;
+
+// Floor for cleanup when the audit deadline is already spent — closing a
+// connection should still be attempted, just never unbounded.
+const AUDIT_CLEANUP_FLOOR_MS = 1_000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+async function registryAuthHeaders(c) {
+  // CHITTY_REGISTRY_TOKEN may be a Cloudflare secrets_store_secrets binding,
+  // which is an object with an async .get() — interpolating it directly yields
+  // "Bearer [object Object]". resolveBindingValue() handles both shapes and
+  // returns undefined for anything that is not a non-empty string.
+  const token = await resolveBindingValue(c.env.CHITTY_REGISTRY_TOKEN);
+  // Public endpoint — only attach a bearer token if one is actually
+  // configured. Sending "Bearer undefined" is worse than sending nothing.
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Best-effort audit record via ChittyChronicle. Never throws — a broker that
+ * fails a registration attempt because its own audit sink is down would be
+ * worse than one that registers the attempt as "audit: recorded=false".
+ */
+async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, status, downstreamStatus, error }) {
+  let chronicle;
+  // One deadline covers the audit AND its cleanup. Bounding only the audit left
+  // a stalled db.end() holding the response open past the deadline anyway.
+  const auditDeadline = Date.now() + AUDIT_TIMEOUT_MS;
+  try {
+    const databaseUrl = await getCredential(
+      c.env,
+      "database/neon/chittyos_core",
+      "NEON_DATABASE_URL",
+      "ChittyConnect-RegistryBroker",
+    );
+    if (!databaseUrl) {
+      return { recorded: false, error: "audit database not configured" };
+    }
+    chronicle = new ChronicleEngine(databaseUrl);
+    // Bound the audit. It is best-effort, and a hung sink must not hold the
+    // caller's request open — the engine opens its own Postgres connection and
+    // runs DDL on connect, either of which can stall.
+    const result = await withTimeout(
+      (async () => {
+        await chronicle.connect();
+        return chronicle.logEvent({
+          service: "chittyconnect-registry-broker",
+          action: "registry.register",
+          userId: actor || "unknown",
+          metadata: { entityType, subtype, name, downstreamStatus },
+          triggeredBy: "chittyconnect",
+          status,
+          errorMessage: error,
+        });
+      })(),
+      AUDIT_TIMEOUT_MS,
+      "audit timed out",
+    );
+    return { recorded: true, id: result.id, timestamp: result.timestamp };
+  } catch (auditError) {
+    console.error("[Registry/Register] audit failed:", auditError.message);
+    return { recorded: false, error: auditError.message };
+  } finally {
+    // ChronicleEngine holds a Postgres client. Without this every registration
+    // leaks a connection for the lifetime of the isolate. Cleanup gets whatever
+    // is left of the audit deadline, with a small floor so an already-expired
+    // deadline still attempts a close. If cleanup itself times out we leak one
+    // connection rather than hang the caller — auditing stays best-effort.
+    if (chronicle) {
+      const remaining = Math.max(AUDIT_CLEANUP_FLOOR_MS, auditDeadline - Date.now());
+      try {
+        await withTimeout(chronicle.close(), remaining, "audit cleanup timed out");
+      } catch (cleanupError) {
+        console.error("[Registry/Register] audit cleanup failed:", cleanupError.message);
+      }
+    }
+  }
+}
+
 /**
  * GET /api/registry/services
- * List all registered services
+ * List all registered services (proxies to ChittyRegistry's live KV-backed
+ * catalog at /api/v1/tools — NOT /api/services, which 404s on the deployed
+ * worker).
  */
 registryRoutes.get("/services", async (c) => {
   try {
-    const response = await fetch("https://registry.chitty.cc/api/services", {
-      headers: {
-        Authorization: `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`,
-      },
+    const response = await fetch(CHITTY_REGISTRY_TOOLS_URL, {
+      headers: await registryAuthHeaders(c),
     });
 
     if (!response.ok) {
@@ -31,19 +145,15 @@ registryRoutes.get("/services", async (c) => {
 
 /**
  * GET /api/registry/services/:serviceId
- * Get service details
+ * Get service details (proxies to /api/v1/tools/:chitty_id).
  */
 registryRoutes.get("/services/:serviceId", async (c) => {
   try {
     const serviceId = c.req.param("serviceId");
 
     const response = await fetch(
-      `https://registry.chitty.cc/api/services/${serviceId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${c.env.CHITTY_REGISTRY_TOKEN}`,
-        },
-      },
+      `${CHITTY_REGISTRY_TOOLS_URL}/${encodeURIComponent(serviceId)}`,
+      { headers: await registryAuthHeaders(c) },
     );
 
     if (!response.ok) {
@@ -55,6 +165,128 @@ registryRoutes.get("/services/:serviceId", async (c) => {
   } catch (error) {
     return c.json({ error: error.message }, 500);
   }
+});
+
+/**
+ * POST /api/registry/register
+ *
+ * The mandated registry-write broker route. Per the system-wide
+ * sensitive-intent contract, registry writes / service registration MUST
+ * route through ChittyConnect. Previously ChittyConnect's live surface only
+ * exposed a read-only GET /api/registry/services — there was no write path,
+ * so every registration attempt was policy-blocked with no route to
+ * complete. This closes that deadlock.
+ *
+ * ChittyConnect does NOT become the registrar here (that responsibility
+ * stays with chittyregister — ChittyID mint, cert, chronicle, registry
+ * write). This route is a policy+audit broker: it validates the entity
+ * envelope against the real P/L/T/E/A contract BEFORE forwarding (so
+ * garbage fails fast, at the broker, without spending chittyregister's
+ * 10/hour/IP submission budget), forwards to register.chitty.cc verbatim,
+ * records an audit attempt via ChittyChronicle, and returns the downstream
+ * result — including any minted ChittyID — faithfully. A downstream 4xx
+ * (e.g. failed proof-of-control) is surfaced as-is, not collapsed into a
+ * generic error.
+ *
+ * Body: the same registration envelope chittyregister's
+ * POST /api/v1/register accepts — { entity_type, subtype, name,
+ * description, ...subtype-specific fields }.
+ */
+registryRoutes.post("/register", async (c) => {
+  const apiKey = c.get("apiKey"); // set by the global authenticate middleware
+  let submission;
+  try {
+    submission = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: "Request body must be valid JSON" }, 400);
+  }
+
+  const validation = validateRegistrationEnvelope(submission);
+  if (!validation.valid) {
+    const audit = await auditRegistrationAttempt(c, {
+      actor: apiKey?.name || apiKey?.userId || apiKey?.service,
+      entityType: validation.entityType,
+      subtype: validation.subtype,
+      name: submission?.name,
+      status: "rejected",
+      error: validation.errors.join("; "),
+    });
+    return c.json(
+      {
+        success: false,
+        stage: "broker_validation",
+        errors: validation.errors,
+        hint: "Validated against the canonical P/L/T/E/A contract (chittycanon://gov/governance#core-types) before forwarding to register.chitty.cc.",
+        audit,
+      },
+      400,
+    );
+  }
+
+  let downstreamResponse;
+  let downstreamBody;
+  try {
+    downstreamResponse = await fetch(CHITTY_REGISTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Source-Service": "chittyconnect",
+        "X-Canonical-URI": "chittycanon://core/services/connect",
+        ...(await registryAuthHeaders(c)),
+      },
+      body: JSON.stringify(submission),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+    const rawBody = await downstreamResponse.text();
+    try {
+      downstreamBody = JSON.parse(rawBody);
+    } catch {
+      downstreamBody = { raw: rawBody };
+    }
+  } catch (error) {
+    const audit = await auditRegistrationAttempt(c, {
+      actor: apiKey?.name || apiKey?.userId || apiKey?.service,
+      entityType: validation.entityType,
+      subtype: validation.subtype,
+      name: submission?.name,
+      status: "error",
+      error: error.message,
+    });
+    return c.json(
+      {
+        success: false,
+        stage: "downstream_unreachable",
+        error: `register.chitty.cc unreachable: ${error.message}`,
+        audit,
+      },
+      502,
+    );
+  }
+
+  const audit = await auditRegistrationAttempt(c, {
+    actor: apiKey?.name || apiKey?.userId || apiKey?.service,
+    entityType: validation.entityType,
+    subtype: validation.subtype,
+    name: submission?.name,
+    status: downstreamResponse.ok ? "success" : "rejected",
+    downstreamStatus: downstreamResponse.status,
+    error: downstreamResponse.ok ? undefined : JSON.stringify(downstreamBody).slice(0, 2000),
+  });
+
+  // Surface the downstream status and body faithfully — a 412 (failed
+  // proof-of-control) or 400 (validation) from chittyregister is not
+  // collapsed into a generic broker error.
+  // Preserve the downstream body faithfully. Spreading it flattened arrays into
+  // index-keyed objects and erased primitives, empty bodies and null — the
+  // broker must not rewrite what chittyregister said.
+  const isPlainObject =
+    downstreamBody !== null &&
+    typeof downstreamBody === "object" &&
+    !Array.isArray(downstreamBody);
+  const payload = isPlainObject
+    ? { ...downstreamBody, broker: { audit } }
+    : { result: downstreamBody, broker: { audit } };
+  return c.json(payload, downstreamResponse.status);
 });
 
 /**
