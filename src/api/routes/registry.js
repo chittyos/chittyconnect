@@ -31,6 +31,19 @@ const CHITTY_REGISTER_URL = "https://register.chitty.cc/api/v1/register";
 // platform error instead of the broker's own 502 + audit record.
 const UPSTREAM_TIMEOUT_MS = 15_000;
 
+// The audit sink is best-effort and must never outlast the request it records.
+const AUDIT_TIMEOUT_MS = 5_000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
 async function registryAuthHeaders(c) {
   // CHITTY_REGISTRY_TOKEN may be a Cloudflare secrets_store_secrets binding,
   // which is an object with an async .get() — interpolating it directly yields
@@ -48,6 +61,7 @@ async function registryAuthHeaders(c) {
  * worse than one that registers the attempt as "audit: recorded=false".
  */
 async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, status, downstreamStatus, error }) {
+  let chronicle;
   try {
     const databaseUrl = await getCredential(
       c.env,
@@ -58,21 +72,34 @@ async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, s
     if (!databaseUrl) {
       return { recorded: false, error: "audit database not configured" };
     }
-    const chronicle = new ChronicleEngine(databaseUrl);
-    await chronicle.connect();
-    const result = await chronicle.logEvent({
-      service: "chittyconnect-registry-broker",
-      action: "registry.register",
-      userId: actor || "unknown",
-      metadata: { entityType, subtype, name, downstreamStatus },
-      triggeredBy: "chittyconnect",
-      status,
-      errorMessage: error,
-    });
+    chronicle = new ChronicleEngine(databaseUrl);
+    // Bound the audit. It is best-effort, and a hung sink must not hold the
+    // caller's request open — the engine opens its own Postgres connection and
+    // runs DDL on connect, either of which can stall.
+    const result = await withTimeout(
+      (async () => {
+        await chronicle.connect();
+        return chronicle.logEvent({
+          service: "chittyconnect-registry-broker",
+          action: "registry.register",
+          userId: actor || "unknown",
+          metadata: { entityType, subtype, name, downstreamStatus },
+          triggeredBy: "chittyconnect",
+          status,
+          errorMessage: error,
+        });
+      })(),
+      AUDIT_TIMEOUT_MS,
+      "audit timed out",
+    );
     return { recorded: true, id: result.id, timestamp: result.timestamp };
   } catch (auditError) {
     console.error("[Registry/Register] audit failed:", auditError.message);
     return { recorded: false, error: auditError.message };
+  } finally {
+    // ChronicleEngine holds a Postgres client. Without this every registration
+    // leaks a connection for the lifetime of the isolate.
+    if (chronicle) await chronicle.close();
   }
 }
 
