@@ -686,3 +686,297 @@ describe("googleProxy shared error handling", () => {
     expect(res.status).toBe(502);
   });
 });
+// ----------------------------------------------------------------
+// Shared-drive passthrough — gated authorization
+//
+// Drive v3 omits shared-drive content unless the request declares support for it,
+// returning HTTP 200 with zero files — indistinguishable from an empty folder.
+// Sending the parameters unconditionally would let any holder of any active API key
+// read every shared drive the service account can see, so they are gated on an
+// allowlist of API-key `userId` values held in worker config.
+//
+// These assert what ChittyConnect EMITS upstream. They cannot and do not verify
+// Google's behaviour, which needs a live call against a real shared drive.
+// ----------------------------------------------------------------
+
+const { Hono: HonoForAuth } = await import("hono");
+
+const AUTHORIZED_USER = "user_evidence_ingress";
+
+/**
+ * Wrap the real routes in an app that seeds `apiKey` the way `authenticate` does.
+ * No mocking: the gate runs its real code path against a real record shape.
+ */
+function appAs(keyInfo) {
+  const app = new HonoForAuth();
+  app.use("*", async (c, next) => {
+    if (keyInfo !== undefined) c.set("apiKey", keyInfo);
+    await next();
+  });
+  app.route("/", googleRoutes);
+  return app;
+}
+
+/** A KV-backed key record as generateAPIKey() writes it — note: no `type` field. */
+function kvKeyRecord(overrides = {}) {
+  return {
+    status: "active",
+    name: "evidence ingress",
+    userId: AUTHORIZED_USER,
+    scopes: ["mcp:read", "mcp:write"],
+    rateLimit: 1000,
+    ...overrides,
+  };
+}
+
+describe("shared-drive parameters are gated on an allowlisted principal", () => {
+  let env;
+  let originalFetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    env = makeEnv({ GDRIVE_SHARED_DRIVE_USER_IDS: AUTHORIZED_USER });
+    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function queryOf(callIndex = 0) {
+    const [url] = globalThis.fetch.mock.calls[callIndex];
+    return new URL(url).searchParams;
+  }
+
+  function urlOf(callIndex = 0) {
+    return globalThis.fetch.mock.calls[callIndex][0];
+  }
+
+  const req = (path, query = "") =>
+    new Request(`http://localhost${path}${query ? `?${query}` : ""}`);
+
+  /** Drive the /content route, which fetches metadata then the bytes. */
+  async function content(app, e, fileId = "img-id", mimeType = "image/png") {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+    return app.fetch(req(`/gdrive/files/${fileId}/content`), e);
+  }
+
+  // ---------------- authorized ----------------
+
+  describe("an allowlisted caller", () => {
+    const app = () => appAs(kvKeyRecord());
+
+    it("files.list declares support and includes shared-drive items", async () => {
+      await app().fetch(req("/gdrive/files", "q=%27folder%27+in+parents"), env);
+      const p = queryOf();
+      expect(p.get("supportsAllDrives")).toBe("true");
+      expect(p.get("includeItemsFromAllDrives")).toBe("true");
+      expect(p.get("q")).toBe("'folder' in parents");
+    });
+
+    it("files.get metadata declares support but sends no list-only filter", async () => {
+      await app().fetch(req("/gdrive/files/abc123", "fields=id,name"), env);
+      const p = queryOf();
+      expect(p.get("supportsAllDrives")).toBe("true");
+      // includeItemsFromAllDrives is files.list-only; files.get does not accept it.
+      expect(p.has("includeItemsFromAllDrives")).toBe(false);
+    });
+
+    it("the content route's metadata probe declares support", async () => {
+      await content(app(), env);
+      expect(queryOf(0).get("supportsAllDrives")).toBe("true");
+      expect(queryOf(0).get("fields")).toBe("mimeType");
+    });
+
+    it("the alt=media download declares support", async () => {
+      await content(app(), env);
+      expect(queryOf(1).get("alt")).toBe("media");
+      expect(queryOf(1).get("supportsAllDrives")).toBe("true");
+    });
+
+    it("files.export is left alone — it documents only mimeType", async () => {
+      await content(app(), env, "doc-id", "application/vnd.google-apps.document");
+      expect(queryOf(0).get("supportsAllDrives")).toBe("true");
+      expect(queryOf(1).get("mimeType")).toBe("application/pdf");
+      expect(queryOf(1).has("supportsAllDrives")).toBe(false);
+    });
+
+    it("forwards corpora and driveId for a search scoped to one shared drive", async () => {
+      await app().fetch(req("/gdrive/files", "corpora=drive&driveId=0ABCdef"), env);
+      expect(queryOf().get("corpora")).toBe("drive");
+      expect(queryOf().get("driveId")).toBe("0ABCdef");
+    });
+  });
+
+  // ---------------- unauthorized ----------------
+
+  describe("a caller who is not allowlisted", () => {
+    /** Every principal that must NOT reach shared drives, and why. */
+    const denied = [
+      ["no apiKey in context at all", undefined],
+      ["a key whose userId is not on the list", kvKeyRecord({ userId: "user_someone_else" })],
+      ["a key with no userId (generateAPIKey's default)", kvKeyRecord({ userId: null })],
+      // name and scopes come verbatim from the POST /api/auth/keys body, so a grant
+      // carried in either would be self-servable in one request.
+      ["a key that named itself the ingress", kvKeyRecord({ userId: "u_x", name: "evidence ingress" })],
+      ["a key that granted itself a drive scope", kvKeyRecord({ userId: "u_x", scopes: ["drive:shared"] })],
+      // Synthetic principals: middleware invents these for callers with no API_KEYS
+      // record. Each is given the allowlisted userId to prove the type check, not the
+      // absent userId, is what refuses them.
+      ["the oauth principal (auth.js:121)", { type: "oauth", userId: AUTHORIZED_USER, status: "active" }],
+      ["the cloudflare-access principal (auth.js:86)", { type: "cloudflare-access", userId: AUTHORIZED_USER, status: "active" }],
+      ["the public policy-bundle principal (auth.js:79)", { type: "public", userId: AUTHORIZED_USER, status: "active" }],
+      ["the github-oidc principal (github-oidc.js:215)", { type: "oidc", userId: AUTHORIZED_USER, status: "active" }],
+    ];
+
+    for (const [label, keyInfo] of denied) {
+      it(`gets no shared-drive parameters: ${label}`, async () => {
+        const app = appAs(keyInfo);
+
+        await app.fetch(req("/gdrive/files", "q=x"), env);
+        expect(queryOf().has("supportsAllDrives")).toBe(false);
+        expect(queryOf().has("includeItemsFromAllDrives")).toBe(false);
+
+        vi.clearAllMocks();
+        globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ id: "x" }));
+        await app.fetch(req("/gdrive/files/abc123"), env);
+        expect(queryOf().has("supportsAllDrives")).toBe(false);
+
+        await content(app, env);
+        expect(queryOf(0).has("supportsAllDrives")).toBe(false);
+        expect(queryOf(1).has("supportsAllDrives")).toBe(false);
+      });
+    }
+
+    it("is denied when the allowlist is unset, empty, or whitespace", async () => {
+      for (const value of [undefined, "", "   ", ",,"]) {
+        vi.clearAllMocks();
+        globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+        const e = makeEnv({ GDRIVE_SHARED_DRIVE_USER_IDS: value });
+        e.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+        await appAs(kvKeyRecord()).fetch(req("/gdrive/files", "q=x"), e);
+        expect(queryOf().has("supportsAllDrives")).toBe(false);
+      }
+    });
+
+    it("does not forward corpora or driveId — they are part of the gated feature", async () => {
+      await appAs(kvKeyRecord({ userId: "nope" })).fetch(
+        req("/gdrive/files", "corpora=drive&driveId=0ABCdef"), env);
+      expect(queryOf().has("corpora")).toBe(false);
+      expect(queryOf().has("driveId")).toBe(false);
+    });
+
+    it("sends a request byte-identical to the pre-change behaviour", async () => {
+      // The exact URL /gdrive/files built before this change existed.
+      await appAs(undefined).fetch(
+        req("/gdrive/files", "q=x&fields=files(id)&pageSize=10&pageToken=t"), env);
+      expect(urlOf()).toBe(
+        "https://www.googleapis.com/drive/v3/files?q=x&fields=files%28id%29&pageSize=10&pageToken=t",
+      );
+    });
+  });
+
+  // ---------------- allowlist parsing ----------------
+
+  it("authorizes a principal listed among several, with untidy spacing", async () => {
+    const e = makeEnv({ GDRIVE_SHARED_DRIVE_USER_IDS: ` other_user , ${AUTHORIZED_USER} ,, third ` });
+    e.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+    await appAs(kvKeyRecord()).fetch(req("/gdrive/files", "q=x"), e);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+  });
+
+  it("matches the userId exactly — no prefix or substring match", async () => {
+    const e = makeEnv({ GDRIVE_SHARED_DRIVE_USER_IDS: AUTHORIZED_USER });
+    e.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+    await appAs(kvKeyRecord({ userId: `${AUTHORIZED_USER}_evil` })).fetch(req("/gdrive/files", "q=x"), e);
+    expect(queryOf().has("supportsAllDrives")).toBe(false);
+  });
+
+  it("Gmail routes are untouched by the Drive parameters", async () => {
+    await appAs(kvKeyRecord()).fetch(req("/email/messages", "q=from:nobody"), env);
+    expect(queryOf().has("supportsAllDrives")).toBe(false);
+    expect(queryOf().has("includeItemsFromAllDrives")).toBe(false);
+  });
+});
+
+// ----------------------------------------------------------------
+// Hand-written service key records
+//
+// Production API_KEYS holds records written directly into KV, outside
+// generateAPIKey, carrying `type: "service"` — chittystorage among them, a
+// consumer this proxy's own header names. An earlier revision rejected any record
+// with a truthy `type`, so the gate could never open for them. The check is against
+// the fabricated type names, not against the presence of a type.
+// ----------------------------------------------------------------
+
+describe("a hand-written service key record", () => {
+  let env;
+  let originalFetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    env = makeEnv({ GDRIVE_SHARED_DRIVE_USER_IDS: AUTHORIZED_USER });
+    env.CREDENTIAL_CACHE.get.mockResolvedValue("test-token");
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ files: [] }));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const queryOf = (i = 0) => new URL(globalThis.fetch.mock.calls[i][0]).searchParams;
+  const req = (path, query = "") =>
+    new Request(`http://localhost${path}${query ? `?${query}` : ""}`);
+
+  /** Shaped like the production records: a `type` generateAPIKey never writes. */
+  const serviceRecord = (userId) => ({
+    status: "active",
+    type: "service",
+    name: "chittystorage",
+    userId,
+    scopes: ["mcp:read"],
+  });
+
+  it("is authorized when its userId is allowlisted", async () => {
+    await appAs(serviceRecord(AUTHORIZED_USER)).fetch(req("/gdrive/files", "q=x"), env);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+    expect(queryOf().get("includeItemsFromAllDrives")).toBe("true");
+  });
+
+  it("reaches file metadata and content, not just the listing", async () => {
+    const app = appAs(serviceRecord(AUTHORIZED_USER));
+
+    await app.fetch(req("/gdrive/files/abc123"), env);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ mimeType: "image/png" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+    await app.fetch(req("/gdrive/files/img-id/content"), env);
+    expect(queryOf(0).get("supportsAllDrives")).toBe("true");
+    expect(queryOf(1).get("supportsAllDrives")).toBe("true");
+  });
+
+  it("is still refused when its userId is not allowlisted", async () => {
+    await appAs(serviceRecord("user_not_listed")).fetch(req("/gdrive/files", "q=x"), env);
+    expect(queryOf().has("supportsAllDrives")).toBe(false);
+  });
+
+  it("an unfamiliar type is not by itself a reason to refuse a real record", async () => {
+    const rec = { status: "active", type: "daemon", userId: AUTHORIZED_USER };
+    await appAs(rec).fetch(req("/gdrive/files", "q=x"), env);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+  });
+
+  it("a record with no type at all is still authorized (mcp-auth.js:107 shape)", async () => {
+    const rec = { name: "k", userId: AUTHORIZED_USER, scopes: [], rateLimit: 1000 };
+    await appAs(rec).fetch(req("/gdrive/files", "q=x"), env);
+    expect(queryOf().get("supportsAllDrives")).toBe("true");
+  });
+});

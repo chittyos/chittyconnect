@@ -1,7 +1,7 @@
 {
   "name": "@chittyos/chittyconnect",
   "version": "2.2.0",
-  "description": "ChittyConnect - AI-intelligent spine with ContextConsciousness™ & MemoryCloude™ for ChittyOS ecosystem",
+  "description": "ChittyConnect - AI-intelligent spine with ContextConsciousness\u2122 & MemoryCloude\u2122 for ChittyOS ecosystem",
   "type": "module",
   "main": "src/index.js",
   "bin": {
@@ -52,7 +52,7 @@
     "@cloudflare/workers-oauth-provider": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@neondatabase/serverless": "^0.10.4",
-    "@sentry/cloudflare": "^10.58.0",
+    "@sentry/cloudflare": "^10.73.0",
     "agents": "^0.19.0",
     "hono": "^4.12.18",
     "jose": "^5.2.0",
@@ -60,7 +60,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
+    "@cloudflare/workers-types": "^5.20260926.1",
     "eslint": "^8.56.0",
     "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
