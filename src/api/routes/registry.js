@@ -34,6 +34,10 @@ const UPSTREAM_TIMEOUT_MS = 15_000;
 // The audit sink is best-effort and must never outlast the request it records.
 const AUDIT_TIMEOUT_MS = 5_000;
 
+// Floor for cleanup when the audit deadline is already spent — closing a
+// connection should still be attempted, just never unbounded.
+const AUDIT_CLEANUP_FLOOR_MS = 1_000;
+
 function withTimeout(promise, ms, message) {
   let timer;
   return Promise.race([
@@ -62,6 +66,9 @@ async function registryAuthHeaders(c) {
  */
 async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, status, downstreamStatus, error }) {
   let chronicle;
+  // One deadline covers the audit AND its cleanup. Bounding only the audit left
+  // a stalled db.end() holding the response open past the deadline anyway.
+  const auditDeadline = Date.now() + AUDIT_TIMEOUT_MS;
   try {
     const databaseUrl = await getCredential(
       c.env,
@@ -98,8 +105,18 @@ async function auditRegistrationAttempt(c, { actor, entityType, subtype, name, s
     return { recorded: false, error: auditError.message };
   } finally {
     // ChronicleEngine holds a Postgres client. Without this every registration
-    // leaks a connection for the lifetime of the isolate.
-    if (chronicle) await chronicle.close();
+    // leaks a connection for the lifetime of the isolate. Cleanup gets whatever
+    // is left of the audit deadline, with a small floor so an already-expired
+    // deadline still attempts a close. If cleanup itself times out we leak one
+    // connection rather than hang the caller — auditing stays best-effort.
+    if (chronicle) {
+      const remaining = Math.max(AUDIT_CLEANUP_FLOOR_MS, auditDeadline - Date.now());
+      try {
+        await withTimeout(chronicle.close(), remaining, "audit cleanup timed out");
+      } catch (cleanupError) {
+        console.error("[Registry/Register] audit cleanup failed:", cleanupError.message);
+      }
+    }
   }
 }
 
