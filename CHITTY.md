@@ -86,6 +86,12 @@ Source: `chittycanon://gov/governance#three-aspects`
 | `/mcp/tools/list` | GET | Yes | MCP tools |
 | `/mcp/tools/call` | POST | Yes | Execute MCP tool |
 
+### Internal Service-Binding RPC
+
+| Entrypoint | Method | Reachability | Purpose |
+|------------|--------|--------------|---------|
+| `GitHubIssueBrokerService` | `createIssue(input)` | Private Cloudflare service binding | GitHub App issue creation with per-key Durable Object serialization and replay recovery |
+
 ## Document Triad
 
 This badge is part of a synchronized documentation triad. Changes to shared fields must propagate.
