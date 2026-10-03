@@ -255,6 +255,7 @@ app.use("*", async (c, next) => {
 app.use("/secrets-portal", secretsPortalGuard);
 
 app.use("/api/v1/secrets/*", makeApiSecretsGuard(authenticate));
+app.use("/api/secrets/*", makeApiSecretsGuard(authenticate));
 
 /**
  * Root health check endpoint
@@ -1522,7 +1523,8 @@ app.get("/", async (c) => {
 // --- Secret Broker: GET /api/secrets/:name ---
 // Allows authenticated ChittyOS workers to resolve a named secret from
 // ChittyConnect's own env. Replaces 1Password for Startup Mode.
-// Auth is handled by the /api/v1/secrets/* middleware above.
+// Auth is handled by the app.use("/api/secrets/*", makeApiSecretsGuard(authenticate))
+// middleware registered above, alongside the /api/v1/secrets/* guard.
 
 const BROKERED_SECRETS = new Set([
   "TWILIO_ACCOUNT_SID",
