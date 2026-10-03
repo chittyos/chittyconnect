@@ -997,6 +997,80 @@ export function resolveEgressProfile(env, slug) {
 }
 
 /**
+ * Fixed code -> Secrets Store binding map for Mercury WRITE tokens (#328).
+ * Write tokens are whitelisted to the mercury-proxy static IP and must only
+ * ever be used through the relay. The list is closed: an unknown code throws
+ * (fail closed) rather than being interpolated into a binding name.
+ */
+export const MERCURY_WRITE_BINDINGS = Object.freeze({
+  ARIBIA: "MERCURY_WRITE_TOKEN_ARIBIA",
+  APT: "MERCURY_WRITE_TOKEN_APT",
+  CITY: "MERCURY_WRITE_TOKEN_CITY",
+  FC: "MERCURY_WRITE_TOKEN_FC",
+  CHIT: "MERCURY_WRITE_TOKEN_CHIT",
+  ICB: "MERCURY_WRITE_TOKEN_ICB",
+  JAVL: "MERCURY_WRITE_TOKEN_JAVL",
+  MNW: "MERCURY_WRITE_TOKEN_MNW",
+  NAJB: "MERCURY_WRITE_TOKEN_NAJB",
+});
+
+/**
+ * Map a business code to its write-token binding name. Throws on any code not
+ * in MERCURY_WRITE_BINDINGS (case-insensitive match on the key only).
+ */
+export function resolveWriteBindingName(code) {
+  const key = String(code ?? "").trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(MERCURY_WRITE_BINDINGS, key)) {
+    throw new Error(`Unknown Mercury write code '${code}'`);
+  }
+  return MERCURY_WRITE_BINDINGS[key];
+}
+
+/**
+ * Resolve the write token for a business code from the Secrets Store.
+ * Throws on unknown code or missing/empty binding (fail closed).
+ */
+export async function resolveWriteToken(env, code) {
+  const name = resolveWriteBindingName(code);
+  const token = await resolveBinding((env || {})[name]);
+  if (!token) {
+    throw new Error(`Mercury write token binding ${name} is not available`);
+  }
+  return token;
+}
+
+/**
+ * Egress config for a write: always the relay (static IP). Fails closed if
+ * the relay URL is missing, regardless of MERCURY_EGRESS_PROFILE (which only
+ * governs reads). Attaches the proxy bearer from MERCURY_EGRESS_PROXY_TOKEN.
+ */
+export async function resolveWriteEgress(env) {
+  const e = env || {};
+  if (!e.MERCURY_EGRESS_URL) {
+    throw new Error("MERCURY_EGRESS_URL is not configured; Mercury writes require the relay");
+  }
+  return {
+    profile: EGRESS_RELAY,
+    relayUrl: e.MERCURY_EGRESS_URL,
+    accessClientId: await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_ID),
+    accessClientSecret: await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET),
+    proxyToken: await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN),
+  };
+}
+
+/**
+ * Perform a Mercury write (POST/PUT/PATCH/DELETE) for a business code through
+ * the relay. Reads must keep using mercuryFetch with the per-slug profile.
+ */
+export async function mercuryWrite(env, code, path, options = {}) {
+  const method = String(options.method || "POST").toUpperCase();
+  if (method === "GET") throw new Error("mercuryWrite is for write methods; use direct reads");
+  const token = await resolveWriteToken(env, code);
+  const egress = await resolveWriteEgress(env);
+  return mercuryFetch(token, path, { ...options, method }, egress);
+}
+
+/**
  * Build the concrete fetch request (url, method, headers, body) for a Mercury
  * call under the active egress profile. Pure function — no I/O — so the
  * profile-selection / header-construction / fail-closed logic is unit-testable
@@ -1017,6 +1091,7 @@ export function buildEgressRequest({
   relayUrl,
   accessClientId,
   accessClientSecret,
+  proxyToken,
   token,
   path,
   options = {},
@@ -1050,6 +1125,8 @@ export function buildEgressRequest({
       "Content-Type": "application/json",
       "X-Mercury-Token": token,
     };
+    // mercury-proxy second layer: Authorization: Bearer <PROXY_TOKEN>.
+    if (proxyToken) headers.Authorization = `Bearer ${proxyToken}`;
     if (accessClientId) headers["CF-Access-Client-Id"] = accessClientId;
     if (accessClientSecret)
       headers["CF-Access-Client-Secret"] = accessClientSecret;
@@ -1090,6 +1167,7 @@ async function mercuryFetch(
     relayUrl: egress.relayUrl,
     accessClientId: egress.accessClientId,
     accessClientSecret: egress.accessClientSecret,
+    proxyToken: egress.proxyToken,
     token,
     path,
     options,
@@ -1143,7 +1221,11 @@ async function requireMercuryToken(c, next) {
   c.set("mercuryToken", token);
   c.set("mercurySlug", slug);
   try {
-    c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
+    const egress = resolveEgressProfile(c.env, slug);
+    if (egress.profile === EGRESS_RELAY) {
+      egress.proxyToken = await resolveBinding(c.env.MERCURY_EGRESS_PROXY_TOKEN);
+    }
+    c.set("mercuryEgress", egress);
   } catch (error) {
     // Misconfigured egress profile (e.g. an unrecognized value) — fail closed
     // with a diagnosable error rather than crashing the worker.
