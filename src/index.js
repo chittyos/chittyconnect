@@ -40,6 +40,12 @@ import {
   makeApiSecretsGuard,
 } from "./auth/secrets-portal-guard.js";
 import { SecretRotationService } from "./services/secret-rotation.js";
+import { runMercuryKeepalive } from "./services/mercury-keepalive.js";
+import {
+  resolveBinding,
+  mercuryFetch,
+  resolveEgressProfile,
+} from "./api/routes/thirdparty.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { withSentry } from "@sentry/cloudflare";
 
@@ -2524,6 +2530,43 @@ ${errorInfo.stack}`);
           );
         } catch (err) {
           console.error(`[Scheduled] Secret rotation failed:`, err);
+        }
+
+        // Mercury token keepalive. Mercury DELETES static API tokens after 30-45
+        // days of inactivity and offers no refresh flow, so a token nobody calls
+        // dies and only a human can mint its replacement. The module self-throttles
+        // per slug (default 20 days), so running it hourly costs one KV read per
+        // entity on almost every pass.
+        try {
+          const ka = await runMercuryKeepalive(env, {
+            resolveBinding,
+            mercuryFetch,
+            resolveEgressProfile,
+          });
+          console.log(
+            `[Scheduled] Mercury keepalive: ${ka.pinged} pinged, ${ka.skipped} not due, ${ka.failed} failed of ${ka.checked} tokens`,
+          );
+          // A dead token is not a transient failure — it needs a human in the
+          // Mercury dashboard — so name the slugs rather than burying them in a count.
+          if (ka.unauthorized.length) {
+            console.error(
+              `[Scheduled] Mercury keepalive: token DELETED/revoked (401), reissue required: ${ka.unauthorized.join(", ")}`,
+            );
+          }
+          for (const e of ka.errors) {
+            console.error(
+              `[Scheduled] Mercury keepalive error for ${e.slug}: ${e.error}`,
+            );
+          }
+          // Zero tokens discovered means the bindings went missing — that reads as
+          // "nothing to do" in every count above, so assert it explicitly.
+          if (ka.checked === 0) {
+            console.error(
+              `[Scheduled] Mercury keepalive: NO MERCURY_TOKEN_* bindings found — every Mercury token is now unprotected`,
+            );
+          }
+        } catch (err) {
+          console.error(`[Scheduled] Mercury keepalive failed:`, err);
         }
 
         // chittysecrets event sync

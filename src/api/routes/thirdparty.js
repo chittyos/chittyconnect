@@ -1268,4 +1268,8 @@ thirdpartyRoutes.post(
   }),
 );
 
-export { thirdpartyRoutes, getMercuryToken, resolveBinding };
+// mercuryFetch is exported for the scheduled keepalive sweep
+// (src/services/mercury-keepalive.js), which must issue the same egress-aware
+// request this module's routes do — a keepalive on a different egress path would
+// fail against IP-allowlisted tokens while reporting success here.
+export { thirdpartyRoutes, getMercuryToken, resolveBinding, mercuryFetch };
