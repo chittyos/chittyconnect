@@ -1,5 +1,13 @@
 title = "ChittyConnect Gitleaks Configuration"
 
+# Inherit gitleaks' built-in provider ruleset (AWS, GCP, Stripe, Slack, npm,
+# private keys, ...). WITHOUT this, the [[rules]] below REPLACE the defaults
+# rather than adding to them — which is how this config scanned the chittysync
+# history containing a real leaked Neon DATABASE_URL and returned 0 findings,
+# while the bare default ruleset returned 1.
+[extend]
+  useDefault = true
+
 [allowlist]
   description = "Allowlisted patterns"
   paths = [
@@ -9,6 +17,33 @@ title = "ChittyConnect Gitleaks Configuration"
     '''__tests__/.*\.test\.(js|ts)''',
   ]
 
+# Any database connection string carrying an inline password, on ANY host.
+#
+# This is the rule that matters. GitHub secret scanning does not match generic
+# connection strings — it matches provider-issued token patterns — and neither
+# does gitleaks' default ruleset. Verified 2026-09-17 against the real leak in
+# chittyos/chittysync: GitHub scanning 0 alerts ever, gitleaks defaults miss
+# it, the previous version of this file 0 findings across the whole history.
+# This rule finds it, and found five further copies baked into committed
+# .wrangler/tmp build artifacts that nobody had identified.
+[[rules]]
+  id = "db-connection-string-with-password"
+  description = "Database connection string with an embedded password (any host)"
+  regex = '''(?i)\b(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp|mssql)://[^\s:/@]{1,64}:[^\s@'\"` ]{6,}@[A-Za-z0-9._\-]+'''
+
+# Kept as a named, higher-signal case of the rule above.
+#
+# The PREVIOUS version of this rule was `[a-z0-9\-]+\.neon\.tech` — the host class could not span
+# dots, so it matched only the legacy single-label form (ep-foo-123.neon.tech)
+# and missed every current Neon host, which is regional
+# (ep-x.us-east-2.aws.neon.tech) or c-N
+# (ep-x-pooler.c-2.us-east-2.aws.neon.tech). A rule named for the exact thing
+# that leaked, which could not match it.
+[[rules]]
+  id = "neon-database-url"
+  description = "Neon Postgres connection string"
+  regex = '''(?i)\b(postgres(?:ql)?)://[^\s:/@]{1,64}:[^\s@'\"` ]{6,}@[A-Za-z0-9._\-]*\.neon\.tech'''
+
 [[rules]]
   id = "cloudflare-api-token"
   description = "Cloudflare API Token"
@@ -16,19 +51,16 @@ title = "ChittyConnect Gitleaks Configuration"
   secretGroup = 1
 
 [[rules]]
-  id = "neon-database-url"
-  description = "Neon Database URL"
-  regex = '''postgres(ql)?:\/\/[^:]+:[^@]+@[a-z0-9\-]+\.neon\.tech'''
-
-[[rules]]
   id = "jwt-secret"
   description = "JWT Secret"
   regex = '''(?i)jwt[_\-]?secret\s*[:=]\s*["\']([^\s"\']{16,})'''
   secretGroup = 1
 
+# 1Password is RETIRED, but an OP_CONNECT_TOKEN in a commit is still a
+# credential leak — and its presence also flags un-migrated 1Password code.
 [[rules]]
-  id = "chittysecrets-token"
-  description = "chittysecrets Connect Token"
+  id = "onepassword-connect-token"
+  description = "1Password Connect token (retired lane; still a credential)"
   regex = '''(?i)op[_\-]?connect[_\-]?token\s*[:=]\s*["\']([^\s"\']{20,})'''
   secretGroup = 1
 
@@ -42,7 +74,10 @@ title = "ChittyConnect Gitleaks Configuration"
   description = "Notion API Key"
   regex = '''(?:ntn_|secret_)[a-zA-Z0-9]{20,}'''
 
+# The previous rule matched only "BEGIN RSA PRIVATE KEY", missing PKCS#8
+# ("BEGIN PRIVATE KEY") — which is what GitHub Apps and Google service accounts
+# actually emit — and OPENSSH keys.
 [[rules]]
-  id = "github-private-key"
-  description = "GitHub App Private Key"
-  regex = '''-----BEGIN RSA PRIVATE KEY-----'''
+  id = "private-key-block"
+  description = "Private key block (RSA, PKCS#8, EC, OPENSSH)"
+  regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----'''
