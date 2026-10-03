@@ -11,6 +11,9 @@ import {
 // (no mocks). Secrets Store bindings are shaped as { get(): Promise<string> }
 // using obviously synthetic values.
 
+const FC_FIXTURE = "write-token-fc";
+const PROXY_FIXTURE = "proxy-bearer";
+const READ_FIXTURE = "read-token";
 const CODES = ["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"];
 
 describe("write token code map", () => {
@@ -69,7 +72,7 @@ describe("write egress + bearer header", () => {
     const eg = await resolveWriteEgress(env);
     const req = buildEgressRequest({
       ...eg,
-      token: "write-token-fc",
+      token: FC_FIXTURE,
       path: "/account/abc/transactions",
       options: { method: "POST", body: { amount: 1 } },
     });
@@ -89,8 +92,8 @@ describe("write egress + bearer header", () => {
   it("direct reads never carry the proxy bearer", () => {
     const req = buildEgressRequest({
       profile: "direct",
-      proxyToken: "proxy-bearer",
-      token: "read-token",
+      proxyToken: PROXY_FIXTURE,
+      token: READ_FIXTURE,
       path: "/accounts",
     });
     expect(req.headers.Authorization).toBe("Bearer read-token");
