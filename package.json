@@ -63,7 +63,7 @@
     "@cloudflare/workers-types": "^5.20260926.1",
     "eslint": "^8.56.0",
     "husky": "^9.0.0",
-    "lint-staged": "^15.2.0",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.2.0",
     "vitest": "^4.0.8",
     "wrangler": "^4.76.0"
@@ -75,6 +75,6 @@
     ]
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.22.1"
   }
 }
