@@ -5,6 +5,7 @@ import {
   resolveWriteToken,
   resolveWriteEgress,
   buildEgressRequest,
+  mercuryWrite,
 } from "../../src/api/routes/thirdparty.js";
 
 // #328: Mercury writes go through the mercury-proxy relay. Pure-function tests
@@ -66,6 +67,25 @@ describe("write egress + bearer header", () => {
 
   it("fails closed when MERCURY_EGRESS_URL is unset", async () => {
     await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_URL: "" })).rejects.toThrow(/relay/);
+  });
+
+  it("fails closed when the proxy bearer is absent", async () => {
+    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_PROXY_TOKEN: undefined })).rejects.toThrow(/PROXY_TOKEN/);
+  });
+
+  it("fails closed when either Access credential is absent", async () => {
+    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_ACCESS_CLIENT_ID: undefined })).rejects.toThrow(/Access credentials/);
+    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_ACCESS_CLIENT_SECRET: undefined })).rejects.toThrow(/Access credentials/);
+  });
+
+  it("rejects every method outside the explicit write allowlist before network I/O", async () => {
+    const writeEnv = {
+      ...env,
+      MERCURY_WRITE_TOKEN_FC: { get: async () => FC_FIXTURE },
+    };
+    for (const method of ["GET", "HEAD", "OPTIONS", "TRACE", "CONNECT"]) {
+      await expect(mercuryWrite(writeEnv, "FC", "/accounts", { method })).rejects.toThrow(/only permits/);
+    }
   });
 
   it("sends Authorization: Bearer proxy token plus CF-Access headers and X-Mercury-Token", async () => {
