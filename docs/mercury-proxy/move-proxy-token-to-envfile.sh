@@ -1,32 +1,63 @@
 #!/usr/bin/env bash
 # OPERATOR-RUN, needs sudo. Moves PROXY_TOKEN out of the unit's Environment=
-# into a root-only EnvironmentFile (temporary until chittysecrets#17 /inject).
-# Never prints the token. Does NOT run automatically.
+# into a root-only EnvironmentFile (temporary until ChittySecrets injection owns it).
+# Never prints the token. Does NOT restart the service automatically.
 set -euo pipefail
+
 UNIT=/etc/systemd/system/mercury-proxy.service
 ENVF=/etc/mercury-proxy/env
-[ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-LINE="$(grep -E '^Environment=("PROXY_TOKEN=.*"|PROXY_TOKEN=.*)
-chown root:root "$ENVF"; chmod 0600 "$ENVF"
-# Do not create a backup: the original unit contains the secret and a backup
-# would create a second plaintext copy. The env file above is the rollback source.
-sed -i '/^Environment=PROXY_TOKEN=/c\EnvironmentFile=/etc/mercury-proxy/env' "$UNIT"
-systemctl daemon-reload
-echo "Edited. Now: systemctl restart mercury-proxy && curl -s https://mercury-proxy.chitty.cc/health"
-echo "Then remove PROXY_TOKEN from the project .env (server.js loads it too). The root-only env file is the temporary rollback source."
- "$UNIT" | head -n 1 || true)"
-[ -n "$LINE" ] || { echo "unit has no inline PROXY_TOKEN; nothing to do"; exit 0; }
-install -d -m 0700 -o root -g root /etc/mercury-proxy
-umask 077
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "run with sudo"
+  exit 1
+fi
+
+if [ ! -f "$UNIT" ]; then
+  echo "unit not found: $UNIT"
+  exit 1
+fi
+
+LINE="$(grep -m1 -E '^Environment="?PROXY_TOKEN=.*"?$' "$UNIT" || true)"
+if [ -z "$LINE" ]; then
+  if grep -q '^EnvironmentFile=/etc/mercury-proxy/env$' "$UNIT"; then
+    echo "already configured with $ENVF"
+    exit 0
+  fi
+  echo "unit has no inline PROXY_TOKEN; nothing to do"
+  exit 0
+fi
+
 ASSIGNMENT="${LINE#Environment=}"
 case "$ASSIGNMENT" in
-  \"*\") ASSIGNMENT="${ASSIGNMENT#\"}"; ASSIGNMENT="${ASSIGNMENT%\"}" ;;
+  \"*\")
+    ASSIGNMENT="${ASSIGNMENT#\"}"
+    ASSIGNMENT="${ASSIGNMENT%\"}"
+    ;;
 esac
-printf '%s\n' "$ASSIGNMENT" > "$ENVF"
-chown root:root "$ENVF"; chmod 0600 "$ENVF"
+
+case "$ASSIGNMENT" in
+  PROXY_TOKEN=*) ;;
+  *)
+    echo "unexpected Environment line; refusing to modify unit"
+    exit 1
+    ;;
+esac
+
+install -d -m 0700 -o root -g root /etc/mercury-proxy
+umask 077
+TMP="$(mktemp /etc/mercury-proxy/env.tmp.XXXXXX)"
+trap 'rm -f "$TMP"' EXIT
+printf '%s\n' "$ASSIGNMENT" > "$TMP"
+chown root:root "$TMP"
+chmod 0600 "$TMP"
+mv "$TMP" "$ENVF"
+trap - EXIT
+
 # Do not create a backup: the original unit contains the secret and a backup
 # would create a second plaintext copy. The env file above is the rollback source.
-sed -i '/^Environment=PROXY_TOKEN=/c\EnvironmentFile=/etc/mercury-proxy/env' "$UNIT"
+sed -i -E '/^Environment="?PROXY_TOKEN=/c\EnvironmentFile=/etc/mercury-proxy/env' "$UNIT"
 systemctl daemon-reload
-echo "Edited. Now: systemctl restart mercury-proxy && curl -s https://mercury-proxy.chitty.cc/health"
-echo "Then remove PROXY_TOKEN from the project .env (server.js loads it too). The root-only env file is the temporary rollback source."
+
+echo "Edited without printing PROXY_TOKEN."
+echo "Next: systemctl restart mercury-proxy"
+echo "Then verify the authenticated /health response and remove PROXY_TOKEN from the project .env."
