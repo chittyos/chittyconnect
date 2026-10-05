@@ -1049,12 +1049,21 @@ export async function resolveWriteEgress(env) {
   if (!e.MERCURY_EGRESS_URL) {
     throw new Error("MERCURY_EGRESS_URL is not configured; Mercury writes require the relay");
   }
+  const accessClientId = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_ID);
+  const accessClientSecret = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET);
+  const proxyToken = await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN);
+  if (!proxyToken) {
+    throw new Error("MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed");
+  }
+  if (!accessClientId || !accessClientSecret) {
+    throw new Error("Mercury relay Access credentials are not configured; Mercury writes fail closed");
+  }
   return {
     profile: EGRESS_RELAY,
     relayUrl: e.MERCURY_EGRESS_URL,
-    accessClientId: await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_ID),
-    accessClientSecret: await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET),
-    proxyToken: await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN),
+    accessClientId,
+    accessClientSecret,
+    proxyToken,
   };
 }
 
@@ -1064,7 +1073,10 @@ export async function resolveWriteEgress(env) {
  */
 export async function mercuryWrite(env, code, path, options = {}) {
   const method = String(options.method || "POST").toUpperCase();
-  if (method === "GET") throw new Error("mercuryWrite is for write methods; use direct reads");
+  const allowedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+  if (!allowedMethods.has(method)) {
+    throw new Error(`mercuryWrite only permits POST, PUT, PATCH, or DELETE; got ${method}`);
+  }
   const token = await resolveWriteToken(env, code);
   const egress = await resolveWriteEgress(env);
   return mercuryFetch(token, path, { ...options, method }, egress);
