@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   MERCURY_WRITE_BINDINGS,
   resolveWriteBindingName,
@@ -117,5 +118,46 @@ describe("write egress + bearer header", () => {
       path: "/accounts",
     });
     expect(req.headers.Authorization).toBe("Bearer read-token");
+  });
+});
+
+
+describe("wrangler Mercury write isolation", () => {
+  const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
+  const envStart = wrangler.indexOf('"env": {');
+  const devStart = wrangler.indexOf('"dev": {', envStart);
+  const stagingStart = wrangler.indexOf('"staging": {', devStart);
+  const productionStart = wrangler.indexOf('"production": {', stagingStart);
+
+  const top = wrangler.slice(0, envStart);
+  const dev = wrangler.slice(devStart, stagingStart);
+  const staging = wrangler.slice(stagingStart, productionStart);
+  const production = wrangler.slice(productionStart);
+
+  const productionOnlyBindings = [
+    "MERCURY_OIDC_CLIENT_ID",
+    "MERCURY_OIDC_CLIENT_SECRET",
+    "MERCURY_OIDC_ISSUER",
+    "MERCURY_EGRESS_ACCESS_CLIENT_ID",
+    "MERCURY_EGRESS_ACCESS_CLIENT_SECRET",
+    "MERCURY_EGRESS_PROXY_TOKEN",
+    ...CODES.map((code) => `MERCURY_WRITE_TOKEN_${code}`),
+  ];
+
+  it("keeps write/proxy credentials out of top-level, dev, and staging", () => {
+    for (const binding of productionOnlyBindings) {
+      const declaration = `"binding": "${binding}"`;
+      expect(top).not.toContain(declaration);
+      expect(dev).not.toContain(declaration);
+      expect(staging).not.toContain(declaration);
+      expect(production).toContain(declaration);
+    }
+  });
+
+  it("does not route dev or staging to the production Mercury relay", () => {
+    const productionRelay = '"MERCURY_EGRESS_URL": "https://mercury-proxy.chitty.cc/proxy"';
+    expect(dev).not.toContain(productionRelay);
+    expect(staging).not.toContain(productionRelay);
+    expect(production).toContain(productionRelay);
   });
 });
