@@ -11,8 +11,9 @@ install -d -m 0700 -o root -g root /etc/mercury-proxy
 umask 077
 grep '^Environment=PROXY_TOKEN=' "$UNIT" | sed 's/^Environment=//' > "$ENVF"
 chown root:root "$ENVF"; chmod 0600 "$ENVF"
-cp -p "$UNIT" "$UNIT.bak-pre-envfile"          # backup contains the token: delete after verifying
+# Do not create a backup: the original unit contains the secret and a backup
+# would create a second plaintext copy. The env file above is the rollback source.
 sed -i '/^Environment=PROXY_TOKEN=/c\EnvironmentFile=/etc/mercury-proxy/env' "$UNIT"
 systemctl daemon-reload
 echo "Edited. Now: systemctl restart mercury-proxy && curl -s https://mercury-proxy.chitty.cc/health"
-echo "Then: shred -u $UNIT.bak-pre-envfile; also remove PROXY_TOKEN from the project .env (server.js loads it too)."
+echo "Then remove PROXY_TOKEN from the project .env (server.js loads it too). The root-only env file is the temporary rollback source."
