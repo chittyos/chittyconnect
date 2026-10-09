@@ -28,8 +28,6 @@ export async function authorizeAgentContext(prompt, agentId, authToken, env) {
   if (!Array.isArray(gate.allowedServices)) {
     return { allowed: false, reason: "invalid allowed services" };
   }
-  if (gate.allowedServices.includes("*")) return { allowed: true };
-
   if (!Array.isArray(gate.allowedAgents) && Object.hasOwn(gate, "allowedAgents")) {
     return { allowed: false, reason: "invalid allowed agents" };
   }
@@ -37,6 +35,10 @@ export async function authorizeAgentContext(prompt, agentId, authToken, env) {
       !gate.allowedAgents.includes(agentId)) {
     return { allowed: false, reason: "agent not permitted" };
   }
+
+  // Wildcard services still respect an explicit agent restriction, but
+  // preserve historical behavior for genuinely unscoped prompt consumers.
+  if (gate.allowedServices.includes("*")) return { allowed: true };
 
   if (!authToken || typeof authToken !== "string" ||
       !env?.API_KEYS || typeof env.API_KEYS.get !== "function") {
