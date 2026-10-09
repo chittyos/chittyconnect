@@ -86,6 +86,15 @@ describe("MCP agent_context consumer authorization", () => {
     expect(access.allowed).toBe(false);
   });
 
+  it("honors restricted agent ID even with wildcard service access", async () => {
+    const prompt = {
+      ...BASE,
+      consumer_gate: JSON.stringify({ allowedServices: ["*"], allowedAgents: ["another-agent"] }),
+    };
+    const access = await authorizeAgentContext(prompt, ID, undefined, envFor(prompt));
+    expect(access.allowed).toBe(false);
+  });
+
   it("preserves legacy behavior only for prompts without an explicit allowlist", async () => {
     const env = envFor({ ...BASE, consumer_gate: "{}" }, null);
     const result = await dispatchToolCall("agent_context", { agent_id: ID }, env);
