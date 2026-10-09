@@ -153,7 +153,13 @@
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
         ],
         "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" },
+          // github-events: the check_suite forward asks for a retry on an
+          // autoassist 5xx or throw. Bound the retries, and park a message
+          // that exhausts them in the DLQ instead of deleting it. The live
+          // consumer predates this file (wrangler.toml-era). The DLQ queue
+          // must exist before deploy (concierge/deploy prerequisite).
+          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "dead_letter_queue": "github-events-dlq" }
         ]
       },
       "ai": { "binding": "AI" },
@@ -453,7 +459,13 @@
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
         ],
         "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" },
+          // github-events: the check_suite forward asks for a retry on an
+          // autoassist 5xx or throw. Bound the retries, and park a message
+          // that exhausts them in the DLQ instead of deleting it. The live
+          // consumer predates this file (wrangler.toml-era). The DLQ queue
+          // must exist before deploy (concierge/deploy prerequisite).
+          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "dead_letter_queue": "github-events-dlq" }
         ]
       },
       "ai": { "binding": "AI" },

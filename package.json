@@ -15,7 +15,7 @@
     "deploy:audit": "./scripts/audit-bindings.sh production",
     "policy-bundle:build": "node scripts/build-policy-bundle.mjs",
     "kv:seed": "./scripts/seed-kv.sh",
-    "test": "vitest",
+    "test": "vitest run && vitest run --config vitest.workers.config.js",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.{js,ts,json}'",
@@ -25,7 +25,8 @@
     "mcp:setup": "./scripts/setup-mcp.sh",
     "mcp:setup:desktop": "./scripts/setup-mcp.sh desktop",
     "mcp:setup:code": "./scripts/setup-mcp.sh code",
-    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js"
+    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js",
+    "test:workers": "vitest run --config vitest.workers.config.js"
   },
   "keywords": [
     "chittyos",
@@ -60,6 +61,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.0",
     "@cloudflare/workers-types": "^5.20260926.1",
     "eslint": "^8.56.0",
     "husky": "^9.0.0",
