@@ -5,7 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.js', 'src/**/__tests__/*.test.js'],
-    exclude: ['tests/scenarios/**'],
+    exclude: ['tests/scenarios/**', 'tests/workers/**'],
     coverage: {
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.js'],

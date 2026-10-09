@@ -168,7 +168,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     },
 
@@ -309,7 +310,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     },
 
@@ -451,7 +453,14 @@
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
         ],
         "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" },
+          // github-events: the check_suite forward asks for a retry on an
+          // autoassist 5xx or throw. Retries are delayed and bounded; a message
+          // that exhausts them parks in the DLQ (must exist before deploy).
+          // Production only: a queue has one consumer worker, so dev/staging
+          // must not claim it. This consumer was attached by hand; the old
+          // wrangler.toml never declared it.
+          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "retry_delay": 30, "dead_letter_queue": "github-events-dlq" }
         ]
       },
       "ai": { "binding": "AI" },
@@ -466,7 +475,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     }
   }

@@ -704,116 +704,344 @@ thirdpartyRoutes.patch("/notion/pages/:pageId", async (c) => {
   }
 });
 
+// ── GitHub repository proxy (contents, pulls, commits, merge) ─────────
+// Used by chittyagent-autoassist's pr_land_v1 loop over a service binding.
+// Token: getCredential("integrations/github/token", "GITHUB_TOKEN").
+// GitHub's status and body pass through unchanged: callers treat 4xx as a
+// final decision and 5xx as retryable, so a 409 (head moved) must stay a 409.
+// owner/repo are validated and every path segment is encoded, so a crafted
+// segment can't normalise into another GitHub API path.
+
+const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/;
+const GITHUB_MERGE_METHODS = ["merge", "squash", "rebase"];
+const GITHUB_SHA_RE = /^[0-9a-f]{7,40}$/i;
+const GITHUB_PASSTHROUGH_HEADERS = ["Content-Type", "Link", "Retry-After"];
+// Plus every X-RateLimit-* header, so callers can back off on 403/429.
+const GITHUB_RATELIMIT_HEADER_PREFIX = "x-ratelimit-";
+
+function githubRepoBase(owner, repo) {
+  for (const name of [owner, repo]) {
+    if (!GITHUB_NAME_RE.test(name) || name === "." || name === "..") {
+      return null;
+    }
+  }
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
+function parsePullNumber(n) {
+  return /^[1-9][0-9]{0,9}$/.test(n) ? Number(n) : null;
+}
+
+// Re-encode a raw (still percent-encoded) file path one segment at a time.
+function encodeContentPath(rawPath) {
+  const segments = rawPath.split("/");
+  const out = [];
+  for (const raw of segments) {
+    let seg;
+    try {
+      seg = decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
+    if (!seg || seg === "." || seg === ".." || seg.includes("/")) return null;
+    out.push(encodeURIComponent(seg));
+  }
+  return out.join("/");
+}
+
+// Slice at the exact route prefix (mount + owner/repo), so an owner or repo
+// literally named "contents" can't shift where the file path starts.
+function contentPathFromRequest(c, owner, repo) {
+  const mount = c.req.routePath.replace(
+    /\/github\/repos\/:owner\/:repo\/contents\/\*$/,
+    "",
+  );
+  const prefix = `${mount}/github/repos/${owner}/${repo}/contents/`;
+  if (!c.req.path.startsWith(prefix)) return null;
+  return encodeContentPath(c.req.path.slice(prefix.length));
+}
+
+// ── Per-caller authorization for the GitHub proxy ──────────────────────
+// The broker's GitHub token reaches many repos, so every route checks the
+// caller before any upstream call. API_KEYS records opt in with two optional
+// fields (docs/github-proxy-key-scoping.md):
+//   github_actions: ["read" | "write" | "merge"]
+//   github_repos:   ["owner/repo" | "owner/*"]
+// A key without both fields is denied (fail closed). OAuth principals from
+// /mcp are always denied: a grant carries no repo allow-list, so even a read
+// would open every repo the broker token reaches.
+// Synthetic principals (public, cloudflare-access, oidc) are always denied.
+const GITHUB_ACTIONS = new Set(["read", "write", "merge"]);
+const GITHUB_SYNTHETIC_PRINCIPALS = new Set([
+  "public",
+  "cloudflare-access",
+  "oidc",
+]);
+
+function githubRepoAllowed(patterns, owner, repo) {
+  const o = owner.toLowerCase();
+  const full = `${o}/${repo.toLowerCase()}`;
+  return patterns.some((pattern) => {
+    if (typeof pattern !== "string") return false;
+    const p = pattern.toLowerCase();
+    return p === full || p === `${o}/*`;
+  });
+}
+
+/** @visibleForTesting */
+export function githubAuthorizationError(principal, action, owner, repo) {
+  if (!GITHUB_ACTIONS.has(action)) return "unknown action";
+  if (!principal) return "no authenticated principal";
+  if (principal.type === "oauth") {
+    return "OAuth principals may not use the GitHub proxy";
+  }
+  if (GITHUB_SYNTHETIC_PRINCIPALS.has(principal.type)) {
+    return `${principal.type} principal may not use the GitHub proxy`;
+  }
+  const { github_actions: actions, github_repos: repos } = principal;
+  if (!Array.isArray(actions) || !Array.isArray(repos)) {
+    return "API key is not scoped for the GitHub proxy";
+  }
+  if (!actions.includes(action)) return `API key lacks github ${action}`;
+  if (!githubRepoAllowed(repos, owner, repo)) {
+    return `API key is not allowed on ${owner}/${repo}`;
+  }
+  return null;
+}
+
+// Single guard used by every GitHub proxy route. Returns a 403 Response to
+// send, or null when the caller may proceed.
+function githubGuard(c, action, owner, repo) {
+  const reason = githubAuthorizationError(c.get("apiKey"), action, owner, repo);
+  if (!reason) return null;
+  console.warn("[github-proxy] denied", {
+    action,
+    repo: `${owner}/${repo}`,
+    caller: c.get("apiKey")?.service || c.get("apiKey")?.name || "unknown",
+    reason,
+  });
+  return c.json(
+    { error: "forbidden", code: "GITHUB_PROXY_FORBIDDEN", reason },
+    403,
+  );
+}
+
+// Forward only the named query parameters that are present.
+function pickQuery(c, names) {
+  const params = new URLSearchParams();
+  for (const name of names) {
+    const value = c.req.query(name);
+    if (value !== undefined) params.set(name, value);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+async function githubPassthrough(c, method, apiPath, body) {
+  const githubToken = await getCredential(
+    c.env,
+    "integrations/github/token",
+    "GITHUB_TOKEN",
+  );
+
+  if (!githubToken) {
+    return c.json({ error: "GitHub token not configured" }, 503);
+  }
+
+  let response;
+  try {
+    response = await fetch(`https://api.github.com${apiPath}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+        ...(body !== undefined && { "Content-Type": "application/json" }),
+      },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    return c.json({ error: `GitHub request failed: ${error.message}` }, 502);
+  }
+
+  const headers = { "Content-Type": "application/json" };
+  for (const name of GITHUB_PASSTHROUGH_HEADERS) {
+    const value = response.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase().startsWith(GITHUB_RATELIMIT_HEADER_PREFIX)) {
+      headers[name] = value;
+    }
+  }
+  return new Response(await response.text(), {
+    status: response.status,
+    headers,
+  });
+}
+
 /**
  * PUT /api/thirdparty/github/repos/:owner/:repo/contents/*
- * Create or update file in GitHub repository
+ * Create or update a file. Returns GitHub's full response body, including
+ * commit.sha and commit.parents.
  */
 thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
-  try {
-    const { owner, repo } = c.req.param();
-    const path = c.req.path.replace(
-      `/api/thirdparty/github/repos/${owner}/${repo}/contents/`,
-      "",
-    );
-    const body = await c.req.json();
-
-    if (!body.content) {
-      return c.json({ error: "content is required" }, 400);
-    }
-
-    // Get GitHub token from chittysecrets with fallback
-    const githubToken = await getCredential(
-      c.env,
-      "integrations/github/token",
-      "GITHUB_TOKEN",
-    );
-
-    if (!githubToken) {
-      return c.json(
-        {
-          error: "GitHub token not configured",
-          details:
-            "Neither chittysecrets Connect nor environment variable available",
-        },
-        503,
-      );
-    }
-
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: "application/vnd.github.v3+json",
-          "Content-Type": "application/json",
-          "User-Agent": "ChittyConnect/1.0",
-        },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return c.json(data);
-  } catch (error) {
-    return c.json({ error: error.message }, 500);
+  const { owner, repo } = c.req.param();
+  const base = githubRepoBase(owner, repo);
+  const path = base && contentPathFromRequest(c, owner, repo);
+  if (!base || !path) {
+    return c.json({ error: "invalid owner, repo or file path" }, 400);
   }
+  const denied = githubGuard(c, "write", owner, repo);
+  if (denied) return denied;
+
+  const body = await c.req.json().catch(() => null);
+  if (!body?.content) {
+    return c.json({ error: "content is required" }, 400);
+  }
+
+  return githubPassthrough(c, "PUT", `${base}/contents/${path}`, body);
 });
 
 /**
  * GET /api/thirdparty/github/repos/:owner/:repo/contents/*
- * Get file contents from GitHub repository
+ * Get file contents (optional ?ref=branch|sha)
  */
 thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
-  try {
-    const { owner, repo } = c.req.param();
-    const path = c.req.path.replace(
-      `/api/thirdparty/github/repos/${owner}/${repo}/contents/`,
-      "",
-    );
-
-    // Get GitHub token from chittysecrets with fallback
-    const githubToken = await getCredential(
-      c.env,
-      "integrations/github/token",
-      "GITHUB_TOKEN",
-    );
-
-    if (!githubToken) {
-      return c.json(
-        {
-          error: "GitHub token not configured",
-        },
-        503,
-      );
-    }
-
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-      {
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "ChittyConnect/1.0",
-        },
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return c.json(data);
-  } catch (error) {
-    return c.json({ error: error.message }, 500);
+  const { owner, repo } = c.req.param();
+  const base = githubRepoBase(owner, repo);
+  const path = base && contentPathFromRequest(c, owner, repo);
+  if (!base || !path) {
+    return c.json({ error: "invalid owner, repo or file path" }, 400);
   }
+  const denied = githubGuard(c, "read", owner, repo);
+  if (denied) return denied;
+  return githubPassthrough(
+    c,
+    "GET",
+    `${base}/contents/${path}${pickQuery(c, ["ref"])}`,
+  );
+});
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/pulls/:n
+ * Read a pull request
+ */
+thirdpartyRoutes.get("/github/repos/:owner/:repo/pulls/:n", async (c) => {
+  const { owner, repo, n } = c.req.param();
+  const base = githubRepoBase(owner, repo);
+  const pr = parsePullNumber(n);
+  if (!base || pr === null) {
+    return c.json({ error: "invalid owner, repo or pull number" }, 400);
+  }
+  const denied = githubGuard(c, "read", owner, repo);
+  if (denied) return denied;
+  return githubPassthrough(c, "GET", `${base}/pulls/${pr}`);
+});
+
+// 400 Response when per_page or page is present but not a positive integer.
+function invalidPageParam(c) {
+  for (const name of ["per_page", "page"]) {
+    const value = c.req.query(name);
+    if (value !== undefined && !/^[1-9][0-9]{0,3}$/.test(value)) {
+      return c.json({ error: `${name} must be a positive integer` }, 400);
+    }
+  }
+  return null;
+}
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/commits/:sha/check-runs
+ * List check runs for a commit. Forwards ?per_page and ?page, and GitHub's
+ * Link header for pagination. Each run carries GitHub's app.id / app.slug.
+ */
+thirdpartyRoutes.get(
+  "/github/repos/:owner/:repo/commits/:sha/check-runs",
+  async (c) => {
+    const { owner, repo, sha } = c.req.param();
+    const base = githubRepoBase(owner, repo);
+    if (!base || !GITHUB_SHA_RE.test(sha)) {
+      return c.json({ error: "invalid owner, repo or commit sha" }, 400);
+    }
+    const denied = githubGuard(c, "read", owner, repo);
+    if (denied) return denied;
+    const badPage = invalidPageParam(c);
+    if (badPage) return badPage;
+    return githubPassthrough(
+      c,
+      "GET",
+      `${base}/commits/${sha}/check-runs${pickQuery(c, ["per_page", "page"])}`,
+    );
+  },
+);
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/commits/:sha/status
+ * Combined commit status (legacy statuses API). Forwards ?per_page and ?page,
+ * and GitHub's Link header for pagination.
+ */
+thirdpartyRoutes.get(
+  "/github/repos/:owner/:repo/commits/:sha/status",
+  async (c) => {
+    const { owner, repo, sha } = c.req.param();
+    const base = githubRepoBase(owner, repo);
+    if (!base || !GITHUB_SHA_RE.test(sha)) {
+      return c.json({ error: "invalid owner, repo or commit sha" }, 400);
+    }
+    const denied = githubGuard(c, "read", owner, repo);
+    if (denied) return denied;
+    const badPage = invalidPageParam(c);
+    if (badPage) return badPage;
+    return githubPassthrough(
+      c,
+      "GET",
+      `${base}/commits/${sha}/status${pickQuery(c, ["per_page", "page"])}`,
+    );
+  },
+);
+
+/**
+ * PUT /api/thirdparty/github/repos/:owner/:repo/pulls/:n/merge
+ * Merge a pull request. `sha` is required so GitHub rejects the merge (409)
+ * if the head moved since the caller evaluated it.
+ */
+thirdpartyRoutes.put("/github/repos/:owner/:repo/pulls/:n/merge", async (c) => {
+  const { owner, repo, n } = c.req.param();
+  const base = githubRepoBase(owner, repo);
+  const pr = parsePullNumber(n);
+  if (!base || pr === null) {
+    return c.json({ error: "invalid owner, repo or pull number" }, 400);
+  }
+  const denied = githubGuard(c, "merge", owner, repo);
+  if (denied) return denied;
+
+  const body = await c.req.json().catch(() => null);
+  if (
+    !body ||
+    typeof body.sha !== "string" ||
+    !/^[0-9a-f]{40}$/i.test(body.sha)
+  ) {
+    return c.json(
+      { error: "sha is required: the full 40-character head commit sha" },
+      400,
+    );
+  }
+  if (
+    body.merge_method !== undefined &&
+    !GITHUB_MERGE_METHODS.includes(body.merge_method)
+  ) {
+    return c.json(
+      {
+        error: `merge_method must be one of ${GITHUB_MERGE_METHODS.join(", ")}`,
+      },
+      400,
+    );
+  }
+
+  return githubPassthrough(c, "PUT", `${base}/pulls/${pr}/merge`, {
+    sha: body.sha,
+    ...(body.merge_method && { merge_method: body.merge_method }),
+  });
 });
 
 /**
@@ -1019,7 +1247,9 @@ export const MERCURY_WRITE_BINDINGS = Object.freeze({
  * in MERCURY_WRITE_BINDINGS (case-insensitive match on the key only).
  */
 export function resolveWriteBindingName(code) {
-  const key = String(code ?? "").trim().toUpperCase();
+  const key = String(code ?? "")
+    .trim()
+    .toUpperCase();
   if (!Object.prototype.hasOwnProperty.call(MERCURY_WRITE_BINDINGS, key)) {
     throw new Error(`Unknown Mercury write code '${code}'`);
   }
@@ -1047,16 +1277,26 @@ export async function resolveWriteToken(env, code) {
 export async function resolveWriteEgress(env) {
   const e = env || {};
   if (!e.MERCURY_EGRESS_URL) {
-    throw new Error("MERCURY_EGRESS_URL is not configured; Mercury writes require the relay");
+    throw new Error(
+      "MERCURY_EGRESS_URL is not configured; Mercury writes require the relay",
+    );
   }
-  const accessClientId = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_ID);
-  const accessClientSecret = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET);
+  const accessClientId = await resolveBinding(
+    e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
+  );
+  const accessClientSecret = await resolveBinding(
+    e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
+  );
   const proxyToken = await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN);
   if (!proxyToken) {
-    throw new Error("MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed");
+    throw new Error(
+      "MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed",
+    );
   }
   if (!accessClientId || !accessClientSecret) {
-    throw new Error("Mercury relay Access credentials are not configured; Mercury writes fail closed");
+    throw new Error(
+      "Mercury relay Access credentials are not configured; Mercury writes fail closed",
+    );
   }
   return {
     profile: EGRESS_RELAY,
@@ -1075,7 +1315,9 @@ export async function mercuryWrite(env, code, path, options = {}) {
   const method = String(options.method || "POST").toUpperCase();
   const allowedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
   if (!allowedMethods.has(method)) {
-    throw new Error(`mercuryWrite only permits POST, PUT, PATCH, or DELETE; got ${method}`);
+    throw new Error(
+      `mercuryWrite only permits POST, PUT, PATCH, or DELETE; got ${method}`,
+    );
   }
   const token = await resolveWriteToken(env, code);
   const egress = await resolveWriteEgress(env);
@@ -1235,7 +1477,9 @@ async function requireMercuryToken(c, next) {
   try {
     const egress = resolveEgressProfile(c.env, slug);
     if (egress.profile === EGRESS_RELAY) {
-      egress.proxyToken = await resolveBinding(c.env.MERCURY_EGRESS_PROXY_TOKEN);
+      egress.proxyToken = await resolveBinding(
+        c.env.MERCURY_EGRESS_PROXY_TOKEN,
+      );
     }
     c.set("mercuryEgress", egress);
   } catch (error) {
