@@ -816,6 +816,142 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
   }
 });
 
+// ── GitHub PR-land proxy (pulls, check-runs, merge) ───────────────────
+// Used by chittyagent-autoassist's pr_land_v1 loop over a service binding.
+// Token source is identical to the contents proxy above. Unlike that proxy,
+// GitHub's status and body pass through unchanged: callers treat 4xx as a
+// final decision and 5xx as retryable, so a 409 (head moved) must stay a 409.
+
+const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/;
+const GITHUB_MERGE_METHODS = ["merge", "squash", "rebase"];
+
+function invalidGithubRepo(owner, repo) {
+  return (
+    !GITHUB_NAME_RE.test(owner) ||
+    !GITHUB_NAME_RE.test(repo) ||
+    owner.startsWith(".") ||
+    repo.startsWith(".")
+  );
+}
+
+function parsePullNumber(n) {
+  return /^[1-9][0-9]{0,9}$/.test(n) ? Number(n) : null;
+}
+
+async function githubPassthrough(c, method, apiPath, body) {
+  const githubToken = await getCredential(
+    c.env,
+    "integrations/github/token",
+    "GITHUB_TOKEN",
+  );
+
+  if (!githubToken) {
+    return c.json({ error: "GitHub token not configured" }, 503);
+  }
+
+  let response;
+  try {
+    response = await fetch(`https://api.github.com${apiPath}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "ChittyConnect/1.0",
+        ...(body !== undefined && { "Content-Type": "application/json" }),
+      },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    return c.json({ error: `GitHub request failed: ${error.message}` }, 502);
+  }
+
+  return new Response(await response.text(), {
+    status: response.status,
+    headers: {
+      "Content-Type":
+        response.headers.get("Content-Type") || "application/json",
+    },
+  });
+}
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/pulls/:n
+ * Read a pull request (GitHub REST shape, status passed through)
+ */
+thirdpartyRoutes.get("/github/repos/:owner/:repo/pulls/:n", async (c) => {
+  const { owner, repo, n } = c.req.param();
+  const pr = parsePullNumber(n);
+  if (invalidGithubRepo(owner, repo) || pr === null) {
+    return c.json({ error: "invalid owner, repo or pull number" }, 400);
+  }
+  return githubPassthrough(c, "GET", `/repos/${owner}/${repo}/pulls/${pr}`);
+});
+
+/**
+ * GET /api/thirdparty/github/repos/:owner/:repo/commits/:sha/check-runs
+ * List check runs for a commit (GitHub REST shape, status passed through)
+ */
+thirdpartyRoutes.get(
+  "/github/repos/:owner/:repo/commits/:sha/check-runs",
+  async (c) => {
+    const { owner, repo, sha } = c.req.param();
+    if (invalidGithubRepo(owner, repo) || !/^[0-9a-f]{7,40}$/i.test(sha)) {
+      return c.json({ error: "invalid owner, repo or commit sha" }, 400);
+    }
+    return githubPassthrough(
+      c,
+      "GET",
+      `/repos/${owner}/${repo}/commits/${sha}/check-runs`,
+    );
+  },
+);
+
+/**
+ * PUT /api/thirdparty/github/repos/:owner/:repo/pulls/:n/merge
+ * Merge a pull request. `sha` is required so GitHub rejects the merge (409)
+ * if the head moved since the caller evaluated it.
+ */
+thirdpartyRoutes.put("/github/repos/:owner/:repo/pulls/:n/merge", async (c) => {
+  const { owner, repo, n } = c.req.param();
+  const pr = parsePullNumber(n);
+  if (invalidGithubRepo(owner, repo) || pr === null) {
+    return c.json({ error: "invalid owner, repo or pull number" }, 400);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  if (
+    !body ||
+    typeof body.sha !== "string" ||
+    !/^[0-9a-f]{40}$/i.test(body.sha)
+  ) {
+    return c.json(
+      { error: "sha is required: the full 40-character head commit sha" },
+      400,
+    );
+  }
+  if (
+    body.merge_method !== undefined &&
+    !GITHUB_MERGE_METHODS.includes(body.merge_method)
+  ) {
+    return c.json(
+      {
+        error: `merge_method must be one of ${GITHUB_MERGE_METHODS.join(", ")}`,
+      },
+      400,
+    );
+  }
+
+  return githubPassthrough(
+    c,
+    "PUT",
+    `/repos/${owner}/${repo}/pulls/${pr}/merge`,
+    {
+      sha: body.sha,
+      ...(body.merge_method && { merge_method: body.merge_method }),
+    },
+  );
+});
+
 /**
  * GET /api/thirdparty/google/calendar/events
  * List Google Calendar events
@@ -1019,7 +1155,9 @@ export const MERCURY_WRITE_BINDINGS = Object.freeze({
  * in MERCURY_WRITE_BINDINGS (case-insensitive match on the key only).
  */
 export function resolveWriteBindingName(code) {
-  const key = String(code ?? "").trim().toUpperCase();
+  const key = String(code ?? "")
+    .trim()
+    .toUpperCase();
   if (!Object.prototype.hasOwnProperty.call(MERCURY_WRITE_BINDINGS, key)) {
     throw new Error(`Unknown Mercury write code '${code}'`);
   }
@@ -1047,16 +1185,26 @@ export async function resolveWriteToken(env, code) {
 export async function resolveWriteEgress(env) {
   const e = env || {};
   if (!e.MERCURY_EGRESS_URL) {
-    throw new Error("MERCURY_EGRESS_URL is not configured; Mercury writes require the relay");
+    throw new Error(
+      "MERCURY_EGRESS_URL is not configured; Mercury writes require the relay",
+    );
   }
-  const accessClientId = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_ID);
-  const accessClientSecret = await resolveBinding(e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET);
+  const accessClientId = await resolveBinding(
+    e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
+  );
+  const accessClientSecret = await resolveBinding(
+    e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
+  );
   const proxyToken = await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN);
   if (!proxyToken) {
-    throw new Error("MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed");
+    throw new Error(
+      "MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed",
+    );
   }
   if (!accessClientId || !accessClientSecret) {
-    throw new Error("Mercury relay Access credentials are not configured; Mercury writes fail closed");
+    throw new Error(
+      "Mercury relay Access credentials are not configured; Mercury writes fail closed",
+    );
   }
   return {
     profile: EGRESS_RELAY,
@@ -1075,7 +1223,9 @@ export async function mercuryWrite(env, code, path, options = {}) {
   const method = String(options.method || "POST").toUpperCase();
   const allowedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
   if (!allowedMethods.has(method)) {
-    throw new Error(`mercuryWrite only permits POST, PUT, PATCH, or DELETE; got ${method}`);
+    throw new Error(
+      `mercuryWrite only permits POST, PUT, PATCH, or DELETE; got ${method}`,
+    );
   }
   const token = await resolveWriteToken(env, code);
   const egress = await resolveWriteEgress(env);
@@ -1235,7 +1385,9 @@ async function requireMercuryToken(c, next) {
   try {
     const egress = resolveEgressProfile(c.env, slug);
     if (egress.profile === EGRESS_RELAY) {
-      egress.proxyToken = await resolveBinding(c.env.MERCURY_EGRESS_PROXY_TOKEN);
+      egress.proxyToken = await resolveBinding(
+        c.env.MERCURY_EGRESS_PROXY_TOKEN,
+      );
     }
     c.set("mercuryEgress", egress);
   } catch (error) {
