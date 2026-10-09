@@ -14,7 +14,7 @@ import {
 // fake SVC_AUTOASSIST service binding. Only GitHub's HTTP is stubbed, at the
 // fetch boundary.
 
-const WEBHOOK_SECRET = "webhook-secret-fixture";
+const WEBHOOK_SECRET = "test-fixture-not-a-credential-webhook";
 const HEAD = "0123456789abcdef0123456789abcdef01234567";
 
 function checkSuitePayload(overrides = {}) {
@@ -93,7 +93,7 @@ function makeEnv() {
       get: async (k, opts) => {
         if (k !== "install:4242") return null;
         const v = {
-          token: "ghs-install-fixture",
+          token: "test-fixture-not-a-credential-install",
           expiresAt: new Date(Date.now() + 3600_000).toISOString(),
         };
         return opts?.type === "json" ? v : JSON.stringify(v);
@@ -107,7 +107,7 @@ function makeEnv() {
       }),
     },
     SVC_AUTOASSIST: autoassistBinding(),
-    AUTOASSIST_ADMIN_TOKEN: "autoassist-admin-fixture",
+    AUTOASSIST_ADMIN_TOKEN: "test-fixture-not-a-credential-admin",
   };
 }
 
@@ -178,7 +178,7 @@ describe("check_suite completed forwarding", () => {
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0].url).pathname).toBe("/api/v1/loops/events");
     expect(calls[0].method).toBe("POST");
-    expect(calls[0].auth).toBe("Bearer autoassist-admin-fixture");
+    expect(calls[0].auth).toBe("Bearer test-fixture-not-a-credential-admin");
     expect(LOOP_EVENT_TYPE).toBe("github_check_suite_completed");
     expect(calls[0].body).toEqual({
       type: LOOP_EVENT_TYPE,
@@ -194,7 +194,7 @@ describe("check_suite completed forwarding", () => {
     });
     const runsRead = githubCalls.find((c) => c.url.endsWith("/check-runs"));
     expect(runsRead.init.headers.Authorization).toBe(
-      "token ghs-install-fixture",
+      "token test-fixture-not-a-credential-install",
     );
   });
 
@@ -223,7 +223,7 @@ describe("check_suite completed forwarding", () => {
     const out = await forwardCheckSuiteCompleted(
       env,
       payload,
-      "ghs-install-fixture",
+      "test-fixture-not-a-credential-install",
     );
     expect(out.forwarded).toBe(2);
     expect(env.SVC_AUTOASSIST.calls.map((c) => c.body.correlation_key)).toEqual(

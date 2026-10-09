@@ -18,20 +18,54 @@ function buildApp() {
   return app;
 }
 
+// API_KEYS records, keyed by the raw key. github_actions / github_repos are
+// the scoping fields the GitHub proxy guard reads (fail closed without them).
+const KEY_RECORDS = {
+  [SERVICE_KEY]: {
+    service: "chittyagent-autoassist",
+    github_actions: ["read", "write", "merge"],
+    github_repos: ["chittyos/*"],
+  },
+  "svc-key-other-service-fixture": {
+    service: "chittyagent-other",
+    github_actions: ["read"],
+    github_repos: ["chittyos/*"],
+  },
+  "svc-key-other-repo-fixture": {
+    service: "chittyagent-autoassist",
+    github_actions: ["read", "write", "merge"],
+    github_repos: ["chittyos/chittyconnect", "chittyapps/*"],
+  },
+  "svc-key-unscoped-fixture": { service: "chittyagent-legacy" },
+  "svc-key-contents-owner-fixture": {
+    service: "chittyagent-autoassist",
+    github_actions: ["read"],
+    github_repos: ["o/contents", "contents/r"],
+  },
+};
+
+// OAuth grants the in-memory OAUTH_PROVIDER binding resolves (as /mcp would).
+const OAUTH_GRANTS = {
+  "oauth-grant-no-github-fixture": { userId: "u1", scope: ["mcp:read"] },
+  "oauth-grant-github-read-fixture": {
+    userId: "u2",
+    scope: ["mcp:read", "github:read"],
+  },
+};
+
 function makeEnv() {
-  const keys = new Map([
-    [
-      `key:${SERVICE_KEY}`,
-      JSON.stringify({
-        status: "active",
-        service: "chittyagent-autoassist",
-        rateLimit: 1000,
-      }),
-    ],
-  ]);
+  const keys = new Map(
+    Object.entries(KEY_RECORDS).map(([k, v]) => [
+      `key:${k}`,
+      JSON.stringify({ status: "active", rateLimit: 1000, ...v }),
+    ]),
+  );
   return {
     API_KEYS: { get: async (k) => keys.get(k) ?? null },
-    GITHUB_TOKEN: "gh-token-fixture",
+    OAUTH_PROVIDER: {
+      unwrapToken: async (t) => OAUTH_GRANTS[t] ?? null,
+    },
+    GITHUB_TOKEN: "test-fixture-not-a-credential-gh",
   };
 }
 
@@ -63,9 +97,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function call(path, { method = "GET", body, key = SERVICE_KEY } = {}) {
+function call(path, { method = "GET", body, key = SERVICE_KEY, bearer } = {}) {
   const headers = { "Content-Type": "application/json" };
-  if (key) headers["X-ChittyOS-API-Key"] = key;
+  if (key && !bearer) headers["X-ChittyOS-API-Key"] = key;
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
   return buildApp().fetch(
     new Request(`https://internal${path}`, {
       method,
@@ -130,7 +165,7 @@ describe.each(ROUTES)("$name", (route) => {
     expect(githubCalls[0].url).toBe(route.upstream);
     expect(githubCalls[0].init.method).toBe(route.method);
     expect(githubCalls[0].init.headers.Authorization).toBe(
-      "Bearer gh-token-fixture",
+      "Bearer test-fixture-not-a-credential-gh",
     );
   });
 
@@ -329,5 +364,141 @@ describe("path safety", () => {
     expect(githubCalls[0].url).toBe(
       "https://api.github.com/repos/chittyos/.github/contents/docs/my%20file.md",
     );
+  });
+});
+
+describe("per-caller authorization", () => {
+  const READ = ROUTES.filter((r) => r.method === "GET");
+  const merge = ROUTES.find((r) => r.name === "PUT pulls/:n/merge");
+  const write = ROUTES.find((r) => r.name === "PUT contents/*");
+
+  it("denies a merge to a key from another service (read-only scope)", async () => {
+    const res = await call(merge.path, {
+      ...merge,
+      key: "svc-key-other-service-fixture",
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("GITHUB_PROXY_FORBIDDEN");
+    expect(githubCalls).toHaveLength(0);
+  });
+
+  it("denies a contents write to a key without write", async () => {
+    const res = await call(write.path, {
+      ...write,
+      key: "svc-key-other-service-fixture",
+    });
+    expect(res.status).toBe(403);
+    expect(githubCalls).toHaveLength(0);
+  });
+
+  it.each(ROUTES.map((r) => [r.name, r]))(
+    "%s: denies a key whose repo allow-list excludes the repo",
+    async (_n, route) => {
+      const res = await call(route.path, {
+        ...route,
+        key: "svc-key-other-repo-fixture",
+      });
+      expect(res.status).toBe(403);
+      expect(githubCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(ROUTES.map((r) => [r.name, r]))(
+    "%s: denies a key with no github scoping fields (fail closed)",
+    async (_n, route) => {
+      const res = await call(route.path, {
+        ...route,
+        key: "svc-key-unscoped-fixture",
+      });
+      expect(res.status).toBe(403);
+      expect(githubCalls).toHaveLength(0);
+    },
+  );
+
+  it.each([merge, write].map((r) => [r.name, r]))(
+    "%s: denies OAuth principals even with github:read",
+    async (_n, route) => {
+      const res = await call(route.path, {
+        ...route,
+        bearer: "oauth-grant-github-read-fixture",
+      });
+      expect(res.status).toBe(403);
+      expect(githubCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(READ.map((r) => [r.name, r]))(
+    "%s: denies an OAuth read without github:read",
+    async (_n, route) => {
+      const res = await call(route.path, {
+        ...route,
+        bearer: "oauth-grant-no-github-fixture",
+      });
+      expect(res.status).toBe(403);
+      expect(githubCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(READ.map((r) => [r.name, r]))(
+    "%s: allows an OAuth read with github:read",
+    async (_n, route) => {
+      const res = await call(route.path, {
+        ...route,
+        bearer: "oauth-grant-github-read-fixture",
+      });
+      expect(res.status).toBe(200);
+      expect(githubCalls).toHaveLength(1);
+    },
+  );
+
+  it("allows a read-scoped key from another service to read in its repos", async () => {
+    const route = READ[0];
+    const res = await call(route.path, {
+      ...route,
+      key: "svc-key-other-service-fixture",
+    });
+    expect(res.status).toBe(200);
+    expect(githubCalls).toHaveLength(1);
+  });
+
+  it("allows a properly scoped key to merge, matching the repo case-insensitively", async () => {
+    const res = await call(
+      "/api/thirdparty/github/repos/ChittyOS/chittyentity/pulls/754/merge",
+      { method: "PUT", body: { sha: HEAD } },
+    );
+    expect(res.status).toBe(200);
+    expect(githubCalls).toHaveLength(1);
+  });
+});
+
+describe("contents path when owner or repo is literally 'contents'", () => {
+  it.each([
+    [
+      "repos/o/contents/contents/README.md",
+      "https://api.github.com/repos/o/contents/contents/README.md",
+    ],
+    [
+      "repos/contents/r/contents/x.md",
+      "https://api.github.com/repos/contents/r/contents/x.md",
+    ],
+  ])("%s keeps the exact file path upstream", async (suffix, upstream) => {
+    const res = await call(`/api/thirdparty/github/${suffix}`, {
+      key: "svc-key-contents-owner-fixture",
+    });
+    expect(res.status).toBe(200);
+    expect(githubCalls).toHaveLength(1);
+    expect(githubCalls[0].url).toBe(upstream);
+  });
+});
+
+describe("commit sha validation on check-runs and status", () => {
+  it.each([
+    "/api/thirdparty/github/repos/chittyos/chittyentity/commits/..%2F..%2Fx/status",
+    "/api/thirdparty/github/repos/chittyos/chittyentity/commits/not-a-sha/check-runs",
+    "/api/thirdparty/github/repos/chittyos/chittyentity/commits/not-a-sha/status",
+  ])("rejects %s with 400 and never calls GitHub", async (path) => {
+    const res = await call(path);
+    expect(res.status).toBe(400);
+    expect(githubCalls).toHaveLength(0);
   });
 });

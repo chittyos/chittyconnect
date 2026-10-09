@@ -747,12 +747,84 @@ function encodeContentPath(rawPath) {
   return out.join("/");
 }
 
-function contentPathFromRequest(c) {
-  const marker = "/contents/";
-  const i = c.req.path.indexOf(marker);
-  return i === -1
-    ? null
-    : encodeContentPath(c.req.path.slice(i + marker.length));
+// Slice at the exact route prefix (mount + owner/repo), so an owner or repo
+// literally named "contents" can't shift where the file path starts.
+function contentPathFromRequest(c, owner, repo) {
+  const mount = c.req.routePath.replace(
+    /\/github\/repos\/:owner\/:repo\/contents\/\*$/,
+    "",
+  );
+  const prefix = `${mount}/github/repos/${owner}/${repo}/contents/`;
+  if (!c.req.path.startsWith(prefix)) return null;
+  return encodeContentPath(c.req.path.slice(prefix.length));
+}
+
+// ── Per-caller authorization for the GitHub proxy ──────────────────────
+// The broker's GitHub token reaches many repos, so every route checks the
+// caller before any upstream call. API_KEYS records opt in with two optional
+// fields (docs/github-proxy-key-scoping.md):
+//   github_actions: ["read" | "write" | "merge"]
+//   github_repos:   ["owner/repo" | "owner/*"]
+// A key without both fields is denied (fail closed). OAuth principals from
+// /mcp may only read, and only with an explicit "github:read" scope.
+// Synthetic principals (public, cloudflare-access, oidc) are always denied.
+const GITHUB_ACTIONS = new Set(["read", "write", "merge"]);
+const GITHUB_SYNTHETIC_PRINCIPALS = new Set([
+  "public",
+  "cloudflare-access",
+  "oidc",
+]);
+
+function githubRepoAllowed(patterns, owner, repo) {
+  const o = owner.toLowerCase();
+  const full = `${o}/${repo.toLowerCase()}`;
+  return patterns.some((pattern) => {
+    if (typeof pattern !== "string") return false;
+    const p = pattern.toLowerCase();
+    return p === full || p === `${o}/*`;
+  });
+}
+
+/** @visibleForTesting */
+export function githubAuthorizationError(principal, action, owner, repo) {
+  if (!GITHUB_ACTIONS.has(action)) return "unknown action";
+  if (!principal) return "no authenticated principal";
+  if (principal.type === "oauth") {
+    const scopes = Array.isArray(principal.scopes) ? principal.scopes : [];
+    if (action === "read" && scopes.includes("github:read")) return null;
+    return action === "read"
+      ? "OAuth principal lacks github:read scope"
+      : `OAuth principals may not ${action}`;
+  }
+  if (GITHUB_SYNTHETIC_PRINCIPALS.has(principal.type)) {
+    return `${principal.type} principal may not use the GitHub proxy`;
+  }
+  const { github_actions: actions, github_repos: repos } = principal;
+  if (!Array.isArray(actions) || !Array.isArray(repos)) {
+    return "API key is not scoped for the GitHub proxy";
+  }
+  if (!actions.includes(action)) return `API key lacks github ${action}`;
+  if (!githubRepoAllowed(repos, owner, repo)) {
+    return `API key is not allowed on ${owner}/${repo}`;
+  }
+  return null;
+}
+
+// Single guard used by every GitHub proxy route. Returns a 403 Response to
+// send, or null when the caller may proceed.
+function githubGuard(c, action, owner, repo) {
+  const reason = githubAuthorizationError(c.get("apiKey"), action, owner, repo);
+  if (!reason) return null;
+  console.warn("[github-proxy] denied", {
+    action,
+    repo: `${owner}/${repo}`,
+    caller: c.get("apiKey")?.service || c.get("apiKey")?.name || "unknown",
+    reason,
+  });
+  return c.json(
+    { error: "forbidden", code: "GITHUB_PROXY_FORBIDDEN", reason },
+    403,
+  );
 }
 
 // Forward only the named query parameters that are present.
@@ -812,10 +884,12 @@ async function githubPassthrough(c, method, apiPath, body) {
 thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
   const { owner, repo } = c.req.param();
   const base = githubRepoBase(owner, repo);
-  const path = contentPathFromRequest(c);
+  const path = base && contentPathFromRequest(c, owner, repo);
   if (!base || !path) {
     return c.json({ error: "invalid owner, repo or file path" }, 400);
   }
+  const denied = githubGuard(c, "write", owner, repo);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => null);
   if (!body?.content) {
@@ -832,10 +906,12 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/contents/*", async (c) => {
 thirdpartyRoutes.get("/github/repos/:owner/:repo/contents/*", async (c) => {
   const { owner, repo } = c.req.param();
   const base = githubRepoBase(owner, repo);
-  const path = contentPathFromRequest(c);
+  const path = base && contentPathFromRequest(c, owner, repo);
   if (!base || !path) {
     return c.json({ error: "invalid owner, repo or file path" }, 400);
   }
+  const denied = githubGuard(c, "read", owner, repo);
+  if (denied) return denied;
   return githubPassthrough(
     c,
     "GET",
@@ -854,6 +930,8 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/pulls/:n", async (c) => {
   if (!base || pr === null) {
     return c.json({ error: "invalid owner, repo or pull number" }, 400);
   }
+  const denied = githubGuard(c, "read", owner, repo);
+  if (denied) return denied;
   return githubPassthrough(c, "GET", `${base}/pulls/${pr}`);
 });
 
@@ -870,6 +948,8 @@ thirdpartyRoutes.get(
     if (!base || !GITHUB_SHA_RE.test(sha)) {
       return c.json({ error: "invalid owner, repo or commit sha" }, 400);
     }
+    const denied = githubGuard(c, "read", owner, repo);
+    if (denied) return denied;
     for (const name of ["per_page", "page"]) {
       const value = c.req.query(name);
       if (value !== undefined && !/^[1-9][0-9]{0,3}$/.test(value)) {
@@ -896,6 +976,8 @@ thirdpartyRoutes.get(
     if (!base || !GITHUB_SHA_RE.test(sha)) {
       return c.json({ error: "invalid owner, repo or commit sha" }, 400);
     }
+    const denied = githubGuard(c, "read", owner, repo);
+    if (denied) return denied;
     return githubPassthrough(c, "GET", `${base}/commits/${sha}/status`);
   },
 );
@@ -912,6 +994,8 @@ thirdpartyRoutes.put("/github/repos/:owner/:repo/pulls/:n/merge", async (c) => {
   if (!base || pr === null) {
     return c.json({ error: "invalid owner, repo or pull number" }, 400);
   }
+  const denied = githubGuard(c, "merge", owner, repo);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => null);
   if (
