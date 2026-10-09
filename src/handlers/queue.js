@@ -22,6 +22,7 @@ const normalizeGitHubEvent = ({
   tenantId,
   payload,
 });
+import { forwardCheckSuiteCompleted } from "./check-suite-forward.js";
 import { getCachedInstallationToken } from "../auth/github.js";
 import { createComplianceCheck } from "../github/checks.js";
 import { autoLabelPullRequest } from "../github/labels.js";
@@ -235,6 +236,11 @@ async function runAutomations(env, event, payload, installationId) {
           }),
         ]);
       }
+      break;
+
+    case "check_suite":
+      // Wake autoassist loops waiting on this head (pr_land_v1)
+      await forwardCheckSuiteCompleted(env, payload, token);
       break;
 
     case "issue_comment":

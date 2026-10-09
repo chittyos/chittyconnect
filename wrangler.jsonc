@@ -168,7 +168,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     },
 
@@ -309,7 +310,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     },
 
@@ -466,7 +468,8 @@
         { "binding": "SVC_CHRONICLE", "service": "chittychronicle", "environment": "production" },
         // { "binding": "SVC_DISPUTE", "service": "chittydispute" },  // TODO: uncomment to use service-binding instead of HTTPS fetch to dispute.chitty.cc
         { "binding": "SVC_SCORE", "service": "chittyscore-worker", "environment": "production" },
-        { "binding": "SVC_STORAGE", "service": "chittystorage" }
+        { "binding": "SVC_STORAGE", "service": "chittystorage" },
+        { "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" }
       ]
     }
   }
