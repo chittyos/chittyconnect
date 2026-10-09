@@ -15,6 +15,7 @@ import {
 } from "../lib/cloudflare-api-helper.js";
 import { getServiceCatalog } from "../lib/service-catalog.js";
 import { Client } from "@neondatabase/serverless";
+import { authorizeAgentContext } from "./agent-context-auth.js";
 
 /**
  * Parse a fetch response, returning an MCP error result for non-OK responses.
@@ -1849,6 +1850,17 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         };
       }
 
+      // Enforce the Prompt Registry's declared consumer/agent allowlists on
+      // this MCP surface. Tool arguments and session context are untrusted;
+      // the service identity is re-derived from the validated API_KEYS KV.
+      const access = await authorizeAgentContext(prompt, agentId, authToken, env);
+      if (!access.allowed) {
+        return {
+          content: [{ type: "text", text: "Unauthorized: agent context consumer gate denied" }],
+          isError: true,
+        };
+      }
+
       // Compose base + layers (reuses prompt registry composition logic)
       let layers = [];
       try {
@@ -1858,10 +1870,17 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const additionalLayerIds = args.additional_layers || [];
       for (const layerId of additionalLayerIds) {
         const layerPrompt = await db
-          .prepare("SELECT base FROM prompt_registry WHERE id = ?")
+          .prepare("SELECT base, consumer_gate FROM prompt_registry WHERE id = ?")
           .bind(layerId)
           .first();
         if (layerPrompt) {
+          const layerAccess = await authorizeAgentContext(layerPrompt, agentId, authToken, env);
+          if (!layerAccess.allowed) {
+            return {
+              content: [{ type: "text", text: "Unauthorized: additional prompt layer denied" }],
+              isError: true,
+            };
+          }
           layers.push({ id: layerId, content: layerPrompt.base, order: layers.length + 1 });
         }
       }
