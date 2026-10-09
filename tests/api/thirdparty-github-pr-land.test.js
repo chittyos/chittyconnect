@@ -51,7 +51,10 @@ beforeEach(() => {
     githubCalls.push({ url, init });
     return new Response(JSON.stringify(githubReply.body), {
       status: githubReply.status,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ...githubReply.headers,
+      },
     });
   });
 });
@@ -85,6 +88,27 @@ const ROUTES = [
     path: `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/check-runs`,
     method: "GET",
     upstream: `https://api.github.com/repos/chittyos/chittyentity/commits/${HEAD}/check-runs`,
+  },
+  {
+    name: "GET commits/:sha/status",
+    path: `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/status`,
+    method: "GET",
+    upstream: `https://api.github.com/repos/chittyos/chittyentity/commits/${HEAD}/status`,
+  },
+  {
+    name: "GET contents/*",
+    path: "/api/thirdparty/github/repos/chittyos/chittyentity/contents/.gate/review.json?ref=feat%2Fx",
+    method: "GET",
+    upstream:
+      "https://api.github.com/repos/chittyos/chittyentity/contents/.gate/review.json?ref=feat%2Fx",
+  },
+  {
+    name: "PUT contents/*",
+    path: "/api/thirdparty/github/repos/chittyos/chittyentity/contents/.gate/review.json",
+    method: "PUT",
+    body: { message: "chore(gate): attest", content: "e30=", branch: "feat/x" },
+    upstream:
+      "https://api.github.com/repos/chittyos/chittyentity/contents/.gate/review.json",
   },
   {
     name: "PUT pulls/:n/merge",
@@ -191,5 +215,119 @@ describe("GitHub token unavailable", () => {
     );
     expect(res.status).toBe(503);
     expect(githubCalls).toHaveLength(0);
+  });
+});
+
+describe("check-runs pagination", () => {
+  const path = `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/check-runs`;
+
+  it("forwards per_page and page, the Link header, and each run's app", async () => {
+    const link =
+      '<https://api.github.com/repositories/1/commits/x/check-runs?per_page=2&page=2>; rel="next"';
+    githubReply = {
+      status: 200,
+      headers: { Link: link },
+      body: {
+        total_count: 3,
+        check_runs: [
+          {
+            name: "test",
+            status: "completed",
+            conclusion: "success",
+            app: { id: 15368, slug: "github-actions" },
+          },
+          {
+            name: "gate",
+            status: "completed",
+            conclusion: "success",
+            app: { id: 99, slug: "chittyconnect" },
+          },
+        ],
+      },
+    };
+    const res = await call(`${path}?per_page=2&page=1&ignored=x`);
+    expect(res.status).toBe(200);
+    expect(githubCalls[0].url).toBe(
+      `https://api.github.com/repos/chittyos/chittyentity/commits/${HEAD}/check-runs?per_page=2&page=1`,
+    );
+    expect(res.headers.get("Link")).toBe(link);
+    const body = await res.json();
+    expect(body.check_runs.map((r) => r.app)).toEqual([
+      { id: 15368, slug: "github-actions" },
+      { id: 99, slug: "chittyconnect" },
+    ]);
+  });
+
+  it("rejects a non-numeric per_page with 400", async () => {
+    const res = await call(`${path}?per_page=all`);
+    expect(res.status).toBe(400);
+    expect(githubCalls).toHaveLength(0);
+  });
+});
+
+describe("contents PUT response", () => {
+  it("returns GitHub's full body including commit.sha and commit.parents", async () => {
+    const upstream = {
+      content: { path: ".gate/review.json", sha: "b".repeat(40) },
+      commit: { sha: "c".repeat(40), parents: [{ sha: HEAD }] },
+    };
+    githubReply = { status: 201, body: upstream };
+    const res = await call(
+      "/api/thirdparty/github/repos/chittyos/chittyentity/contents/.gate/review.json",
+      {
+        method: "PUT",
+        body: { message: "m", content: "e30=", branch: "feat/x" },
+      },
+    );
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual(upstream);
+  });
+});
+
+describe("path safety", () => {
+  it.each([
+    ["owner '..'", "/api/thirdparty/github/repos/../chittyentity/pulls/754"],
+    [
+      "owner with %",
+      "/api/thirdparty/github/repos/a%2Fb/chittyentity/pulls/754",
+    ],
+    [
+      "repo '..' (encoded)",
+      "/api/thirdparty/github/repos/chittyos/%2e%2e/pulls/754",
+    ],
+    [
+      "encoded '/' in a file segment",
+      "/api/thirdparty/github/repos/chittyos/chittyentity/contents/a%2F..%2Fb",
+    ],
+  ])("rejects %s and never calls GitHub", async (_label, path) => {
+    const res = await call(path);
+    expect([400, 404]).toContain(res.status);
+    expect(githubCalls).toHaveLength(0);
+  });
+
+  it("keeps an encoded '..' file segment inside the contents route", async () => {
+    // `new Request` normalizes %2e%2e to `..`, so the route sees contents/b.
+    // Safety property: the request stays under .../contents/ on the same repo
+    // and can only reach GitHub's contents endpoint, never another route.
+    githubReply = { status: 200, body: {} };
+    const res = await call(
+      "/api/thirdparty/github/repos/chittyos/chittyentity/contents/a/%2e%2e/b",
+    );
+    expect(res.status).toBe(200);
+    expect(githubCalls).toHaveLength(1);
+    expect(githubCalls[0].url).toBe(
+      "https://api.github.com/repos/chittyos/chittyentity/contents/b",
+    );
+  });
+
+  it("encodes each file path segment exactly once", async () => {
+    githubReply = { status: 200, body: {} };
+    const res = await call(
+      "/api/thirdparty/github/repos/chittyos/.github/contents/docs/my%20file.md",
+    );
+    expect(res.status).toBe(200);
+    expect(githubCalls[0].url).toBe(
+      "https://api.github.com/repos/chittyos/.github/contents/docs/my%20file.md",
+    );
   });
 });
