@@ -301,6 +301,29 @@ describe("check_suite queue ack/retry", () => {
     expect(msg.ack).not.toHaveBeenCalled();
   });
 
+  it("passes a 30s delay when it retries", async () => {
+    const { msg } = await run(autoassistBinding(503));
+    expect(msg.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
+  });
+
+  it("still retries when recording the failed status in IDEMP_KV throws", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = { ...makeEnv(), SVC_AUTOASSIST: autoassistBinding(503) };
+    const kv = memoryKv();
+    env.IDEMP_KV = {
+      get: kv.get,
+      put: async (k, v, o) => {
+        if (v === "failed") throw new Error("kv unavailable");
+        return kv.put(k, v, o);
+      },
+    };
+    await deliver(env, checkSuitePayload());
+    const [msg] = await drain(env);
+    expect(msg.retry).toHaveBeenCalledTimes(1);
+    expect(msg.ack).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
   it.each([404, 400, 422])(
     "acks the message when autoassist returns %i",
     async (status) => {
@@ -326,6 +349,40 @@ describe("check_suite queue ack/retry", () => {
       }),
     );
     errors.mockRestore();
+  });
+});
+
+describe("check_suite retry re-sends only failed PRs", () => {
+  it("first attempt A=200 B=503; the retry sends only B", async () => {
+    const payload = checkSuitePayload();
+    payload.check_suite.pull_requests = [{ number: 1 }, { number: 2 }];
+    const calls = [];
+    let bStatus = 503;
+    const binding = {
+      calls,
+      fetch: async (req) => {
+        const body = await req.json();
+        calls.push(body.correlation_key);
+        const status = body.correlation_key.endsWith("#1") ? 200 : bStatus;
+        return new Response("{}", { status });
+      },
+    };
+    const env = { ...makeEnv(), SVC_AUTOASSIST: binding };
+    await deliver(env, payload);
+
+    const [first] = await drain(env);
+    expect(first.retry).toHaveBeenCalledTimes(1);
+    expect([...calls].sort()).toEqual([
+      "chittyos/chittyentity#1",
+      "chittyos/chittyentity#2",
+    ]);
+
+    calls.length = 0;
+    bStatus = 202;
+    const [second] = await drain(env);
+    expect(calls).toEqual(["chittyos/chittyentity#2"]);
+    expect(second.ack).toHaveBeenCalledTimes(1);
+    expect(second.retry).not.toHaveBeenCalled();
   });
 });
 
@@ -356,5 +413,18 @@ describe("wrangler.jsonc", () => {
       /\{ "binding": "SVC_AUTOASSIST", "service": "chittyagent-autoassist" \}/g,
     );
     expect(lines).toHaveLength(3);
+  });
+
+  it("registers the github-events consumer in production only, with a 30s retry delay", () => {
+    const raw = readFileSync(
+      new URL("../../wrangler.jsonc", import.meta.url),
+      "utf8",
+    );
+    const consumers = raw.match(/\{ "queue": "github-events",[^}]*\}/g);
+    expect(consumers).toHaveLength(1);
+    expect(consumers[0]).toContain('"retry_delay": 30');
+    expect(raw.indexOf(consumers[0])).toBeGreaterThan(
+      raw.indexOf('"production": {'),
+    );
   });
 });

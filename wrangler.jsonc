@@ -153,13 +153,7 @@
           { "binding": "PROOF_Q", "queue": "documint-proofs" }
         ],
         "consumers": [
-          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" },
-          // github-events: the check_suite forward asks for a retry on an
-          // autoassist 5xx or throw. Bound the retries, and park a message
-          // that exhausts them in the DLQ instead of deleting it. The live
-          // consumer predates this file (wrangler.toml-era). The DLQ queue
-          // must exist before deploy (concierge/deploy prerequisite).
-          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "dead_letter_queue": "github-events-dlq" }
+          { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" }
         ]
       },
       "ai": { "binding": "AI" },
@@ -461,11 +455,12 @@
         "consumers": [
           { "queue": "documint-proofs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "documint-proofs-dlq" },
           // github-events: the check_suite forward asks for a retry on an
-          // autoassist 5xx or throw. Bound the retries, and park a message
-          // that exhausts them in the DLQ instead of deleting it. The live
-          // consumer predates this file (wrangler.toml-era). The DLQ queue
-          // must exist before deploy (concierge/deploy prerequisite).
-          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "dead_letter_queue": "github-events-dlq" }
+          // autoassist 5xx or throw. Retries are delayed and bounded; a message
+          // that exhausts them parks in the DLQ (must exist before deploy).
+          // Production only: a queue has one consumer worker, so dev/staging
+          // must not claim it. This consumer was attached by hand; the old
+          // wrangler.toml never declared it.
+          { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "retry_delay": 30, "dead_letter_queue": "github-events-dlq" }
         ]
       },
       "ai": { "binding": "AI" },

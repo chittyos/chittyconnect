@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { authenticate } from "../../src/api/middleware/auth.js";
-import { thirdpartyRoutes } from "../../src/api/routes/thirdparty.js";
+import {
+  githubAuthorizationError,
+  thirdpartyRoutes,
+} from "../../src/api/routes/thirdparty.js";
 
 // The PR-land proxy used by chittyagent-autoassist's pr_land_v1 loop.
 // Only GitHub's HTTP is stubbed, at the fetch boundary. Auth runs through the
@@ -526,5 +529,28 @@ describe("commit sha validation on check-runs and status", () => {
     const res = await call(path);
     expect(res.status).toBe(400);
     expect(githubCalls).toHaveLength(0);
+  });
+});
+
+describe("github_repos owner boundary", () => {
+  const principal = {
+    type: "api_key",
+    github_actions: ["read"],
+    github_repos: ["chittyos/*"],
+  };
+
+  it("allows chittyos/x", () => {
+    expect(githubAuthorizationError(principal, "read", "chittyos", "x")).toBe(
+      null,
+    );
+  });
+
+  it.each([
+    ["chittyos-evil", "x"],
+    ["chittyosx", "y"],
+  ])("denies %s/%s", (owner, repo) => {
+    expect(githubAuthorizationError(principal, "read", owner, repo)).toMatch(
+      /not allowed/,
+    );
   });
 });
