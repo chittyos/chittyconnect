@@ -161,8 +161,24 @@ async function deliver(env, payload, { signature } = {}) {
 }
 
 async function drain(env) {
-  const messages = env.sent.map((body) => ({ body, ack: () => {} }));
+  const messages = env.sent.map((body) => ({
+    body,
+    ack: vi.fn(),
+    retry: vi.fn(),
+  }));
   await queueConsumer({ queue: "github-events", messages }, env);
+  return messages;
+}
+
+function throwingBinding() {
+  const calls = [];
+  return {
+    calls,
+    fetch: async (req) => {
+      calls.push({ url: req.url });
+      throw new Error("service binding unavailable");
+    },
+  };
 }
 
 describe("check_suite completed forwarding", () => {
@@ -257,6 +273,76 @@ describe("check_suite completed forwarding", () => {
     expect(out.results).toEqual([
       { correlation_key: "chittyos/chittyentity#754", status: 404 },
     ]);
+  });
+});
+
+describe("check_suite queue ack/retry", () => {
+  async function run(binding) {
+    const env = { ...makeEnv(), SVC_AUTOASSIST: binding };
+    await deliver(env, checkSuitePayload());
+    const [msg] = await drain(env);
+    return { env, msg };
+  }
+
+  it.each([500, 503])(
+    "retries the message when autoassist returns %i",
+    async (status) => {
+      const { env, msg } = await run(autoassistBinding(status));
+      expect(env.SVC_AUTOASSIST.calls).toHaveLength(1);
+      expect(msg.retry).toHaveBeenCalledTimes(1);
+      expect(msg.ack).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retries the message when the autoassist fetch throws", async () => {
+    const { env, msg } = await run(throwingBinding());
+    expect(env.SVC_AUTOASSIST.calls).toHaveLength(1);
+    expect(msg.retry).toHaveBeenCalledTimes(1);
+    expect(msg.ack).not.toHaveBeenCalled();
+  });
+
+  it.each([404, 400, 422])(
+    "acks the message when autoassist returns %i",
+    async (status) => {
+      const { env, msg } = await run(autoassistBinding(status));
+      expect(env.SVC_AUTOASSIST.calls).toHaveLength(1);
+      expect(msg.ack).toHaveBeenCalledTimes(1);
+      expect(msg.retry).not.toHaveBeenCalled();
+    },
+  );
+
+  it("acks without forwarding and logs POLICY_BLOCKED when the admin token is unset", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = { ...makeEnv(), AUTOASSIST_ADMIN_TOKEN: undefined };
+    await deliver(env, checkSuitePayload());
+    const [msg] = await drain(env);
+    expect(env.SVC_AUTOASSIST.calls).toHaveLength(0);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        code: "POLICY_BLOCKED_AUTOASSIST_TOKEN_UNSET",
+      }),
+    );
+    errors.mockRestore();
+  });
+});
+
+describe("check_runs_url origin check", () => {
+  it("does not send the installation token off api.github.com; forwards without check_runs", async () => {
+    const payload = checkSuitePayload();
+    payload.check_suite.check_runs_url =
+      "https://api.github.com.evil.example/repos/chittyos/chittyentity/check-suites/77/check-runs";
+    const env = makeEnv();
+    const out = await forwardCheckSuiteCompleted(
+      env,
+      payload,
+      "test-fixture-not-a-credential-install",
+    );
+    expect(githubCalls).toHaveLength(0);
+    expect(out.forwarded).toBe(1);
+    expect(env.SVC_AUTOASSIST.calls[0].body.payload.check_runs).toBeNull();
   });
 });
 

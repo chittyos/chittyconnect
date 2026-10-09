@@ -253,6 +253,31 @@ describe("GitHub token unavailable", () => {
   });
 });
 
+describe("rate-limit headers", () => {
+  it("passes Retry-After and X-RateLimit-* through on a GitHub 403", async () => {
+    githubReply = {
+      status: 403,
+      headers: {
+        "Retry-After": "60",
+        "X-RateLimit-Limit": "5000",
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": "1760000000",
+        "X-RateLimit-Used": "5000",
+        "X-RateLimit-Resource": "core",
+      },
+      body: { message: "API rate limit exceeded" },
+    };
+    const res = await call(ROUTES[0].path);
+    expect(res.status).toBe(403);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("5000");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("0");
+    expect(res.headers.get("X-RateLimit-Reset")).toBe("1760000000");
+    expect(res.headers.get("X-RateLimit-Used")).toBe("5000");
+    expect(res.headers.get("X-RateLimit-Resource")).toBe("core");
+  });
+});
+
 describe("check-runs pagination", () => {
   const path = `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/check-runs`;
 
@@ -440,14 +465,15 @@ describe("per-caller authorization", () => {
   );
 
   it.each(READ.map((r) => [r.name, r]))(
-    "%s: allows an OAuth read with github:read",
+    "%s: denies an OAuth read even with github:read",
     async (_n, route) => {
       const res = await call(route.path, {
         ...route,
         bearer: "oauth-grant-github-read-fixture",
       });
-      expect(res.status).toBe(200);
-      expect(githubCalls).toHaveLength(1);
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("GITHUB_PROXY_FORBIDDEN");
+      expect(githubCalls).toHaveLength(0);
     },
   );
 

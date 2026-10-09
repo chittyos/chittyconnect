@@ -75,8 +75,15 @@ export async function queueConsumer(batch, env) {
     }
   });
 
-  // Ack all messages (even failures, to avoid infinite retries)
-  batch.messages.forEach((msg) => msg.ack());
+  // Retry only failures marked retryable (e.g. autoassist 5xx); ack the rest,
+  // failures included, to avoid infinite retries.
+  batch.messages.forEach((msg, i) => {
+    if (results[i].status === "rejected" && results[i].reason?.retryable) {
+      msg.retry();
+    } else {
+      msg.ack();
+    }
+  });
 }
 
 /**
@@ -240,7 +247,14 @@ async function runAutomations(env, event, payload, installationId) {
 
     case "check_suite":
       // Wake autoassist loops waiting on this head (pr_land_v1)
-      await forwardCheckSuiteCompleted(env, payload, token);
+      {
+        const out = await forwardCheckSuiteCompleted(env, payload, token);
+        if (out.retry) {
+          const error = new Error("autoassist loop event delivery failed");
+          error.retryable = true;
+          throw error;
+        }
+      }
       break;
 
     case "issue_comment":

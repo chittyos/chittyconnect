@@ -8,9 +8,10 @@
  * It runs from the GitHub event queue consumer, so the webhook's HMAC
  * signature has already been verified before anything here executes.
  *
- * Delivery is best-effort and never throws: a missing binding or token, or a
- * non-2xx reply (e.g. 404 when no loop is waiting on that PR), is logged and
- * the rest of the event's automations still run.
+ * Never throws. A missing binding or token, or a 4xx reply (e.g. 404 when no
+ * loop is waiting on that PR), is logged and the message is acked. A 5xx reply
+ * or a failed fetch sets `retry: true`, and the queue consumer retries the
+ * message (the queue's max_retries bounds this).
  */
 
 import { resolveBindingValue } from "../lib/credential-helper.js";
@@ -45,8 +46,29 @@ export function buildCheckSuiteLoopEvents(payload, checkRuns) {
     }));
 }
 
+const GITHUB_API_ORIGIN = "https://api.github.com";
+
+function isGitHubApiUrl(url) {
+  try {
+    return new URL(url).origin === GITHUB_API_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchCheckRunSummary(token, checkRunsUrl) {
   if (!token || !checkRunsUrl) return null;
+  // The installation token goes only to GitHub's API, never to a payload URL
+  // that points anywhere else.
+  if (!isGitHubApiUrl(checkRunsUrl)) {
+    console.warn(
+      "[check-suite] check_runs_url not on api.github.com; skipped",
+      {
+        check_runs_url: checkRunsUrl,
+      },
+    );
+    return null;
+  }
   try {
     const res = await fetch(checkRunsUrl, {
       headers: {
@@ -71,7 +93,7 @@ async function fetchCheckRunSummary(token, checkRunsUrl) {
  * @param {object} env - Worker environment (SVC_AUTOASSIST, AUTOASSIST_ADMIN_TOKEN)
  * @param {object} payload - GitHub check_suite webhook payload
  * @param {string} [token] - GitHub installation token for the check-runs read
- * @returns {Promise<{forwarded: number, skipped?: string, results?: Array}>}
+ * @returns {Promise<{forwarded: number, skipped?: string, results?: Array, retry?: boolean}>}
  */
 export async function forwardCheckSuiteCompleted(env, payload, token) {
   if (payload?.action !== "completed") {
@@ -86,7 +108,9 @@ export async function forwardCheckSuiteCompleted(env, payload, token) {
 
   const adminToken = await resolveBindingValue(env.AUTOASSIST_ADMIN_TOKEN);
   if (!adminToken) {
-    console.warn("[check-suite] AUTOASSIST_ADMIN_TOKEN missing; not forwarded");
+    console.error("[check-suite] AUTOASSIST_ADMIN_TOKEN unset; not forwarded", {
+      code: "POLICY_BLOCKED_AUTOASSIST_TOKEN_UNSET",
+    });
     return { forwarded: 0, skipped: "token_missing" };
   }
 
@@ -135,5 +159,6 @@ export async function forwardCheckSuiteCompleted(env, payload, token) {
   return {
     forwarded: results.filter((r) => r.status >= 200 && r.status < 300).length,
     results,
+    retry: results.some((r) => r.error !== undefined || r.status >= 500),
   };
 }

@@ -715,7 +715,9 @@ thirdpartyRoutes.patch("/notion/pages/:pageId", async (c) => {
 const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/;
 const GITHUB_MERGE_METHODS = ["merge", "squash", "rebase"];
 const GITHUB_SHA_RE = /^[0-9a-f]{7,40}$/i;
-const GITHUB_PASSTHROUGH_HEADERS = ["Content-Type", "Link"];
+const GITHUB_PASSTHROUGH_HEADERS = ["Content-Type", "Link", "Retry-After"];
+// Plus every X-RateLimit-* header, so callers can back off on 403/429.
+const GITHUB_RATELIMIT_HEADER_PREFIX = "x-ratelimit-";
 
 function githubRepoBase(owner, repo) {
   for (const name of [owner, repo]) {
@@ -766,7 +768,8 @@ function contentPathFromRequest(c, owner, repo) {
 //   github_actions: ["read" | "write" | "merge"]
 //   github_repos:   ["owner/repo" | "owner/*"]
 // A key without both fields is denied (fail closed). OAuth principals from
-// /mcp may only read, and only with an explicit "github:read" scope.
+// /mcp are always denied: a grant carries no repo allow-list, so even a read
+// would open every repo the broker token reaches.
 // Synthetic principals (public, cloudflare-access, oidc) are always denied.
 const GITHUB_ACTIONS = new Set(["read", "write", "merge"]);
 const GITHUB_SYNTHETIC_PRINCIPALS = new Set([
@@ -790,11 +793,7 @@ export function githubAuthorizationError(principal, action, owner, repo) {
   if (!GITHUB_ACTIONS.has(action)) return "unknown action";
   if (!principal) return "no authenticated principal";
   if (principal.type === "oauth") {
-    const scopes = Array.isArray(principal.scopes) ? principal.scopes : [];
-    if (action === "read" && scopes.includes("github:read")) return null;
-    return action === "read"
-      ? "OAuth principal lacks github:read scope"
-      : `OAuth principals may not ${action}`;
+    return "OAuth principals may not use the GitHub proxy";
   }
   if (GITHUB_SYNTHETIC_PRINCIPALS.has(principal.type)) {
     return `${principal.type} principal may not use the GitHub proxy`;
@@ -869,6 +868,11 @@ async function githubPassthrough(c, method, apiPath, body) {
   for (const name of GITHUB_PASSTHROUGH_HEADERS) {
     const value = response.headers.get(name);
     if (value) headers[name] = value;
+  }
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase().startsWith(GITHUB_RATELIMIT_HEADER_PREFIX)) {
+      headers[name] = value;
+    }
   }
   return new Response(await response.text(), {
     status: response.status,

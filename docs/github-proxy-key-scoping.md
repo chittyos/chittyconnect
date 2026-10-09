@@ -28,6 +28,7 @@ These are schema fields, not credentials.
 | PUT pulls/:n/merge | `merge` + repo match |
 
 - A key without both fields is denied with 403 `GITHUB_PROXY_FORBIDDEN` (fail closed).
-- OAuth principals (`/mcp` tokens) are denied on merge and contents PUT, and on
-  reads unless the grant carries the `github:read` scope.
+- OAuth principals (`/mcp` tokens) are denied on every route, reads included.
+  An OAuth grant has no repo allow-list, so any GitHub access through it would
+  reach every repo the broker token can. Use a scoped API key instead.
 - Synthetic principals (`public`, `cloudflare-access`, `oidc`) are always denied.
