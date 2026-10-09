@@ -939,6 +939,17 @@ thirdpartyRoutes.get("/github/repos/:owner/:repo/pulls/:n", async (c) => {
   return githubPassthrough(c, "GET", `${base}/pulls/${pr}`);
 });
 
+// 400 Response when per_page or page is present but not a positive integer.
+function invalidPageParam(c) {
+  for (const name of ["per_page", "page"]) {
+    const value = c.req.query(name);
+    if (value !== undefined && !/^[1-9][0-9]{0,3}$/.test(value)) {
+      return c.json({ error: `${name} must be a positive integer` }, 400);
+    }
+  }
+  return null;
+}
+
 /**
  * GET /api/thirdparty/github/repos/:owner/:repo/commits/:sha/check-runs
  * List check runs for a commit. Forwards ?per_page and ?page, and GitHub's
@@ -954,12 +965,8 @@ thirdpartyRoutes.get(
     }
     const denied = githubGuard(c, "read", owner, repo);
     if (denied) return denied;
-    for (const name of ["per_page", "page"]) {
-      const value = c.req.query(name);
-      if (value !== undefined && !/^[1-9][0-9]{0,3}$/.test(value)) {
-        return c.json({ error: `${name} must be a positive integer` }, 400);
-      }
-    }
+    const badPage = invalidPageParam(c);
+    if (badPage) return badPage;
     return githubPassthrough(
       c,
       "GET",
@@ -970,7 +977,8 @@ thirdpartyRoutes.get(
 
 /**
  * GET /api/thirdparty/github/repos/:owner/:repo/commits/:sha/status
- * Combined commit status (legacy statuses API)
+ * Combined commit status (legacy statuses API). Forwards ?per_page and ?page,
+ * and GitHub's Link header for pagination.
  */
 thirdpartyRoutes.get(
   "/github/repos/:owner/:repo/commits/:sha/status",
@@ -982,7 +990,13 @@ thirdpartyRoutes.get(
     }
     const denied = githubGuard(c, "read", owner, repo);
     if (denied) return denied;
-    return githubPassthrough(c, "GET", `${base}/commits/${sha}/status`);
+    const badPage = invalidPageParam(c);
+    if (badPage) return badPage;
+    return githubPassthrough(
+      c,
+      "GET",
+      `${base}/commits/${sha}/status${pickQuery(c, ["per_page", "page"])}`,
+    );
   },
 );
 

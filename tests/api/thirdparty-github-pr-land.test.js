@@ -281,6 +281,32 @@ describe("rate-limit headers", () => {
   });
 });
 
+describe("commit status pagination", () => {
+  const path = `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/status`;
+
+  it("forwards per_page and page and the Link header", async () => {
+    const link =
+      '<https://api.github.com/repositories/1/commits/x/status?per_page=2&page=2>; rel="next"';
+    githubReply = {
+      status: 200,
+      headers: { Link: link },
+      body: { state: "success", statuses: [] },
+    };
+    const res = await call(`${path}?per_page=2&page=1&ignored=x`);
+    expect(res.status).toBe(200);
+    expect(githubCalls[0].url).toBe(
+      `https://api.github.com/repos/chittyos/chittyentity/commits/${HEAD}/status?per_page=2&page=1`,
+    );
+    expect(res.headers.get("Link")).toBe(link);
+  });
+
+  it.each(["all", "0", "-1"])("rejects page=%s with 400", async (v) => {
+    const res = await call(`${path}?page=${v}`);
+    expect(res.status).toBe(400);
+    expect(githubCalls).toHaveLength(0);
+  });
+});
+
 describe("check-runs pagination", () => {
   const path = `/api/thirdparty/github/repos/chittyos/chittyentity/commits/${HEAD}/check-runs`;
 
