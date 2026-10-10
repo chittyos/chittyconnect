@@ -174,15 +174,13 @@ describe("wrangler Mercury credential isolation", () => {
     expect(wrangler).not.toMatch(/"binding":\s*"MERCURY_/);
   });
 
-  it("binds staging and production to separate ChittySecrets RPC targets", () => {
+  it("binds only production to the verified ChittySecrets RPC target", () => {
+    expect(top).not.toContain('"binding": "SVC_SECRETS"');
     expect(dev).not.toContain('"binding": "SVC_SECRETS"');
-    expect(staging).toContain(
-      '{ "binding": "SVC_SECRETS", "service": "chittysecrets-staging", "entrypoint": "ChittyConnectInjectionBroker" }',
-    );
+    expect(staging).not.toContain('"binding": "SVC_SECRETS"');
     expect(production).toContain(
       '{ "binding": "SVC_SECRETS", "service": "chittysecrets", "entrypoint": "ChittyConnectInjectionBroker" }',
     );
-    expect(top).not.toContain('"binding": "SVC_SECRETS"');
   });
 
   it("does not route dev or staging to the production Mercury relay", () => {
