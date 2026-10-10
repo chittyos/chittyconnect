@@ -289,7 +289,6 @@
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
-        { "binding": "SVC_SECRETS", "service": "chittysecrets-staging", "entrypoint": "ChittyConnectInjectionBroker" },
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },
