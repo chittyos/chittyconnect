@@ -1275,8 +1275,7 @@ export const MERCURY_WRITE_REFERENCES = Object.freeze({
 });
 
 /**
- * Map a business code to its write-token binding name. Throws on any code not
- * in MERCURY_WRITE_BINDINGS (case-insensitive match on the key only).
+ * Map a business code to its immutable ChittySecrets credential reference.\n * Unknown codes (including APTA) fail closed.
  */
 export function resolveWriteCredentialReference(code) {
   const key = String(code ?? "")
@@ -1631,4 +1630,4 @@ thirdpartyRoutes.post(
   }),
 );
 
-export { thirdpartyRoutes, getMercuryToken, resolveBinding };
+export { thirdpartyRoutes };
