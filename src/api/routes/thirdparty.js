@@ -1275,7 +1275,8 @@ export const MERCURY_WRITE_REFERENCES = Object.freeze({
 });
 
 /**
- * Map a business code to its immutable ChittySecrets credential reference.\n * Unknown codes (including APTA) fail closed.
+ * Map a business code to its immutable ChittySecrets credential reference.
+ * Unknown codes (including APTA) fail closed.
  */
 export function resolveWriteCredentialReference(code) {
   const key = String(code ?? "")
