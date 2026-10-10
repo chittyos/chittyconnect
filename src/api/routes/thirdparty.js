@@ -1132,36 +1132,70 @@ async function resolveBinding(binding) {
 }
 
 /**
- * Resolve Mercury API token for a given integration.
- * Checks: request header > Secrets Store binding > legacy env var >
- * single fallback > credential broker (chittysecrets).
+ * Mercury credential references are stable identifiers only. ChittyConnect
+ * resolves them through the private ChittySecrets service binding at the exact
+ * point of provider execution; no Mercury value is stored in Worker bindings,
+ * route context, KV, or application configuration.
  */
-async function getMercuryToken(c, integrationSlug) {
-  const slug = integrationSlug || "default";
+export const MERCURY_READ_REFERENCES = Object.freeze({
+  ARIBIA: Object.freeze({ credentialRef: "chittysecrets://mercury/aribia/read", secretName: "MERCURY_TOKEN_ARIBIA_LLC" }),
+  CITY: Object.freeze({ credentialRef: "chittysecrets://mercury/city/read", secretName: "MERCURY_TOKEN_ARIBIA_LLC_CITY_STUDIO" }),
+  APT: Object.freeze({ credentialRef: "chittysecrets://mercury/apt/read", secretName: "MERCURY_TOKEN_ARIBIA_LLC_APT_ARLENE" }),
+  FC: Object.freeze({ credentialRef: "chittysecrets://mercury/fc/read", secretName: "MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS" }),
+  CHIT: Object.freeze({ credentialRef: "chittysecrets://mercury/chit/read", secretName: "MERCURY_TOKEN_CHITTY_SERVICES" }),
+  ICB: Object.freeze({ credentialRef: "chittysecrets://mercury/icb/read", secretName: "MERCURY_TOKEN_IT_CAN_BE_LLC" }),
+  JAVL: Object.freeze({ credentialRef: "chittysecrets://mercury/javl/read", secretName: "MERCURY_TOKEN_JEAN_ARLENE_VENTURING" }),
+  MNW: Object.freeze({ credentialRef: "chittysecrets://mercury/mnw/read", secretName: "MERCURY_TOKEN_MNW" }),
+  NAJB: Object.freeze({ credentialRef: "chittysecrets://mercury/najb/read", secretName: "MERCURY_TOKEN_NAJB" }),
+});
 
-  const headerToken = c.req.header("X-Mercury-Token");
-  if (headerToken) return headerToken;
+const MERCURY_READ_ALIASES = Object.freeze({
+  "aribia": "ARIBIA",
+  "aribia-llc": "ARIBIA",
+  "city": "CITY",
+  "aribia-llc-city-studio": "CITY",
+  "apt": "APT",
+  "aribia-llc-apt-arlene": "APT",
+  "fc": "FC",
+  "chicago-furnished-condos": "FC",
+  "chit": "CHIT",
+  "chitty-services": "CHIT",
+  "icb": "ICB",
+  "it-can-be-llc": "ICB",
+  "javl": "JAVL",
+  "jean-arlene-venturing": "JAVL",
+  "mnw": "MNW",
+  "najb": "NAJB",
+});
 
-  const slugUpper = slug.replace(/-/g, "_").toUpperCase();
+export function resolveMercuryReadReference(integrationSlug) {
+  const slug = String(integrationSlug ?? "").trim().toLowerCase();
+  const code = MERCURY_READ_ALIASES[slug] || slug.toUpperCase();
+  const descriptor = MERCURY_READ_REFERENCES[code];
+  if (!descriptor) {
+    throw new Error(`Unknown Mercury credential boundary '${integrationSlug ?? ""}'`);
+  }
+  return descriptor;
+}
 
-  // Per-entity Secrets Store binding (canonical runtime delivery — wrangler.jsonc
-  // provisions one MERCURY_TOKEN_<SLUG> per Mercury business login). Secrets Store
-  // bindings expose an async get(); resolveBinding handles that vs plain strings.
-  const storeToken = await resolveBinding(c.env[`MERCURY_TOKEN_${slugUpper}`]);
-  if (storeToken) return storeToken;
-
-  // Legacy per-entity env var form, retained for backward compatibility.
-  const envKey = `MERCURY_API_KEY_${slugUpper}`;
-  if (c.env[envKey]) return c.env[envKey];
-
-  if (c.env.MERCURY_API_TOKEN) return c.env.MERCURY_API_TOKEN;
-
-  return getCredential(
-    c.env,
-    `integrations/mercury/${slug}`,
-    "MERCURY_API_TOKEN",
-    "Mercury",
-  );
+async function resolveBrokerCredential(env, descriptor) {
+  const broker = env?.SVC_SECRETS;
+  if (!broker || typeof broker.resolveReference !== "function") {
+    throw new Error("POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE: SVC_SECRETS runtime broker is not bound");
+  }
+  const result = await broker.resolveReference({
+    secretName: descriptor.secretName,
+    credentialRef: descriptor.credentialRef,
+  });
+  if (
+    !result ||
+    result.credentialRef !== descriptor.credentialRef ||
+    typeof result.value !== "string" ||
+    result.value.length === 0
+  ) {
+    throw new Error(`MISSING_CREDENTIAL_MATERIAL: ${descriptor.credentialRef}`);
+  }
+  return result.value;
 }
 
 // ── Mercury egress profile (static-IP relay indirection) ─────────────
@@ -1219,8 +1253,6 @@ export function resolveEgressProfile(env, slug) {
   return {
     profile,
     relayUrl: e.MERCURY_EGRESS_URL,
-    accessClientId: e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
-    accessClientSecret: e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
   };
 }
 
@@ -1230,74 +1262,69 @@ export function resolveEgressProfile(env, slug) {
  * ever be used through the relay. The list is closed: an unknown code throws
  * (fail closed) rather than being interpolated into a binding name.
  */
-export const MERCURY_WRITE_BINDINGS = Object.freeze({
-  ARIBIA: "MERCURY_WRITE_TOKEN_ARIBIA",
-  APT: "MERCURY_WRITE_TOKEN_APT",
-  CITY: "MERCURY_WRITE_TOKEN_CITY",
-  FC: "MERCURY_WRITE_TOKEN_FC",
-  CHIT: "MERCURY_WRITE_TOKEN_CHIT",
-  ICB: "MERCURY_WRITE_TOKEN_ICB",
-  JAVL: "MERCURY_WRITE_TOKEN_JAVL",
-  MNW: "MERCURY_WRITE_TOKEN_MNW",
-  NAJB: "MERCURY_WRITE_TOKEN_NAJB",
+export const MERCURY_WRITE_REFERENCES = Object.freeze({
+  ARIBIA: Object.freeze({ credentialRef: "chittysecrets://mercury/aribia/write", secretName: "MERCURY_WRITE_TOKEN_ARIBIA" }),
+  APT: Object.freeze({ credentialRef: "chittysecrets://mercury/apt/write", secretName: "MERCURY_WRITE_TOKEN_APT" }),
+  CITY: Object.freeze({ credentialRef: "chittysecrets://mercury/city/write", secretName: "MERCURY_WRITE_TOKEN_CITY" }),
+  FC: Object.freeze({ credentialRef: "chittysecrets://mercury/fc/write", secretName: "MERCURY_WRITE_TOKEN_FC" }),
+  CHIT: Object.freeze({ credentialRef: "chittysecrets://mercury/chit/write", secretName: "MERCURY_WRITE_TOKEN_CHIT" }),
+  ICB: Object.freeze({ credentialRef: "chittysecrets://mercury/icb/write", secretName: "MERCURY_WRITE_TOKEN_ICB" }),
+  JAVL: Object.freeze({ credentialRef: "chittysecrets://mercury/javl/write", secretName: "MERCURY_WRITE_TOKEN_JAVL" }),
+  MNW: Object.freeze({ credentialRef: "chittysecrets://mercury/mnw/write", secretName: "MERCURY_WRITE_TOKEN_MNW" }),
+  NAJB: Object.freeze({ credentialRef: "chittysecrets://mercury/najb/write", secretName: "MERCURY_WRITE_TOKEN_NAJB" }),
 });
 
 /**
- * Map a business code to its write-token binding name. Throws on any code not
- * in MERCURY_WRITE_BINDINGS (case-insensitive match on the key only).
+ * Map a business code to its immutable ChittySecrets credential reference.
+ * Unknown codes (including APTA) fail closed.
  */
-export function resolveWriteBindingName(code) {
+export function resolveWriteCredentialReference(code) {
   const key = String(code ?? "")
     .trim()
     .toUpperCase();
-  if (!Object.prototype.hasOwnProperty.call(MERCURY_WRITE_BINDINGS, key)) {
+  if (!Object.prototype.hasOwnProperty.call(MERCURY_WRITE_REFERENCES, key)) {
     throw new Error(`Unknown Mercury write code '${code}'`);
   }
-  return MERCURY_WRITE_BINDINGS[key];
+  return MERCURY_WRITE_REFERENCES[key];
 }
 
-/**
- * Resolve the write token for a business code from the Secrets Store.
- * Throws on unknown code or missing/empty binding (fail closed).
- */
-export async function resolveWriteToken(env, code) {
-  const name = resolveWriteBindingName(code);
-  const token = await resolveBinding((env || {})[name]);
-  if (!token) {
-    throw new Error(`Mercury write token binding ${name} is not available`);
-  }
-  return token;
+async function resolveWriteToken(env, code) {
+  return resolveBrokerCredential(env, resolveWriteCredentialReference(code));
 }
 
+const MERCURY_EGRESS_REFERENCES = Object.freeze({
+  accessClientId: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/access-client-id",
+    secretName: "MERCURY_EGRESS_ACCESS_CLIENT_ID",
+  }),
+  accessClientSecret: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/access-client-secret",
+    secretName: "MERCURY_EGRESS_ACCESS_CLIENT_SECRET",
+  }),
+  proxyToken: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/proxy-token",
+    secretName: "MERCURY_EGRESS_PROXY_TOKEN",
+  }),
+});
+
 /**
- * Egress config for a write: always the relay (static IP). Fails closed if
- * the relay URL is missing, regardless of MERCURY_EGRESS_PROFILE (which only
- * governs reads). Attaches the proxy bearer from MERCURY_EGRESS_PROXY_TOKEN.
+ * Hydrate relay credentials only inside the provider-execution boundary. The
+ * route layer carries no secret values and Worker configuration stores none.
  */
-export async function resolveWriteEgress(env) {
+async function resolveWriteEgress(env) {
   const e = env || {};
   if (!e.MERCURY_EGRESS_URL) {
     throw new Error(
       "MERCURY_EGRESS_URL is not configured; Mercury writes require the relay",
     );
   }
-  const accessClientId = await resolveBinding(
-    e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
-  );
-  const accessClientSecret = await resolveBinding(
-    e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
-  );
-  const proxyToken = await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN);
-  if (!proxyToken) {
-    throw new Error(
-      "MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed",
-    );
-  }
-  if (!accessClientId || !accessClientSecret) {
-    throw new Error(
-      "Mercury relay Access credentials are not configured; Mercury writes fail closed",
-    );
-  }
+
+  const [accessClientId, accessClientSecret, proxyToken] = await Promise.all([
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.accessClientId),
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.accessClientSecret),
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.proxyToken),
+  ]);
+
   return {
     profile: EGRESS_RELAY,
     relayUrl: e.MERCURY_EGRESS_URL,
@@ -1460,39 +1487,33 @@ function getSlug(c) {
 }
 
 /**
- * Middleware: resolve Mercury token and attach to context.
- * Returns 503 if no token can be resolved for the slug.
+ * Middleware: resolve only the Mercury credential reference and attach that
+ * non-secret descriptor to context. Secret material is injected later inside
+ * brokerMercuryFetch and never lives on route context.
  */
-async function requireMercuryToken(c, next) {
+async function requireMercuryCredential(c, next) {
   const slug = c.get("mercurySlug") ?? getSlug(c);
-  const token = await getMercuryToken(c, slug);
-  if (!token) {
-    return c.json(
-      { error: `Mercury API token not configured for ${slug || "default"}` },
-      503,
-    );
-  }
-  c.set("mercuryToken", token);
-  c.set("mercurySlug", slug);
   try {
-    const egress = resolveEgressProfile(c.env, slug);
-    if (egress.profile === EGRESS_RELAY) {
-      egress.proxyToken = await resolveBinding(
-        c.env.MERCURY_EGRESS_PROXY_TOKEN,
-      );
-    }
-    c.set("mercuryEgress", egress);
+    const descriptor = resolveMercuryReadReference(slug);
+    c.set("mercuryCredential", descriptor);
+    c.set("mercurySlug", slug);
+    c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
   } catch (error) {
-    // Misconfigured egress profile (e.g. an unrecognized value) — fail closed
-    // with a diagnosable error rather than crashing the worker.
     return c.json(
       {
-        error: `Mercury egress misconfigured for ${slug || "default"}: ${error.message}`,
+        error: `Mercury credential/egress unavailable for ${slug || "default"}: ${error.message}`,
       },
       503,
     );
   }
   await next();
+}
+
+async function brokerMercuryFetch(env, descriptor, path, options = {}, egress = { profile: EGRESS_DIRECT }) {
+  const token = await resolveBrokerCredential(env, descriptor);
+  const hydratedEgress =
+    egress.profile === EGRESS_RELAY ? await resolveWriteEgress(env) : egress;
+  return mercuryFetch(token, path, options, hydratedEgress);
 }
 
 /**
@@ -1527,10 +1548,11 @@ function mercuryHandler(operation, handler) {
 /** GET /api/thirdparty/mercury/accounts */
 thirdpartyRoutes.get(
   "/mercury/accounts",
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /accounts", async (c) => {
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       "/accounts",
       {},
       c.get("mercuryEgress"),
@@ -1543,10 +1565,11 @@ thirdpartyRoutes.get(
 thirdpartyRoutes.get(
   "/mercury/account/:accountId",
   validateAccountId,
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /account/:id", async (c) => {
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       `/account/${c.req.param("accountId")}`,
       {},
       c.get("mercuryEgress"),
@@ -1559,7 +1582,7 @@ thirdpartyRoutes.get(
 thirdpartyRoutes.get(
   "/mercury/account/:accountId/transactions",
   validateAccountId,
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /account/:id/transactions", async (c) => {
     const params = new URLSearchParams();
     for (const key of ["start", "end", "limit", "offset"]) {
@@ -1567,8 +1590,9 @@ thirdpartyRoutes.get(
       if (val) params.set(key, val);
     }
     const qs = params.toString() ? `?${params}` : "";
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       `/account/${c.req.param("accountId")}/transactions${qs}`,
       {},
       c.get("mercuryEgress"),
@@ -1588,11 +1612,12 @@ thirdpartyRoutes.post(
     c.set("mercurySlug", body.slug || getSlug(c));
     await next();
   },
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("POST /refresh", async (c) => {
     const slug = c.get("mercurySlug");
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       "/accounts",
       {},
       c.get("mercuryEgress"),
@@ -1606,4 +1631,4 @@ thirdpartyRoutes.post(
   }),
 );
 
-export { thirdpartyRoutes, getMercuryToken, resolveBinding };
+export { thirdpartyRoutes };
