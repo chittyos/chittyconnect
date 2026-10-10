@@ -109,7 +109,7 @@ describe("brokered write execution", () => {
     const req = requests[0];
     expect(req.url).toBe("https://mercury-proxy.chitty.cc/proxy");
     expect(req.init.method).toBe("POST");
-    expect(req.init.headers.Authorization).toBe("Bearer synthetic-proxy");
+    expect(req.init.headers.Authorization).toBe("Bearer px");
     expect(req.init.headers["CF-Access-Client-Id"]).toBe("aid");
     expect(req.init.headers["CF-Access-Client-Secret"]).toBe("as");
     expect(req.init.headers["X-Mercury-Token"]).toBe("wt");
@@ -139,7 +139,7 @@ describe("egress request construction", () => {
       path: "/account/abc/transactions",
       options: { method: "POST", body: { amount: 1 } },
     });
-    expect(req.headers.Authorization).toBe("Bearer synthetic-proxy");
+    expect(req.headers.Authorization).toBe("Bearer px");
     expect(req.headers["CF-Access-Client-Id"]).toBe("aid");
     expect(req.headers["CF-Access-Client-Secret"]).toBe("as");
     expect(req.headers["X-Mercury-Token"]).toBe("wt");
