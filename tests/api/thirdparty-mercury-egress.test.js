@@ -82,8 +82,8 @@ describe("resolveEgressProfile", () => {
       {
         MERCURY_EGRESS_PROFILE: "relay",
         MERCURY_EGRESS_URL: "https://egress.chitty.cc/mercury",
-        MERCURY_EGRESS_ACCESS_CLIENT_ID: "must-not-be-read",
-        MERCURY_EGRESS_ACCESS_CLIENT_SECRET: "must-not-be-read",
+        MERCURY_EGRESS_ACCESS_CLIENT_ID: "x",
+        MERCURY_EGRESS_ACCESS_CLIENT_SECRET: "x",
       },
       "aribia-llc",
     );
