@@ -1253,8 +1253,6 @@ export function resolveEgressProfile(env, slug) {
   return {
     profile,
     relayUrl: e.MERCURY_EGRESS_URL,
-    accessClientId: e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
-    accessClientSecret: e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
   };
 }
 
@@ -1294,35 +1292,39 @@ async function resolveWriteToken(env, code) {
   return resolveBrokerCredential(env, resolveWriteCredentialReference(code));
 }
 
+const MERCURY_EGRESS_REFERENCES = Object.freeze({
+  accessClientId: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/access-client-id",
+    secretName: "MERCURY_EGRESS_ACCESS_CLIENT_ID",
+  }),
+  accessClientSecret: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/access-client-secret",
+    secretName: "MERCURY_EGRESS_ACCESS_CLIENT_SECRET",
+  }),
+  proxyToken: Object.freeze({
+    credentialRef: "chittysecrets://mercury/egress/proxy-token",
+    secretName: "MERCURY_EGRESS_PROXY_TOKEN",
+  }),
+});
+
 /**
- * Egress config for a write: always the relay (static IP). Fails closed if
- * the relay URL is missing, regardless of MERCURY_EGRESS_PROFILE (which only
- * governs reads). Attaches the proxy bearer from MERCURY_EGRESS_PROXY_TOKEN.
+ * Hydrate relay credentials only inside the provider-execution boundary. The
+ * route layer carries no secret values and Worker configuration stores none.
  */
-export async function resolveWriteEgress(env) {
+async function resolveWriteEgress(env) {
   const e = env || {};
   if (!e.MERCURY_EGRESS_URL) {
     throw new Error(
       "MERCURY_EGRESS_URL is not configured; Mercury writes require the relay",
     );
   }
-  const accessClientId = await resolveBinding(
-    e.MERCURY_EGRESS_ACCESS_CLIENT_ID,
-  );
-  const accessClientSecret = await resolveBinding(
-    e.MERCURY_EGRESS_ACCESS_CLIENT_SECRET,
-  );
-  const proxyToken = await resolveBinding(e.MERCURY_EGRESS_PROXY_TOKEN);
-  if (!proxyToken) {
-    throw new Error(
-      "MERCURY_EGRESS_PROXY_TOKEN is not configured; Mercury writes fail closed",
-    );
-  }
-  if (!accessClientId || !accessClientSecret) {
-    throw new Error(
-      "Mercury relay Access credentials are not configured; Mercury writes fail closed",
-    );
-  }
+
+  const [accessClientId, accessClientSecret, proxyToken] = await Promise.all([
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.accessClientId),
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.accessClientSecret),
+    resolveBrokerCredential(e, MERCURY_EGRESS_REFERENCES.proxyToken),
+  ]);
+
   return {
     profile: EGRESS_RELAY,
     relayUrl: e.MERCURY_EGRESS_URL,
@@ -1485,39 +1487,33 @@ function getSlug(c) {
 }
 
 /**
- * Middleware: resolve Mercury token and attach to context.
- * Returns 503 if no token can be resolved for the slug.
+ * Middleware: resolve only the Mercury credential reference and attach that
+ * non-secret descriptor to context. Secret material is injected later inside
+ * brokerMercuryFetch and never lives on route context.
  */
-async function requireMercuryToken(c, next) {
+async function requireMercuryCredential(c, next) {
   const slug = c.get("mercurySlug") ?? getSlug(c);
-  const token = await getMercuryToken(c, slug);
-  if (!token) {
-    return c.json(
-      { error: `Mercury API token not configured for ${slug || "default"}` },
-      503,
-    );
-  }
-  c.set("mercuryToken", token);
-  c.set("mercurySlug", slug);
   try {
-    const egress = resolveEgressProfile(c.env, slug);
-    if (egress.profile === EGRESS_RELAY) {
-      egress.proxyToken = await resolveBinding(
-        c.env.MERCURY_EGRESS_PROXY_TOKEN,
-      );
-    }
-    c.set("mercuryEgress", egress);
+    const descriptor = resolveMercuryReadReference(slug);
+    c.set("mercuryCredential", descriptor);
+    c.set("mercurySlug", slug);
+    c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
   } catch (error) {
-    // Misconfigured egress profile (e.g. an unrecognized value) — fail closed
-    // with a diagnosable error rather than crashing the worker.
     return c.json(
       {
-        error: `Mercury egress misconfigured for ${slug || "default"}: ${error.message}`,
+        error: `Mercury credential/egress unavailable for ${slug || "default"}: ${error.message}`,
       },
       503,
     );
   }
   await next();
+}
+
+async function brokerMercuryFetch(env, descriptor, path, options = {}, egress = { profile: EGRESS_DIRECT }) {
+  const token = await resolveBrokerCredential(env, descriptor);
+  const hydratedEgress =
+    egress.profile === EGRESS_RELAY ? await resolveWriteEgress(env) : egress;
+  return mercuryFetch(token, path, options, hydratedEgress);
 }
 
 /**
@@ -1552,10 +1548,11 @@ function mercuryHandler(operation, handler) {
 /** GET /api/thirdparty/mercury/accounts */
 thirdpartyRoutes.get(
   "/mercury/accounts",
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /accounts", async (c) => {
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       "/accounts",
       {},
       c.get("mercuryEgress"),
@@ -1568,10 +1565,11 @@ thirdpartyRoutes.get(
 thirdpartyRoutes.get(
   "/mercury/account/:accountId",
   validateAccountId,
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /account/:id", async (c) => {
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       `/account/${c.req.param("accountId")}`,
       {},
       c.get("mercuryEgress"),
@@ -1584,7 +1582,7 @@ thirdpartyRoutes.get(
 thirdpartyRoutes.get(
   "/mercury/account/:accountId/transactions",
   validateAccountId,
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("GET /account/:id/transactions", async (c) => {
     const params = new URLSearchParams();
     for (const key of ["start", "end", "limit", "offset"]) {
@@ -1592,8 +1590,9 @@ thirdpartyRoutes.get(
       if (val) params.set(key, val);
     }
     const qs = params.toString() ? `?${params}` : "";
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       `/account/${c.req.param("accountId")}/transactions${qs}`,
       {},
       c.get("mercuryEgress"),
@@ -1613,11 +1612,12 @@ thirdpartyRoutes.post(
     c.set("mercurySlug", body.slug || getSlug(c));
     await next();
   },
-  requireMercuryToken,
+  requireMercuryCredential,
   mercuryHandler("POST /refresh", async (c) => {
     const slug = c.get("mercurySlug");
-    const data = await mercuryFetch(
-      c.get("mercuryToken"),
+    const data = await brokerMercuryFetch(
+      c.env,
+      c.get("mercuryCredential"),
       "/accounts",
       {},
       c.get("mercuryEgress"),
