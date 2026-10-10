@@ -13,10 +13,10 @@ const CODES = ["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJ
 function brokerEnv() {
   const calls = [];
   const values = new Map([
-    ["MERCURY_WRITE_TOKEN_FC", "synthetic-write-fc"],
-    ["MERCURY_EGRESS_PROXY_TOKEN", "synthetic-proxy"],
-    ["MERCURY_EGRESS_ACCESS_CLIENT_ID", "synthetic-access-id"],
-    ["MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "synthetic-access-secret"],
+    ["MERCURY_WRITE_TOKEN_FC", "wt"],
+    ["MERCURY_EGRESS_PROXY_TOKEN", "px"],
+    ["MERCURY_EGRESS_ACCESS_CLIENT_ID", "aid"],
+    ["MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "as"],
   ]);
   const env = {
     MERCURY_EGRESS_PROFILE: "direct",
@@ -110,9 +110,9 @@ describe("brokered write execution", () => {
     expect(req.url).toBe("https://mercury-proxy.chitty.cc/proxy");
     expect(req.init.method).toBe("POST");
     expect(req.init.headers.Authorization).toBe("Bearer synthetic-proxy");
-    expect(req.init.headers["CF-Access-Client-Id"]).toBe("synthetic-access-id");
-    expect(req.init.headers["CF-Access-Client-Secret"]).toBe("synthetic-access-secret");
-    expect(req.init.headers["X-Mercury-Token"]).toBe("synthetic-write-fc");
+    expect(req.init.headers["CF-Access-Client-Id"]).toBe("aid");
+    expect(req.init.headers["CF-Access-Client-Secret"]).toBe("as");
+    expect(req.init.headers["X-Mercury-Token"]).toBe("wt");
   });
 
   it("fails closed if the private ChittySecrets broker binding is unavailable", async () => {
@@ -132,25 +132,25 @@ describe("egress request construction", () => {
     const req = buildEgressRequest({
       profile: "relay",
       relayUrl: "https://mercury-proxy.chitty.cc/proxy",
-      accessClientId: "synthetic-access-id",
-      accessClientSecret: "synthetic-access-secret",
-      proxyToken: "synthetic-proxy",
-      token: "synthetic-write-fc",
+      accessClientId: "aid",
+      accessClientSecret: "as",
+      proxyToken: "px",
+      token: "wt",
       path: "/account/abc/transactions",
       options: { method: "POST", body: { amount: 1 } },
     });
     expect(req.headers.Authorization).toBe("Bearer synthetic-proxy");
-    expect(req.headers["CF-Access-Client-Id"]).toBe("synthetic-access-id");
-    expect(req.headers["CF-Access-Client-Secret"]).toBe("synthetic-access-secret");
-    expect(req.headers["X-Mercury-Token"]).toBe("synthetic-write-fc");
+    expect(req.headers["CF-Access-Client-Id"]).toBe("aid");
+    expect(req.headers["CF-Access-Client-Secret"]).toBe("as");
+    expect(req.headers["X-Mercury-Token"]).toBe("wt");
   });
 
   it("read egress profile carries config only, never credential material", () => {
     const profile = resolveEgressProfile(
       {
         MERCURY_EGRESS_PROFILE: "direct",
-        MERCURY_EGRESS_ACCESS_CLIENT_ID: "must-not-be-read",
-        MERCURY_EGRESS_PROXY_TOKEN: "must-not-be-read",
+        MERCURY_EGRESS_ACCESS_CLIENT_ID: "x",
+        MERCURY_EGRESS_PROXY_TOKEN: "x",
       },
       "fc",
     );
