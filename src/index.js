@@ -12,6 +12,8 @@
  */
 
 import { Hono } from "hono";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { verifyFinanceMercuryWebhook } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -2515,6 +2517,20 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Finance-only private RPC projection of ChittyConnect's existing ChittySecrets
+ * broker. No Mercury signing key is returned to ChittyFinance; verification
+ * happens inside ChittySecrets' named private broker entrypoint.
+ *
+ * This entrypoint has NO mutation methods. Only ChittyConnect's governed
+ * provider executor may call the separate internal seal capability.
+ */
+export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
+  async verifyMercuryWebhookSignature(input) {
+    return verifyFinanceMercuryWebhook(this.env, input);
+  }
+}
 
 /**
  * Export Durable Object classes
