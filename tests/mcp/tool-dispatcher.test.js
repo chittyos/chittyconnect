@@ -25,6 +25,7 @@ vi.mock("@neondatabase/serverless", () => ({
 
 import { dispatchToolCall } from "../../src/mcp/tool-dispatcher.js";
 import { Client } from "@neondatabase/serverless";
+import { serviceFetch } from "../../src/lib/service-switch.js";
 
 // Mock credential-helper
 vi.mock("../../src/lib/credential-helper.js", () => ({
@@ -1124,6 +1125,7 @@ describe("dispatchToolCall", () => {
 
       expect(result.isError).toBeUndefined();
       expect(getServiceToken).not.toHaveBeenCalled();
+      expect(serviceFetch).not.toHaveBeenCalled();
       expect(mockFetch).not.toHaveBeenCalled();
       expect(mockFinanceFetch).toHaveBeenCalledTimes(1);
 
