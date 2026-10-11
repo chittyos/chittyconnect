@@ -607,7 +607,7 @@ const MCP_TOOLS = [
   {
     name: "chitty_finance_entities",
     description:
-      "List financial entities with their account mappings from Mercury and other connected banks.",
+      "List canonical ChittyFinance tenants with their mapped financial accounts through the private ChittyConnect service binding.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -619,7 +619,7 @@ const MCP_TOOLS = [
       properties: {
         entity: {
           type: "string",
-          description: "Entity identifier (e.g., 'nicholas', 'chittycorp')",
+          description: "ChittyFinance tenant UUID, slug, or exact tenant name",
         },
       },
       required: ["entity"],
@@ -632,7 +632,7 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        entity: { type: "string", description: "Entity identifier" },
+        entity: { type: "string", description: "ChittyFinance tenant UUID, slug, or exact tenant name" },
         start: {
           type: "string",
           format: "date",
