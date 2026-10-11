@@ -1540,10 +1540,137 @@ function mercuryHandler(operation, handler) {
         `[Mercury] ${operation} failed (slug=${slug}):`,
         error.message,
       );
-      return c.json({ error: error.message }, 500);
+      return c.json({ error: error.message }, error instanceof MercuryQueryError ? 400 : 500);
     }
   };
 }
+
+/**
+ * Mercury source-only read surfaces needed by the webhook-first activity gate.
+ * This proxy forwards provider cursors; finance middleware verifies completeness,
+ * temporal coverage, and checkpoint state before any ChittyFinance access.
+ */
+const MERCURY_READ_FILTERS = Object.freeze({
+  accounts: new Set(["limit", "start_after", "end_before", "order"]),
+  events: new Set(["limit", "start_after", "end_before", "order", "resourceType", "resourceId"]),
+  webhooks: new Set(["limit", "start_after", "end_before", "order", "status"]),
+  transactions: new Set(["limit", "start_after", "end_before", "start_at", "order", "status", "search", "start", "end", "postedStart", "postedEnd", "accountId", "cardId", "mercuryCategory", "categoryId"]),
+  // Legacy per-account endpoint uses OFFSET pagination, NOT start_after;
+  // postedStart/postedEnd are only supported on the org-wide /transactions.
+  accountTransactions: new Set(["limit", "offset", "order", "status", "search", "start", "end", "requestId", "mercuryCategory", "categoryId"]),
+});
+const MERCURY_QUERY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+class MercuryQueryError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "MercuryQueryError";
+  }
+}
+
+export function buildMercuryReadQuery(requestUrl, surface) {
+  const allowed = MERCURY_READ_FILTERS[surface];
+  if (!allowed) throw new MercuryQueryError("Unsupported Mercury read surface");
+  const input = new URL(requestUrl).searchParams;
+  const output = new URLSearchParams();
+
+  if ((input.has("start_after") || input.has("end_before")) && input.has("start_at")) {
+    throw new MercuryQueryError("Mercury start_at cannot be combined with other cursors");
+  }
+  if (input.has("start_after") && input.has("end_before")) {
+    throw new MercuryQueryError("Mercury cursors start_after and end_before are mutually exclusive");
+  }
+
+  for (const [key, value] of input) {
+    if (key === "slug" || key === "entity") continue;
+    if (!allowed.has(key) || !value) {
+      throw new MercuryQueryError("Unsupported or empty Mercury query parameter: " + key);
+    }
+    if (key === "offset" && (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(Number(value)))) {
+      throw new MercuryQueryError("Mercury offset must be a non-negative integer");
+    }
+    if (key === "limit" && (!/^[0-9]+$/.test(value) || Number(value) < 1 || Number(value) > 1000)) {
+      throw new MercuryQueryError("Mercury limit must be an integer between 1 and 1000");
+    }
+    if (key === "order" && value !== "asc" && value !== "desc") {
+      throw new MercuryQueryError("Mercury order must be asc or desc");
+    }
+    if (["start_after", "end_before", "resourceId", "accountId", "requestId", "categoryId", "cardId"].includes(key) && !MERCURY_QUERY_UUID.test(value)) {
+      throw new MercuryQueryError("Invalid Mercury UUID query parameter: " + key);
+    }
+    if (key === "resourceType" && !["transaction", "checkingAccount", "savingsAccount", "treasuryAccount", "investmentAccount", "creditAccount"].includes(value)) {
+      throw new MercuryQueryError("Unsupported Mercury event resource type");
+    }
+    if (key === "status") {
+      const statuses = surface === "webhooks"
+        ? ["active", "paused", "disabled", "deleted"]
+        : ["pending", "sent", "cancelled", "failed", "reversed", "blocked"];
+      if (!statuses.includes(value)) throw new MercuryQueryError("Unsupported Mercury status");
+    }
+    if (["start", "end", "postedStart", "postedEnd"].includes(key) && !Number.isFinite(Date.parse(value))) {
+      throw new MercuryQueryError("Invalid Mercury date parameter: " + key);
+    }
+    output.append(key, value);
+  }
+
+  const encoded = output.toString();
+  return encoded ? "?" + encoded : "";
+}
+
+/** GET /api/thirdparty/mercury/organization — identity source, not a registry write */
+thirdpartyRoutes.get(
+  "/mercury/organization",
+  requireMercuryCredential,
+  mercuryHandler("GET /organization", async (c) => {
+    const data = await brokerMercuryFetch(
+      c.env, c.get("mercuryCredential"), "/organization", {}, c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
+
+/** GET /api/thirdparty/mercury/events — provider Events, cursor unchanged */
+thirdpartyRoutes.get(
+  "/mercury/events",
+  requireMercuryCredential,
+  mercuryHandler("GET /events", async (c) => {
+    const query = buildMercuryReadQuery(c.req.url, "events");
+    const data = await brokerMercuryFetch(
+      c.env, c.get("mercuryCredential"), "/events" + query, {}, c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
+
+/** GET /api/thirdparty/mercury/webhooks — existing provider webhook coverage only */
+thirdpartyRoutes.get(
+  "/mercury/webhooks",
+  requireMercuryCredential,
+  mercuryHandler("GET /webhooks", async (c) => {
+    const query = buildMercuryReadQuery(c.req.url, "webhooks");
+    const data = await brokerMercuryFetch(
+      c.env, c.get("mercuryCredential"), "/webhooks" + query, {}, c.get("mercuryEgress"),
+    );
+    // Mercury's webhook signing secret is create-only and never a read output.
+    const webhooks = Array.isArray(data.webhooks)
+      ? data.webhooks.map(({ secret: _secret, ...webhook }) => webhook)
+      : data.webhooks;
+    return c.json({ ...data, webhooks });
+  }),
+);
+
+/** GET /api/thirdparty/mercury/transactions — posted/created/pending source reads */
+thirdpartyRoutes.get(
+  "/mercury/transactions",
+  requireMercuryCredential,
+  mercuryHandler("GET /transactions", async (c) => {
+    const query = buildMercuryReadQuery(c.req.url, "transactions");
+    const data = await brokerMercuryFetch(
+      c.env, c.get("mercuryCredential"), "/transactions" + query, {}, c.get("mercuryEgress"),
+    );
+    return c.json(data);
+  }),
+);
 
 /** GET /api/thirdparty/mercury/accounts */
 thirdpartyRoutes.get(
@@ -1553,7 +1680,7 @@ thirdpartyRoutes.get(
     const data = await brokerMercuryFetch(
       c.env,
       c.get("mercuryCredential"),
-      "/accounts",
+      "/accounts" + buildMercuryReadQuery(c.req.url, "accounts"),
       {},
       c.get("mercuryEgress"),
     );
@@ -1584,12 +1711,7 @@ thirdpartyRoutes.get(
   validateAccountId,
   requireMercuryCredential,
   mercuryHandler("GET /account/:id/transactions", async (c) => {
-    const params = new URLSearchParams();
-    for (const key of ["start", "end", "limit", "offset"]) {
-      const val = c.req.query(key);
-      if (val) params.set(key, val);
-    }
-    const qs = params.toString() ? `?${params}` : "";
+    const qs = buildMercuryReadQuery(c.req.url, "accountTransactions");
     const data = await brokerMercuryFetch(
       c.env,
       c.get("mercuryCredential"),
