@@ -12,6 +12,7 @@
  */
 
 import { Hono } from "hono";
+import { WorkerEntrypoint } from "cloudflare:workers";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -2515,6 +2516,48 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Finance-only private RPC projection of ChittyConnect's existing ChittySecrets
+ * broker. No Mercury signing key is returned to ChittyFinance; verification
+ * happens inside ChittySecrets' named private broker entrypoint.
+ *
+ * This entrypoint has NO mutation methods. Only ChittyConnect's governed
+ * provider executor may call the separate internal seal capability.
+ */
+export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
+  async verifyMercuryWebhookSignature(input) {
+    const org = String(input?.organizationId ?? "").toLowerCase();
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(org)) {
+      return { verified: false, organizationId: org, reason: "invalid_provider_organization" };
+    }
+    if (this.env.ENVIRONMENT !== "production") {
+      return { verified: false, organizationId: org, reason: "nonproduction_scope_denied" };
+    }
+    const secrets = this.env.SVC_SECRETS;
+    if (!secrets || typeof secrets.verifyMercuryWebhookSignature !== "function") {
+      return { verified: false, organizationId: org, reason: "secrets_broker_not_deployed" };
+    }
+    if (typeof input?.rawBody !== "string" || input.rawBody.length > 524288 ||
+        typeof input?.signatureHeader !== "string") {
+      return { verified: false, organizationId: org, reason: "invalid_signed_payload" };
+    }
+    try {
+      const result = await secrets.verifyMercuryWebhookSignature({
+        organizationId: org,
+        rawBody: input.rawBody,
+        signatureHeader: input.signatureHeader,
+      });
+      return {
+        verified: result?.verified === true,
+        organizationId: org,
+      };
+    } catch {
+      // Never echo sensitive broker exceptions, signatures or payload content.
+      return { verified: false, organizationId: org, reason: "broker_verification_unavailable" };
+    }
+  }
+}
 
 /**
  * Export Durable Object classes
