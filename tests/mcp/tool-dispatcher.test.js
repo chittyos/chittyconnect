@@ -1187,28 +1187,35 @@ describe("dispatchToolCall", () => {
   });
 
   describe("chitty_finance_xfer_detect", () => {
-    it("whitelists args — does not forward arbitrary fields", async () => {
-      getServiceToken.mockResolvedValue("finance-svc-token");
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ transfers: [] }),
-      });
+    it("whitelists args and stays on the private finance binding", async () => {
+      mockFinanceFetch.mockResolvedValue(
+        new Response(JSON.stringify({ transfers: [] }), { status: 200 }),
+      );
+
+      const envWithFinance = {
+        ...mockEnv,
+        SVC_FINANCE: { fetch: mockFinanceFetch },
+      };
 
       await dispatchToolCall(
         "chitty_finance_xfer_detect",
         {
-          entity: "arias-llc",
+          entity: "aribia-llc",
           start: "2025-01-01",
           end: "2025-12-31",
           threshold: 1000,
           __proto__: { polluted: true },
           malicious_field: "should not appear",
         },
-        mockEnv,
+        envWithFinance,
       );
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.entity).toBe("arias-llc");
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(getServiceToken).not.toHaveBeenCalled();
+      const request = mockFinanceFetch.mock.calls[0][0];
+      expect(request.url).toBe("https://internal/api/transfers/detect");
+      const body = JSON.parse(await request.text());
+      expect(body.entity).toBe("aribia-llc");
       expect(body.start).toBe("2025-01-01");
       expect(body.end).toBe("2025-12-31");
       expect(body.threshold).toBe(1000);
