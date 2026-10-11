@@ -221,7 +221,18 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         { status: 503, headers: { "Content-Type": "application/json" } },
       );
     }
-    return serviceFetch(env, "finance", path, options);
+    // Do not go through the generic switch: KV policy could change its mode
+    // from a private binding to public HTTP and request a service bearer token.
+    // The finance projection only accepts the synthetic internal host.
+    const request = new Request(`https://internal${path}`, {
+      method: options.method || "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-ChittyOS-Caller": "chittyconnect",
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    return env.SVC_FINANCE.fetch(request);
   };
 
   try {
