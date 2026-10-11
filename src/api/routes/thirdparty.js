@@ -1551,9 +1551,13 @@ function mercuryHandler(operation, handler) {
  * temporal coverage, and checkpoint state before any ChittyFinance access.
  */
 const MERCURY_READ_FILTERS = Object.freeze({
+  accounts: new Set(["limit", "start_after", "end_before", "order"]),
   events: new Set(["limit", "start_after", "end_before", "order", "resourceType", "resourceId"]),
   webhooks: new Set(["limit", "start_after", "end_before", "order", "status"]),
-  transactions: new Set(["limit", "start_after", "end_before", "order", "status", "search", "start", "end", "postedStart", "postedEnd", "accountId"]),
+  transactions: new Set(["limit", "start_after", "end_before", "start_at", "order", "status", "search", "start", "end", "postedStart", "postedEnd", "accountId", "cardId", "mercuryCategory", "categoryId"]),
+  // Legacy per-account endpoint uses OFFSET pagination, NOT start_after;
+  // postedStart/postedEnd are only supported on the org-wide /transactions.
+  accountTransactions: new Set(["limit", "offset", "order", "status", "search", "start", "end", "requestId", "mercuryCategory", "categoryId"]),
 });
 const MERCURY_QUERY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1570,6 +1574,9 @@ export function buildMercuryReadQuery(requestUrl, surface) {
   const input = new URL(requestUrl).searchParams;
   const output = new URLSearchParams();
 
+  if ((input.has("start_after") || input.has("end_before")) && input.has("start_at")) {
+    throw new MercuryQueryError("Mercury start_at cannot be combined with other cursors");
+  }
   if (input.has("start_after") && input.has("end_before")) {
     throw new MercuryQueryError("Mercury cursors start_after and end_before are mutually exclusive");
   }
@@ -1579,13 +1586,16 @@ export function buildMercuryReadQuery(requestUrl, surface) {
     if (!allowed.has(key) || !value) {
       throw new MercuryQueryError("Unsupported or empty Mercury query parameter: " + key);
     }
+    if (key === "offset" && (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(Number(value)))) {
+      throw new MercuryQueryError("Mercury offset must be a non-negative integer");
+    }
     if (key === "limit" && (!/^[0-9]+$/.test(value) || Number(value) < 1 || Number(value) > 1000)) {
       throw new MercuryQueryError("Mercury limit must be an integer between 1 and 1000");
     }
     if (key === "order" && value !== "asc" && value !== "desc") {
       throw new MercuryQueryError("Mercury order must be asc or desc");
     }
-    if (["start_after", "end_before", "resourceId", "accountId"].includes(key) && !MERCURY_QUERY_UUID.test(value)) {
+    if (["start_after", "end_before", "resourceId", "accountId", "requestId", "categoryId", "cardId"].includes(key) && !MERCURY_QUERY_UUID.test(value)) {
       throw new MercuryQueryError("Invalid Mercury UUID query parameter: " + key);
     }
     if (key === "resourceType" && !["transaction", "checkingAccount", "savingsAccount", "treasuryAccount", "investmentAccount", "creditAccount"].includes(value)) {
@@ -1670,7 +1680,7 @@ thirdpartyRoutes.get(
     const data = await brokerMercuryFetch(
       c.env,
       c.get("mercuryCredential"),
-      "/accounts",
+      "/accounts" + buildMercuryReadQuery(c.req.url, "accounts"),
       {},
       c.get("mercuryEgress"),
     );
@@ -1701,12 +1711,7 @@ thirdpartyRoutes.get(
   validateAccountId,
   requireMercuryCredential,
   mercuryHandler("GET /account/:id/transactions", async (c) => {
-    const params = new URLSearchParams();
-    for (const key of ["start", "end", "limit", "offset"]) {
-      const val = c.req.query(key);
-      if (val) params.set(key, val);
-    }
-    const qs = params.toString() ? `?${params}` : "";
+    const qs = buildMercuryReadQuery(c.req.url, "accountTransactions");
     const data = await brokerMercuryFetch(
       c.env,
       c.get("mercuryCredential"),
