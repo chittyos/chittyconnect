@@ -17,6 +17,25 @@ describe("Mercury source-only read query forwarding", () => {
     )).toBe(`?limit=50&order=asc&start_after=${uuid}&resourceType=transaction&resourceId=${uuid}`);
   });
 
+  it("forwards account discovery cursors for complete org account enumeration", () => {
+    expect(buildMercuryReadQuery(
+      url("accounts", `slug=ARIBIA&limit=100&start_after=${uuid}&order=asc`),
+      "accounts",
+    )).toBe(`?limit=100&start_after=${uuid}&order=asc`);
+  });
+
+  it("uses offset pagination for account transactions, rejecting unsupported cursor and postedStart", () => {
+    expect(buildMercuryReadQuery(
+      url("account/3fa85f64-5717-4562-b3fc-2c963f66afa6/transactions",
+        "slug=FC&limit=100&offset=100&start=2026-10-08&status=pending"),
+      "accountTransactions",
+    )).toBe("?limit=100&offset=100&start=2026-10-08&status=pending");
+
+    for (const bad of ["postedStart=2026-10-08", `start_after=${uuid}`]) {
+      expect(() => buildMercuryReadQuery(url("account/123/transactions", bad), "accountTransactions")).toThrow();
+    }
+  });
+
   it("preserves webhook status filters and cursor, omitting credential labels", () => {
     expect(buildMercuryReadQuery(
       url("webhooks", `entity=CHIT&status=active&status=paused&start_after=${uuid}`),
@@ -34,6 +53,10 @@ describe("Mercury source-only read query forwarding", () => {
   it("rejects unsupported source query fields, mutually exclusive cursors, and invalid values", () => {
     const bad = [
       ["events", "x=1"],
+      ["accounts", "limit=1001"],
+      ["accountTransactions", "offset=-1"],
+      ["accountTransactions", "offset=NaN"],
+      ["transactions", `start_at=${uuid}&start_after=${uuid}`],
       ["events", "limit=0"],
       ["events", "start_after=not-uuid"],
       ["events", `start_after=${uuid}&end_before=${uuid}`],
