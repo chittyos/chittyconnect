@@ -705,7 +705,7 @@ const MCP_TOOLS = [
   {
     name: "chitty_finance_sync",
     description:
-      "Trigger a Mercury bank sync to pull latest transactions into the finance database.",
+      "Deprecated/disabled. Mercury -> ChittyFinance synchronization is webhook-first and runs only through the canonical activity-gated reconciliation loop.",
     inputSchema: { type: "object", properties: {} },
   },
 
