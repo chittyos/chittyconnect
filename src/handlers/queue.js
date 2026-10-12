@@ -22,6 +22,7 @@ const normalizeGitHubEvent = ({
   tenantId,
   payload,
 });
+import { consumeFinanceMercuryReconciliationMessage } from "../lib/mercury-webhook-verifier.js";
 import { forwardCheckSuiteCompleted } from "./check-suite-forward.js";
 import { getCachedInstallationToken } from "../auth/github.js";
 import { createComplianceCheck } from "../github/checks.js";
@@ -95,6 +96,13 @@ export async function queueConsumer(batch, env) {
  * @param {object} env - Worker environment
  */
 async function processEvent(message, env) {
+  // Mercury reconciliation is a separate branch of this *existing* queue.
+  // Do not invoke any GitHub installation lookup or GitHub-only IDEMP_KV
+  // failure/success markers for a provider banking event.
+  if (message?.kind === "mercury.reconciliation") {
+    return consumeFinanceMercuryReconciliationMessage(env, message);
+  }
+
   const { delivery, event, payload } = message;
 
   try {
