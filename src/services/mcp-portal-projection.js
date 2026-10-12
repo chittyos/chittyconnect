@@ -12,7 +12,8 @@
  * 1Password) — never hardcoded.
  */
 
-export const PORTAL_SERVER_CAP = 40;
+// Current Cloudflare ai-controls PUT schema permits 80 portal members (2026-10-12).
+export const PORTAL_SERVER_CAP = 80;
 
 /** The canonical compliant MCP endpoint pattern (this repo + builder both
  * treat `{svc}.chitty.cc/mcp` as canonical; `{svc}.agent.chitty.cc/mcp` is
@@ -81,6 +82,11 @@ export async function putPortalServers(env, portalId, portal, servers) {
     body: JSON.stringify({
       name: portal.name,
       hostname: portal.hostname,
+      ...(portal.description !== undefined ? { description: portal.description } : {}),
+      ...(portal.code_mode ? { code_mode: portal.code_mode } : {}),
+      ...(typeof portal.secure_web_gateway === "boolean"
+        ? { secure_web_gateway: portal.secure_web_gateway }
+        : {}),
       servers,
     }),
   });
@@ -133,7 +139,10 @@ export async function fetchDiscoveryServers(env) {
 
   const raw = entries.map((e) => {
     const s = e.server || {};
-    const url = (s.remotes || []).find((x) => x?.url)?.url || null;
+    const urls = (s.remotes || []).map((x) => x?.url).filter((u) => typeof u === "string");
+    // Registry discovery can carry a legacy remote before the canonical one.
+    const url = urls.find((u) => CANONICAL_MCP_RE.test(u)) ||
+      urls.find((u) => /^https:\/\//.test(u) && /\/mcp\/?$/.test(u)) || null;
     const status =
       e._meta?.["io.modelcontextprotocol.registry/official"]?.status;
     return { name: s.name, url, status };
@@ -239,6 +248,71 @@ export function computePortalDiff(discovery, portal) {
     keepDetail: keeps,
     currentCount: current.length,
   };
+}
+
+/**
+ * Build an ADD-ONLY portal membership. This is the only supported write
+ * while registry identity reconciliation / portal-removal approval is pending.
+ *
+ * Cloudflare's portal PUT replaces the whole membership array, including
+ * portal-scoped tool/prompt overrides and end-user OAuth flags. Copy only
+ * supported fields, exactly retaining existing members, and add members
+ * disabled by default.
+ */
+export function buildAddOnlyMembership(portal, additions = []) {
+  const members = [];
+  const usedIds = new Set();
+  const usedHosts = new Set();
+
+  for (const server of portal.servers || []) {
+    const serverId = server.server_id || server.id;
+    const hostKey = normalizeMcpHost(server.hostname);
+    if (!serverId || !hostKey || usedIds.has(serverId) || usedHosts.has(hostKey)) {
+      throw new Error("Ambiguous portal membership: cannot safely update");
+    }
+    usedIds.add(serverId);
+    usedHosts.add(hostKey);
+
+    const retained = { server_id: serverId };
+    for (const key of ["default_disabled", "on_behalf"]) {
+      if (typeof server[key] === "boolean") retained[key] = server[key];
+    }
+    for (const key of ["updated_tools", "updated_prompts"]) {
+      if (Array.isArray(server[key])) {
+        retained[key] = server[key].map((item) => {
+          const entry = { name: item.name };
+          if (!entry.name) throw new Error("Invalid portal capability override");
+          for (const field of ["alias", "description", "enabled"]) {
+            if (item[field] !== undefined) entry[field] = item[field];
+          }
+          return entry;
+        });
+      }
+    }
+    members.push(retained);
+  }
+
+  for (const server of additions) {
+    const id = server.server_id || server.id;
+    const hostKey = normalizeMcpHost(server.hostname);
+    if (!id || !hostKey || !/^[a-z0-9_]+(?:-[a-z0-9_]+)*$/.test(id) || id.length > 32) {
+      throw new Error("Invalid proposed MCP member");
+    }
+    if (usedHosts.has(hostKey)) continue;
+    if (usedIds.has(id)) throw new Error("Proposed MCP member ID collision");
+    usedHosts.add(hostKey);
+    usedIds.add(id);
+    // New registry entries never become publicly usable without enablement.
+    members.push({ server_id: id, default_disabled: true, on_behalf: false });
+  }
+
+  if (members.length > PORTAL_SERVER_CAP) {
+    throw new Error("MCP portal membership exceeds " + PORTAL_SERVER_CAP + " members");
+  }
+  if (members.length === 0) {
+    throw new Error("Refusing empty MCP portal membership");
+  }
+  return members;
 }
 
 /**
