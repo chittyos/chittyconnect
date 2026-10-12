@@ -71,7 +71,6 @@ export class ChittyServClient {
       // error message; it could contain material the backend must not reveal.
       // Preserve the existing /api/credentials/* 404 classification while
       // never copying upstream-controlled content into the exception.
-      await response.body?.cancel();
       const err = new Error(response.status === 404
         ? "ChittyServ credential not found (HTTP 404)"
         : `ChittyServ credential retrieval failed: HTTP ${response.status}`);
