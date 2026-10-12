@@ -15,7 +15,7 @@ import {
 } from "../lib/cloudflare-api-helper.js";
 import { getServiceCatalog } from "../lib/service-catalog.js";
 import { Client } from "@neondatabase/serverless";
-import { authorizeAgentContext } from "./agent-context-auth.js";
+import { authorizeAgentContext, authorizeAdditionalAgentLayer } from "./agent-context-auth.js";
 
 /**
  * Parse a fetch response, returning an MCP error result for non-OK responses.
@@ -1867,22 +1867,30 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
         layers = JSON.parse(prompt.layers || "[]");
       } catch { /* empty */ }
 
-      const additionalLayerIds = args.additional_layers || [];
+      const additionalLayerIds = args.additional_layers ?? [];
+      if (!Array.isArray(additionalLayerIds) || additionalLayerIds.length > 8 ||
+          additionalLayerIds.some(id => typeof id !== "string" || !id.length || id.length > 128)) {
+        return {
+          content: [{ type: "text", text: "Unauthorized: invalid additional prompt layers" }],
+          isError: true,
+        };
+      }
       for (const layerId of additionalLayerIds) {
         const layerPrompt = await db
-          .prepare("SELECT base, consumer_gate FROM prompt_registry WHERE id = ?")
+          .prepare("SELECT base, domain, consumer_gate FROM prompt_registry WHERE id = ?")
           .bind(layerId)
           .first();
-        if (layerPrompt) {
-          const layerAccess = await authorizeAgentContext(layerPrompt, agentId, authToken, env);
-          if (!layerAccess.allowed) {
-            return {
-              content: [{ type: "text", text: "Unauthorized: additional prompt layer denied" }],
-              isError: true,
-            };
-          }
-          layers.push({ id: layerId, content: layerPrompt.base, order: layers.length + 1 });
+        // Never compose a cross-domain, unscoped legacy, or absent layer.
+        const layerAccess = await authorizeAdditionalAgentLayer(
+          prompt, layerPrompt, agentId, authToken, env,
+        );
+        if (!layerAccess.allowed) {
+          return {
+            content: [{ type: "text", text: "Unauthorized: additional prompt layer denied" }],
+            isError: true,
+          };
         }
+        layers.push({ id: layerId, content: layerPrompt.base, order: layers.length + 1 });
       }
 
       layers.sort((a, b) => (a.order || 0) - (b.order || 0));
