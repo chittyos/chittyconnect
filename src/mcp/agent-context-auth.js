@@ -22,11 +22,14 @@ export async function authorizeAgentContext(prompt, agentId, authToken, env) {
   const gate = parseGate(prompt?.consumer_gate);
   if (!gate) return { allowed: false, reason: "invalid consumer gate" };
 
-  // Preserve existing behavior for older unscoped prompts. A malformed
-  // explicit allowlist, however, must not silently turn into public access.
-  if (!Object.hasOwn(gate, "allowedServices")) return { allowed: true };
-  if (!Array.isArray(gate.allowedServices)) {
-    return { allowed: false, reason: "invalid allowed services" };
+  // Agent contexts are executable instructions. Absence of an explicit,
+  // named service allowlist (or a wildcard) is never anonymous permission.
+  // Legacy unscoped prompt records may be handled by their original REST
+  // policy but cannot be exposed via agent_context.
+  if (!Array.isArray(gate.allowedServices) ||
+      gate.allowedServices.length === 0 ||
+      gate.allowedServices.includes("*")) {
+    return { allowed: false, reason: "explicit service grant required" };
   }
   if (!Array.isArray(gate.allowedAgents) && Object.hasOwn(gate, "allowedAgents")) {
     return { allowed: false, reason: "invalid allowed agents" };
@@ -35,10 +38,6 @@ export async function authorizeAgentContext(prompt, agentId, authToken, env) {
       !gate.allowedAgents.includes(agentId)) {
     return { allowed: false, reason: "agent not permitted" };
   }
-
-  // Wildcard services still respect an explicit agent restriction, but
-  // preserve historical behavior for genuinely unscoped prompt consumers.
-  if (gate.allowedServices.includes("*")) return { allowed: true };
 
   if (!authToken || typeof authToken !== "string" ||
       !env?.API_KEYS || typeof env.API_KEYS.get !== "function") {
