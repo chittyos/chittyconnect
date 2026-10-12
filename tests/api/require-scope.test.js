@@ -8,7 +8,7 @@
  * is the genuine article, not a stand-in.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { Hono } from "hono";
 import {
   requireScope,
@@ -50,6 +50,42 @@ describe("revealScopeFor", () => {
       "credentials:reveal:infrastructure",
     );
     expect(REVEAL_SCOPE_PREFIX).toBe("credentials:reveal");
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("credential scope audit redaction", () => {
+  it("never logs the item, field or attacker-controlled key label on a denial", async () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    const app = appWithKey(
+      {
+        status: "active",
+        userId: "synthetic-id-001",
+        name: "UNTRUSTED-FAKE-SERVICE-NAME",
+        scopes: ["mcp:read"],
+      },
+      vaultGuard,
+    );
+    const res = await app.request(
+      "/infrastructure/highly_sensitive_secret_name/credential_password_field",
+    );
+    expect(res.status).toBe(403);
+    const audit = logs.mock.calls
+      .map(([entry]) => {
+        try { return JSON.parse(entry); } catch { return null; }
+      })
+      .find((entry) => entry?.tag === "scope-audit");
+    expect(audit).toBeDefined();
+    expect(audit.allowed).toBe(false);
+    expect(audit.scope).toBe("credentials:reveal:infrastructure");
+    expect(audit.userId).toBe("synthetic-id-001");
+    expect(audit).not.toHaveProperty("path");
+    expect(JSON.stringify(audit)).not.toContain("highly_sensitive_secret_name");
+    expect(JSON.stringify(audit)).not.toContain("credential_password_field");
+    expect(JSON.stringify(audit)).not.toContain("UNTRUSTED-FAKE-SERVICE-NAME");
   });
 });
 
