@@ -71,18 +71,8 @@ export class OnePasswordConnectClient {
       emergency: env.ONEPASSWORD_VAULT_EMERGENCY,
     };
 
-    // Cache configuration
-    this.cacheTTL = {
-      infrastructure: 3600, // 1 hour for infrastructure creds
-      services: 1800, // 30 minutes for service tokens
-      integrations: 900, // 15 minutes for third-party APIs
-      emergency: 0, // Never cache emergency credentials
-    };
-
-    // Cached encryption key for performance
-    // This dramatically improves encryption/decryption speed
-    this.cachedEncryptionKey = null;
-    this.cachedKeyMaterial = null;
+    // Credentials are resolved for each operation; no KV cache or
+    // in-process secret memoization is permitted.
   }
 
   /**
@@ -92,38 +82,12 @@ export class OnePasswordConnectClient {
    * @param {object} options - Retrieval options
    * @returns {Promise<string>} Credential value
    */
-  async get(credentialPath, options = {}) {
-    const { bypassCache = false, cacheOverrideTTL = null } = options;
-
-    // Parse credential path
+  async get(credentialPath, _options = {}) {
     const parsed = this.parseCredentialPath(credentialPath);
     if (!parsed) {
-      throw new Error(`Invalid credential path: ${credentialPath}`);
+      throw new Error("Invalid credential reference");
     }
-
-    // Check cache first (unless bypassed)
-    if (!bypassCache) {
-      const cached = await this.getFromCache(credentialPath);
-      if (cached) {
-        console.log(`[chittysecrets] Cache HIT for ${credentialPath}`);
-        return cached;
-      }
-    }
-
-    console.log(
-      `[chittysecrets] Cache MISS for ${credentialPath}, fetching from Connect API`,
-    );
-
-    // Fetch from chittysecrets Connect API
-    const value = await this.fetchFromConnect(parsed);
-
-    // Cache the result (unless emergency vault)
-    if (parsed.vault !== "emergency") {
-      const ttl = cacheOverrideTTL || this.cacheTTL[parsed.vault] || 900;
-      await this.setCache(credentialPath, value, ttl);
-    }
-
-    return value;
+    return this.fetchFromConnect(parsed);
   }
 
   /**
@@ -213,14 +177,11 @@ export class OnePasswordConnectClient {
       });
 
       if (!res.ok) {
-        let errMsg = `HTTP ${res.status} ${res.statusText}`;
-        try {
-          const errJson = await res.json();
-          errMsg = errJson.error || errJson.reason || errMsg;
-        } catch (e) {
-          // Ignore JSON parse errors on failed HTTP responses
-        }
-        throw new Error(`ChittySecrets reveal failed: ${errMsg}`);
+        // Upstream-supplied error bodies are untrusted and may contain
+        // material that must never reach worker logs or caller exceptions.
+        const err = new Error(`ChittySecrets reveal failed: HTTP ${res.status}`);
+        if (res.status === 404) err.code = "CREDENTIAL_NOT_FOUND";
+        throw err;
       }
 
       const data = await res.json();
@@ -233,10 +194,6 @@ export class OnePasswordConnectClient {
         err.code = "CREDENTIAL_NOT_FOUND";
         throw err;
       }
-
-      console.log(
-        `[chittysecrets] Successfully retrieved ${parsed.fullPath} via secret ${secretName} (${value.length} chars)`,
-      );
 
       return value;
     } catch (error) {
@@ -274,10 +231,8 @@ export class OnePasswordConnectClient {
 
     const envValue = this.env[envVarName];
 
-    if (!envValue) {
-      throw new Error(
-        `Failover failed: Environment variable ${envVarName} not set`,
-      );
+    if (typeof envValue !== "string" || envValue.length === 0) {
+      throw new Error(`Failover failed: ${envVarName} is not a usable string binding`);
     }
 
     console.warn(
@@ -287,190 +242,8 @@ export class OnePasswordConnectClient {
     return envValue;
   }
 
-  /**
-   * Get credential from cache
-   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
-   *
-   * @private
-   * @param {string} credentialPath - Credential path
-   * @returns {Promise<string|null>} Cached value or null
-   */
-  async getFromCache(credentialPath) {
-    try {
-      const cacheKey = `chittysecrets:cache:${credentialPath}`;
-      const cached = await this.env.CREDENTIAL_CACHE.get(cacheKey);
-
-      if (cached) {
-        // Decrypt cached value (credentials are encrypted at rest in KV)
-        return this.decrypt(cached);
-      }
-
-      return null;
-    } catch (error) {
-      console.error(`[chittysecrets] Cache read error:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Set credential in cache
-   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
-   *
-   * @private
-   * @param {string} credentialPath - Credential path
-   * @param {string} value - Credential value
-   * @param {number} ttl - Time to live in seconds
-   */
-  async setCache(credentialPath, value, ttl) {
-    try {
-      const cacheKey = `chittysecrets:cache:${credentialPath}`;
-
-      // Encrypt value before caching
-      const encrypted = await this.encrypt(value);
-
-      await this.env.CREDENTIAL_CACHE.put(cacheKey, encrypted, {
-        expirationTtl: ttl,
-      });
-
-      console.log(`[chittysecrets] Cached ${credentialPath} for ${ttl}s`);
-    } catch (error) {
-      console.error(`[chittysecrets] Cache write error:`, error);
-      // Don't throw - cache failure shouldn't break credential retrieval
-    }
-  }
-
-  /**
-   * Get or create cached encryption key
-   *
-   * @private
-   * @returns {Promise<CryptoKey>} Encryption key
-   */
-  async getEncryptionKey() {
-    // Return cached key if available
-    if (this.cachedEncryptionKey) {
-      return this.cachedEncryptionKey;
-    }
-
-    const encoder = new TextEncoder();
-
-    // Import key material (only once)
-    if (!this.cachedKeyMaterial) {
-      if (!this.env.ENCRYPTION_KEY) {
-        throw new Error(
-          "ENCRYPTION_KEY secret is not configured — cannot encrypt/decrypt credential cache",
-        );
-      }
-      this.cachedKeyMaterial = await crypto.subtle.importKey(
-        "raw",
-        encoder.encode(this.env.ENCRYPTION_KEY),
-        { name: "PBKDF2" },
-        false,
-        ["deriveBits", "deriveKey"],
-      );
-    }
-
-    // Derive and cache the key
-    this.cachedEncryptionKey = await crypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        salt: encoder.encode("chittyos-chittysecrets-salt"),
-        iterations: 100000,
-        hash: "SHA-256",
-      },
-      this.cachedKeyMaterial,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
-
-    console.log(
-      "[chittysecrets] Encryption key cached for improved performance",
-    );
-    return this.cachedEncryptionKey;
-  }
-
-  /**
-   * Encrypt credential value for caching
-   *
-   * @private
-   * @param {string} value - Plain text credential
-   * @returns {Promise<string>} Encrypted credential
-   */
-  async encrypt(value) {
-    // Use cached key for massive performance improvement
-    const startTime = Date.now();
-
-    const encoder = new TextEncoder();
-    const data = encoder.encode(value);
-
-    // Get cached encryption key
-    const key = await this.getEncryptionKey();
-
-    // Generate random IV
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-
-    // Encrypt
-    const encrypted = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      key,
-      data,
-    );
-
-    // Combine IV + encrypted data
-    const combined = new Uint8Array(iv.length + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(encrypted), iv.length);
-
-    // Base64 encode
-    const result = btoa(String.fromCharCode(...combined));
-
-    const encryptTime = Date.now() - startTime;
-    if (encryptTime > 10) {
-      console.log(`[chittysecrets] Encryption took ${encryptTime}ms`);
-    }
-
-    return result;
-  }
-
-  /**
-   * Decrypt cached credential value
-   *
-   * @private
-   * @param {string} encrypted - Encrypted credential
-   * @returns {Promise<string>} Plain text credential
-   */
-  async decrypt(encrypted) {
-    const startTime = Date.now();
-    const decoder = new TextDecoder();
-
-    // Base64 decode
-    const combined = new Uint8Array(
-      atob(encrypted)
-        .split("")
-        .map((c) => c.charCodeAt(0)),
-    );
-
-    // Extract IV and encrypted data
-    const iv = combined.slice(0, 12);
-    const data = combined.slice(12);
-
-    // Get cached encryption key (same key works for decrypt)
-    const key = await this.getEncryptionKey();
-
-    // Decrypt
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      data,
-    );
-
-    const decryptTime = Date.now() - startTime;
-    if (decryptTime > 10) {
-      console.log(`[chittysecrets] Decryption took ${decryptTime}ms`);
-    }
-
-    return decoder.decode(decrypted);
-  }
+  // Legacy cache/encryption implementation removed. Credentials must be
+  // resolved at the runtime broker boundary and never persisted into KV.
 
   /**
    * Retrieve an infrastructure credential from chittysecrets.
@@ -542,19 +315,11 @@ export class OnePasswordConnectClient {
   }
 
   /**
-   * Invalidate cached credential
-   * Now uses CREDENTIAL_CACHE KV namespace instead of RATE_LIMIT
-   *
-   * @param {string} credentialPath - Credential path to invalidate
+   * Compatibility method: runtime-only credentials cannot be invalidated
+   * from KV. Historical KV records are left untouched pending custody review.
    */
-  async invalidateCache(credentialPath) {
-    try {
-      const cacheKey = `chittysecrets:cache:${credentialPath}`;
-      await this.env.CREDENTIAL_CACHE.delete(cacheKey);
-      console.log(`[chittysecrets] Invalidated cache for ${credentialPath}`);
-    } catch (error) {
-      console.error(`[chittysecrets] Cache invalidation error:`, error);
-    }
+  async invalidateCache(_credentialPath) {
+    // No-op.
   }
 
   /**
