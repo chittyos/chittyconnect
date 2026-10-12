@@ -44,10 +44,13 @@ export class ChittyServClient {
       throw new Error("CHITTYSERV_URL not configured — ChittyServ unavailable in this environment");
     }
 
+    // Match the node-local ChittyServ requireSafeSegment contract exactly:
+    // item/field permit only letters, digits and underscores. A hyphenated
+    // ChittyConnect binding alias is NOT a valid ChittyServ credential path.
     const parts = typeof credentialPath === "string" ? credentialPath.split("/") : [];
     if (parts.length !== 3 ||
         !["infrastructure", "services", "integrations", "emergency"].includes(parts[0]) ||
-        !parts.every((p) => /^[A-Za-z0-9_-]{1,128}$/.test(p))) {
+        !parts.every((p) => /^[A-Za-z0-9_]{1,128}$/.test(p))) {
       throw new TypeError("Invalid ChittyServ credential reference");
     }
 
