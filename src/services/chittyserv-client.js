@@ -121,7 +121,8 @@ export class ChittyServClient {
       if (result.status === "fulfilled") {
         credentialMap.set(path, result.value);
       } else {
-        console.error(`[ChittyServ] Prefetch FAILED: ${path}`, result.reason);
+        // Never log arbitrary backend errors: they may contain secret material.
+        console.error(`[ChittyServ] Prefetch FAILED: ${path}`);
       }
     });
 
@@ -173,7 +174,7 @@ export class ChittyServClient {
     } catch (error) {
       return {
         status: "down",
-        error: error?.message || "ChittyServ unavailable",
+        error: "ChittyServ unavailable",
         backend: "chittyserv",
         timestamp: Date.now(),
       };
