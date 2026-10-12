@@ -23,7 +23,7 @@ export const authKeysRoutes = new Hono();
  */
 const SELF_SERVICE_SCOPES = new Set(["mcp:read", "mcp:write"]);
 
-function normalizeSelfServiceKeyRequest(body, callerScopes) {
+function normalizeSelfServiceKeyRequest(body, callerScopes, callerExpiresAt = null) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, status: 400, code: "INVALID_KEY_REQUEST" };
   }
@@ -60,11 +60,28 @@ function normalizeSelfServiceKeyRequest(body, callerScopes) {
     return { ok: false, status: 403, code: "SCOPE_ESCALATION_DENIED" };
   }
 
-  const expiresAt = body.expiresAt ?? null;
+  // A delegated key cannot outlive its granting parent. A parent with a
+  // malformed or expired expiry cannot issue new authority; the main API
+  // authentication path does not yet independently enforce expiry (#313).
+  let parentExpiryMs = null;
+  if (callerExpiresAt !== null && callerExpiresAt !== undefined) {
+    parentExpiryMs = Date.parse(callerExpiresAt);
+    if (!Number.isFinite(parentExpiryMs) || parentExpiryMs <= Date.now()) {
+      return { ok: false, status: 403, code: "ISSUER_KEY_EXPIRED" };
+    }
+  }
+
+  // Both dashboard clients send YYYY-MM-DD (input type=date), not ISO with T.
+  // A blank field means inherit the parent's expiry, if any.
+  const expiresAt = body.expiresAt || callerExpiresAt || null;
   if (expiresAt !== null &&
-      (typeof expiresAt !== "string" || !/^\d{4}-\d\d-\d\dT/.test(expiresAt) ||
+      (typeof expiresAt !== "string" ||
+       !/^\d{4}-\d\d-\d\d(?:T|$)/.test(expiresAt) ||
        !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now())) {
     return { ok: false, status: 400, code: "INVALID_KEY_EXPIRY" };
+  }
+  if (parentExpiryMs !== null && Date.parse(expiresAt) > parentExpiryMs) {
+    return { ok: false, status: 403, code: "EXPIRY_ESCALATION_DENIED" };
   }
 
   return {
@@ -126,7 +143,9 @@ authKeysRoutes.post("/", async (c) => {
   }
 
   const body = await c.req.json().catch(() => null);
-  const admission = normalizeSelfServiceKeyRequest(body, keyInfo.scopes);
+  const admission = normalizeSelfServiceKeyRequest(
+    body, keyInfo.scopes, keyInfo.expiresAt,
+  );
   if (!admission.ok) {
     return c.json({
       success: false,
