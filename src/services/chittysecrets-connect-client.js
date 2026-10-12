@@ -302,10 +302,8 @@ export class OnePasswordConnectClient {
         credentialMap.set(path, result.value);
         console.log(`[chittysecrets] Prefetch SUCCESS: ${path}`);
       } else {
-        console.error(
-          `[chittysecrets] Prefetch FAILED: ${path}`,
-          result.reason,
-        );
+        // An untrusted backend failure can contain credential material.
+        console.error(`[chittysecrets] Prefetch FAILED: ${path}`);
       }
     });
 
