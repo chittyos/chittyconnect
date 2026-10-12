@@ -65,6 +65,8 @@ export class ChittyServClient {
     });
 
     if (!response.ok) {
+      // Cancel, do not read, untrusted error bodies to release the stream.
+      try { await response.body?.cancel(); } catch { /* Already closed */ }
       // Never incorporate an untrusted upstream error body into a log or
       // error message; it could contain material the backend must not reveal.
       // Preserve the existing /api/credentials/* 404 classification while
