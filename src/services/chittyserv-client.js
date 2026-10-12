@@ -47,7 +47,7 @@ export class ChittyServClient {
     const parts = typeof credentialPath === "string" ? credentialPath.split("/") : [];
     if (parts.length !== 3 ||
         !["infrastructure", "services", "integrations", "emergency"].includes(parts[0]) ||
-        !parts.every((p) => /^[A-Za-z0-9_]{1,128}$/.test(p))) {
+        !parts.every((p) => /^[A-Za-z0-9_-]{1,128}$/.test(p))) {
       throw new TypeError("Invalid ChittyServ credential reference");
     }
 
