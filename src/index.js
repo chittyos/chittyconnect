@@ -2519,12 +2519,11 @@ ${errorInfo.stack}`);
 );
 
 /**
- * Finance-only private RPC projection of ChittyConnect's existing ChittySecrets
- * broker. No Mercury signing key is returned to ChittyFinance; verification
- * happens inside ChittySecrets' named private broker entrypoint.
- *
- * This entrypoint has NO mutation methods. Only ChittyConnect's governed
- * provider executor may call the separate internal seal capability.
+ * Finance-only private RPC projection of the existing ChittyConnect broker.
+ * Signature verification remains inside ChittySecrets: no credential material
+ * is returned. The reconciliation method only enqueues validated, nonsecret
+ * provider event identifiers after a verified Finance consumer-readiness gate.
+ * It never provisions Mercury credentials or performs ledger/provider writes.
  */
 export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
   async verifyMercuryWebhookSignature(input) {
