@@ -182,11 +182,11 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 
 ### Layer 3: Cache Storage (Workers KV)
 
-**What:** Short-lived, high-read tokens that change more often than you want to redeploy.
+**What:** Historical OAuth access-token cache and rotation metadata. Long-lived Google credential material is also present in this legacy namespace; its migration requires a separate custody/consumer review. It is **not** a sanctioned general-purpose credential store.
 
 **Binding:** `CREDENTIAL_CACHE` KV namespace on ChittyConnect.
 
-**Access:** Programmatic only, via `SecretRotationService` or `getCachedGDriveToken()` / `getCachedNeonUri()` helper functions.
+**Access:** Existing Google OAuth rotation/consumer paths (`SecretRotationService`, `getCachedGDriveToken()`) and metadata only. `getCachedNeonUri()` is a retired compatibility function that **always returns null**; new Neon consumers must use the ChittyConnect credential broker.
 
 **Keys:**
 
@@ -198,7 +198,7 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 | `secret:gdrive:meta` | None | Rotation metadata (lastRotatedAt, lastResult) | Automatic |
 | `secret:neon:connection_uri` | Historical only | **Deprecated; no reads/writes** from the current rotator or SQL executor; see custody hold below |
 | `secret:neon:password_rotated_at` | Historical only | Deprecated; not written while custody hold is active |
-| `secret:neon:meta` | None | Rotation metadata | Automatic |
+| `secret:neon:meta` | None | Historical rotation metadata | **Preserved, not updated** while the Neon custody hold is active |
 
 **Service Account Structure** for `secret:gdrive:service_account`:
 ```json
