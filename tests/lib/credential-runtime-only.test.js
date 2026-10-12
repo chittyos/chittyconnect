@@ -2,6 +2,8 @@
 // The browser/Worker never persists source or broker credential values in KV.
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
+import { Hono } from "hono";
+import { credentialsRoutes } from "../../src/api/routes/credentials.js";
 import { ChittyServClient } from "../../src/services/chittyserv-client.js";
 import { OnePasswordConnectClient } from "../../src/services/chittysecrets-connect-client.js";
 
@@ -210,6 +212,28 @@ describe("ChittyServ runtime-only credentials", () => {
       expect(error.message).not.toContain("sensitive-error-body-do-not-echo");
     }
     expect(calls.serv).toBe(1);
+  });
+});
+
+describe("canonical credential HTTP route", () => {
+  it("returns NOT_FOUND/404 when the broker tags a missing credential, without an error-body leak", async () => {
+    await openBackend();
+    const app = new Hono();
+    app.route("/api/credentials", credentialsRoutes);
+    const response = await app.request(
+      "http://localhost/api/credentials/services/missing/token",
+      { method: "GET" },
+      {
+        CREDENTIAL_BROKER_TYPE: "chittyserv",
+        CHITTYSERV_URL: endpoint,
+        CHITTY_SERV_TOKEN: "synthetic-runtime-token",
+        CREDENTIAL_CACHE: noCredentialCache(),
+      },
+    );
+    expect(response.status).toBe(404);
+    const payload = await response.json();
+    expect(payload.error.code).toBe("NOT_FOUND");
+    expect(JSON.stringify(payload)).not.toContain("sensitive-error-body-do-not-echo");
   });
 });
 
