@@ -216,6 +216,37 @@ describe("durable Mercury intent dispatch through existing ChittyConnect queue",
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("retries rather than acks malformed or mismatched successful consumer receipts", async () => {
+    const event = { kind: "mercury.reconciliation", ...reconciliationEvent };
+    const responses = [
+      null,
+      {},
+      { processed: false, consumer: "chittyconnect-finance", organizationId: org, idempotencyKey: event.idempotencyKey },
+      { processed: true, consumer: "unknown-consumer", organizationId: org, idempotencyKey: event.idempotencyKey },
+      { processed: true, consumer: "chittyconnect-finance", organizationId: "e15f4a46-e328-11ee-9e22-5f2c16c0b48b", idempotencyKey: event.idempotencyKey },
+      { processed: true, consumer: "chittyconnect-finance", organizationId: org, idempotencyKey: "another-event" },
+    ];
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const receipt of responses) {
+        const ack = vi.fn();
+        const retry = vi.fn();
+        const response = new Response(receipt === null ? "" : JSON.stringify(receipt), { status: 200 });
+        await queueConsumer({
+          queue: "github-events",
+          messages: [{ body: event, ack, retry }],
+        }, {
+          ENVIRONMENT: "production",
+          SVC_FINANCE: { fetch: vi.fn().mockResolvedValue(response) },
+        });
+        expect(ack).not.toHaveBeenCalled();
+        expect(retry).toHaveBeenCalledOnce();
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("acknowledges only a verified completed downstream reconciliation result", async () => {
     const event = { kind: "mercury.reconciliation", ...reconciliationEvent };
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
