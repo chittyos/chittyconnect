@@ -1,128 +1,164 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  MERCURY_WRITE_BINDINGS,
-  resolveWriteBindingName,
-  resolveWriteToken,
-  resolveWriteEgress,
+  MERCURY_WRITE_REFERENCES,
+  resolveWriteCredentialReference,
+  resolveEgressProfile,
   buildEgressRequest,
   mercuryWrite,
 } from "../../src/api/routes/thirdparty.js";
 
-// #328: Mercury writes go through the mercury-proxy relay. Pure-function tests
-// (no mocks). Secrets Store bindings are shaped as { get(): Promise<string> }
-// using obviously synthetic values.
-
-const FC_FIXTURE = "write-token-fc";
-const PROXY_FIXTURE = "proxy-bearer";
-const READ_FIXTURE = "read-token";
 const CODES = ["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"];
 
-describe("write token code map", () => {
-  it("maps exactly the nine codes to MERCURY_WRITE_TOKEN_<CODE>", () => {
-    expect(Object.keys(MERCURY_WRITE_BINDINGS).sort()).toEqual([...CODES].sort());
-    for (const c of CODES) {
-      expect(resolveWriteBindingName(c)).toBe(`MERCURY_WRITE_TOKEN_${c}`);
+function brokerEnv() {
+  const calls = [];
+  const values = new Map([
+    ["MERCURY_WRITE_TOKEN_FC", "wt"],
+    ["MERCURY_EGRESS_PROXY_TOKEN", "px"],
+    ["MERCURY_EGRESS_ACCESS_CLIENT_ID", "aid"],
+    ["MERCURY_EGRESS_ACCESS_CLIENT_SECRET", "as"],
+  ]);
+  const env = {
+    MERCURY_EGRESS_PROFILE: "direct",
+    MERCURY_EGRESS_URL: "https://mercury-proxy.chitty.cc/proxy",
+    SVC_SECRETS: {
+      async resolveReference(input) {
+        calls.push({ ...input });
+        const value = values.get(input.secretName);
+        if (!value) throw new Error(`missing synthetic fixture ${input.secretName}`);
+        return { credentialRef: input.credentialRef, value };
+      },
+    },
+  };
+  return { env, calls };
+}
+
+describe("Mercury write credential references", () => {
+  it("maps exactly the nine canonical codes to stable ChittySecrets references", () => {
+    expect(Object.keys(MERCURY_WRITE_REFERENCES).sort()).toEqual([...CODES].sort());
+    for (const code of CODES) {
+      const ref = resolveWriteCredentialReference(code);
+      expect(ref.secretName).toBe(`MERCURY_WRITE_TOKEN_${code}`);
+      expect(ref.credentialRef).toMatch(/^chittysecrets:\/\/mercury\/[a-z]+\/write$/);
     }
   });
 
   it("is case-insensitive on the code", () => {
-    expect(resolveWriteBindingName(" icb ")).toBe("MERCURY_WRITE_TOKEN_ICB");
+    expect(resolveWriteCredentialReference(" icb ")).toBe(MERCURY_WRITE_REFERENCES.ICB);
   });
 
   it("fails closed on unknown codes, including APTA and prototype keys", () => {
-    for (const bad of ["APTA", "", undefined, null, "constructor", "__proto__", "ARIBIA_LLC", "MERCURY_TOKEN_ARIBIA_LLC"]) {
-      expect(() => resolveWriteBindingName(bad)).toThrow(/Unknown Mercury write code/);
+    for (const bad of ["APTA", "", undefined, null, "constructor", "__proto__", "ARIBIA_LLC"]) {
+      expect(() => resolveWriteCredentialReference(bad)).toThrow(/Unknown Mercury write code/);
     }
-  });
-
-  it("resolves the token from a Secrets Store style binding", async () => {
-    const env = { MERCURY_WRITE_TOKEN_FC: { get: async () => "write-token-fc" } };
-    expect(await resolveWriteToken(env, "fc")).toBe("write-token-fc");
-  });
-
-  it("does not fall back to another code's binding or the read token", async () => {
-    const env = {
-      MERCURY_WRITE_TOKEN_FC: { get: async () => "write-token-fc" },
-      MERCURY_TOKEN_ARIBIA_LLC: { get: async () => "read-token" },
-    };
-    await expect(resolveWriteToken(env, "ARIBIA")).rejects.toThrow(/not available/);
-    await expect(resolveWriteToken(env, "NOPE")).rejects.toThrow(/Unknown/);
   });
 });
 
-describe("write egress + bearer header", () => {
-  const env = {
-    MERCURY_EGRESS_PROFILE: "direct", // reads stay direct; writes ignore this
-    MERCURY_EGRESS_URL: "https://mercury-proxy.chitty.cc/proxy",
-    MERCURY_EGRESS_PROXY_TOKEN: { get: async () => "proxy-bearer" },
-    MERCURY_EGRESS_ACCESS_CLIENT_ID: { get: async () => "access-id" },
-    MERCURY_EGRESS_ACCESS_CLIENT_SECRET: { get: async () => "access-secret" },
-  };
-
-  it("always selects the relay for writes even when profile is direct", async () => {
-    const eg = await resolveWriteEgress(env);
-    expect(eg.profile).toBe("relay");
-    expect(eg.relayUrl).toBe("https://mercury-proxy.chitty.cc/proxy");
-  });
-
-  it("fails closed when MERCURY_EGRESS_URL is unset", async () => {
-    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_URL: "" })).rejects.toThrow(/relay/);
-  });
-
-  it("fails closed when the proxy bearer is absent", async () => {
-    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_PROXY_TOKEN: undefined })).rejects.toThrow(/PROXY_TOKEN/);
-  });
-
-  it("fails closed when either Access credential is absent", async () => {
-    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_ACCESS_CLIENT_ID: undefined })).rejects.toThrow(/Access credentials/);
-    await expect(resolveWriteEgress({ ...env, MERCURY_EGRESS_ACCESS_CLIENT_SECRET: undefined })).rejects.toThrow(/Access credentials/);
-  });
-
-  it("rejects every method outside the explicit write allowlist before network I/O", async () => {
-    const writeEnv = {
-      ...env,
-      MERCURY_WRITE_TOKEN_FC: { get: async () => FC_FIXTURE },
-    };
+describe("brokered write execution", () => {
+  it("rejects every method outside the explicit mutation allowlist before broker/network I/O", async () => {
+    const { env, calls } = brokerEnv();
     for (const method of ["GET", "HEAD", "OPTIONS", "TRACE", "CONNECT"]) {
-      await expect(mercuryWrite(writeEnv, "FC", "/accounts", { method })).rejects.toThrow(/only permits/);
+      await expect(mercuryWrite(env, "FC", "/accounts", { method })).rejects.toThrow(/only permits/);
     }
+    expect(calls).toHaveLength(0);
   });
 
-  it("sends Authorization: Bearer proxy token plus CF-Access headers and X-Mercury-Token", async () => {
-    const eg = await resolveWriteEgress(env);
+  it("hydrates all credentials through SVC_SECRETS and immediately inserts them into the relay request", async () => {
+    const { env, calls } = brokerEnv();
+    const requests = [];
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      requests.push({ url: String(input), init });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    try {
+      await expect(
+        mercuryWrite(env, "FC", "/account/abc/transactions", {
+          method: "POST",
+          body: { amount: 1 },
+        }),
+      ).resolves.toEqual({ ok: true });
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+
+    expect(calls).toEqual([
+      {
+        secretName: "MERCURY_WRITE_TOKEN_FC",
+        credentialRef: "chittysecrets://mercury/fc/write",
+      },
+      {
+        secretName: "MERCURY_EGRESS_ACCESS_CLIENT_ID",
+        credentialRef: "chittysecrets://mercury/egress/access-client-id",
+      },
+      {
+        secretName: "MERCURY_EGRESS_ACCESS_CLIENT_SECRET",
+        credentialRef: "chittysecrets://mercury/egress/access-client-secret",
+      },
+      {
+        secretName: "MERCURY_EGRESS_PROXY_TOKEN",
+        credentialRef: "chittysecrets://mercury/egress/proxy-token",
+      },
+    ]);
+
+    expect(requests).toHaveLength(1);
+    const req = requests[0];
+    expect(req.url).toBe("https://mercury-proxy.chitty.cc/proxy");
+    expect(req.init.method).toBe("POST");
+    expect(req.init.headers.Authorization).toBe("Bearer px");
+    expect(req.init.headers["CF-Access-Client-Id"]).toBe("aid");
+    expect(req.init.headers["CF-Access-Client-Secret"]).toBe("as");
+    expect(req.init.headers["X-Mercury-Token"]).toBe("wt");
+  });
+
+  it("fails closed if the private ChittySecrets broker binding is unavailable", async () => {
+    await expect(
+      mercuryWrite(
+        { MERCURY_EGRESS_URL: "https://mercury-proxy.chitty.cc/proxy" },
+        "FC",
+        "/webhooks",
+        { method: "POST", body: {} },
+      ),
+    ).rejects.toThrow(/POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE/);
+  });
+});
+
+describe("egress request construction", () => {
+  it("relay request keeps the static-egress and Access layers", () => {
     const req = buildEgressRequest({
-      ...eg,
-      token: FC_FIXTURE,
+      profile: "relay",
+      relayUrl: "https://mercury-proxy.chitty.cc/proxy",
+      accessClientId: "aid",
+      accessClientSecret: "as",
+      proxyToken: "px",
+      token: "wt",
       path: "/account/abc/transactions",
       options: { method: "POST", body: { amount: 1 } },
     });
-    expect(req.url).toBe("https://mercury-proxy.chitty.cc/proxy");
-    expect(req.method).toBe("POST");
-    expect(req.headers.Authorization).toBe("Bearer proxy-bearer");
-    expect(req.headers["CF-Access-Client-Id"]).toBe("access-id");
-    expect(req.headers["CF-Access-Client-Secret"]).toBe("access-secret");
-    expect(req.headers["X-Mercury-Token"]).toBe("write-token-fc");
-    expect(JSON.parse(req.body)).toEqual({
-      method: "POST",
-      path: "/account/abc/transactions",
-      body: { amount: 1 },
-    });
+    expect(req.headers.Authorization).toBe("Bearer px");
+    expect(req.headers["CF-Access-Client-Id"]).toBe("aid");
+    expect(req.headers["CF-Access-Client-Secret"]).toBe("as");
+    expect(req.headers["X-Mercury-Token"]).toBe("wt");
   });
 
-  it("direct reads never carry the proxy bearer", () => {
-    const req = buildEgressRequest({
-      profile: "direct",
-      proxyToken: PROXY_FIXTURE,
-      token: READ_FIXTURE,
-      path: "/accounts",
-    });
-    expect(req.headers.Authorization).toBe("Bearer read-token");
+  it("read egress profile carries config only, never credential material", () => {
+    const profile = resolveEgressProfile(
+      {
+        MERCURY_EGRESS_PROFILE: "direct",
+        MERCURY_EGRESS_ACCESS_CLIENT_ID: "x",
+        MERCURY_EGRESS_PROXY_TOKEN: "x",
+      },
+      "fc",
+    );
+    expect(profile).toEqual({ profile: "direct", relayUrl: undefined });
   });
 });
 
-
-describe("wrangler Mercury write isolation", () => {
+describe("wrangler Mercury credential isolation", () => {
   const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
   const envStart = wrangler.indexOf('"env": {');
   const devStart = wrangler.indexOf('"dev": {', envStart);
@@ -134,24 +170,17 @@ describe("wrangler Mercury write isolation", () => {
   const staging = wrangler.slice(stagingStart, productionStart);
   const production = wrangler.slice(productionStart);
 
-  const productionOnlyBindings = [
-    "MERCURY_OIDC_CLIENT_ID",
-    "MERCURY_OIDC_CLIENT_SECRET",
-    "MERCURY_OIDC_ISSUER",
-    "MERCURY_EGRESS_ACCESS_CLIENT_ID",
-    "MERCURY_EGRESS_ACCESS_CLIENT_SECRET",
-    "MERCURY_EGRESS_PROXY_TOKEN",
-    ...CODES.map((code) => `MERCURY_WRITE_TOKEN_${code}`),
-  ];
+  it("declares no direct Mercury secret-store bindings anywhere in ChittyConnect", () => {
+    expect(wrangler).not.toMatch(/"binding":\s*"MERCURY_/);
+  });
 
-  it("keeps write/proxy credentials out of top-level, dev, and staging", () => {
-    for (const binding of productionOnlyBindings) {
-      const declaration = `"binding": "${binding}"`;
-      expect(top).not.toContain(declaration);
-      expect(dev).not.toContain(declaration);
-      expect(staging).not.toContain(declaration);
-      expect(production).toContain(declaration);
-    }
+  it("binds only production to the verified ChittySecrets RPC target", () => {
+    expect(top).not.toContain('"binding": "SVC_SECRETS"');
+    expect(dev).not.toContain('"binding": "SVC_SECRETS"');
+    expect(staging).not.toContain('"binding": "SVC_SECRETS"');
+    expect(production).toContain(
+      '{ "binding": "SVC_SECRETS", "service": "chittysecrets", "entrypoint": "ChittyConnectInjectionBroker" }',
+    );
   });
 
   it("does not route dev or staging to the production Mercury relay", () => {

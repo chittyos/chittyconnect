@@ -1,96 +1,47 @@
 /**
- * Mercury Token Resolution Tests
+ * Mercury credential-reference resolution tests.
  *
- * Exercises the real getMercuryToken / resolveBinding functions, including the
- * per-entity Cloudflare Secrets Store binding path (MERCURY_TOKEN_<SLUG>), whose
- * bindings expose an async get() rather than a plain string value.
+ * Mercury values never live in route context or Worker secret bindings. Routes
+ * carry stable chittysecrets:// references and ChittyConnect resolves them only
+ * at provider execution time through SVC_SECRETS.
  */
-
 import { describe, it, expect } from "vitest";
-import { getMercuryToken, resolveBinding } from "../../src/api/routes/thirdparty.js";
+import {
+  MERCURY_READ_REFERENCES,
+  resolveMercuryReadReference,
+} from "../../src/api/routes/thirdparty.js";
 
-// Faithful stand-in for a Cloudflare Secrets Store binding: an object exposing
-// an async get() that returns the secret string. This mirrors the runtime shape
-// — it is the real binding contract, not a stubbed datastore.
-function secretsStoreBinding(value) {
-  return { get: async () => value };
-}
+const CODES = ["ARIBIA", "CITY", "APT", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"];
 
-// Minimal Hono-style context exposing only what getMercuryToken reads.
-function ctx(env, header) {
-  return {
-    env,
-    req: { header: (name) => (name === "X-Mercury-Token" ? header : undefined) },
-  };
-}
-
-describe("resolveBinding", () => {
-  it("returns undefined for absent bindings", async () => {
-    expect(await resolveBinding(undefined)).toBeUndefined();
-    expect(await resolveBinding(null)).toBeUndefined();
+describe("Mercury read credential references", () => {
+  it("defines exactly the nine canonical credential boundaries", () => {
+    expect(Object.keys(MERCURY_READ_REFERENCES).sort()).toEqual([...CODES].sort());
+    for (const code of CODES) {
+      const ref = MERCURY_READ_REFERENCES[code];
+      expect(ref.credentialRef).toMatch(/^chittysecrets:\/\/mercury\/[a-z]+\/read$/);
+      expect(ref.secretName).toMatch(/^MERCURY_TOKEN_/);
+    }
   });
 
-  it("returns plain string bindings as-is", async () => {
-    expect(await resolveBinding("plain-token")).toBe("plain-token");
+  it("resolves legal/provider aliases without collapsing FC and CHIT", () => {
+    expect(resolveMercuryReadReference("aribia-llc")).toBe(MERCURY_READ_REFERENCES.ARIBIA);
+    expect(resolveMercuryReadReference("aribia-llc-city-studio")).toBe(MERCURY_READ_REFERENCES.CITY);
+    expect(resolveMercuryReadReference("aribia-llc-apt-arlene")).toBe(MERCURY_READ_REFERENCES.APT);
+    expect(resolveMercuryReadReference("chicago-furnished-condos")).toBe(MERCURY_READ_REFERENCES.FC);
+    expect(resolveMercuryReadReference("chitty-services")).toBe(MERCURY_READ_REFERENCES.CHIT);
+    expect(resolveMercuryReadReference("it-can-be-llc")).toBe(MERCURY_READ_REFERENCES.ICB);
+    expect(resolveMercuryReadReference("jean-arlene-venturing")).toBe(MERCURY_READ_REFERENCES.JAVL);
+    expect(MERCURY_READ_REFERENCES.FC.credentialRef).not.toBe(MERCURY_READ_REFERENCES.CHIT.credentialRef);
   });
 
-  it("awaits get() on Secrets Store bindings", async () => {
-    expect(await resolveBinding(secretsStoreBinding("store-token"))).toBe("store-token");
+  it("supports canonical short codes case-insensitively", () => {
+    expect(resolveMercuryReadReference(" FC ")).toBe(MERCURY_READ_REFERENCES.FC);
+    expect(resolveMercuryReadReference("najb")).toBe(MERCURY_READ_REFERENCES.NAJB);
   });
 
-  it("treats an empty Secrets Store value as undefined", async () => {
-    expect(await resolveBinding(secretsStoreBinding(""))).toBeUndefined();
-  });
-
-  it("degrades to undefined when get() throws (store unreachable)", async () => {
-    const throwing = { get: async () => { throw new Error("store unreachable"); } };
-    expect(await resolveBinding(throwing)).toBeUndefined();
-  });
-});
-
-describe("getMercuryToken", () => {
-  it("prefers the X-Mercury-Token header over all bindings", async () => {
-    const env = { MERCURY_TOKEN_ARIBIA_LLC: secretsStoreBinding("store"), MERCURY_API_TOKEN: "fallback" };
-    expect(await getMercuryToken(ctx(env, "header-token"), "aribia-llc")).toBe("header-token");
-  });
-
-  it("resolves the per-entity Secrets Store binding for a kebab slug", async () => {
-    const env = { MERCURY_TOKEN_ARIBIA_LLC: secretsStoreBinding("aribia-token"), MERCURY_API_TOKEN: "fallback" };
-    expect(await getMercuryToken(ctx(env), "aribia-llc")).toBe("aribia-token");
-  });
-
-  it("resolves a multi-segment slug to the right binding", async () => {
-    const env = {
-      MERCURY_TOKEN_CHICAGO_FURNISHED_CONDOS: secretsStoreBinding("chicago-token"),
-      MERCURY_API_TOKEN: "fallback",
-    };
-    expect(await getMercuryToken(ctx(env), "chicago-furnished-condos")).toBe("chicago-token");
-  });
-
-  it("isolates entities — slug B does not receive entity A's token", async () => {
-    const env = {
-      MERCURY_TOKEN_ARIBIA_LLC: secretsStoreBinding("aribia-token"),
-      MERCURY_TOKEN_IT_CAN_BE_LLC: secretsStoreBinding("itcanbe-token"),
-    };
-    expect(await getMercuryToken(ctx(env), "it-can-be-llc")).toBe("itcanbe-token");
-    expect(await getMercuryToken(ctx(env), "aribia-llc")).toBe("aribia-token");
-  });
-
-  it("falls back to the legacy MERCURY_API_KEY_<SLUG> env var", async () => {
-    const env = { MERCURY_API_KEY_ARIBIA_LLC: "legacy-token", MERCURY_API_TOKEN: "fallback" };
-    expect(await getMercuryToken(ctx(env), "aribia-llc")).toBe("legacy-token");
-  });
-
-  it("falls back to the single MERCURY_API_TOKEN when no per-entity binding exists", async () => {
-    const env = { MERCURY_API_TOKEN: "single-fallback" };
-    expect(await getMercuryToken(ctx(env), "unknown-entity")).toBe("single-fallback");
-  });
-
-  it("prefers Secrets Store over the legacy env var for the same slug", async () => {
-    const env = {
-      MERCURY_TOKEN_ARIBIA_LLC: secretsStoreBinding("store-token"),
-      MERCURY_API_KEY_ARIBIA_LLC: "legacy-token",
-    };
-    expect(await getMercuryToken(ctx(env), "aribia-llc")).toBe("store-token");
+  it("fails closed when no explicit credential boundary is supplied", () => {
+    for (const bad of [undefined, null, "", "default", "APTA", "__proto__", "constructor"]) {
+      expect(() => resolveMercuryReadReference(bad)).toThrow(/Unknown Mercury credential boundary/);
+    }
   });
 });

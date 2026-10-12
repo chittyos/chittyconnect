@@ -209,6 +209,33 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
     return { error: null, apiToken, accountId };
   };
 
+  // ChittyFinance calls are service-binding-only. Finance is a governed
+  // system-of-record boundary and must not silently fall back to a bearer
+  // credential in this Worker.
+  const financeServiceFetch = async (path, options = {}) => {
+    if (!env?.SVC_FINANCE || typeof env.SVC_FINANCE.fetch !== "function") {
+      return new Response(
+        JSON.stringify({
+          error: "POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE",
+          message: "SVC_FINANCE private service binding is required",
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    // Do not go through the generic switch: KV policy could change its mode
+    // from a private binding to public HTTP and request a service bearer token.
+    // The finance projection only accepts the synthetic internal host.
+    const request = new Request(`https://internal${path}`, {
+      method: options.method || "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-ChittyOS-Caller": "chittyconnect",
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    return env.SVC_FINANCE.fetch(request);
+  };
+
   try {
     let result;
 
@@ -920,15 +947,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
 
     // ── Finance tools ───────────────────────────────────────────────
     else if (name === "chitty_finance_entities") {
-      const response = await serviceFetch(env, "finance", "/api/entities", {});
+      const response = await financeServiceFetch("/internal/chittyconnect/entities", {});
       const fetchErr = await checkFetchError(response, "ChittyFinance");
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_balances") {
-      const response = await serviceFetch(
-        env,
-        "finance",
-        `/api/entities/${encodeURIComponent(args.entity)}/balances`,
+      const response = await financeServiceFetch(
+        `/internal/chittyconnect/entities/${encodeURIComponent(args.entity)}/balances`,
         {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
@@ -938,10 +963,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(
-        env,
-        "finance",
-        `/api/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
+      const response = await financeServiceFetch(
+        `/internal/chittyconnect/entities/${encodeURIComponent(args.entity)}/transactions?${params}`,
         {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
@@ -951,10 +974,8 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(
-        env,
-        "finance",
-        `/api/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
+      const response = await financeServiceFetch(
+        `/internal/chittyconnect/entities/${encodeURIComponent(args.entity)}/cash-flow?${params}`,
         {},
       );
       const fetchErr = await checkFetchError(response, "ChittyFinance");
@@ -965,9 +986,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (args.entity) params.set("entity", args.entity);
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(
-        env,
-        "finance",
+      const response = await financeServiceFetch(
         `/api/transfers/inter-entity?${params}`,
         {},
       );
@@ -975,9 +994,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_xfer_detect") {
-      const response = await serviceFetch(
-        env,
-        "finance",
+      const response = await financeServiceFetch(
         "/api/transfers/detect",
         {
           method: "POST",
@@ -997,9 +1014,7 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       const params = new URLSearchParams();
       if (args.start) params.set("start", args.start);
       if (args.end) params.set("end", args.end);
-      const response = await serviceFetch(
-        env,
-        "finance",
+      const response = await financeServiceFetch(
         `/api/reports/flow-of-funds?${params}`,
         {},
       );
@@ -1007,12 +1022,13 @@ export async function dispatchToolCall(name, args = {}, env, options = {}) {
       if (fetchErr) return fetchErr;
       result = await response.json();
     } else if (name === "chitty_finance_sync") {
-      const response = await serviceFetch(env, "finance", "/api/sync/mercury", {
-        method: "POST",
-      });
-      const fetchErr = await checkFetchError(response, "ChittyFinance");
-      if (fetchErr) return fetchErr;
-      result = await response.json();
+      return {
+        content: [{
+          type: "text",
+          text: "Direct Mercury sync is disabled. Mercury -> ChittyFinance is webhook-first; reconciliation runs only after provider activity or an explicit reconciliation exception.",
+        }],
+        isError: true,
+      };
     } else if (name.startsWith("chitty_finance_")) {
       // Generic fallback for connect_bank and analyze — these go to our own baseUrl
       const action = name.replace("chitty_finance_", "");

@@ -12,6 +12,8 @@
  */
 
 import { Hono } from "hono";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -2515,6 +2517,23 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Finance-only private RPC projection of the existing ChittyConnect broker.
+ * Signature verification remains inside ChittySecrets: no credential material
+ * is returned. The reconciliation method only enqueues validated, nonsecret
+ * provider event identifiers after a verified Finance consumer-readiness gate.
+ * It never provisions Mercury credentials or performs ledger/provider writes.
+ */
+export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
+  async verifyMercuryWebhookSignature(input) {
+    return verifyFinanceMercuryWebhook(this.env, input);
+  }
+
+  async acceptMercuryReconciliationIntent(input) {
+    return acceptFinanceMercuryReconciliationIntent(this.env, input);
+  }
+}
 
 /**
  * Export Durable Object classes
