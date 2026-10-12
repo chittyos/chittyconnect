@@ -10,9 +10,8 @@
  *
  * Deny-by-default: a key with no `scopes` field, an empty `scopes` array, or a
  * `scopes` array lacking the required entry is rejected. There is no
- * allow-with-warning mode — per the sensitive-intent contract
- * (~/.ch1tty/canon/system-wide-sensitive-intent-contract-v1.md) the credential
- * path fails closed, and a warning nobody reads is an open door.
+ * allow-with-warning mode — credential access must fail closed in the
+ * existing ChittyConnect sensitive-intent architecture (#263 and #271).
  *
  * The 403 body names the scope that was required so an under-provisioned
  * caller can be reissued a correct key without needing to read this source.
@@ -26,9 +25,8 @@
  */
 
 /**
- * Vaults the credential routes expose. Kept in sync with the `validVaults`
- * check in ../routes/credentials.js — a vault absent here has no reachable
- * scope and is therefore denied, which is the correct direction to fail.
+ * Prefix only: allowed vaults live in the endpoint's route resolver.
+ * This middleware never authorizes new vault names or grants a scope.
  */
 export const REVEAL_SCOPE_PREFIX = "credentials:reveal";
 
@@ -104,8 +102,10 @@ export function requireScopeFrom(resolve) {
 /**
  * Shared decision + audit point for both middleware forms.
  *
- * The audit line carries the key's service/name and the scope decision but
- * never the key itself or any credential material.
+ * The audit line carries a scope decision and authenticated key metadata,
+ * never the request path (which contains vault/item/field identifiers), token,
+ * secret reference, or credential material. The display name is self-asserted
+ * on the API-key issuance route; it must not be treated as trusted identity.
  */
 async function enforce(c, next, scope) {
   const keyInfo = c.get("apiKey") || {};
@@ -118,8 +118,7 @@ async function enforce(c, next, scope) {
       scope,
       allowed,
       keyType: keyInfo.type || "api-key",
-      service: keyInfo.service || keyInfo.name || "unknown",
-      path: c.req.path,
+      userId: keyInfo.userId || null,
     }),
   );
 
