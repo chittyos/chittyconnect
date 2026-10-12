@@ -32,13 +32,21 @@ mcpPortalRoutes.post("/build-event", async (c) => {
 
   let payload = {};
   try {
-    payload = await c.req.json();
+    const input = await c.req.json();
+    payload = input && typeof input === "object" && !Array.isArray(input) ? input : {};
   } catch {
     payload = {};
   }
 
   const enabled = c.env.MCP_PORTAL_PROJECTION_ENABLED === "true";
-  const portalId = payload.portalId || c.env.MCP_PORTAL_ID || "chitty-mcp";
+  const portalId = c.env.MCP_PORTAL_ID || "chitty-mcp";
+  // The bearer/session on this route does not authorize cross-portal changes.
+  if (payload.portalId && payload.portalId !== portalId) {
+    return c.json({ ok: false, error: "Portal target is fixed by deployment configuration" }, 403);
+  }
+  if (payload.overrideRemovalGuard === true) {
+    return c.json({ ok: false, error: "Removal override is not supported" }, 403);
+  }
 
   const instance = await wf.create({
     params: {
