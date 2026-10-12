@@ -236,4 +236,4 @@ async function resolveNeonConnection(env, database) {
   return cred || null;
 }
 
-export { executeRoutes };
+export { executeRoutes, resolveNeonConnection };
