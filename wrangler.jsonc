@@ -427,6 +427,12 @@
           { "queue": "github-events", "max_batch_size": 10, "max_batch_timeout": 30, "max_retries": 5, "retry_delay": 30, "dead_letter_queue": "github-events-dlq" }
         ]
       },
+      // Deliberately PRODUCTION-ONLY. Staging has no production Mercury
+      // Workflow binding, signing/proxy capability or independent Queue consumer.
+      // A separate staging rehearsal must never route into production Finance.
+      "workflows": [
+        { "name": "chittyconnect-mercury-reconciliation", "binding": "MERCURY_RECONCILIATION_WORKFLOW", "class_name": "MercuryReconciliationWorkflow" }
+      ],
       "ai": { "binding": "AI" },
       "services": [
         { "binding": "SVC_TASKS", "service": "chittyagent-tasks", "environment": "production" },
