@@ -72,7 +72,14 @@ export class ChittyServClient {
       throw err;
     }
 
-    const data = await response.json();
+    // SyntaxError text from Response.json() may echo an upstream body.
+    // Never allow malformed provider content into caller error messages.
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("ChittyServ returned malformed credential JSON");
+    }
     const value = data?.value ?? data?.credential;
     if (typeof value !== "string" || value.length === 0) {
       throw new Error("ChittyServ returned an invalid credential response");
