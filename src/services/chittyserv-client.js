@@ -14,22 +14,9 @@
 export class ChittyServClient {
   constructor(env) {
     this.env = env;
-    this.baseUrl = env.CHITTYSERV_URL; // Set in env.dev only — absent in staging/prod
-    this.token = env.CHITTY_SERV_TOKEN;
-
-    if (this.baseUrl && !this.token) {
-      console.warn(
-        "[ChittyServ] CHITTY_SERV_TOKEN not set — unauthenticated requests will be made",
-      );
-    }
-
-    // Cache configuration — same TTLs as chittysecrets client
-    this.cacheTTL = {
-      infrastructure: 3600,
-      services: 1800,
-      integrations: 900,
-      emergency: 0,
-    };
+    this.baseUrl = env.CHITTYSERV_URL;
+    // A bearer credential is resolved from its binding for each operation,
+    // never copied into KV, an instance cache, or a log.
   }
 
   /**
@@ -39,33 +26,10 @@ export class ChittyServClient {
    * @param {object} options - Retrieval options
    * @returns {Promise<string>} Credential value
    */
-  async get(credentialPath, options = {}) {
-    const { bypassCache = false } = options;
-
-    // Check KV cache first (unless bypassed)
-    if (!bypassCache) {
-      const cached = await this.getFromCache(credentialPath);
-      if (cached) {
-        console.log(`[ChittyServ] Cache HIT for ${credentialPath}`);
-        return cached;
-      }
-    }
-
-    console.log(
-      `[ChittyServ] Cache MISS for ${credentialPath}, fetching from ChittyServ`,
-    );
-
-    // Fetch from ChittyServ API
-    const value = await this.fetchFromChittyServ(credentialPath);
-
-    // Cache the result (parse vault from path for TTL)
-    const vault = credentialPath.split("/")[0];
-    if (vault !== "emergency") {
-      const ttl = this.cacheTTL[vault] || 900;
-      await this.setCache(credentialPath, value, ttl);
-    }
-
-    return value;
+  async get(credentialPath, _options = {}) {
+    // Compatibility: callers may still pass bypassCache. Credential values
+    // cannot be cached in KV or memoized on the Worker instance at all.
+    return this.fetchFromChittyServ(credentialPath);
   }
 
   /**
@@ -79,92 +43,60 @@ export class ChittyServClient {
     if (!this.baseUrl) {
       throw new Error("CHITTYSERV_URL not configured — ChittyServ unavailable in this environment");
     }
-    const url = `${this.baseUrl}/v1/credentials/${credentialPath}`;
 
-    const headers = {
-      "Content-Type": "application/json",
-      "X-Request-ID": crypto.randomUUID(),
-      "X-Source-Service": "chittyconnect",
-      "X-Canonical-URI": "chittycanon://core/services/connect",
-    };
-
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
+    const parts = typeof credentialPath === "string" ? credentialPath.split("/") : [];
+    if (parts.length !== 3 ||
+        !["infrastructure", "services", "integrations", "emergency"].includes(parts[0]) ||
+        !parts.every((p) => /^[A-Za-z0-9_]{1,128}$/.test(p))) {
+      throw new TypeError("Invalid ChittyServ credential reference");
     }
 
+    const token = await this.resolveBearerToken();
+    const url = `${this.baseUrl.replace(/\\/$/, "")}/v1/credentials/${parts.join("/")}`;
     const response = await fetch(url, {
       method: "GET",
-      headers,
+      headers: {
+        "X-Request-ID": crypto.randomUUID(),
+        "X-Source-Service": "chittyconnect",
+        "X-Canonical-URI": "chittycanon://core/services/connect",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
-      const err = new Error(
-        `ChittyServ credential fetch failed for ${credentialPath}: ${response.status} ${response.statusText}${errorBody ? ` — ${errorBody}` : ""}`,
-      );
-      // A 404 is "this credential does not exist", not "the broker is down".
-      // Only the former may request operator provisioning. See #303.
+      // Never incorporate an untrusted upstream error body into a log or
+      // error message; it could contain material the backend must not reveal.
+      const err = new Error(`ChittyServ credential retrieval failed: HTTP ${response.status}`);
       if (response.status === 404) err.code = "CREDENTIAL_NOT_FOUND";
       throw err;
     }
 
     const data = await response.json();
-
-    // ChittyServ returns { success: true, value: "..." } or { value: "..." }
-    const value = data.value || data.credential;
-
-    if (!value) {
-      const err = new Error(
-        `ChittyServ returned no value for ${credentialPath}`,
-      );
-      err.code = "CREDENTIAL_NOT_FOUND";
-      throw err;
+    const value = data?.value ?? data?.credential;
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error("ChittyServ returned an invalid credential response");
     }
-
-    console.log(
-      `[ChittyServ] Successfully retrieved ${credentialPath} (${value.length} chars)`,
-    );
-
     return value;
   }
 
   /**
-   * Get credential from KV cache
-   *
-   * @private
-   * @param {string} credentialPath - Credential path
-   * @returns {Promise<string|null>} Cached value or null
+   * Resolve the existing ChittyConnect→ChittyServ authentication binding at
+   * the point of the call. Accept plain Worker secrets and Cloudflare
+   * Secrets Store bindings; fail closed on missing or non-string values.
    */
-  async getFromCache(credentialPath) {
-    try {
-      if (!this.env.CREDENTIAL_CACHE) return null;
-      const cacheKey = `chittyserv:cache:${credentialPath}`;
-      return await this.env.CREDENTIAL_CACHE.get(cacheKey);
-    } catch (error) {
-      console.error("[ChittyServ] Cache read error:", error);
-      return null;
+  async resolveBearerToken() {
+    const binding = this.env.CHITTY_SERV_TOKEN;
+    let token;
+    if (typeof binding === "string") {
+      token = binding;
+    } else if (binding && typeof binding.get === "function") {
+      token = await binding.get();
     }
-  }
-
-  /**
-   * Set credential in KV cache
-   *
-   * @private
-   * @param {string} credentialPath - Credential path
-   * @param {string} value - Credential value
-   * @param {number} ttl - Time to live in seconds
-   */
-  async setCache(credentialPath, value, ttl) {
-    try {
-      if (!this.env.CREDENTIAL_CACHE) return;
-      const cacheKey = `chittyserv:cache:${credentialPath}`;
-      await this.env.CREDENTIAL_CACHE.put(cacheKey, value, {
-        expirationTtl: ttl,
-      });
-      console.log(`[ChittyServ] Cached ${credentialPath} for ${ttl}s`);
-    } catch (error) {
-      console.error("[ChittyServ] Cache write error:", error);
+    if (typeof token !== "string" || token.length === 0) {
+      throw new Error("ChittyServ authentication binding is unavailable");
     }
+    return token;
   }
 
   /**
@@ -220,41 +152,42 @@ export class ChittyServClient {
   async healthCheck() {
     try {
       if (!this.baseUrl) {
-        return {
-          status: "not_configured",
-          message: "CHITTYSERV_URL not set",
-          timestamp: Date.now(),
-        };
+        return { status: "not_configured", message: "CHITTYSERV_URL not set", timestamp: Date.now() };
       }
 
-      const response = await fetch(`${this.baseUrl}/health`, {
+      // A public /health is not proof of authorized credential retrieval.
+      // Still, a configured broker cannot be reported healthy without
+      // a usable local auth binding or enforced upstream authentication.
+      const token = await this.resolveBearerToken();
+      const response = await fetch(`${this.baseUrl.replace(/\\/$/, "")}/health`, {
         method: "GET",
         headers: {
-          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          Authorization: `Bearer ${token}`,
           "X-Source-Service": "chittyconnect",
         },
         signal: AbortSignal.timeout(3000),
       });
-
       const body = await response.json().catch(() => ({}));
+      const healthy = response.ok && body?.status === "ok" &&
+        body?.service === "chittyserv" && body?.auth === "required" &&
+        body?.backend?.credentials === "configured";
 
       return {
-        status: response.ok ? body.status || "healthy" : "degraded",
+        status: healthy ? "healthy" : "degraded",
         statusCode: response.status,
         backend: "chittyserv",
-        url: this.baseUrl,
         timestamp: Date.now(),
       };
     } catch (error) {
       return {
         status: "down",
-        error: error.message,
+        error: error?.message || "ChittyServ unavailable",
         backend: "chittyserv",
-        url: this.baseUrl,
         timestamp: Date.now(),
       };
     }
   }
+
 }
 
 export default ChittyServClient;
