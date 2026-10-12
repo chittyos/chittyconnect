@@ -13,7 +13,7 @@
 
 import { Hono } from "hono";
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { verifyFinanceMercuryWebhook } from "./lib/mercury-webhook-verifier.js";
+import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -2529,6 +2529,10 @@ ${errorInfo.stack}`);
 export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
   async verifyMercuryWebhookSignature(input) {
     return verifyFinanceMercuryWebhook(this.env, input);
+  }
+
+  async acceptMercuryReconciliationIntent(input) {
+    return acceptFinanceMercuryReconciliationIntent(this.env, input);
   }
 }
 
