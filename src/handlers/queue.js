@@ -22,6 +22,7 @@ const normalizeGitHubEvent = ({
   tenantId,
   payload,
 });
+import { consumeFinanceMercuryReconciliationMessage } from "../lib/mercury-webhook-verifier.js";
 import { forwardCheckSuiteCompleted } from "./check-suite-forward.js";
 import { getCachedInstallationToken } from "../auth/github.js";
 import { createComplianceCheck } from "../github/checks.js";
@@ -98,6 +99,12 @@ async function processEvent(message, env) {
   const { delivery, event, payload } = message;
 
   try {
+    // Do not pass provider reconciliation messages through the GitHub-only
+    // consumer: its missing-installation fast path would silently ack them.
+    if (message?.kind === "mercury.reconciliation") {
+      await consumeFinanceMercuryReconciliationMessage(env, message);
+      return;
+    }
     // Get installation ID from payload
     const installationId = payload.installation?.id;
     if (!installationId) {
