@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useCommandStore } from "../stores/commandStore";
+import { useAuthStore } from "../stores/authStore";
 import { formatDistanceToNowStrict } from "date-fns";
 
 const HEALTH_COLORS = {
@@ -58,11 +59,17 @@ export default function Command() {
     isHealing,
   } = useCommandStore();
 
+  const authUser = useAuthStore((state) => state.user);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
+  const allowedKeyScopes = ["mcp:read", "mcp:write"].filter(
+    (scope) => Array.isArray(authUser?.scopes) && authUser.scopes.includes(scope),
+  );
+
   const [search, setSearch] = useState("");
   const [view, setView] = useState("connections"); // connections | keys | log
   const [testingSlug, setTestingSlug] = useState(null);
   const [showNewKey, setShowNewKey] = useState(false);
-  const [keyForm, setKeyForm] = useState({ name: "", scopes: ["mcp:read", "mcp:write"], expiresAt: "" });
+  const [keyForm, setKeyForm] = useState({ name: "", scopes: [], expiresAt: "" });
   const [showSettings, setShowSettings] = useState(false);
   const [expandHealthy, setExpandHealthy] = useState(false);
 
@@ -70,6 +77,10 @@ export default function Command() {
     init();
     return cleanup;
   }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleTest = useCallback(async (slug) => {
     setTestingSlug(slug);
@@ -90,7 +101,7 @@ export default function Command() {
     const ok = await createApiKey(keyForm.name, keyForm.scopes, keyForm.expiresAt || null);
     if (ok) {
       setShowNewKey(false);
-      setKeyForm({ name: "", scopes: ["mcp:read", "mcp:write"], expiresAt: "" });
+      setKeyForm({ name: "", scopes: [], expiresAt: "" });
     }
   }, [createApiKey, keyForm]);
 
@@ -363,7 +374,11 @@ export default function Command() {
             <button
               className="btn btn-primary btn-sm"
               style={{ marginLeft: "auto" }}
-              onClick={() => setShowNewKey(true)}
+              disabled={allowedKeyScopes.length === 0}
+              onClick={() => {
+                setKeyForm({ name: "", scopes: allowedKeyScopes, expiresAt: "" });
+                setShowNewKey(true);
+              }}
             >
               New Key
             </button>
@@ -623,7 +638,7 @@ export default function Command() {
                 <div className="form-group">
                   <label className="form-label">Scopes</label>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {["mcp:read", "mcp:write"].map((s) => (
+                    {allowedKeyScopes.map((s) => (
                       <label
                         key={s}
                         className={`filter-chip ${keyForm.scopes.includes(s) ? "active" : ""}`}
@@ -661,7 +676,7 @@ export default function Command() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowNewKey(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={!keyForm.name.trim()}>
+                <button type="submit" className="btn btn-primary" disabled={!keyForm.name.trim() || keyForm.scopes.length === 0}>
                   Create Key
                 </button>
               </div>
