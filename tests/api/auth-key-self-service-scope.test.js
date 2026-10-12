@@ -92,6 +92,12 @@ describe("POST /api/auth/keys self-service admission", () => {
     ["newline", "trusted-service\nspoof"],
     ["control", "x\u0007"],
     ["bidi", "safe\u202Espoof"],
+    ["C1 control", "name\u0085separator"],
+    ["line separator", "name\u2028separator"],
+    ["paragraph separator", "name\u2029separator"],
+    ["Arabic letter mark", "name\u061Cspoof"],
+    ["left-to-right mark", "name\u200Espoof"],
+    ["zero-width joiner", "name\u200Djoiner"],
     ["non-string", { not: "a name" }],
     ["empty", "    "],
   ])("rejects %s from display label before persistence", async (_label, name) => {
