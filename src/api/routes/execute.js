@@ -212,6 +212,19 @@ executeRoutes.post("/fetch", async (c) => {
         );
       }
 
+      // Reuse the existing ChittyConnect admin privilege already required by
+      // high-impact tenant migration. Ordinary API-key authentication alone
+      // never confers permission to use a provider-owned bearer token.
+      const keyInfo = c.get("apiKey") || {};
+      const scopes = Array.isArray(keyInfo.scopes)
+        ? keyInfo.scopes
+        : typeof keyInfo.scopes === "string"
+          ? keyInfo.scopes.split(/\s+/).filter(Boolean)
+          : [];
+      if (keyInfo.role !== "admin" && !scopes.includes("admin")) {
+        return c.json({ error: "admin scope required for credentialed execution" }, 403);
+      }
+
       // Validate the target BEFORE resolving or injecting any credential.
       if (!credentialDestinationAllowed(credential, url, allowlistRaw)) {
         return c.json({ error: "credential destination is not authorized for this provider" }, 403);
