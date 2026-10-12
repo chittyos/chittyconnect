@@ -33,6 +33,7 @@ import {
   fetchDiscoveryServers,
   computePortalDiff,
   evaluateRemovalGuard,
+  buildAddOnlyMembership,
   PORTAL_SERVER_CAP,
 } from "../services/mcp-portal-projection.js";
 
@@ -71,12 +72,18 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
   async run(event, step) {
     const env = this.env;
     const enabled = env.MCP_PORTAL_PROJECTION_ENABLED === "true";
-    const portalId =
-      event.payload?.portalId || env.MCP_PORTAL_ID || "chitty-mcp";
-    const trigger = event.payload?.trigger || "manual";
-    // Explicit operator override: bypasses the proportional / desired-collapse
-    // removal brakes (NEVER the empty-membership hard fail). Default false.
-    const removalOverride = event.payload?.overrideRemovalGuard === true;
+    // Never allow an untrusted event to select an arbitrary tenant/portal.
+    // Cloudflare Workflows pass create({ params }) as event.payload in the
+    // current API, but accept both shapes for older recorded event fixtures.
+    const input = event.payload || event.params || {};
+    const portalId = env.MCP_PORTAL_ID || "chitty-mcp";
+    if (input.portalId && input.portalId !== portalId) {
+      throw new Error("MCP projection event cannot override configured portal");
+    }
+    const trigger = input.trigger || "manual";
+    // The legacy event-supplied removal override is deliberately retired.
+    // Deletion requires a separate governed, reviewed migration after
+    // authoritative registry and portal membership reconcile.
 
     // 1. READ discovery (registry.chitty.cc/v0.1/servers) — never writes.
     const discovery = await step.do("read-discovery", async () =>
@@ -91,11 +98,17 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
         id: p.id,
         name: p.name,
         hostname: p.hostname,
+        description: p.description,
+        code_mode: p.code_mode,
+        secure_web_gateway: p.secure_web_gateway,
+        // This whole-array PUT must preserve ALL current portal policy fields.
         servers: (p.servers || []).map((s) => ({
-          id: s.id,
+          id: s.server_id || s.id,
           hostname: s.hostname,
           default_disabled: s.default_disabled,
           on_behalf: s.on_behalf,
+          updated_tools: s.updated_tools,
+          updated_prompts: s.updated_prompts,
         })),
       };
     });
@@ -110,14 +123,14 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
     //    collapse / empty-membership (all signal a broken discovery source).
     //    Adds and keeps are ALWAYS safe; only the REMOVE path is gated.
     const guard = await step.do("guard", async () => {
-      const removal = evaluateRemovalGuard(diff, portal.servers.length, {
-        override: removalOverride,
-      });
+      const removal = evaluateRemovalGuard(diff, portal.servers.length);
       const issues = [...removal.reasons];
-      const capExceeded = diff.desired.length > PORTAL_SERVER_CAP;
+      // The safe add-only payload includes current members even when discovery
+      // is sparse, so cap-check the actual projected membership, not desired.
+      const capExceeded = portal.servers.length + diff.toAdd.length > PORTAL_SERVER_CAP;
       if (capExceeded) {
         issues.push(
-          `desired ${diff.desired.length} exceeds CF cap ${PORTAL_SERVER_CAP}`,
+          `current ${portal.servers.length} + new ${diff.toAdd.length} exceeds CF cap ${PORTAL_SERVER_CAP}`,
         );
       }
       return {
@@ -134,8 +147,7 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
     // Adds may proceed even when removals are blocked (adds never wipe).
     const addsAllowed = enabled && !guard.capExceeded;
     // Removals require the removal guard to pass (or operator override).
-    const removalsAllowed =
-      enabled && !guard.capExceeded && !guard.removalsBlocked;
+    const removalsAllowed = false; // STOP gate: no removal authorization in this Workflow
     // Full convergence (the whole-array PUT that can drop members) requires
     // removals to be allowed; otherwise we PUT an ADD-ONLY membership
     // (current ∪ adds) so we never remove behind the guard's back.
@@ -152,8 +164,7 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
               metrics: guard.removal.metrics,
               reasons: guard.removal.reasons,
               to_remove: diff.toRemove,
-              override_offered:
-                "set payload.overrideRemovalGuard=true to force (cannot override empty-membership)",
+              override_offered: "none: destructive removal requires a separate approved migration",
             }),
           )
         : { skipped: true };
@@ -200,27 +211,17 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
         };
       }
 
-      let desiredMembership;
-      let mode;
-      if (removalsAllowed) {
-        mode = "converge";
-        desiredMembership = diff.desired.map((s) => ({
+      // No-op when there are no additions, and never attach a server whose
+      // account-level creation failed (such as auth or ID collision).
+      if (diff.toAdd.length === 0) return { skipped: true, reason: "no new members" };
+      if (adds.failed?.length) return { skipped: true, reason: "account-level server creation failed", failed: adds.failed };
+      const mode = "add-only (removals prohibited)";
+      const desiredMembership = buildAddOnlyMembership(portal,
+        diff.toAdd.map((s) => ({
           server_id: s.id || serverIdFromHostname(s.hostname),
-          default_disabled: s.default_disabled ?? false,
-        }));
-      } else {
-        // ADD-ONLY: keep every current member, append the new adds.
-        mode = "add-only (removals guarded)";
-        const keepIds = portal.servers.map((s) => ({
-          server_id: s.id,
-          default_disabled: s.default_disabled ?? false,
-        }));
-        const addIds = diff.toAdd.map((s) => ({
-          server_id: s.id || serverIdFromHostname(s.hostname),
-          default_disabled: false,
-        }));
-        desiredMembership = [...keepIds, ...addIds];
-      }
+          hostname: s.hostname,
+        })),
+      );
 
       // Defense in depth: a whole-array PUT must never be empty.
       if (desiredMembership.length === 0) {
@@ -234,7 +235,13 @@ export class MCPPortalProjection extends WorkflowEntrypoint {
       const r = await putPortalServers(
         env,
         portalId,
-        { name: portal.name, hostname: portal.hostname },
+        {
+          name: portal.name,
+          hostname: portal.hostname,
+          description: portal.description,
+          code_mode: portal.code_mode,
+          secure_web_gateway: portal.secure_web_gateway,
+        },
         desiredMembership,
       );
       return { skipped: false, mode, count: desiredMembership.length, ...r };
