@@ -32,11 +32,9 @@ function normalizeSelfServiceKeyRequest(body, callerScopes, callerExpiresAt = nu
   // Names are display labels, never a claim of service identity.
   if (typeof name !== "string" || name.trim().length < 1 ||
       name.trim().length > 80 ||
-      [...name].some((ch) => {
-        const cp = ch.codePointAt(0);
-        return cp < 32 || cp === 127 || (cp >= 0x202a && cp <= 0x202e) ||
-          (cp >= 0x2066 && cp <= 0x2069);
-      })) {
+      // Unicode controls, format/bidi marks, and line/paragraph
+      // separators must not enter logs or auditable key labels.
+      /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) {
     return { ok: false, status: 400, code: "INVALID_KEY_NAME" };
   }
 
