@@ -63,3 +63,39 @@ export async function authorizeAgentContext(prompt, agentId, authToken, env) {
   }
   return { allowed: true, service: data.service };
 }
+
+/**
+ * Explicit opt-in for a caller-supplied additional prompt layer.
+ * Legacy unscoped prompts are readable only by their existing owners;
+ * they are never composable into another agent via additional_layers.
+ *
+ * Cross-domain composition is denied until a separately governed scope
+ * delegation exists. Storage cannot import Litigation prompts merely
+ * because both records are present in the same D1 database.
+ */
+export async function authorizeAdditionalAgentLayer(basePrompt, layerPrompt, agentId, authToken, env) {
+  if (!basePrompt || !layerPrompt ||
+      typeof basePrompt.domain !== "string" ||
+      basePrompt.domain !== layerPrompt.domain) {
+    return { allowed: false, reason: "prompt layer domain mismatch" };
+  }
+  const layerGate = parseGate(layerPrompt.consumer_gate);
+  if (!layerGate || !Array.isArray(layerGate.allowedServices) ||
+      layerGate.allowedServices.length === 0 ||
+      layerGate.allowedServices.includes("*")) {
+    return { allowed: false, reason: "explicit service grant required for additional layer" };
+  }
+  if (!Array.isArray(layerGate.allowedAgents) ||
+      !layerGate.allowedAgents.includes(agentId)) {
+    return { allowed: false, reason: "explicit agent grant required for additional layer" };
+  }
+  const baseGate = parseGate(basePrompt.consumer_gate);
+  const requiredScopes = Array.isArray(baseGate?.scopeBoundaries)
+    ? baseGate.scopeBoundaries : [];
+  if (requiredScopes.length > 0 &&
+      (!Array.isArray(layerGate.scopeBoundaries) ||
+        !requiredScopes.every(scope => layerGate.scopeBoundaries.includes(scope)))) {
+    return { allowed: false, reason: "additional layer scope is incompatible" };
+  }
+  return authorizeAgentContext(layerPrompt, agentId, authToken, env);
+}
