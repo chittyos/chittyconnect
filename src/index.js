@@ -12,8 +12,8 @@
  */
 
 import { Hono } from "hono";
-import { WorkerEntrypoint } from "cloudflare:workers";
-import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent } from "./lib/mercury-webhook-verifier.js";
+import { WorkerEntrypoint, WorkflowEntrypoint } from "cloudflare:workers";
+import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent, executeFinanceMercuryWorkflow } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
 import { queueConsumer } from "./handlers/queue.js";
@@ -2532,6 +2532,17 @@ export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
 
   async acceptMercuryReconciliationIntent(input) {
     return acceptFinanceMercuryReconciliationIntent(this.env, input);
+  }
+}
+
+/**
+ * Durable, versioned Cloudflare Workflow for the already broker-verified
+ * Mercury webhook event stream. Never accepts provider secrets or starts
+ * financial reconciliation from an unverified timer/agent request.
+ */
+export class MercuryReconciliationWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    return executeFinanceMercuryWorkflow(this.env, event, step);
   }
 }
 
