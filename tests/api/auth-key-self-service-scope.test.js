@@ -113,4 +113,43 @@ describe("POST /api/auth/keys self-service admission", () => {
     expect((await response.json()).error.code).toBe("INVALID_KEY_EXPIRY");
     expect(h.stored).toHaveLength(0);
   });
+  it("accepts YYYY-MM-DD expiry emitted by the two existing dashboard clients", async () => {
+    const h = createHarness(writer);
+    const response = await h.request({
+      name: "date-input-compatible",
+      scopes: ["mcp:read"],
+      expiresAt: "2099-01-01",
+    });
+    expect(response.status).toBe(201);
+    expect(h.stored[0].expiresAt).toBe("2099-01-01");
+  });
+
+  it("never gives a new child a longer lifetime than its parent", async () => {
+    const parent = { ...writer, expiresAt: "2099-01-15T00:00:00Z" };
+    const inherit = createHarness(parent);
+    const inherited = await inherit.request({ name: "inherits", scopes: ["mcp:read"] });
+    expect(inherited.status).toBe(201);
+    expect(inherit.stored[0].expiresAt).toBe(parent.expiresAt);
+
+    const extend = createHarness(parent);
+    const result = await extend.request({
+      name: "attempted-extension",
+      scopes: ["mcp:read"],
+      expiresAt: "2099-02-01",
+    });
+    expect(result.status).toBe(403);
+    expect((await result.json()).error.code).toBe("EXPIRY_ESCALATION_DENIED");
+    expect(extend.stored).toHaveLength(0);
+  });
+
+  it("does not allow expired or malformed parent keys to mint new keys", async () => {
+    for (const expiresAt of ["2020-01-01T00:00:00Z", "not-a-date"]) {
+      const h = createHarness({ ...writer, expiresAt });
+      const response = await h.request({ name: "revive-expired", scopes: ["mcp:read"] });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe("ISSUER_KEY_EXPIRED");
+      expect(h.stored).toHaveLength(0);
+    }
+  });
+
 });
