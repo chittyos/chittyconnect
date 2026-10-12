@@ -96,15 +96,16 @@ export async function queueConsumer(batch, env) {
  * @param {object} env - Worker environment
  */
 async function processEvent(message, env) {
+  // Mercury reconciliation is a separate branch of this *existing* queue.
+  // Do not invoke any GitHub installation lookup or GitHub-only IDEMP_KV
+  // failure/success markers for a provider banking event.
+  if (message?.kind === "mercury.reconciliation") {
+    return consumeFinanceMercuryReconciliationMessage(env, message);
+  }
+
   const { delivery, event, payload } = message;
 
   try {
-    // Do not pass provider reconciliation messages through the GitHub-only
-    // consumer: its missing-installation fast path would silently ack them.
-    if (message?.kind === "mercury.reconciliation") {
-      await consumeFinanceMercuryReconciliationMessage(env, message);
-      return;
-    }
     // Get installation ID from payload
     const installationId = payload.installation?.id;
     if (!installationId) {
