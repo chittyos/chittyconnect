@@ -7,6 +7,8 @@ export default function ApiKeys() {
   const {
     apiKeys,
     apiKeysLoading,
+    user,
+    fetchProfile,
     newKeyValue,
     fetchApiKeys,
     createApiKey,
@@ -16,7 +18,12 @@ export default function ApiKeys() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState(["mcp:read", "mcp:write"]);
+  // Mirror the authoritative parent-key scope subset; never propose a grant
+  // the current authenticated key cannot delegate.
+  const allowedScopes = AVAILABLE_SCOPES.filter((s) =>
+    Array.isArray(user?.scopes) && user.scopes.includes(s),
+  );
+  const [scopes, setScopes] = useState([]);
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState(null);
@@ -24,7 +31,8 @@ export default function ApiKeys() {
 
   useEffect(() => {
     fetchApiKeys();
-  }, [fetchApiKeys]);
+    fetchProfile();
+  }, [fetchApiKeys, fetchProfile]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -33,7 +41,7 @@ export default function ApiKeys() {
     setCreating(false);
     setShowCreate(false);
     setName("");
-    setScopes(["mcp:read", "mcp:write"]);
+    setScopes([]);
     setExpiresAt("");
   };
 
@@ -62,7 +70,14 @@ export default function ApiKeys() {
           <h1 className="page-title">API Keys</h1>
           <p className="page-subtitle">Manage your authentication keys</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+        <button
+          className="btn btn-primary"
+          disabled={allowedScopes.length === 0}
+          onClick={() => {
+            setScopes(allowedScopes);
+            setShowCreate(true);
+          }}
+        >
           Create New Key
         </button>
       </div>
@@ -190,7 +205,7 @@ export default function ApiKeys() {
                 <div className="form-group">
                   <label className="form-label">Scopes</label>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {AVAILABLE_SCOPES.map((s) => (
+                    {allowedScopes.map((s) => (
                       <label
                         key={s}
                         className={`filter-chip ${scopes.includes(s) ? "active" : ""}`}
@@ -221,7 +236,7 @@ export default function ApiKeys() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreate(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creating || !name.trim()}>
+                <button type="submit" className="btn btn-primary" disabled={creating || !name.trim() || scopes.length === 0}>
                   {creating ? "Creating..." : "Create Key"}
                 </button>
               </div>
