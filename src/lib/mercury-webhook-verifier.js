@@ -42,6 +42,25 @@ const EVENT_IDENTIFIER = /^[A-Za-z0-9_-]{1,160}$/;
 const FINANCE_BROKER_CALLER = "chittyconnect";
 const CONSUMER_BASE_URL = "https://internal/internal/chittyconnect/mercury-reconciliation";
 
+/** Reject impossible RFC 3339 dates instead of Date.parse calendar normalization. */
+function validMercuryTimestamp(value) {
+  if (typeof value !== "string") return false;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?(?:Z|([+-])(\d{2}):([0-5]\d))$/.exec(value);
+  if (!parts) return false;
+  const [year, month, day, hour, minute, second] = parts.slice(1, 7).map(Number);
+  const zoneHour = parts[8] === undefined ? 0 : Number(parts[8]);
+  const zoneMinute = parts[9] === undefined ? 0 : Number(parts[9]);
+  if (zoneHour > 14 || (zoneHour === 14 && zoneMinute !== 0)) return false;
+  const roundTrip = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return year >= 2000 && year <= 2999 &&
+    roundTrip.getUTCFullYear() === year &&
+    roundTrip.getUTCMonth() === month - 1 &&
+    roundTrip.getUTCDate() === day &&
+    roundTrip.getUTCHours() === hour &&
+    roundTrip.getUTCMinutes() === minute &&
+    roundTrip.getUTCSeconds() === second;
+}
+
 function checkedFinanceEvent(input) {
   const organizationId = input?.organizationId;
   const providerEventId = input?.providerEventId;
@@ -60,8 +79,7 @@ function checkedFinanceEvent(input) {
           !Number.isSafeInteger(input.resourceVersion) ||
           input.resourceVersion < 0)) ||
       (input.occurredAt != null &&
-        (typeof input.occurredAt !== "string" ||
-          !Number.isFinite(Date.parse(input.occurredAt))))) {
+        !validMercuryTimestamp(input.occurredAt))) {
     throw new Error("invalid_mercury_reconciliation_intent");
   }
   return {
