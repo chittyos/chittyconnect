@@ -100,4 +100,111 @@ describe("MCP agent_context consumer authorization", () => {
     const result = await dispatchToolCall("agent_context", { agent_id: ID }, env);
     expect(result.isError).toBeFalsy();
   });
+  it("never composes a legacy litigation prompt through a Storage agent", async () => {
+    const legacy = { domain: "litigation", base: "SENSITIVE LITIGATION PROMPT", consumer_gate: "{}" };
+    const env = envFor();
+    env.DB.prepare = vi.fn(() => ({
+      bind: (id) => ({ first: async () => id === BASE.id ? BASE : legacy }),
+    }));
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: ["litigation.synthesize"],
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Unauthorized");
+    expect(result.content[0].text).not.toContain(legacy.base);
+    expect(result.content[0].text).not.toContain(BASE.base);
+  });
+
+  it("rejects same-domain legacy prompt layers without explicit service grants", async () => {
+    const legacy = { domain: "agents", base: "UNSCOPED LEGACY PROMPT", consumer_gate: "{}" };
+    const env = envFor();
+    env.DB.prepare = vi.fn(() => ({
+      bind: (id) => ({ first: async () => id === BASE.id ? BASE : legacy }),
+    }));
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: ["legacy.agents.context"],
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain(legacy.base);
+  });
+
+  it("rejects a cross-domain layer even when its service is explicitly permitted", async () => {
+    const layer = {
+      domain: "litigation", base: "LITIGATION CROSS-DOMAIN",
+      consumer_gate: JSON.stringify({
+        allowedServices: ["chittystorage"], allowedAgents: [ID],
+      }),
+    };
+    const env = envFor();
+    env.DB.prepare = vi.fn(() => ({
+      bind: (id) => ({ first: async () => id === BASE.id ? BASE : layer }),
+    }));
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: ["litigation.allowed-by-service"],
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain(layer.base);
+  });
+
+  it("permits authorized same-domain, same-scope Storage layers", async () => {
+    const base = {
+      ...BASE,
+      consumer_gate: JSON.stringify({
+        allowedServices: ["chittystorage"], allowedAgents: [ID], scopeBoundaries: ["storage"],
+      }),
+    };
+    const layer = {
+      domain: "agents", base: "STORAGE-COMPATIBLE LAYER",
+      consumer_gate: JSON.stringify({
+        allowedServices: ["chittystorage"], allowedAgents: [ID], scopeBoundaries: ["storage"],
+      }),
+    };
+    const env = envFor(base);
+    env.DB.prepare = vi.fn(() => ({
+      bind: (id) => ({ first: async () => id === base.id ? base : layer }),
+    }));
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: ["storage.authorized-layer"],
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBeFalsy();
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.systemPrompt).toContain(base.base);
+    expect(payload.systemPrompt).toContain(layer.base);
+    expect(payload.resolvedLayers).toContain("storage.authorized-layer");
+  });
+
+  it("denies a layer with missing Storage scope boundary", async () => {
+    const base = {
+      ...BASE,
+      consumer_gate: JSON.stringify({
+        allowedServices: ["chittystorage"], allowedAgents: [ID], scopeBoundaries: ["storage"],
+      }),
+    };
+    const layer = {
+      domain: "agents", base: "INCOMPATIBLE SCOPE LAYER",
+      consumer_gate: JSON.stringify({
+        allowedServices: ["chittystorage"], allowedAgents: [ID], scopeBoundaries: ["legal"],
+      }),
+    };
+    const env = envFor(base);
+    env.DB.prepare = vi.fn(() => ({
+      bind: (id) => ({ first: async () => id === base.id ? base : layer }),
+    }));
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: ["legal-in-storage-domain"],
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain(layer.base);
+  });
+
+  it("caps caller-supplied layer count before querying any layer", async () => {
+    const env = envFor();
+    const result = await dispatchToolCall("agent_context", {
+      agent_id: ID, additional_layers: Array.from({ length: 9 }, (_, i) => "layer-" + i),
+    }, env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("invalid additional prompt layers");
+    expect(env.DB.prepare).toHaveBeenCalledTimes(1);
+  });
+
 });
