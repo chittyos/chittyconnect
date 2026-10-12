@@ -132,7 +132,7 @@ describe("ChittyServ runtime-only credentials", () => {
       CHITTY_SERV_TOKEN: "synthetic-runtime-token",
       CREDENTIAL_CACHE: noCredentialCache(),
     });
-    for (const p of ["../example/token", "services/one-two/token", "services//token", "services/example", "emergency/../token"]) {
+    for (const p of ["../example/token", "services/one.two/token", "services//token", "services/example", "emergency/../token"]) {
       await expect(c.get(p)).rejects.toThrow(/credential reference/);
     }
     expect(calls.serv).toBe(0);
@@ -152,6 +152,21 @@ describe("ChittyServ runtime-only credentials", () => {
       expect(error.message).toContain("malformed credential JSON");
       expect(error.message).not.toContain("sensitive-parse-fragment");
     }
+  });
+
+  it("preserves the transport of existing hyphenated database references", async () => {
+    await openBackend();
+    const c = new ChittyServClient({
+      CHITTYSERV_URL: endpoint,
+      CHITTY_SERV_TOKEN: "synthetic-runtime-token",
+      CREDENTIAL_CACHE: noCredentialCache(),
+    });
+    // The node-local backend remains authoritative over the final identity:
+    // the client must not silently translate a hyphen into an underscore.
+    let caught;
+    try { await c.get("integrations/neon/chittyos-core"); } catch (e) { caught = e; }
+    expect(caught?.code).toBe("CREDENTIAL_NOT_FOUND");
+    expect(calls.serv).toBe(1);
   });
 
   it("preserves 404 classification but never copies upstream error bodies", async () => {
