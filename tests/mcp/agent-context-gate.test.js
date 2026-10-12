@@ -95,10 +95,24 @@ describe("MCP agent_context consumer authorization", () => {
     expect(access.allowed).toBe(false);
   });
 
-  it("preserves legacy behavior only for prompts without an explicit allowlist", async () => {
-    const env = envFor({ ...BASE, consumer_gate: "{}" }, null);
+  it("rejects legacy unscoped agent prompts rather than treating absent grants as public", async () => {
+    const legacy = { ...BASE, consumer_gate: "{}" };
+    const env = envFor(legacy, null);
     const result = await dispatchToolCall("agent_context", { agent_id: ID }, env);
-    expect(result.isError).toBeFalsy();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain(legacy.base);
+  });
+
+  it("rejects wildcard service grants even when the requested agent ID matches", async () => {
+    const wildcard = {
+      ...BASE,
+      consumer_gate: JSON.stringify({ allowedServices: ["*"], allowedAgents: [ID] }),
+    };
+    const env = envFor(wildcard);
+    const result = await dispatchToolCall("agent_context", { agent_id: ID },
+      env, { authToken: "valid-key" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain(wildcard.base);
   });
   it("never composes a legacy litigation prompt through a Storage agent", async () => {
     const legacy = { domain: "litigation", base: "SENSITIVE LITIGATION PROMPT", consumer_gate: "{}" };
