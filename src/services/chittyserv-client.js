@@ -52,7 +52,7 @@ export class ChittyServClient {
     }
 
     const token = await this.resolveBearerToken();
-    const url = `${this.baseUrl.replace(/\\/$/, "")}/v1/credentials/${parts.join("/")}`;
+    const url = `${this.baseUrl.replace(/\/$/, "")}/v1/credentials/${parts.join("/")}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -129,19 +129,11 @@ export class ChittyServClient {
   }
 
   /**
-   * Invalidate cached credential
-   *
-   * @param {string} credentialPath - Credential path to invalidate
+   * Legacy interface compatibility. No credential values are cached.
+   * Never mutate old KV entries from a read-only credential client.
    */
-  async invalidateCache(credentialPath) {
-    try {
-      if (!this.env.CREDENTIAL_CACHE) return;
-      const cacheKey = `chittyserv:cache:${credentialPath}`;
-      await this.env.CREDENTIAL_CACHE.delete(cacheKey);
-      console.log(`[ChittyServ] Invalidated cache for ${credentialPath}`);
-    } catch (error) {
-      console.error("[ChittyServ] Cache invalidation error:", error);
-    }
+  async invalidateCache(_credentialPath) {
+    // No-op: runtime-only retrieval means there is nothing to invalidate.
   }
 
   /**
@@ -159,7 +151,7 @@ export class ChittyServClient {
       // Still, a configured broker cannot be reported healthy without
       // a usable local auth binding or enforced upstream authentication.
       const token = await this.resolveBearerToken();
-      const response = await fetch(`${this.baseUrl.replace(/\\/$/, "")}/health`, {
+      const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/health`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
