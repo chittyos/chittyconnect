@@ -180,7 +180,10 @@ export class OnePasswordConnectClient {
       if (!res.ok) {
         // Upstream-supplied error bodies are untrusted and may contain
         // material that must never reach worker logs or caller exceptions.
-        const err = new Error(`ChittySecrets reveal failed: HTTP ${res.status}`);
+        await res.body?.cancel();
+        const err = new Error(res.status === 404
+          ? "ChittySecrets credential not found (HTTP 404)"
+          : `ChittySecrets reveal failed: HTTP ${res.status}`);
         if (res.status === 404) err.code = "CREDENTIAL_NOT_FOUND";
         throw err;
       }
