@@ -136,6 +136,53 @@ const FETCH_CREDENTIAL_ALIASES = {
   github: "integrations/github/token",
 };
 
+// This is the provider-ownership boundary, NOT an operator-selected list of
+// arbitrary egress targets. Do not allow FETCH_ALLOWED_HOSTS to override it.
+// The values are exact hosts (no suffix match, wildcards or userinfo).
+const FETCH_CREDENTIAL_PROVIDER_HOSTS = {
+  notion: new Set(["api.notion.com"]),
+  google: new Set([
+    "www.googleapis.com",
+    "gmail.googleapis.com",
+    "drive.googleapis.com",
+    "sheets.googleapis.com",
+    "calendar.googleapis.com",
+    "people.googleapis.com",
+  ]),
+  github: new Set(["api.github.com"]),
+};
+
+/**
+ * Determine whether a credentialed request stays with its issuing provider.
+ * A missing FETCH_ALLOWED_HOSTS means the owner-host set remains enforced,
+ * not that any Internet destination becomes eligible.
+ *
+ * @returns {boolean} true only if alias, HTTPS origin and both gates pass.
+ */
+export function credentialDestinationAllowed(alias, url, operatorAllowlist = "") {
+  if (typeof alias !== "string" ||
+      !Object.hasOwn(FETCH_CREDENTIAL_ALIASES, alias) ||
+      typeof url !== "string") return false;
+  let destination;
+  try {
+    destination = new URL(url);
+  } catch {
+    return false;
+  }
+  if (destination.protocol !== "https:" ||
+      destination.username || destination.password || destination.port) {
+    return false;
+  }
+  const ownerHosts = FETCH_CREDENTIAL_PROVIDER_HOSTS[alias];
+  if (!ownerHosts?.has(destination.hostname)) return false;
+
+  const operatorHosts = new Set(
+    String(operatorAllowlist || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean),
+  );
+  // Optional operator allowlist can only NARROW the canonical provider scope.
+  return operatorHosts.size === 0 || operatorHosts.has(destination.hostname);
+}
+
 executeRoutes.post("/fetch", async (c) => {
   try {
     const { url, method = "GET", headers = {}, body, credential } = await c.req.json();
@@ -157,31 +204,37 @@ executeRoutes.post("/fetch", async (c) => {
       allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
     );
 
-    const fetchHeaders = { ...headers };
+    // Headers() canonicalizes casing, avoiding duplicate lower/upper-case
+    // Authorization fields when an untrusted caller supplied one.
+    const fetchHeaders = new Headers(headers);
     if (credential) {
-      const credentialPath = FETCH_CREDENTIAL_ALIASES[credential];
-      if (!credentialPath) {
+      if (typeof credential !== "string" ||
+          !Object.hasOwn(FETCH_CREDENTIAL_ALIASES, credential)) {
         return c.json(
-          { error: `unknown credential alias '${credential}'`, allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
+          { error: "unknown credential alias", allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
           400,
         );
       }
-      // When using a credential, the destination host must be allowlisted —
-      // either via the operator-configured FETCH_ALLOWED_HOSTS env var, or by
-      // matching a known host owned by the credential alias.
-      if (allowedHosts.size > 0 && !allowedHosts.has(parsedUrl.hostname)) {
-        return c.json({ error: `host '${parsedUrl.hostname}' is not in FETCH_ALLOWED_HOSTS` }, 403);
+
+      // Validate the target BEFORE resolving or injecting any credential.
+      if (!credentialDestinationAllowed(credential, url, allowlistRaw)) {
+        return c.json({ error: "credential destination is not authorized for this provider" }, 403);
       }
-      const token = await getCredential(c.env, credentialPath, null);
-      if (token) {
-        fetchHeaders["Authorization"] = `Bearer ${token}`;
+      const token = await getCredential(c.env, FETCH_CREDENTIAL_ALIASES[credential], null);
+      if (typeof token !== "string" || token.length === 0) {
+        return c.json({ error: "credential unavailable" }, 503);
       }
+
+      fetchHeaders.set("Authorization", `Bearer ${token}`);
     }
 
     const response = await fetch(url, {
       method,
       headers: fetchHeaders,
       body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+      // Workers forward Authorization across redirects by default. Never
+      // auto-follow redirects when a broker-managed credential is present.
+      redirect: credential ? "manual" : "follow",
     });
 
     const contentType = response.headers.get("content-type") || "";
