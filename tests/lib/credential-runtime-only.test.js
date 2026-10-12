@@ -169,19 +169,18 @@ describe("ChittyServ runtime-only credentials", () => {
     }
   });
 
-  it("preserves the transport of existing hyphenated database references", async () => {
+  it("rejects hyphenated aliases unsupported by canonical ChittyServ", async () => {
     await openBackend();
     const c = new ChittyServClient({
       CHITTYSERV_URL: endpoint,
       CHITTY_SERV_TOKEN: "synthetic-runtime-token",
       CREDENTIAL_CACHE: noCredentialCache(),
     });
-    // The node-local backend remains authoritative over the final identity:
-    // the client must not silently translate a hyphen into an underscore.
-    let caught;
-    try { await c.get("integrations/neon/chittyos-core"); } catch (e) { caught = e; }
-    expect(caught?.code).toBe("CREDENTIAL_NOT_FOUND");
-    expect(calls.serv).toBe(1);
+    // ChittyConnect's integrations/neon/chittyos-core path belongs to
+    // Cloudflare binding alias resolution, NOT ChittyServ's strict triplet API.
+    // Do not send a reference that the node-local upstream must reject.
+    await expect(c.get("integrations/neon/chittyos-core")).rejects.toThrow(/credential reference/);
+    expect(calls.serv).toBe(0);
   });
 
   it("redacts malformed 2xx JSON without surfacing response snippets", async () => {
