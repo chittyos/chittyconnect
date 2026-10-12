@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Hono } from "hono";
 import { executeRoutes, credentialDestinationAllowed } from "../../src/api/routes/execute.js";
+import { authenticate } from "../../src/api/middleware/auth.js";
 
 // Exercise the actual Hono handler and real credential-broker resolver. The
 // provider transport is intercepted with a test-only synthetic response;
 // no real GitHub/Google/Notion credentials or external requests are used.
 const app = new Hono();
+app.use("/execute/*", authenticate);
 app.route("/execute", executeRoutes);
 const testEnv = {
+  // Real API-key middleware is used; only its KV-backed test fixture is synthetic.
+  API_KEYS: { get: async () => JSON.stringify({ status: "active", role: "admin", scopes: ["admin"] }) },
   CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
   GITHUB_TOKEN: "synthetic-test-only-github-token",
   NOTION_TOKEN: "synthetic-test-only-notion-token",
@@ -16,7 +20,7 @@ const testEnv = {
 
 const req = (payload, env = testEnv) => app.request(
   "http://localhost/execute/fetch",
-  { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+  { method: "POST", headers: { "Content-Type": "application/json", "X-ChittyOS-API-Key": "synthetic-admin-key" }, body: JSON.stringify(payload) },
   env,
 );
 
@@ -59,6 +63,7 @@ describe("provider-owned credential destination policy", () => {
     const upstream = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
     let brokerRead = 0;
     const env = {
+      API_KEYS: testEnv.API_KEYS,
       CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
       GITHUB_TOKEN: { get: async () => { brokerRead++; return "synthetic-only-secret"; } },
     };
@@ -114,9 +119,25 @@ describe("provider-owned credential destination policy", () => {
       expect(response.status).toBe(400);
     }
     const missing = await req({ url: "https://api.github.com/", credential: "github" }, {
+      API_KEYS: testEnv.API_KEYS,
       CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
     });
     expect(missing.status).toBe(503);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("denies ordinary authenticated API keys before broker credential access", async () => {
+    const upstream = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+    let credentialReads = 0;
+    const env = {
+      ...testEnv,
+      API_KEYS: { get: async () => JSON.stringify({ status: "active", role: "reader", scopes: ["read"] }) },
+      GITHUB_TOKEN: { get: async () => { credentialReads++; return "must-not-be-issued"; } },
+    };
+    const response = await req({ url: "https://api.github.com/", credential: "github" }, env);
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toMatch(/admin scope required/);
+    expect(credentialReads).toBe(0);
     expect(upstream).not.toHaveBeenCalled();
   });
 
