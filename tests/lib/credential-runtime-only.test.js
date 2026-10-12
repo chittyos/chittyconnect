@@ -40,6 +40,11 @@ async function openBackend() {
       if (req.url === "/v1/credentials/services/missing/token") {
         return send(404, { error: "sensitive-error-body-do-not-echo" });
       }
+      if (req.url === "/v1/credentials/services/malformed/token") {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        return res.end('{"value":"sensitive-parse-fragment"');
+      }
       if (req.url === "/v1/credentials/services/example/token") {
         return send(200, { success: true, value: "synthetic-secret-value" });
       }
@@ -53,6 +58,16 @@ async function openBackend() {
         return send(403, { error: "bad Access credentials" });
       }
       if (req.method !== "POST") return send(405, { error: "use POST" });
+      let raw = "";
+      for await (const chunk of req) raw += chunk.toString();
+      const name = JSON.parse(raw).name;
+      if (name === "CHITTYID_MALFORMED") {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        return res.end('{"value":"sensitive-parse-fragment"');
+      }
+      if (name === "CHITTYID_OBJECT") return send(200, { value: { sensitive: "invalid" } });
+      if (name === "CHITTYID_NOTFOUND") return send(404, { error: "sensitive-error-body-do-not-echo" });
       return send(200, { value: "synthetic-secret-value" });
     }
 
@@ -123,6 +138,22 @@ describe("ChittyServ runtime-only credentials", () => {
     expect(calls.serv).toBe(0);
   });
 
+  it("redacts malformed upstream JSON rather than exposing parsed body fragments", async () => {
+    await openBackend();
+    const c = new ChittyServClient({
+      CHITTYSERV_URL: endpoint,
+      CHITTY_SERV_TOKEN: "synthetic-runtime-token",
+      CREDENTIAL_CACHE: noCredentialCache(),
+    });
+    try {
+      await c.get("services/malformed/token");
+      throw new Error("expected malformed response");
+    } catch (error) {
+      expect(error.message).toContain("malformed credential JSON");
+      expect(error.message).not.toContain("sensitive-parse-fragment");
+    }
+  });
+
   it("preserves 404 classification but never copies upstream error bodies", async () => {
     await openBackend();
     const c = new ChittyServClient({
@@ -155,5 +186,25 @@ describe("legacy ChittySecrets backend is runtime-only", () => {
     expect(await c.get("services/chittyid/service_token")).toBe("synthetic-secret-value");
     expect(calls.legacy).toBe(2);
     await c.invalidateCache("services/chittyid/service_token");
+  });
+
+  it("rejects non-string credentials and suppresses provider-controlled error content", async () => {
+    await openBackend();
+    const c = new OnePasswordConnectClient({
+      CHITTYSECRETS_URL: endpoint,
+      CF_ACCESS_CLIENT_ID: "synthetic-cf-client",
+      CF_ACCESS_CLIENT_SECRET: "synthetic-cf-secret",
+      CREDENTIAL_CACHE: noCredentialCache(),
+      CREDENTIAL_FAILOVER_ENABLED: "false",
+    });
+    await expect(c.get("services/chittyid/object")).rejects.toThrow(/no value/);
+    await expect(c.get("services/chittyid/notfound")).rejects.toThrow(/HTTP 404/);
+    try {
+      await c.get("services/chittyid/malformed");
+      throw new Error("expected malformed response");
+    } catch (error) {
+      expect(error.message).toContain("malformed credential JSON");
+      expect(error.message).not.toContain("sensitive-parse-fragment");
+    }
   });
 });
