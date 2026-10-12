@@ -183,10 +183,15 @@ export class OnePasswordConnectClient {
         throw err;
       }
 
-      const data = await res.json();
-      const value = data.value;
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("ChittySecrets returned malformed credential JSON");
+      }
+      const value = data?.value;
 
-      if (!value) {
+      if (typeof value !== "string" || value.length === 0) {
         const err = new Error(
           `ChittySecrets returned no value for secret ${secretName}`,
         );
