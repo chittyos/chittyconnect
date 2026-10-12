@@ -153,8 +153,8 @@ export class SecretRotationService {
         lastError: meta?.lastError || null,
         ageMs: lastRotatedAt ? age : null,
         intervalMs: config.refreshIntervalMs,
-        isDue: age >= config.refreshIntervalMs,
-        fresh: lastRotatedAt > 0 && age < config.refreshIntervalMs,
+        isDue: config.enabled !== false && age >= config.refreshIntervalMs,
+        fresh: config.enabled !== false && lastRotatedAt > 0 && age < config.refreshIntervalMs,
       };
     }
 
