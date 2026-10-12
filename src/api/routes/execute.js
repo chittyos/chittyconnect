@@ -270,17 +270,14 @@ const KNOWN_DATABASES = {
   "chittyos-core": {
     credentialPath: "integrations/neon/chittyos-core",
     envFallback: "NEON_CHITTYOS_CORE_URL",
-    kvKey: "secret:neon:chittyos-core:connection_uri",
   },
   "chittycommand": {
     credentialPath: "integrations/neon/chittycommand",
     envFallback: "NEON_CHITTYCOMMAND_URL",
-    kvKey: "secret:neon:chittycommand:connection_uri",
   },
   "chittycounsel": {
     credentialPath: "integrations/neon/chittycounsel",
     envFallback: "NEON_CHITTYCOUNSEL_URL",
-    kvKey: "secret:neon:chittycounsel:connection_uri",
   },
 };
 
@@ -293,15 +290,12 @@ async function resolveNeonConnection(env, database) {
   const known = KNOWN_DATABASES[database];
   if (!known) return null;
 
-  // Try KV cache first (rotated connection strings)
-  if (env.CREDENTIAL_CACHE) {
-    const cached = await env.CREDENTIAL_CACHE.get(known.kvKey);
-    if (cached) return cached;
-  }
-
-  // Try credential broker (chittysecrets)
+  // Connection strings are security-sensitive authority material: never
+  // bypass ChittyConnect's credential broker through eventually consistent KV.
+  // Retain existing binding fallback inside getCredential until the governed
+  // migration verifies all downstream SQL consumers.
   const cred = await getCredential(env, known.credentialPath, known.envFallback);
   return cred || null;
 }
 
-export { executeRoutes };
+export { executeRoutes, resolveNeonConnection };
