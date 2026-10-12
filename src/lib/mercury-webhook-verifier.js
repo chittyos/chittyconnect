@@ -56,8 +56,9 @@ function checkedFinanceEvent(input) {
       !EVENT_IDENTIFIER.test(input.resourceId) ||
       !["create", "update", "delete"].includes(input?.operationType) ||
       (input.resourceVersion != null &&
-        (typeof input.resourceVersion !== "string" ||
-          input.resourceVersion.length > 160)) ||
+        (typeof input.resourceVersion !== "number" ||
+          !Number.isSafeInteger(input.resourceVersion) ||
+          input.resourceVersion < 0)) ||
       (input.occurredAt != null &&
         (typeof input.occurredAt !== "string" ||
           !Number.isFinite(Date.parse(input.occurredAt))))) {
