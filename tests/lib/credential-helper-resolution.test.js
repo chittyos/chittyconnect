@@ -115,7 +115,7 @@ describe("getCredentialResult tiers", () => {
     const env = {
       CREDENTIAL_BROKER_TYPE: "chittyserv",
       CHITTYSERV_URL: "https://chittyserv.invalid",
-      CHITTYSERV_TOKEN: "not-a-real-token",
+      CHITTY_SERV_TOKEN: "not-a-real-token",
     };
 
     const result = await getCredentialResult(
@@ -139,7 +139,7 @@ describe("getCredentialResult tiers", () => {
     const env = {
       CREDENTIAL_BROKER_TYPE: "chittyserv",
       CHITTYSERV_URL: "https://chittyserv.invalid",
-      CHITTYSERV_TOKEN: "not-a-real-token",
+      CHITTY_SERV_TOKEN: "not-a-real-token",
     };
 
     const result = await getCredentialResult(
