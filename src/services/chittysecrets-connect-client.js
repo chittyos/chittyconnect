@@ -178,6 +178,9 @@ export class OnePasswordConnectClient {
       });
 
       if (!res.ok) {
+        // Discard the upstream body without buffering its potentially
+        // sensitive contents into a Worker exception or persistent trace.
+        try { await res.body?.cancel(); } catch { /* Already closed */ }
         // Upstream-supplied error bodies are untrusted and may contain
         // material that must never reach worker logs or caller exceptions.
         await res.body?.cancel();
