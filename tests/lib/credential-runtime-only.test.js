@@ -37,6 +37,12 @@ async function openBackend() {
       if (req.headers.authorization !== "Bearer synthetic-runtime-token") {
         return send(401, { error: "bad bearer" });
       }
+      if (req.url === "/v1/credentials/services/malformed/token") {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end("SENTINEL_SECRET_FROM_UNTRUSTED_2XX invalid json");
+        return;
+      }
       if (req.url === "/v1/credentials/services/missing/token") {
         return send(404, { error: "sensitive-error-body-do-not-echo" });
       }
@@ -49,6 +55,13 @@ async function openBackend() {
         return send(200, { success: true, value: "synthetic-secret-value" });
       }
       return send(404, { error: "missing" });
+    }
+
+    if (req.url === "/malformed/mcp?action=reveal") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end("SENTINEL_SECRET_FROM_LEGACY_2XX invalid json");
+      return;
     }
 
     if (req.url === "/mcp?action=reveal") {
@@ -169,6 +182,19 @@ describe("ChittyServ runtime-only credentials", () => {
     expect(calls.serv).toBe(1);
   });
 
+  it("redacts malformed 2xx JSON without surfacing response snippets", async () => {
+    await openBackend();
+    const c = new ChittyServClient({
+      CHITTYSERV_URL: endpoint,
+      CHITTY_SERV_TOKEN: "synthetic-runtime-token",
+      CREDENTIAL_CACHE: noCredentialCache(),
+    });
+    let error;
+    try { await c.get("services/malformed/token"); } catch (e) { error = e; }
+    expect(error?.message).toBe("ChittyServ returned malformed credential JSON");
+    expect(error?.message).not.toContain("SENTINEL_SECRET");
+  });
+
   it("preserves 404 classification but never copies upstream error bodies", async () => {
     await openBackend();
     const c = new ChittyServClient({
@@ -188,6 +214,21 @@ describe("ChittyServ runtime-only credentials", () => {
 });
 
 describe("legacy ChittySecrets backend is runtime-only", () => {
+  it("redacts malformed upstream JSON through the legacy adapter", async () => {
+    await openBackend();
+    const c = new OnePasswordConnectClient({
+      CHITTYSECRETS_URL: endpoint + "/malformed",
+      CF_ACCESS_CLIENT_ID: "synthetic-cf-client",
+      CF_ACCESS_CLIENT_SECRET: "synthetic-cf-secret",
+      CREDENTIAL_CACHE: noCredentialCache(),
+      CREDENTIAL_FAILOVER_ENABLED: "false",
+    });
+    let error;
+    try { await c.get("services/chittyid/service_token"); } catch (e) { error = e; }
+    expect(error?.message).toBe("ChittySecrets returned malformed credential JSON");
+    expect(error?.message).not.toContain("SENTINEL_SECRET");
+  });
+
   it("does not use encrypted or plaintext KV for repeated successful retrieval", async () => {
     await openBackend();
     const c = new OnePasswordConnectClient({
