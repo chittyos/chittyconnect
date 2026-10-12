@@ -90,7 +90,7 @@ ONEPASSWORD_CONNECT_URL    — chittysecrets Connect server URL
 |--------|------|---------|
 | `EnhancedCredentialProvisioner` | `src/services/credential-provisioner-enhanced.js` | Context-aware credential provisioning with chittysecrets integration |
 | `CredentialBroker` | `src/lib/credential-broker.js` | Unified abstraction over credential backends (chittysecrets, ChittyServ) |
-| `SecretRotationService` | `src/services/secret-rotation.js` | Cron-based rotation of cached tokens (OAuth, DB passwords) |
+| `SecretRotationService` | `src/services/secret-rotation.js` | OAuth rotation and policy-blocked Neon password status (database password resets disabled) |
 | `CREDENTIAL_CACHE` | KV namespace | Hot cache for rotated tokens |
 | `credential-paths.js` | `src/lib/credential-paths.js` | Maps logical names to chittysecrets item paths |
 
@@ -196,8 +196,8 @@ const neonUrl = env.NEON_DATABASE_URL; // Injected at deploy time
 | `secret:gdrive:refresh_token` | None | OAuth2 refresh token (seeded by provisioning bot) | Manual |
 | `secret:gdrive:service_account` | None | Service account JSON: `{ client_email, private_key, impersonate, scopes }` (seeded by provisioning bot) | Manual |
 | `secret:gdrive:meta` | None | Rotation metadata (lastRotatedAt, lastResult) | Automatic |
-| `secret:neon:connection_uri` | 8 days | Rotated connection string | Weekly cron |
-| `secret:neon:password_rotated_at` | None | Timestamp of last rotation | Weekly cron |
+| `secret:neon:connection_uri` | Historical only | **Deprecated; no reads/writes** from the current rotator or SQL executor; see custody hold below |
+| `secret:neon:password_rotated_at` | Historical only | Deprecated; not written while custody hold is active |
 | `secret:neon:meta` | None | Rotation metadata | Automatic |
 
 **Service Account Structure** for `secret:gdrive:service_account`:
@@ -307,30 +307,15 @@ The `SecretRotationService` uses a registry-driven design. Each entry defines:
 **Required KV seed:**
 - `secret:gdrive:refresh_token` — Long-lived refresh token (seeded by provisioning bot)
 
-### Neon Password Rotation
+### Neon Password Rotation — Suspended
 
-**Interval:** Weekly (every 7 days).
+**Policy:** `POLICY_BLOCKED_CHITTYSECRETS_ROTATION_NOT_BROKERED` until an approved end-to-end custody migration is proven. Direct Neon role resets and KV connection-URI publishing are disabled on both the hourly scheduler and manual rotation API. The read-only status endpoint retains the Neon entry with `enabled: false`, `fresh: false`, and `isDue: false`; no metadata is overwritten by a blocked rotation.
 
-**Flow:**
-```
-1. Read `NEON_API_KEY` from Worker env
-2. POST https://console.neon.tech/api/v2/projects/{id}/branches/{branch}/roles/{role}/reset_password
-   - Authorization: Bearer {NEON_API_KEY}
-3. Receive new password in response
-4. Build new connection URI: postgresql://{role}:{password}@{host}/{db}?sslmode=require
-5. KV.put('secret:neon:connection_uri', uri, { expirationTtl: 8 days })
-6. Update rotation metadata
-```
+**Why:** The former routine issued an irreversible provider `reset_password` call **before** persisting the replacement URI only to eventually consistent KV, bypassing ChittySecrets and downstream consumers. It could leave all Neon clients with stale credentials, and the credential URI itself was materialized outside approved custody.
 
-**Required env vars:**
-- `NEON_API_KEY` — Neon API key (Cloudflare Secret)
-- `NEON_PROJECT_ID` — Neon project ID
-- `NEON_BRANCH_ID` — Target branch (optional, defaults to main)
-- `NEON_ROLE_NAME` — Database role (defaults to `chittyos_app`)
-- `NEON_HOST` — Neon host for connection string construction
-- `NEON_DATABASE` — Database name (defaults to `neondb`)
+**Verified production baseline (2026-10-12):** ChittyConnect's hourly cron is deployed. Its `secret:neon:meta` record last reported error on 2026-10-07 due to missing API configuration. Cloudflare bindings contain `NEON_API_KEY`, but not `NEON_PROJECT_ID`, `NEON_BRANCH_ID`, or `NEON_HOST`. No `secret:neon:connection_uri` or per-database KV URI key was present in the checked production namespace. Nothing was deleted or reset. Do not interpret the historical error as proof that the rotation is safe if configuration later changes.
 
-**Implementation note:** the current rotator reads `NEON_API_KEY` directly from Worker env rather than through the credential broker.
+**Restoration gate:** discover the existing ChittySecrets service account and ChittyConnect broker issuance, designate the authoritative Neon role and actual consumers, prove acknowledgement of the *new* credential in canonical custody and read-back from every affected consumer, design rollback and failure handling, run separate security review, then obtain explicit production approval before enabling resets. No new broker, database, workflow or persistent secret store is justified by this guard.
 
 ### Adding New Rotators
 
