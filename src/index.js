@@ -2540,6 +2540,8 @@ export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
  */
 export { McpConnectAgent };
 export { SessionStateActor } from "./durable-objects/SessionStateActor.js";
+export { GitHubIssueIdempotency } from "./durable-objects/GitHubIssueIdempotency.js";
+export { GitHubIssueBrokerService } from "./github/issue-broker-service.js";
 
 export class MCPSessionGraveyard {
   constructor(state, env) {}
