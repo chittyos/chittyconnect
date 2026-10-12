@@ -191,18 +191,14 @@ executeRoutes.post("/fetch", async (c) => {
       return c.json({ error: "url required" }, 400);
     }
 
-    // Host allowlist: operators opt-in via FETCH_ALLOWED_HOSTS (comma-separated).
-    // Without it, /fetch is restricted to the credential alias's owner host.
-    let parsedUrl;
+    // Parse the destination for every request. Credentialed requests receive
+    // the stricter provider-ownership/HTTPS gate below.
     try {
-      parsedUrl = new URL(url);
+      new URL(url);
     } catch {
       return c.json({ error: "url must be a valid absolute URL" }, 400);
     }
     const allowlistRaw = c.env.FETCH_ALLOWED_HOSTS || "";
-    const allowedHosts = new Set(
-      allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
-    );
 
     // Headers() canonicalizes casing, avoiding duplicate lower/upper-case
     // Authorization fields when an untrusted caller supplied one.
