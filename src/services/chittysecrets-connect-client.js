@@ -173,6 +173,8 @@ export class OnePasswordConnectClient {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ name: secretName }),
+        // Runtime-only credential calls must not hang if a provider stalls.
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!res.ok) {
@@ -343,6 +345,7 @@ export class OnePasswordConnectClient {
         headers: {
           Authorization: `Bearer ${typeof this.env.ONEPASSWORD_CONNECT_TOKEN === "string" ? this.env.ONEPASSWORD_CONNECT_TOKEN : await this.env.ONEPASSWORD_CONNECT_TOKEN.get()}`,
         },
+        signal: AbortSignal.timeout(3000),
       });
 
       return {
