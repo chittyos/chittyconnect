@@ -1,8 +1,8 @@
 /**
  * chittysecrets Connect API Client
  *
- * Provides secure, cached access to credentials stored in chittysecrets.
- * Implements intelligent caching, error handling, and failover strategies.
+ * Provides runtime-only access to credentials stored in ChittySecrets.
+ * Retains legacy retrieval and failover interfaces without credential persistence.
  *
  * @module services/chittysecrets-connect-client
  */
@@ -61,7 +61,6 @@ export class OnePasswordConnectClient {
   constructor(env) {
     this.env = env;
     this.connectUrl = env.ONEPASSWORD_CONNECT_URL;
-    this.connectToken = env.ONEPASSWORD_CONNECT_TOKEN;
 
     // Vault IDs from environment
     this.vaults = {
@@ -197,10 +196,9 @@ export class OnePasswordConnectClient {
 
       return value;
     } catch (error) {
-      console.error(
-        `[chittysecrets] Fetch error for ${parsed.fullPath}:`,
-        error,
-      );
+      // Transport errors may embed upstream content. Log only the operation,
+      // never provider-provided exception bodies or resolved secret values.
+      console.error(`[chittysecrets] Fetch failed for ${parsed.fullPath}`);
 
       // Check if we should failover to environment variable
       if (this.env.CREDENTIAL_FAILOVER_ENABLED === "true") {
@@ -329,7 +327,7 @@ export class OnePasswordConnectClient {
    */
   async healthCheck() {
     try {
-      if (!this.connectUrl || !this.connectToken) {
+      if (!this.connectUrl || !this.env.ONEPASSWORD_CONNECT_TOKEN) {
         return {
           status: "not_configured",
           message: "chittysecrets Connect not configured",
@@ -340,7 +338,7 @@ export class OnePasswordConnectClient {
       const response = await fetch(`${this.connectUrl}/health`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${this.connectToken}`,
+          Authorization: `Bearer ${typeof this.env.ONEPASSWORD_CONNECT_TOKEN === "string" ? this.env.ONEPASSWORD_CONNECT_TOKEN : await this.env.ONEPASSWORD_CONNECT_TOKEN.get()}`,
         },
       });
 
