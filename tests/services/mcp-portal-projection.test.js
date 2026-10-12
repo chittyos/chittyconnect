@@ -10,6 +10,8 @@ import {
   evaluateRemovalGuard,
   normalizeMcpHost,
   REMOVAL_GUARD,
+  PORTAL_SERVER_CAP,
+  buildAddOnlyMembership,
 } from "../../src/services/mcp-portal-projection.js";
 
 // The live chitty-mcp portal membership (id + hostname), captured 2026-06-12.
@@ -201,5 +203,110 @@ describe("evaluateRemovalGuard", () => {
     expect(REMOVAL_GUARD.REMOVE_ABS_FLOOR).toBe(2);
     expect(REMOVAL_GUARD.REMOVE_FRACTION).toBe(0.2);
     expect(REMOVAL_GUARD.DESIRED_FRACTION_FLOOR).toBe(0.5);
+  });
+});
+
+
+describe("buildAddOnlyMembership — Cloudflare security settings retained", () => {
+  const existing = {
+    id: "quo",
+    server_id: "quo",
+    hostname: "https://agent.chitty.cc/quo/mcp",
+    default_disabled: true,
+    on_behalf: true,
+    updated_tools: [
+      { name: "send_message", enabled: false, alias: "blocked-send" },
+      { name: "list_threads", enabled: true },
+    ],
+    updated_prompts: [{ name: "triage", enabled: false }],
+  };
+
+  it("retains OAuth, disabled state and all tool/prompt overrides, adds disabled", () => {
+    const input = { servers: [existing] };
+    const members = buildAddOnlyMembership(input, [
+      { server_id: "new_reader", hostname: "https://reader.chitty.cc/mcp" },
+    ]);
+    expect(members).toEqual([
+      {
+        server_id: "quo",
+        default_disabled: true,
+        on_behalf: true,
+        updated_tools: [
+          { name: "send_message", enabled: false, alias: "blocked-send" },
+          { name: "list_threads", enabled: true },
+        ],
+        updated_prompts: [{ name: "triage", enabled: false }],
+      },
+      { server_id: "new_reader", default_disabled: true, on_behalf: false },
+    ]);
+    expect(input.servers[0]).toEqual(existing);
+  });
+
+  it("preserves existing false and opt-in settings instead of overriding", () => {
+    const portal = {
+      servers: [{
+        id: "auth",
+        hostname: "https://auth.chitty.cc/mcp",
+        default_disabled: false,
+        on_behalf: true,
+      }],
+    };
+    expect(buildAddOnlyMembership(portal, [])).toEqual([
+      { server_id: "auth", default_disabled: false, on_behalf: true },
+    ]);
+  });
+
+  it("deduplicates a proposed hostname already in portal, never removing the original", () => {
+    expect(buildAddOnlyMembership({ servers: [existing] }, [
+      { server_id: "different_id", hostname: existing.hostname },
+    ])).toEqual([
+      {
+        server_id: "quo",
+        default_disabled: true,
+        on_behalf: true,
+        updated_tools: [
+          { name: "send_message", enabled: false, alias: "blocked-send" },
+          { name: "list_threads", enabled: true },
+        ],
+        updated_prompts: [{ name: "triage", enabled: false }],
+      },
+    ]);
+  });
+
+  it("rejects ambiguous IDs, empty array, and unsafe proposed IDs", () => {
+    expect(() => buildAddOnlyMembership({ servers: [] }, [])).toThrow("Refusing empty");
+    expect(() => buildAddOnlyMembership({ servers: [existing, existing] }, []))
+      .toThrow("Ambiguous");
+    expect(() => buildAddOnlyMembership({ servers: [existing] }, [
+      { server_id: "quo", hostname: "https://other.chitty.cc/mcp" },
+    ])).toThrow("collision");
+    expect(() => buildAddOnlyMembership({ servers: [existing] }, [
+      { server_id: "not valid", hostname: "https://other.chitty.cc/mcp" },
+    ])).toThrow("Invalid");
+  });
+
+  it("honors Cloudflare's current 80-member PUT schema without deleting anything", () => {
+    expect(PORTAL_SERVER_CAP).toBe(80);
+    const servers = Array.from({ length: 80 }, (_, i) => ({
+      id: "id" + i,
+      hostname: "https://a" + i + ".chitty.cc/mcp",
+      default_disabled: i % 2 === 0,
+    }));
+    expect(buildAddOnlyMembership({ servers }, [])).toHaveLength(80);
+    expect(() => buildAddOnlyMembership({ servers }, [
+      { server_id: "another", hostname: "https://new.chitty.cc/mcp" },
+    ])).toThrow("exceeds 80");
+  });
+
+  it("keeps the full original membership under sparse discovery pressure", () => {
+    const result = buildAddOnlyMembership(portal, [{
+      server_id: "new_reader", hostname: "https://reader.chitty.cc/mcp",
+    }]);
+    expect(result).toHaveLength(28);
+    expect(result.map((x) => x.server_id)).toEqual([
+      ...PORTAL_27.map((x) => x.id),
+      "new_reader",
+    ]);
+    expect(result.at(-1).default_disabled).toBe(true);
   });
 });
