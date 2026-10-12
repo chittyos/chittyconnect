@@ -204,6 +204,18 @@ describe("durable Mercury intent dispatch through existing ChittyConnect queue",
     }
   });
 
+  it("rejects impossible Mercury dates before readiness and queueing", async () => {
+    const send = vi.fn();
+    const fetch = vi.fn().mockResolvedValue(readinessResponse());
+    for (const occurredAt of ["2026-02-30T13:00:00Z", "2026-04-31T13:00:00Z", "2026-10-11T25:00:00Z", "2026-10-11T13:00:00+15:00"]) {
+      await expect(acceptFinanceMercuryReconciliationIntent({
+        ENVIRONMENT: "production", EVENT_Q: { send }, SVC_FINANCE: { fetch },
+      }, { ...reconciliationEvent, occurredAt })).rejects.toThrow("invalid_mercury_reconciliation_intent");
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("acknowledges only a verified completed downstream reconciliation result", async () => {
     const event = { kind: "mercury.reconciliation", ...reconciliationEvent };
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
