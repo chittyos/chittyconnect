@@ -44,6 +44,18 @@ describe("getServiceToken adapter", () => {
     expect(value).toBe("test-binding-value-not-a-real-credential");
   });
 
+  it("resolves chittymcp from the existing Secrets Store binding name", async () => {
+    const broker = createCredentialBroker({
+      CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
+      CH1TTY_MCP_TOKEN: {
+        get: async () => "test-chittymcp-binding-value-not-a-real-credential",
+      },
+    });
+
+    const value = await broker.getServiceToken("chittymcp");
+    expect(value).toBe("test-chittymcp-binding-value-not-a-real-credential");
+  });
+
   it("falls back to the services/{service}/token spelling", async () => {
     const broker = createCredentialBroker({
       CREDENTIAL_BROKER_TYPE: "cloudflare-secrets",
