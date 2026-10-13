@@ -54,6 +54,12 @@ describe("getServiceToken adapter", () => {
 
     const value = await broker.getServiceToken("chittymcp");
     expect(value).toBe("test-chittymcp-binding-value-not-a-real-credential");
+
+    // Cover the explicit /token alias independently: getServiceToken() returns
+    // as soon as service_token succeeds, so it cannot prove this mapping.
+    await expect(
+      broker.get("services/chittymcp/token"),
+    ).resolves.toBe("test-chittymcp-binding-value-not-a-real-credential");
   });
 
   it("falls back to the services/{service}/token spelling", async () => {
