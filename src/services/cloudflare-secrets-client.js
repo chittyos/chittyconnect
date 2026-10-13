@@ -53,6 +53,8 @@ const PATH_TO_ENV = {
   "services/chittyauth/auth_salt": "AUTH_SALT",
   "services/chittyconnect/service_token": "CHITTYCONNECT_SERVICE_TOKEN",
   "services/chittyconnect/mcp_token": "CHITTYCONNECT_TOKEN",
+  "services/chittymcp/service_token": "CH1TTY_MCP_TOKEN",
+  "services/chittymcp/token": "CH1TTY_MCP_TOKEN",
   "services/chittyid/service_token": "CHITTY_ID_TOKEN",
   "services/chittyid/token": "CHITTY_ID_TOKEN",
   "services/chittyregistry/token": "CHITTY_REGISTRY_TOKEN",
