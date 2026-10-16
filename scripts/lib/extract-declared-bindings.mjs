@@ -73,6 +73,7 @@ function namesFrom(obj) {
   for (const item of obj.r2_buckets           || []) if (item?.binding) out.push(item.binding);
   for (const item of obj.vectorize            || []) if (item?.binding) out.push(item.binding);
   for (const item of obj.services             || []) if (item?.binding) out.push(item.binding);
+  for (const item of obj.workflows            || []) if (item?.binding) out.push(item.binding);
   for (const item of obj.hyperdrive           || []) if (item?.binding) out.push(item.binding);
   for (const item of obj.analytics_engine_datasets || []) if (item?.binding) out.push(item.binding);
   if (obj.ai?.binding) out.push(obj.ai.binding);

@@ -171,7 +171,22 @@ describe("wrangler Mercury credential isolation", () => {
   const production = wrangler.slice(productionStart);
 
   it("declares no direct Mercury secret-store bindings anywhere in ChittyConnect", () => {
-    expect(wrangler).not.toMatch(/"binding":\s*"MERCURY_/);
+    // Mercury WORKFLOW is a nonsecret capability binding; this guard must
+    // inspect only Secrets Store entries instead of banning all MERCURY_* names.
+    const stores = [...wrangler.matchAll(/"secrets_store_secrets"\s*:\s*\[([\s\S]*?)\]/g)];
+    expect(stores.length).toBeGreaterThan(0);
+    for (const [, bindings] of stores) {
+      expect(bindings).not.toMatch(/"binding":\s*"MERCURY_/);
+    }
+  });
+
+  it("binds the durable Mercury Workflow only in production", () => {
+    const binding = '"binding": "MERCURY_RECONCILIATION_WORKFLOW"';
+    expect(dev).not.toContain(binding);
+    expect(staging).not.toContain(binding);
+    expect(production).toContain(
+      '{ "name": "chittyconnect-mercury-reconciliation", "binding": "MERCURY_RECONCILIATION_WORKFLOW", "class_name": "MercuryReconciliationWorkflow" }',
+    );
   });
 
   it("binds only production to the verified ChittySecrets RPC target", () => {
