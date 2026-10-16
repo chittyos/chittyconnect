@@ -15,6 +15,82 @@ import {
 export const authKeysRoutes = new Hono();
 
 /**
+ * The dashboard is a SELF-SERVICE key editor, not a capability issuer.
+ * Privileged scopes (credentials:reveal:*, mcp:admin, infrastructure/admin)
+ * belong to ChittyAuth/ChittyConnect's governed provisioning path.
+ * Scope inheritance alone is not sufficient: legacy keys could previously
+ * self-issue arbitrary scopes (#313). Allow only this narrow, immutable set.
+ */
+const SELF_SERVICE_SCOPES = new Set(["mcp:read", "mcp:write"]);
+
+function normalizeSelfServiceKeyRequest(body, callerScopes, callerExpiresAt = null) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, status: 400, code: "INVALID_KEY_REQUEST" };
+  }
+
+  const name = body.name === undefined ? "Unnamed Key" : body.name;
+  // Names are display labels, never a claim of service identity.
+  if (typeof name !== "string" || name.trim().length < 1 ||
+      name.trim().length > 80 ||
+      // Unicode controls, format/bidi marks, and line/paragraph
+      // separators must not enter logs or auditable key labels.
+      /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) {
+    return { ok: false, status: 400, code: "INVALID_KEY_NAME" };
+  }
+
+  const parentScopes = Array.isArray(callerScopes)
+    ? callerScopes.filter((s) => typeof s === "string") : [];
+
+  // Omitted scopes inherit only the parent's own non-privileged permissions.
+  // An empty or legacy parent set never creates an implicitly privileged key.
+  const requested = body.scopes === undefined
+    ? ["mcp:read", "mcp:write"].filter((s) => parentScopes.includes(s))
+    : body.scopes;
+
+  if (!Array.isArray(requested) || requested.length === 0 || requested.length > 2 ||
+      requested.some((s) => typeof s !== "string" || !SELF_SERVICE_SCOPES.has(s)) ||
+      new Set(requested).size !== requested.length) {
+    return { ok: false, status: 400, code: "INVALID_KEY_SCOPES" };
+  }
+
+  // The caller must already possess EVERY requested self-service permission.
+  if (!requested.every((scope) => parentScopes.includes(scope))) {
+    return { ok: false, status: 403, code: "SCOPE_ESCALATION_DENIED" };
+  }
+
+  // A delegated key cannot outlive its granting parent. A parent with a
+  // malformed or expired expiry cannot issue new authority; the main API
+  // authentication path does not yet independently enforce expiry (#313).
+  let parentExpiryMs = null;
+  if (callerExpiresAt !== null && callerExpiresAt !== undefined) {
+    parentExpiryMs = Date.parse(callerExpiresAt);
+    if (!Number.isFinite(parentExpiryMs) || parentExpiryMs <= Date.now()) {
+      return { ok: false, status: 403, code: "ISSUER_KEY_EXPIRED" };
+    }
+  }
+
+  // Both dashboard clients send YYYY-MM-DD (input type=date), not ISO with T.
+  // A blank field means inherit the parent's expiry, if any.
+  const expiresAt = body.expiresAt || callerExpiresAt || null;
+  if (expiresAt !== null &&
+      (typeof expiresAt !== "string" ||
+       !/^\d{4}-\d\d-\d\d(?:T|$)/.test(expiresAt) ||
+       !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now())) {
+    return { ok: false, status: 400, code: "INVALID_KEY_EXPIRY" };
+  }
+  if (parentExpiryMs !== null && Date.parse(expiresAt) > parentExpiryMs) {
+    return { ok: false, status: 403, code: "EXPIRY_ESCALATION_DENIED" };
+  }
+
+  return {
+    ok: true,
+    name: name.trim(),
+    scopes: [...requested],
+    expiresAt,
+  };
+}
+
+/**
  * GET /me — Return current key's metadata
  */
 authKeysRoutes.get("/me", (c) => {
@@ -39,7 +115,7 @@ authKeysRoutes.get("/me", (c) => {
 authKeysRoutes.get("/", async (c) => {
   const keyInfo = c.get("apiKey");
 
-  if (!keyInfo.userId) {
+  if (!keyInfo?.userId) {
     return c.json(
       { success: false, error: "No userId associated with this key" },
       400,
@@ -57,25 +133,32 @@ authKeysRoutes.get("/", async (c) => {
 authKeysRoutes.post("/", async (c) => {
   const keyInfo = c.get("apiKey");
 
-  if (!keyInfo.userId) {
+  if (!keyInfo?.userId) {
     return c.json(
       { success: false, error: "No userId associated with this key" },
       400,
     );
   }
 
-  const body = await c.req.json().catch(() => ({}));
-  const {
-    name = "Unnamed Key",
-    scopes = ["mcp:read", "mcp:write"],
-    expiresAt = null,
-  } = body;
+  const body = await c.req.json().catch(() => null);
+  const admission = normalizeSelfServiceKeyRequest(
+    body, keyInfo.scopes, keyInfo.expiresAt,
+  );
+  if (!admission.ok) {
+    return c.json({
+      success: false,
+      error: { code: admission.code, message: "Self-service key request denied" },
+    }, admission.status);
+  }
+  const { name, scopes, expiresAt } = admission;
 
   const fullKey = await generateAPIKey(c.env, {
     name,
     userId: keyInfo.userId,
     scopes,
     expiresAt,
+    // Mark provenance, but the key label is NOT a verified service identity.
+    metadata: { issuance: "self-service", issuerUserId: keyInfo.userId },
   });
 
   return c.json(
@@ -103,7 +186,7 @@ authKeysRoutes.delete("/:keyPrefix", async (c) => {
   const keyInfo = c.get("apiKey");
   const prefix = c.req.param("keyPrefix");
 
-  if (!keyInfo.userId) {
+  if (!keyInfo?.userId) {
     return c.json(
       { success: false, error: "No userId associated with this key" },
       400,
