@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# deploy-secrets-connect.sh — Deploy secrets via 1Password Connect + wrangler
+# deploy-secrets-connect.sh — Deploy secrets via chittysecrets Connect + wrangler
 #
-# Uses the local 1Password Connect server to fetch secrets,
+# Uses the local chittysecrets Connect server to fetch secrets,
 # then pipes them to `wrangler secret put`.
 #
 # Vault IDs here are from the Connect server's perspective — they differ
@@ -57,19 +57,19 @@ echo "=========================================="
 echo ""
 
 # Preflight: verify Connect server is reachable and token is valid
-echo -n "Checking 1Password Connect... "
+echo -n "Checking chittysecrets Connect... "
 if ! curl -s --connect-timeout 5 --max-time 10 \
   -H "Authorization: Bearer ${CONNECT_TOKEN}" \
   "${CONNECT_HOST}/v1/vaults" >/dev/null 2>&1; then
   echo -e "${RED}FAILED${NC}"
-  echo "ERROR: Cannot reach 1Password Connect at ${CONNECT_HOST}"
+  echo "ERROR: Cannot reach chittysecrets Connect at ${CONNECT_HOST}"
   echo "Verify OP_CONNECT_HOST and OP_CONNECT_TOKEN"
   exit 1
 fi
 echo -e "${GREEN}OK${NC}"
 echo ""
 
-# Fetch a field value from 1Password Connect.
+# Fetch a field value from chittysecrets Connect.
 # Returns: 0 = success (value on stdout), 1 = field not found, 2 = infrastructure error
 fetch_field() {
   local vault_id="$1" item_id="$2" field_label="$3"
@@ -88,7 +88,7 @@ fetch_field() {
   body=$(echo "$body" | sed '$d')
 
   if [[ "$http_code" -ge 400 ]]; then
-    echo "ERROR: 1Password Connect returned HTTP $http_code for item $item_id" >&2
+    echo "ERROR: chittysecrets Connect returned HTTP $http_code for item $item_id" >&2
     return 2
   fi
 
@@ -138,7 +138,7 @@ deploy_secret() {
   fi
 }
 
-# === Secrets with verified 1Password Connect mappings ===
+# === Secrets with verified chittysecrets Connect mappings ===
 
 # Service tokens (ChittyOS-Core vault)
 deploy_secret "CHITTY_ID_TOKEN"         "$VAULT_CORE" "in62ym7ojib2t3fomxwmqrkwwq" "password"
@@ -151,7 +151,7 @@ deploy_secret "ENCRYPTION_KEY"          "$VAULT_CORE" "cbntnzm43dtolsz3cpfubst65
 deploy_secret "CHITTYCONNECT_SERVICE_TOKEN" "$VAULT_SERVICES" "h5nhajyt33pexhh5qswsznflba" "credential"
 
 # Service tokens from ChittyOS vault
-# TODO: These 5 share one 1Password item (sozaa...). Create per-service items
+# TODO: These 5 share one chittysecrets item (sozaa...). Create per-service items
 # to enable independent rotation and reduce blast radius on compromise.
 deploy_secret "CHITTY_CERTIFY_TOKEN"    "$VAULT_SERVICES" "xfu6fpk4lvlmmd5lf2zv6vjvni" "credential"
 deploy_secret "CHITTY_DNA_TOKEN"        "$VAULT_SERVICES" "agd7l6vbolyn4rtoxrafmst25u" "credential"

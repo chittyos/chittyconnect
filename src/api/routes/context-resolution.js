@@ -139,18 +139,67 @@ contextResolution.post("/resolve", async (c) => {
  * POST /api/v1/context/bind
  *
  * Body: {
- *   action: "bind_existing" | "create_new",
  *   sessionId: string,           // Client's session ID
  *   platform: string,            // Platform identifier
+ *   contextId: string,           // Existing context ID
+ *   chittyId: string,            // Existing ChittyID
+ * }
+ */
+contextResolution.post("/provision", async (c) => {
+  try {
+    const { pendingContext } = await c.req.json();
+
+    if (!pendingContext) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_PENDING_CONTEXT",
+            message: "pendingContext required for provision",
+          },
+        },
+        400,
+      );
+    }
+
+    const resolver = new ContextResolver(c.env);
+    // createContext handles coordinationNeed check internally
+    const context = await resolver.createContext(pendingContext);
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        minted: true,
+        context,
+        message: `New context created: ${context.chitty_id}`,
+      },
+    });
+  } catch (error) {
+    console.error("[ContextResolution] Provision error:", error);
+    return apiResponse(
+      c,
+      {
+        success: false,
+        error: {
+          code: "PROVISION_FAILED",
+          message: error.message,
+        },
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Confirm context binding (BIND)
+ * POST /api/v1/context/bind
  *
- *   // For bind_existing:
- *   contextId?: string,          // Existing context ID
- *   chittyId?: string,           // Existing ChittyID
- *
- *   // For create_new:
- *   pendingContext?: {
- *     projectPath, workspace, supportType, organization, anchorHash
- *   }
+ * Body: {
+ *   sessionId: string,           // Client's session ID
+ *   platform: string,            // Platform identifier
+ *   contextId: string,           // Existing context ID
+ *   chittyId: string,            // Existing ChittyID
  * }
  */
 contextResolution.post("/bind", async (c) => {
@@ -161,7 +210,6 @@ contextResolution.post("/bind", async (c) => {
       platform = "unknown",
       contextId,
       chittyId,
-      pendingContext,
     } = await c.req.json();
 
     if (!sessionId) {
@@ -178,91 +226,54 @@ contextResolution.post("/bind", async (c) => {
       );
     }
 
-    const resolver = new ContextResolver(c.env);
-    let boundContext;
-
-    if (action === "bind_existing") {
-      if (!contextId || !chittyId) {
-        return apiResponse(
-          c,
-          {
-            success: false,
-            error: {
-              code: "MISSING_CONTEXT",
-              message: "contextId and chittyId required for bind_existing",
-            },
-          },
-          400,
-        );
-      }
-
-      // Bind session to existing context
-      const binding = await resolver.bindSession(
-        contextId,
-        chittyId,
-        sessionId,
-        platform,
-      );
-      boundContext = await resolver.loadContextByChittyId(chittyId);
-
-      return apiResponse(c, {
-        success: true,
-        data: {
-          bound: true,
-          binding,
-          context: boundContext,
-          message: `Session bound to existing context: ${chittyId}`,
-        },
-      });
-    } else if (action === "create_new") {
-      if (!pendingContext) {
-        return apiResponse(
-          c,
-          {
-            success: false,
-            error: {
-              code: "MISSING_PENDING_CONTEXT",
-              message: "pendingContext required for create_new",
-            },
-          },
-          400,
-        );
-      }
-
-      // Create new context
-      boundContext = await resolver.createContext(pendingContext);
-
-      // Bind session to new context
-      const binding = await resolver.bindSession(
-        boundContext.id,
-        boundContext.chitty_id,
-        sessionId,
-        platform,
-      );
-
-      return apiResponse(c, {
-        success: true,
-        data: {
-          bound: true,
-          created: true,
-          binding,
-          context: boundContext,
-          message: `New context created and bound: ${boundContext.chitty_id}`,
-        },
-      });
-    } else {
+    if (action === "create_new") {
       return apiResponse(
         c,
         {
           success: false,
           error: {
             code: "INVALID_ACTION",
-            message: 'action must be "bind_existing" or "create_new"',
+            message: 'action "create_new" is no longer supported on /bind. Use /provision first.',
           },
         },
         400,
       );
     }
+
+    const resolver = new ContextResolver(c.env);
+
+    if (!contextId || !chittyId) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "MISSING_CONTEXT",
+            message: "contextId and chittyId required for bind",
+          },
+        },
+        400,
+      );
+    }
+
+    // Bind session to existing context
+    const binding = await resolver.bindSession(
+      contextId,
+      chittyId,
+      sessionId,
+      platform,
+    );
+    const boundContext = await resolver.loadContextByChittyId(chittyId);
+
+    return apiResponse(c, {
+      success: true,
+      data: {
+        bound: true,
+        binding,
+        context: boundContext,
+        message: `Session bound to existing context: ${chittyId}`,
+      },
+    });
   } catch (error) {
     console.error("[ContextResolution] Bind error:", error);
     return apiResponse(

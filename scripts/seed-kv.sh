@@ -5,7 +5,7 @@
 #   KV_NAMESPACE_ID=<id> ./scripts/seed-kv.sh
 #
 # Override any default value via environment variables:
-#   ALLOWLIST_JSON          — JSON array of 1Password vault prefixes
+#   ALLOWLIST_JSON          — JSON array of chittysecrets vault prefixes
 #   SUBJECT_ALLOWLIST       — JSON array of allowed service subjects
 #   TOKEN_SHA256_LIST       — JSON array of pre-approved token hashes
 #   CRED_RATE_LIMIT         — Max credential requests per window (integer)

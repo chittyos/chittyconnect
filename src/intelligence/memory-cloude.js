@@ -9,11 +9,25 @@
  * @canon chittycanon://gov/governance#core-types
  */
 
+import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
+
+/**
+ * Instances that are NOT per-entity and must never be resolved from caller input.
+ * These are the pre-scoping shared buckets; reaching one is a cross-entity read.
+ */
+const MEMORY_INSTANCE_DENYLIST = new Set(["memory-cloude", "memory-context-embeddings"]);
+
 export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
-    this.vectorStore = env.MEMORY_VECTORIZE; // Cloudflare Vectorize for semantic memory
+    this.searchNamespace = env.AI_SEARCH; // Cloudflare AI Search namespace binding
+    // Derived here, NOT in initialize(). src/index.js calls initialize() without
+    // awaiting it (`.initialize().catch(...)`), so a request arriving first would see
+    // this undefined and silently skip indexing — the same silent-skip that left
+    // storeEmbedding dead behind `this.hasVectorize`. It is a synchronous derivation
+    // from env; it has no reason to depend on an async call having completed.
+    this.hasAiSearch = !!this.searchNamespace;
     this.retention = {
       conversations: 90, // 90 days
       decisions: 365, // 1 year
@@ -27,12 +41,11 @@ export class MemoryCloude {
   async initialize() {
     console.log("[MemoryCloude™] Initializing perpetual context system...");
 
-    // Check for Vectorize availability
-    this.hasVectorize = !!this.vectorStore;
-
-    if (!this.hasVectorize) {
+    // hasAiSearch is set in the constructor; re-deriving here would reintroduce the
+    // ordering dependency this deliberately removed.
+    if (!this.hasAiSearch) {
       console.warn(
-        "[MemoryCloude™] Vectorize not available, using KV-only mode",
+        "[MemoryCloude™] AI Search not available, using KV-only mode",
       );
     }
 
@@ -42,77 +55,150 @@ export class MemoryCloude {
   /**
    * Persist an interaction to memory
    */
-  async persistInteraction(sessionId, interaction) {
+  async idempotencyDigest(value) {
+    const bytes = new TextEncoder().encode(String(value));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  interactionStorageKey(sessionId, interactionId) {
+    const marker = `${sessionId}-idem-`;
+    if (interactionId.startsWith(marker)) {
+      return `session:${sessionId}:id:${interactionId.slice(marker.length)}`;
+    }
+
+    // Legacy format: interaction id ended in the millisecond timestamp and the
+    // raw KV key used that timestamp directly.
+    const parts = interactionId.split("-");
+    const timestamp = parts[parts.length - 1];
+    return `session:${sessionId}:${timestamp}`;
+  }
+
+  async persistInteraction(sessionId, interaction, options = {}) {
+    const idempotencyKey =
+      options.idempotencyKey || interaction?.idempotencyKey || interaction?.idempotency_key;
     const timestamp = Date.now();
-    const interactionId = `${sessionId}-${timestamp}`;
 
-    // 1. Store raw interaction in KV
-    await this.kv.put(
-      `session:${sessionId}:${timestamp}`,
-      JSON.stringify({
-        ...interaction,
-        id: interactionId,
-        timestamp,
-      }),
-      { expirationTtl: this.retention.conversations * 86400 },
-    );
-
-    // 2. Generate and store embedding (if Vectorize available)
-    if (this.hasVectorize) {
-      await this.storeEmbedding(interactionId, sessionId, interaction);
+    let interactionId;
+    let rawKey;
+    if (idempotencyKey) {
+      const digest = await this.idempotencyDigest(idempotencyKey);
+      interactionId = `${sessionId}-idem-${digest}`;
+      rawKey = `session:${sessionId}:id:${digest}`;
+    } else {
+      interactionId = `${sessionId}-${timestamp}`;
+      rawKey = `session:${sessionId}:${timestamp}`;
     }
 
-    // 3. Extract and persist entities
-    if (interaction.entities) {
-      await this.persistEntities(interaction.entities, sessionId);
+    const existingRaw = idempotencyKey ? await this.kv.get(rawKey, "json") : null;
+    const deduplicated = !!existingRaw;
+
+    if (!existingRaw) {
+      // 1. Deterministic raw key is the replay convergence point.
+      await this.kv.put(
+        rawKey,
+        JSON.stringify({
+          ...interaction,
+          id: interactionId,
+          timestamp,
+        }),
+        { expirationTtl: this.retention.conversations * 86400 },
+      );
+
+      // 2. AI Search item id is deterministic on idempotent writes.
+      if (this.hasAiSearch) {
+        await this.storeEmbedding(interactionId, sessionId, interaction);
+      }
+
+      // These derivative counters are legacy non-transactional behavior. They
+      // execute once for a normal first write; replays do not increment them.
+      if (interaction.entities) {
+        await this.persistEntities(interaction.entities, sessionId);
+      }
+      if (interaction.decisions) {
+        await this.persistDecisions(sessionId, interaction.decisions);
+      }
     }
 
-    // 4. Record decisions
-    if (interaction.decisions) {
-      await this.persistDecisions(sessionId, interaction.decisions);
-    }
-
-    // 5. Update session index
+    // Index repair is safe on replay because both methods deduplicate by id.
     await this.updateSessionIndex(sessionId, interactionId);
-
-    // 6. Update user index for cross-session history
     await this.updateUserIndex(interaction.userId, sessionId, interactionId);
 
-    console.log(`[MemoryCloude™] Persisted interaction ${interactionId}`);
+    console.log(
+      `[MemoryCloude™] Persisted interaction ${interactionId}${deduplicated ? " (deduplicated)" : ""}`,
+    );
+    return { interactionId, deduplicated };
   }
 
   /**
-   * Store embedding in Vectorize
+   * Store interaction in AI Search
    */
+  /**
+   * Resolve the AI Search instance for one primary synthetic entity.
+   *
+   * Scope is the instance, never a query filter — see
+   * chittysearch/docs/NAMESPACE-STRATEGY.md rule 1. Between entities is a real trust
+   * boundary and gets a separate instance; between sessions of one entity is the
+   * product (90-day continuity), so session narrowing is ranking, not scope.
+   *
+   * Returns null when no entity can be identified. Callers must then skip the AI
+   * Search path entirely rather than fall back to a shared instance — an unscoped
+   * write is how one entity's context becomes another's recall.
+   *
+   * THIS SCOPES; IT DOES NOT AUTHORIZE. It maps an entity id to that entity's
+   * instance and validates the id's shape. It cannot know whether the caller is
+   * entitled to that entity — the route must pass an entity from authenticated
+   * context, never straight from a request body. Validation here bounds the damage
+   * of a caller mistake; it is not a substitute for authorization at the edge.
+   *
+   * @param {{entityId?: string, userId?: string}} interaction
+   * @returns {string|null} instance id, or null when unscoped
+   */
+  memoryInstanceFor(interaction) {
+    const entity = interaction?.entityId || interaction?.userId || this.env?.CHITTY_ENTITY_ID;
+    if (!entity || typeof entity !== "string") return null;
+    // Reject anything that is not a plain identifier. The value reaches here from
+    // request-shaped objects, so it is attacker-influenceable: unconstrained, a caller
+    // could pick a name that resolves to an instance it does not own. The `memory-`
+    // prefix already makes an evidence instance unreachable, but not a sibling one.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(entity)) return null;
+    const instance = `memory-${entity}`;
+    // Legacy shared instances predate per-entity scoping and belong to no entity.
+    // Without this, entityId "cloude" resolves to the old everyone-bucket.
+    if (MEMORY_INSTANCE_DENYLIST.has(instance)) return null;
+    return instance;
+  }
+
   async storeEmbedding(interactionId, sessionId, interaction) {
     try {
-      // Generate embedding using Cloudflare AI
-      const text = this.extractTextContent(interaction);
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [text],
-      });
-
-      if (embedding && embedding.data && embedding.data[0]) {
-        // Store in Vectorize
-        await this.vectorStore.insert([
+      if (this.hasAiSearch) {
+        const instanceId = this.memoryInstanceFor(interaction);
+        if (!instanceId) {
+          console.warn(
+            "[MemoryCloude™] No entity id on interaction; skipping AI Search index (unscoped write refused)",
+          );
+          return;
+        }
+        const text = this.extractTextContent(interaction);
+        const instance = this.searchNamespace.get(instanceId);
+        await instance.items.upload(
+          interactionId,
+          text,
           {
-            id: interactionId,
-            values: embedding.data[0],
             metadata: {
-              sessionId,
-              timestamp: Date.now(),
-              userId: interaction.userId,
-              type: interaction.type,
-              entities: JSON.stringify(interaction.entities || []),
-              actions: JSON.stringify(interaction.actions || []),
-            },
-          },
-        ]);
-
-        console.log(`[MemoryCloude™] Stored embedding for ${interactionId}`);
+              sessionId: String(sessionId),
+              timestamp: String(Date.now()),
+              userId: String(interaction.userId || ""),
+              type: String(interaction.type || ""),
+            }
+          }
+        );
+        console.log(`[MemoryCloude™] Stored interaction ${interactionId} in AI Search`);
       }
     } catch (error) {
-      console.warn("[MemoryCloude™] Embedding storage failed:", error.message);
+      console.warn("[MemoryCloude™] Interaction storage failed:", error.message);
     }
   }
 
@@ -183,7 +269,9 @@ export class MemoryCloude {
     const existing = (await this.kv.get(indexKey, "json")) || {
       interactions: [],
     };
-    existing.interactions.push(interactionId);
+    if (!existing.interactions.includes(interactionId)) {
+      existing.interactions.push(interactionId);
+    }
     existing.lastUpdate = Date.now();
 
     await this.kv.put(indexKey, JSON.stringify(existing), {
@@ -205,11 +293,15 @@ export class MemoryCloude {
     if (!existing.sessions.includes(sessionId)) {
       existing.sessions.push(sessionId);
     }
-    existing.interactions.push({
-      id: interactionId,
-      sessionId,
-      timestamp: Date.now(),
-    });
+    if (!existing.interactions.some((entry) =>
+      (typeof entry === "string" ? entry : entry?.id) === interactionId
+    )) {
+      existing.interactions.push({
+        id: interactionId,
+        sessionId,
+        timestamp: Date.now(),
+      });
+    }
     existing.lastUpdate = Date.now();
 
     await this.kv.put(indexKey, JSON.stringify(existing), {
@@ -222,42 +314,53 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
-    const useSemanticSearch = options.semantic !== false && this.hasVectorize;
+    // Semantic recall requires a resolvable entity, because the entity's instance IS
+    // the scope. Unscoped, the only safe answer is the KV-backed keyword path, which
+    // reads `session:{sessionId}:*` and therefore cannot cross an entity boundary.
+    const instanceId = this.memoryInstanceFor(options);
+    const useSemanticSearch =
+      options.semantic !== false && this.hasAiSearch && !!instanceId;
 
     if (useSemanticSearch) {
-      return await this.semanticRecall(sessionId, query, limit);
+      return await this.semanticRecall(sessionId, query, limit, instanceId);
     } else {
       return await this.keywordRecall(sessionId, query, limit);
     }
   }
 
   /**
-   * Semantic search using vector embeddings
+   * Semantic search within ONE entity's memory instance.
+   *
+   * Federation is deliberately absent. An earlier revision passed
+   * `instance_ids: ["memory-cloude", "context-embeddings"]` and then isolated sessions
+   * with a post-hoc `chunk.item.metadata.sessionId === sessionId` filter. Both halves
+   * were wrong: chittysearch's CHARTER forbids fanning out across instances, and a
+   * caller-supplied filter is not a scope boundary because it fails open the moment it
+   * is omitted. The session filter below is retained only as *ranking* — every chunk it
+   * sees already belongs to this entity, so dropping it would widen recall within the
+   * entity, never across entities.
    */
-  async semanticRecall(sessionId, query, limit) {
+  async semanticRecall(sessionId, query, limit, instanceId) {
     try {
-      // Generate query embedding
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [query],
+      const instance = this.searchNamespace.get(instanceId);
+      const searchResults = await instance.search({
+        messages: [{ role: "user", content: query }],
+        ai_search_options: {
+          retrieval: { top_k: limit * 2 }
+        }
       });
 
-      if (!embedding || !embedding.data || !embedding.data[0]) {
-        throw new Error("Failed to generate query embedding");
+      if (!searchResults || !searchResults.chunks) {
+        throw new Error("No results from AI Search");
       }
 
-      // Query Vectorize
-      const matches = await this.vectorStore.query(embedding.data[0], {
-        topK: limit * 2, // Get more, then filter by session
-        returnMetadata: true,
-      });
-
-      // Filter by session and re-rank
-      const sessionMatches = matches
-        .filter((m) => m.metadata.sessionId === sessionId)
-        .map((m) => ({
-          id: m.id,
-          score: m.score,
-          metadata: m.metadata,
+      // Filter by session and format
+      const sessionMatches = searchResults.chunks
+        .filter((chunk) => chunk.item.metadata && chunk.item.metadata.sessionId === sessionId)
+        .map((chunk) => ({
+          id: chunk.item.key,
+          score: chunk.score,
+          metadata: chunk.item.metadata,
         }));
 
       // Re-rank by recency and relevance
@@ -269,10 +372,8 @@ export class MemoryCloude {
       // Fetch full interaction data
       const contexts = [];
       for (const match of reranked.slice(0, limit)) {
-        const parts = match.id.split("-");
-        const timestamp = parts[parts.length - 1];
         const data = await this.kv.get(
-          `session:${sessionId}:${timestamp}`,
+          this.interactionStorageKey(sessionId, match.id),
           "json",
         );
 
@@ -307,10 +408,8 @@ export class MemoryCloude {
     const keywords = query.toLowerCase().split(/\s+/);
 
     for (const interactionId of index.interactions.slice(-20)) {
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
@@ -371,7 +470,7 @@ export class MemoryCloude {
 
     try {
       // Use AI to generate summary
-      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.env.AI.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -385,7 +484,15 @@ export class MemoryCloude {
         ],
       });
 
-      const summary = response.response;
+      const summary = extractAiText(response);
+      if (!summary.trim()) {
+        // An empty envelope must not be cached as a valid summary — fall through
+        // to the catch below so the failure stays visible instead of persisting "".
+        // Whitespace-only counts as empty: a blank summary cached for the full
+        // retention period is the silent failure this guard exists to prevent,
+        // and `!summary` alone would let " " through.
+        throw new Error("Workers AI returned no summary text");
+      }
 
       // Store summary
       await this.kv.put(`session:${sessionId}:summary`, summary, {
@@ -416,10 +523,8 @@ export class MemoryCloude {
     const toFetch = index.interactions.slice(-limit);
 
     for (const interactionId of toFetch) {
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
@@ -460,10 +565,8 @@ export class MemoryCloude {
       if (!sessionId || !interactionId) continue;
 
       // Extract timestamp from interaction ID (format: sessionId-timestamp)
-      const parts = interactionId.split("-");
-      const timestamp = parts[parts.length - 1];
       const data = await this.kv.get(
-        `session:${sessionId}:${timestamp}`,
+        this.interactionStorageKey(sessionId, interactionId),
         "json",
       );
 
@@ -518,29 +621,36 @@ export class MemoryCloude {
    */
   async recallSimilarDecompositions(subtask) {
     // Search for similar task decompositions in memory
-    if (!this.hasVectorize) {
+    if (!this.hasAiSearch) {
       return [];
     }
 
+    // Same rule as semanticRecall: no entity, no instance, no search. Returning []
+    // is correct here — a decomposition hint is an optimisation, and losing it costs
+    // nothing next to answering from another entity's memory.
+    const instanceId = this.memoryInstanceFor(subtask);
+    if (!instanceId) return [];
+
     try {
-      const embedding = await this.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-        text: [JSON.stringify(subtask)],
+      const instance = this.searchNamespace.get(instanceId);
+      const searchResults = await instance.search({
+        messages: [{ role: "user", content: JSON.stringify(subtask) }],
+        ai_search_options: {
+          retrieval: {
+            top_k: 5,
+            filters: { type: "task_decomposition" }
+          }
+        }
       });
 
-      if (!embedding || !embedding.data || !embedding.data[0]) {
+      if (!searchResults || !searchResults.chunks) {
         return [];
       }
 
-      const matches = await this.vectorStore.query(embedding.data[0], {
-        topK: 5,
-        returnMetadata: true,
-        filter: { type: "task_decomposition" },
-      });
-
-      return matches.map((m) => ({
-        task: m.metadata.task,
-        approach: m.metadata.approach,
-        performance: m.metadata.performance,
+      return searchResults.chunks.map((chunk) => ({
+        task: chunk.item.metadata.task,
+        approach: chunk.item.metadata.approach,
+        performance: chunk.item.metadata.performance,
       }));
     } catch (error) {
       console.warn(
@@ -560,7 +670,7 @@ export class MemoryCloude {
     return {
       interactions: index?.interactions?.length || 0,
       lastUpdate: index?.lastUpdate || null,
-      hasVectorize: this.hasVectorize,
+      hasVectorize: this.hasAiSearch,
       retentionDays: this.retention.conversations,
     };
   }

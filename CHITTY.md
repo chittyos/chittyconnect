@@ -25,6 +25,9 @@ Cloudflare Worker deployed at connect.chitty.cc with Neon PostgreSQL, KV, and Du
 ### Stack
 - **Runtime**: Cloudflare Workers + Hono
 - **Database**: Neon PostgreSQL (context entities, DNA, ledger, sessions)
+  - `public.context_*`, `public.document_*`, `public.credential_*`, etc. — ChittyConnect application schema (migrations 001–018, D1 mirror)
+  - `neon_auth.{user,account,session,verification,organization,member,invitation}` — **ChittyConnect-owned** user identity surface, JWKS-federated from `auth.chitty.cc` with RLS bound to JWT `sub` (migration 019)
+  - `neon_auth.{jwks,project_config}` — owned by ChittyAuth (read-only here)
 - **Integrations**: Notion, OpenAI, Google Calendar, Neon, Cloudflare AI
 
 ### Three Interfaces
@@ -44,7 +47,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 | Aspect | Abbrev | Answer |
 |--------|--------|--------|
 | **Identity** | TY | AI-intelligent spine — universal connector for GPTs, Claude, and third-party integrations |
-| **Connectivity** | VY | REST API + MCP Server + GitHub App; proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness cross-session state; policy-gated git write tools (`git_commit`, `git_push`, `git_tag`) **planned** for non-shell channels — spec-only, see CHARTER §"Git Tool Surface (write/sensitive) — SPEC", tracking chittyos/chittyconnect#209 (read-only git on chittymcp via `chittyagent-git`) |
+| **Connectivity** | VY | REST API + GitHub App; proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness cross-session state. Acts as authorization server (capability minting/introspection, confirmation) + credential broker (signing-as-a-service from chittysecrets) + policy resolver + ledger emitter for the git tool surface — the MCP surface for git lives on `chittyagent-git` (resource server), not here. See CHARTER §"Git Broker Surface (REST, sensitive) — SPEC"; tracking chittyos/chittyconnect#209. |
 | **Authority** | RY | Tier 2 Platform — integration hub, not source of truth; delegates identity/auth/registration upstream |
 
 ## ChittyOS Ecosystem

@@ -721,7 +721,7 @@ connectionsRoutes.post("/:slug/credential/test", async (c) => {
       });
     }
 
-    // Try 1Password path first, then env var
+    // Try chittysecrets path first, then env var
     let available = false;
     let source = null;
 
@@ -811,7 +811,7 @@ const ALLOWED_HOSTS = new Set([
   "api.twilio.com",
   "api.cloudflare.com",
   "www.googleapis.com",
-  "1password-connect.chitty.cc",
+  "chittysecrets-connect.chitty.cc",
 ]);
 
 function isUrlSafe(urlStr) {

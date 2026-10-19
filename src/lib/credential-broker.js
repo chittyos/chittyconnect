@@ -4,10 +4,10 @@
  * Supports multiple backends:
  *   - "cloudflare-secrets" → Direct env binding reads (zero latency, default)
  *   - "chittyserv"         → ChittyServ API at CHITTYSERV_URL/v1/
- *   - "1password"          → 1Password Connect API (legacy, deprecated)
- *   - "auto"               → cloudflare-secrets → chittyserv → 1password
+ *   - "chittysecrets"      → chittysecrets Connect API (legacy, deprecated)
+ *   - "auto"               → cloudflare-secrets → chittyserv → chittysecrets
  *
- * Portal Pattern: Secrets are synced from 1Password synthetic-shared vault
+ * Portal Pattern: Secrets are synced from chittysecrets synthetic-shared vault
  * to Cloudflare Secrets Store at deploy time. The broker reads from env
  * bindings first (zero network, zero latency), falling back to runtime
  * credential fetching only when env bindings are missing.
@@ -17,7 +17,7 @@
  * @module lib/credential-broker
  */
 
-import { OnePasswordConnectClient } from "../services/1password-connect-client.js";
+import { OnePasswordConnectClient } from "../services/chittysecrets-connect-client.js";
 import { ChittyServClient } from "../services/chittyserv-client.js";
 import { CloudflareSecretsClient } from "../services/cloudflare-secrets-client.js";
 
@@ -39,7 +39,7 @@ export function createCredentialBroker(env) {
     case "chittyserv":
       return new ChittyServBroker(env);
 
-    case "1password":
+    case "chittysecrets":
       return new OnePasswordBroker(env);
 
     case "auto":
@@ -54,6 +54,80 @@ export function createCredentialBroker(env) {
 }
 
 // ─── Cloudflare Secrets Broker (Default — Portal Pattern) ────────────────────
+
+
+/**
+ * Adapter for the 1Password-shaped call signature the provisioner still uses.
+ *
+ * The 1Password retirement repointed `EnhancedCredentialProvisioner.onePassword`
+ * at the broker ("Keep .onePassword as alias for backward compat"), but only
+ * OnePasswordConnectClient ever implemented getInfrastructureCredential(). Every
+ * broker class exposes get(path) instead, so with the production setting
+ * CREDENTIAL_BROKER_TYPE="cloudflare-secrets" the provisioner threw TypeError at
+ * call time — silently, because nothing exercises it until a token mint is
+ * attempted. That severed Cloudflare API-token minting, which is the sanctioned
+ * path for issuing scoped tokens.
+ *
+ * Path convention is the existing one in cloudflare-secrets-client.js PATH_TO_ENV:
+ *   infrastructure/{service}/{field}
+ */
+function attachInfrastructureCredentialAdapter(cls) {
+  cls.prototype.getInfrastructureCredential = async function (service, field, options = {}) {
+    if (!service || !field) {
+      throw new Error(
+        `E_CREDENTIAL_BAD_REF: getInfrastructureCredential requires (service, field); got (${service}, ${field})`,
+      );
+    }
+    const path = `infrastructure/${service}/${field}`;
+    return this.get(path, options);
+  };
+}
+
+/**
+ * Adapter for the second 1Password-shaped signature the provisioner uses.
+ *
+ * provisionServiceToken() (credential type `chittyos_service_token`) calls
+ * this.onePassword.getServiceToken(target_service, ...). Only
+ * OnePasswordConnectClient ever implemented it, so every broker configuration
+ * threw `TypeError: this.onePassword.getServiceToken is not a function` —
+ * the same severed-call-site class as getInfrastructureCredential above, in
+ * the one code path the infrastructure adapter does not cover.
+ *
+ * PATH_TO_ENV in cloudflare-secrets-client.js spells the field both ways
+ * depending on the service (services/chittyconnect/service_token vs
+ * services/chittyledger/token), so try the more specific name first. get()
+ * throws on a miss rather than returning undefined, hence the try/fallback.
+ */
+function attachServiceTokenAdapter(cls) {
+  cls.prototype.getServiceToken = async function (service, options = {}) {
+    if (!service) {
+      throw new Error(
+        `E_CREDENTIAL_BAD_REF: getServiceToken requires (service); got (${service})`,
+      );
+    }
+
+    const paths = [
+      `services/${service}/service_token`,
+      `services/${service}/token`,
+    ];
+
+    const failures = [];
+    for (const path of paths) {
+      try {
+        return await this.get(path, options);
+      } catch (err) {
+        // Path and binding names are safe to log; the value is never touched.
+        failures.push(`${path}: ${err?.message ?? "lookup failed"}`);
+      }
+    }
+
+    const err = new Error(
+      `E_CREDENTIAL_NOT_FOUND: no service token for ${service}. Tried ${failures.join("; ")}`,
+    );
+    err.code = "CREDENTIAL_NOT_FOUND";
+    throw err;
+  };
+}
 
 class CloudflareSecretsBroker {
   constructor(env) {
@@ -103,12 +177,12 @@ class ChittyServBroker {
   }
 }
 
-// ─── 1Password Broker (Legacy — Deprecated) ─────────────────────────────────
+// ─── chittysecrets Broker (Legacy — Deprecated) ─────────────────────────────────
 
 class OnePasswordBroker {
   constructor(env) {
     this.client = new OnePasswordConnectClient(env);
-    this.type = "1password";
+    this.type = "chittysecrets";
   }
 
   async get(credentialPath, options = {}) {
@@ -128,7 +202,7 @@ class OnePasswordBroker {
   }
 }
 
-// ─── Auto Broker (cloudflare-secrets → chittyserv → 1password) ──────────────
+// ─── Auto Broker (cloudflare-secrets → chittyserv → chittysecrets) ──────────────
 
 class AutoBroker {
   constructor(env) {
@@ -140,25 +214,40 @@ class AutoBroker {
   }
 
   async get(credentialPath, options = {}) {
+    // Tracks whether EVERY tier reported a clean miss. If so the composite
+    // error keeps code CREDENTIAL_NOT_FOUND, so the caller can still tell
+    // "absent everywhere" from "a tier is down". Swallowing the tag here was
+    // what made the classifier inert under `auto`. See #303.
+    let allMisses = true;
+
     // 1. Try env bindings first (zero latency)
     try {
       return await this.cfSecrets.get(credentialPath, options);
-    } catch {
-      // Not in env bindings
+    } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
     }
 
     // 2. Try ChittyServ
     try {
       return await this.chittyserv.get(credentialPath, options);
     } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
       console.warn(
         `[CredentialBroker:auto] ChittyServ failed for ${credentialPath}:`,
         err.message,
       );
     }
 
-    // 3. Fall back to 1Password Connect
-    return this.onePassword.get(credentialPath, options);
+    // 3. Fall back to chittysecrets Connect
+    try {
+      return await this.onePassword.get(credentialPath, options);
+    } catch (err) {
+      if (err?.code !== "CREDENTIAL_NOT_FOUND") allMisses = false;
+      // If any tier failed rather than cleanly missed, the composite is an
+      // availability problem — strip the tag so it is not reported as absence.
+      if (!allMisses && err) delete err.code;
+      throw err;
+    }
   }
 
   async prefetch(credentialPaths) {
@@ -195,3 +284,15 @@ class AutoBroker {
     };
   }
 }
+
+// Every broker speaks the provisioner's legacy call shape.
+attachInfrastructureCredentialAdapter(CloudflareSecretsBroker);
+attachInfrastructureCredentialAdapter(ChittyServBroker);
+attachInfrastructureCredentialAdapter(OnePasswordBroker);
+attachInfrastructureCredentialAdapter(AutoBroker);
+
+attachServiceTokenAdapter(CloudflareSecretsBroker);
+attachServiceTokenAdapter(ChittyServBroker);
+attachServiceTokenAdapter(OnePasswordBroker);
+attachServiceTokenAdapter(AutoBroker);
+

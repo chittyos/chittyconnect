@@ -222,7 +222,7 @@ Analyze task complexity without executing.
 }
 ```
 
-### Credential Management (1Password Integration)
+### Credential Management (chittysecrets Integration)
 
 #### `chitty_credential_retrieve`
 Securely retrieve credentials with context validation.
@@ -656,7 +656,7 @@ await chitty_credential_revoke({
 - Enhanced MCP server with session management
 - Durable Objects for persistent state
 - Streaming support via SSE
-- 1Password credential integration
+- chittysecrets credential integration
 - Tool composition and chaining
 - Advanced error handling with recovery
 - Multi-platform support (Desktop, Code)

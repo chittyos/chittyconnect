@@ -1,6 +1,6 @@
 /**
  * ChittyCases API Routes
- * Legal case management with 1Password Connect integration
+ * Legal case management with chittysecrets Connect integration
  */
 
 import { Hono } from "hono";

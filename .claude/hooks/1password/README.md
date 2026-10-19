@@ -1,8 +1,8 @@
-# 1Password Hooks for Claude Code
+# chittysecrets Hooks for Claude Code
 
-Pre-execution validation hooks that ensure 1Password secrets are accessible before Claude Code runs shell commands.
+Pre-execution validation hooks that ensure chittysecrets secrets are accessible before Claude Code runs shell commands.
 
-Based on [1Password Cursor Hooks](https://github.com/1Password/cursor-hooks), adapted for Claude Code and ChittyConnect.
+Based on [chittysecrets Cursor Hooks](https://github.com/chittysecrets/cursor-hooks), adapted for Claude Code and ChittyConnect.
 
 ## How It Works
 
@@ -18,21 +18,21 @@ Claude Code → beforeShellExecution → validate-secrets.sh → Allow/Deny
 
 - **Automatic Detection**: Scans commands for `op://` secret references
 - **Pre-Validation**: Validates secrets are accessible before execution
-- **Fail Open**: If 1Password is unavailable, warns but allows execution
-- **Configurable**: Use `.1password/environments.toml` to specify required secrets
-- **Logging**: Debug logs at `/tmp/1password-claude-hooks.log`
+- **Fail Open**: If chittysecrets is unavailable, warns but allows execution
+- **Configurable**: Use `.chittysecrets/environments.toml` to specify required secrets
+- **Logging**: Debug logs at `/tmp/chittysecrets-claude-hooks.log`
 
 ## Requirements
 
-- [1Password CLI](https://developer.1password.com/docs/cli/) (`op`) installed
-- Signed in to 1Password (`op signin`)
+- [chittysecrets CLI](https://developer.chittysecrets.com/docs/cli/) (`op`) installed
+- Signed in to chittysecrets (`op signin`)
 - Claude Code with hooks enabled
 
 ## Installation
 
 The hooks are already configured in this repository. To use in another project:
 
-1. Copy `.claude/hooks/1password/` to your project
+1. Copy `.claude/hooks/chittysecrets/` to your project
 2. Add hook configuration to `.claude/settings.local.json`:
 
 ```json
@@ -40,7 +40,7 @@ The hooks are already configured in this repository. To use in another project:
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".claude/hooks/1password/validate-secrets.sh"
+        "command": ".claude/hooks/chittysecrets/validate-secrets.sh"
       }
     ]
   }
@@ -61,7 +61,7 @@ op read "op://Private/database/connection_string"
 
 ### Option 2: Explicit Configuration
 
-Create `.1password/environments.toml` to specify required secrets:
+Create `.chittysecrets/environments.toml` to specify required secrets:
 
 ```toml
 # Secrets required for this project
@@ -85,8 +85,8 @@ description = "ChittyConnect service token"
 | No `op://` refs in command | Allow |
 | All secrets accessible | Allow |
 | Some secrets inaccessible | Deny with message |
-| 1Password CLI not installed | Allow (warn) |
-| 1Password not signed in | Allow (warn) |
+| chittysecrets CLI not installed | Allow (warn) |
+| chittysecrets not signed in | Allow (warn) |
 
 ## Debugging
 
@@ -94,18 +94,18 @@ Enable debug mode:
 
 ```bash
 DEBUG=1 echo '{"command":"op run -- echo test","workspace_roots":["."]}' | \
-  .claude/hooks/1password/validate-secrets.sh
+  .claude/hooks/chittysecrets/validate-secrets.sh
 ```
 
 View logs:
 
 ```bash
-tail -f /tmp/1password-claude-hooks.log
+tail -f /tmp/chittysecrets-claude-hooks.log
 ```
 
 ## Integration with ChittyConnect
 
-ChittyConnect uses 1Password for all credentials:
+ChittyConnect uses chittysecrets for all credentials:
 
 | Secret | Reference |
 |--------|-----------|
@@ -124,7 +124,7 @@ The hook ensures these are accessible before deployment commands.
 
 ## Related Resources
 
-- [1Password Developer Docs](https://developer.1password.com/)
-- [1Password Cursor Hooks](https://github.com/1Password/cursor-hooks)
-- [ChittyConnect 1Password Integration](../../ONEPASSWORD_INTEGRATION.md)
+- [chittysecrets Developer Docs](https://developer.chittysecrets.com/)
+- [chittysecrets Cursor Hooks](https://github.com/chittysecrets/cursor-hooks)
+- [ChittyConnect chittysecrets Integration](../../ONEPASSWORD_INTEGRATION.md)
 - [Claude Code Hooks Documentation](https://docs.anthropic.com/claude-code/hooks)

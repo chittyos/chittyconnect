@@ -53,6 +53,20 @@ export class ChronicleEngine {
     await this.db.query(CHRONICLE_SCHEMA);
   }
 
+  /**
+   * Release the underlying connection. Callers that construct a short-lived
+   * engine per request MUST call this in a finally block; without it each
+   * request leaks a Postgres connection for the lifetime of the isolate.
+   * Safe to call more than once and never throws.
+   */
+  async close() {
+    try {
+      await this.db.end();
+    } catch {
+      // Already closed, or never successfully connected. Nothing to release.
+    }
+  }
+
   async logEvent(event) {
     const result = await this.db.query(
       `

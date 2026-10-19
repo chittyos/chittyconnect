@@ -1,0 +1,70 @@
+{
+  "contract_version": "1.0.0",
+  "name": "system-wide-sensitive-intent-policy",
+  "sensitive_intent_match_any": [
+    "credential",
+    "credentials",
+    "secret",
+    "secrets",
+    "api key",
+    "token",
+    "deploy",
+    "release",
+    "publish",
+    "registry",
+    "register service",
+    "cloudflare",
+    "github deploy",
+    "neon admin",
+    "dns change",
+    "workers deploy"
+  ],
+  "required_route": {
+    "mode": "mandatory_broker",
+    "broker_path": "ch1tty.cast_execute_to_chittyconnect"
+  },
+  "forbidden_behaviors": [
+    "ask_user_for_long_lived_secret",
+    "return_plaintext_long_lived_secret",
+    "direct_provider_secret_bypass"
+  ],
+  "failure_mode": {
+    "mode": "fail_closed",
+    "error_code": "POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE"
+  },
+  "error_taxonomy": {
+    "policy_blocked_unavailable": "POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE",
+    "policy_blocked_route": "POLICY_BLOCKED_MANDATORY_BROKER_ROUTE",
+    "policy_blocked_destination": "POLICY_BLOCKED_DESTINATION_UNVERIFIED",
+    "missing_material": "MISSING_CREDENTIAL_MATERIAL",
+    "insufficient_scope": "INSUFFICIENT_SCOPE",
+    "policy_denied": "EXECUTION_DENIED_BY_POLICY",
+    "provider_error": "EXECUTION_FAILED_PROVIDER_ERROR"
+  },
+  "destination_resolution": {
+    "required_before_store_or_rotate": true,
+    "resolver_action": "resolve_secret_destination",
+    "on_unverified_error": "POLICY_BLOCKED_DESTINATION_UNVERIFIED",
+    "required_response_fields": [
+      "required_destination_type",
+      "required_destination_identifier",
+      "approved_resolution_paths"
+    ]
+  },
+  "leak_containment_override": {
+    "enabled": true,
+    "action": "contain_credential_leak",
+    "allows_rotation_without_destination_verification": true,
+    "requires_incident_record": true,
+    "requires_followup_store_task": true
+  },
+  "credential_escalation_rule": {
+    "allowed_only_for_error": "MISSING_CREDENTIAL_MATERIAL",
+    "required_fields": [
+      "required_secret_path",
+      "required_scope",
+      "target_store",
+      "retry_hint"
+    ]
+  }
+}

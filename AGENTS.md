@@ -47,5 +47,5 @@ This guide helps contributors work effectively in this repository. It summarizes
 ## Security & Configuration Tips
 
 - Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys
-- For npm publish, CI loads tokens via GitHub/1Password; local publishes require `--access public` for scoped packages
+- For npm publish, CI loads tokens via GitHub/chittysecrets; local publishes require `--access public` for scoped packages
 

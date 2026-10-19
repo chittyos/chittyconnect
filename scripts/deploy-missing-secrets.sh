@@ -4,8 +4,8 @@
 # Usage:
 #   ./scripts/deploy-missing-secrets.sh [--env production|staging|dev] [--dry-run]
 #
-# Source of truth: 1Password vaults → Cloudflare Secrets (hot runtime delivery)
-# Each secret must exist in 1Password BEFORE running this script.
+# Source of truth: chittysecrets vaults → Cloudflare Secrets (hot runtime delivery)
+# Each secret must exist in chittysecrets BEFORE running this script.
 #
 # Prerequisites:
 #   - `op` CLI authenticated (eval $(op signin))
@@ -32,7 +32,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# 1Password vault references
+# chittysecrets vault references
 VAULT_INFRA="oxwo63jlcbo66c7kwx67lquw4i"       # ChittyOS-Core
 VAULT_SERVICES="xgevq7nkt6t4bfokjaczht5gdy"     # ChittyOS-Deployment
 VAULT_INTEGRATIONS="3ngilqu4qsp4mlr53xhvyi4sry" # ChittyOS-Integrations
@@ -76,7 +76,7 @@ MISSING_SECRETS=(
   # Note: CHITTYOS_ACCOUNT_ID is a wrangler var, not a secret — no deployment needed
   "ENCRYPTION_KEY|$VAULT_EMERGENCY|encryption|key"
   "INTERNAL_WEBHOOK_SECRET|$VAULT_EMERGENCY|internal-webhook|secret"
-  "OP_EVENTS_API_TOKEN|$VAULT_EMERGENCY|1password-events|api_token"
+  "OP_EVENTS_API_TOKEN|$VAULT_EMERGENCY|chittysecrets-events|api_token"
   "EMERGENCY_REVOKE_TOKEN|$VAULT_EMERGENCY|emergency-revoke|token"
 
   # Google Integration
@@ -98,11 +98,11 @@ for entry in "${MISSING_SECRETS[@]}"; do
     continue
   fi
 
-  # Fetch from 1Password
+  # Fetch from chittysecrets
   VALUE=$(op item get "$ITEM" --vault "$VAULT" --fields "$FIELD" 2>/dev/null) || true
 
   if [[ -z "$VALUE" ]]; then
-    echo -e "${RED}MISSING in 1Password${NC} (op://$VAULT/$ITEM/$FIELD)"
+    echo -e "${RED}MISSING in chittysecrets${NC} (op://$VAULT/$ITEM/$FIELD)"
     FAILED=$((FAILED + 1))
     continue
   fi

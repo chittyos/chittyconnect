@@ -26,10 +26,6 @@
     {
       "url": "https://connect.chitty.cc",
       "description": "Production - ChittyConnect API Gateway"
-    },
-    {
-      "url": "https://connect-staging.chitty.cc",
-      "description": "Staging - Test environment"
     }
   ],
   "security": [

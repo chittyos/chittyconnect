@@ -1,6 +1,6 @@
 /**
  * ChittyEvidence API Routes
- * Evidence ingestion and management with 1Password Connect integration
+ * Evidence ingestion and management with chittysecrets Connect integration
  *
  * UPDATED FOR CHITTYLEDGER INTEGRATION (ChittyEvidence v2.0)
  * - Supports UUID-based evidence_id (primary)
@@ -8,8 +8,8 @@
  * - Maps to ChittyLedger things/evidence tables
  * - Response transformers for legacy field names
  *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Service token retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  */
 
 import { Hono } from "hono";

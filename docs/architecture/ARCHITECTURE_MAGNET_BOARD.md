@@ -65,7 +65,7 @@ This file curates the Notion content into a concise, actionable roadmap aligned 
 - /access: docs/governance/ACCESS_CONTROL.md
 
 ## Secrets & Provisioning (cross‑service)
-- Long‑lived: 1Password → Wrangler secrets per env
+- Long‑lived: chittysecrets → Wrangler secrets per env
 - Ephemeral (CI): ChittyConnect `/credentials/deploy` with `CHITTYCONNECT_API_KEY`
 - Standard env:
   - CHITTY_AUTH_TOKEN (auth.chitty.cc)
