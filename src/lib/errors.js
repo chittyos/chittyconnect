@@ -150,9 +150,10 @@ export function wrapServiceError(serviceName, error, context = {}) {
 export function fromZodError(zodError) {
   const fieldErrors = {};
 
-  zodError.errors.forEach((err) => {
-    const path = err.path.join(".");
-    fieldErrors[path] = err.message;
+  // Zod 4 exposes validation details on `.issues`; `.errors` was removed.
+  zodError.issues.forEach((issue) => {
+    const path = issue.path.join(".");
+    fieldErrors[path] = issue.message;
   });
 
   return new ValidationError("Request validation failed", fieldErrors);

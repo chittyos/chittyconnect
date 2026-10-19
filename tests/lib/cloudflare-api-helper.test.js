@@ -60,7 +60,7 @@ describe("parseTimeframe", () => {
 });
 
 describe("getCloudflareApiCredentials", () => {
-  it("returns token from 1Password and accountId from env", async () => {
+  it("returns token from chittysecrets and accountId from env", async () => {
     getCredential.mockResolvedValue("op-api-token");
     const env = { CHITTYOS_ACCOUNT_ID: "acct-123" };
 

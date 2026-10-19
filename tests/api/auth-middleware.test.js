@@ -119,6 +119,94 @@ describe("authenticate middleware", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("allows GET /api/v1/identity/:id/policy-bundle without an API key", async () => {
+    const c = createMockContext({
+      req: {
+        method: "GET",
+        header: headerMap({}),
+        raw: new Request(
+          "http://localhost/api/v1/identity/03-1-USA-5537-P-2602-0-38/policy-bundle",
+          { method: "GET" },
+        ),
+      },
+    });
+
+    const next = vi.fn(async () => {});
+    await authenticate(c, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(c.set).toHaveBeenCalledWith(
+      "apiKey",
+      expect.objectContaining({ type: "public", service: "policy-bundle" }),
+    );
+  });
+
+  it("allows GET /api/v1/identity/:id/policy-bundle/check without an API key", async () => {
+    const c = createMockContext({
+      req: {
+        method: "GET",
+        header: headerMap({}),
+        raw: new Request(
+          "http://localhost/api/v1/identity/03-1-USA-5537-P-2602-0-38/policy-bundle/check",
+          { method: "GET" },
+        ),
+      },
+    });
+
+    const next = vi.fn(async () => {});
+    await authenticate(c, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(c.set).toHaveBeenCalledWith(
+      "apiKey",
+      expect.objectContaining({ type: "public", service: "policy-bundle" }),
+    );
+  });
+
+  it("does NOT bypass auth for a non-GET request to the policy-bundle path", async () => {
+    const c = createMockContext({
+      req: {
+        method: "POST",
+        header: headerMap({}),
+        raw: new Request(
+          "http://localhost/api/v1/identity/03-1-USA-5537-P-2602-0-38/policy-bundle",
+          { method: "POST" },
+        ),
+      },
+    });
+
+    c.env.API_KEYS.get.mockResolvedValueOnce(null);
+    c.env.OAUTH_PROVIDER = undefined;
+
+    const next = vi.fn(async () => {});
+    const response = await authenticate(c, next);
+
+    expect(response.status).toBe(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("does NOT bypass auth for a sibling identity route that is not policy-bundle", async () => {
+    const c = createMockContext({
+      req: {
+        method: "GET",
+        header: headerMap({}),
+        raw: new Request(
+          "http://localhost/api/v1/identity/03-1-USA-5537-P-2602-0-38/profile",
+          { method: "GET" },
+        ),
+      },
+    });
+
+    c.env.API_KEYS.get.mockResolvedValueOnce(null);
+    c.env.OAUTH_PROVIDER = undefined;
+
+    const next = vi.fn(async () => {});
+    const response = await authenticate(c, next);
+
+    expect(response.status).toBe(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("accepts CF Access client headers for /api/v1/context/sync without API key", async () => {
     const c = createMockContext({
       req: {

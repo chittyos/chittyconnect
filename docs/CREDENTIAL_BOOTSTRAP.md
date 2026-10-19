@@ -8,7 +8,7 @@ ChittyConnect needs service tokens to authenticate with other ChittyOS services 
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│   1Password     │ ──► │  Cloudflare     │
+│   chittysecrets     │ ──► │  Cloudflare     │
 │   (source)      │sync │  Secrets        │
 └─────────────────┘     └────────┬────────┘
                                  │
@@ -25,7 +25,7 @@ ChittyConnect needs service tokens to authenticate with other ChittyOS services 
               └──────────┘ └──────────┘ └──────────┘
 ```
 
-**Key insight:** Credentials are synced at deploy time, NOT fetched at runtime. The 1Password Connect server is optional for hot-reload scenarios.
+**Key insight:** Credentials are synced at deploy time, NOT fetched at runtime. The chittysecrets Connect server is optional for hot-reload scenarios.
 
 ## Required Secrets
 
@@ -47,7 +47,7 @@ ChittyConnect needs service tokens to authenticate with other ChittyOS services 
 
 1. **Get the JWT_SECRET** from ChittyAuth:
    ```bash
-   # In 1Password, find "ChittyAuth JWT Secret" in the Services vault
+   # In chittysecrets, find "ChittyAuth JWT Secret" in the Services vault
    # Or ask an admin who has access to Cloudflare secrets
    ```
 
@@ -79,7 +79,7 @@ wrangler secret put CHITTY_AUTH_TOKEN --env production
 
 ```yaml
 # GitHub Actions example
-- name: Sync secrets from 1Password
+- name: Sync secrets from chittysecrets
   env:
     OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
   run: |
@@ -100,12 +100,12 @@ wrangler secret put CHITTY_AUTH_TOKEN --env production
 
 ## Failover Mechanism
 
-ChittyConnect has a built-in failover in `1password-connect-client.js`:
+ChittyConnect has a built-in failover in `chittysecrets-connect-client.js`:
 
-1. **Primary**: Try 1Password Connect API (if configured)
+1. **Primary**: Try chittysecrets Connect API (if configured)
 2. **Fallback**: Use environment variable (Cloudflare secret)
 
-This means even if 1Password Connect is unavailable, ChittyConnect will use the Cloudflare secrets.
+This means even if chittysecrets Connect is unavailable, ChittyConnect will use the Cloudflare secrets.
 
 ## Token Lifecycle
 
@@ -153,6 +153,6 @@ Fix: Run the bootstrap script to provision tokens.
 ## Related Files
 
 - `/scripts/bootstrap-service-tokens.mjs` - Token generation script
-- `/src/services/1password-connect-client.js` - Credential fetching
+- `/src/services/chittysecrets-connect-client.js` - Credential fetching
 - `/src/lib/credential-helper.js` - Helper functions
 - `/wrangler.toml` - Secret documentation

@@ -8,6 +8,7 @@
  */
 
 import { ContextConsciousness } from "./context-consciousness.js";
+import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
 import { MemoryCloude } from "./memory-cloude.js";
 
 /**
@@ -366,7 +367,7 @@ Respond in JSON format: {
   "risks": ["..."]
 }`;
 
-      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.env.AI.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -380,7 +381,7 @@ Respond in JSON format: {
         ],
       });
 
-      const analysis = JSON.parse(response.response);
+      const analysis = JSON.parse(extractAiText(response));
       console.log(
         `[Cognitive-Coordination™] Task complexity: ${analysis.complexity}`,
       );
@@ -492,7 +493,7 @@ Respond in JSON format: {
   "recommendations": ["..."]
 }`;
 
-      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.env.AI.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -506,7 +507,7 @@ Respond in JSON format: {
         ],
       });
 
-      const synthesis = JSON.parse(response.response);
+      const synthesis = JSON.parse(extractAiText(response));
 
       return {
         success: true,

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# 1Password Secret Validation Hook for Claude Code
-# Validates that required 1Password secrets are accessible before shell execution
+# chittysecrets Secret Validation Hook for Claude Code
+# Validates that required chittysecrets secrets are accessible before shell execution
 #
-# Based on: https://github.com/1Password/cursor-hooks
+# Based on: https://github.com/chittysecrets/cursor-hooks
 # Adapted for Claude Code and ChittyConnect
 #
 
 set -euo pipefail
 
 # Configuration
-LOG_FILE="${TMPDIR:-/tmp}/1password-claude-hooks.log"
-CONFIG_FILE=".1password/environments.toml"
+LOG_FILE="${TMPDIR:-/tmp}/chittysecrets-claude-hooks.log"
+CONFIG_FILE=".chittysecrets/environments.toml"
 DEBUG="${DEBUG:-0}"
 
 # Logging function
@@ -36,16 +36,16 @@ output_response() {
     fi
 }
 
-# Check if 1Password CLI is installed and signed in
+# Check if chittysecrets CLI is installed and signed in
 check_op_cli() {
     if ! command -v op &> /dev/null; then
-        log "WARN" "1Password CLI not installed"
+        log "WARN" "chittysecrets CLI not installed"
         return 1
     fi
 
     # Check if signed in (this is a quick check)
     if ! op account list &> /dev/null 2>&1; then
-        log "WARN" "1Password CLI not signed in"
+        log "WARN" "chittysecrets CLI not signed in"
         return 1
     fi
 
@@ -58,7 +58,7 @@ validate_secret_ref() {
 
     # Check if it's a valid op:// reference
     if [[ ! "$ref" =~ ^op:// ]]; then
-        log "DEBUG" "Not a 1Password reference: $ref"
+        log "DEBUG" "Not a chittysecrets reference: $ref"
         return 0
     fi
 
@@ -97,7 +97,7 @@ extract_op_refs_from_command() {
 
 # Main validation logic
 main() {
-    log "INFO" "1Password validation hook started"
+    log "INFO" "chittysecrets validation hook started"
 
     # Read input from stdin (Claude Code passes JSON)
     local input
@@ -122,15 +122,15 @@ main() {
 
     # Skip validation for non-op commands (fail open)
     if [[ ! "$command" =~ "op " ]] && [[ ! "$command" =~ "op://" ]]; then
-        log "DEBUG" "Command doesn't use 1Password, allowing"
+        log "DEBUG" "Command doesn't use chittysecrets, allowing"
         output_response "allow"
         exit 0
     fi
 
     # Check if op CLI is available
     if ! check_op_cli; then
-        log "WARN" "1Password CLI not available, failing open"
-        output_response "allow" "1Password CLI not available. Secrets may not be accessible."
+        log "WARN" "chittysecrets CLI not available, failing open"
+        output_response "allow" "chittysecrets CLI not available. Secrets may not be accessible."
         exit 0
     fi
 
@@ -169,7 +169,7 @@ main() {
         local count
         count=$(echo -e "$failed_refs" | grep -c -v '^$' || echo "0")
         log "ERROR" "Validation failed for $count secret(s)"
-        output_response "deny" "1Password secrets unavailable. Please unlock 1Password or sign in with 'op signin'. Failed: $count secret(s)"
+        output_response "deny" "chittysecrets secrets unavailable. Please unlock chittysecrets or sign in with 'op signin'. Failed: $count secret(s)"
         exit 0
     fi
 

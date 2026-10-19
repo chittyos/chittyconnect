@@ -11,7 +11,7 @@ import { getCredential } from "./credential-helper.js";
 import { CREDENTIAL_PATHS } from "./credential-paths.js";
 
 /**
- * Retrieve Cloudflare API credentials from 1Password or env fallbacks.
+ * Retrieve Cloudflare API credentials from chittysecrets or env fallbacks.
  *
  * @param {object} env - Cloudflare Worker environment bindings
  * @returns {Promise<{apiToken: string|undefined, accountId: string|undefined}>}

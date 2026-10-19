@@ -32,7 +32,7 @@ ChittyChronicle (event logging) and ChittyQuality (document validation) have bee
 **`src/api/routes/chittychronicle.js`** (UPDATED)
 - Replaced proxy implementation with direct database operations
 - Now uses ChronicleEngine for all operations
-- Retrieves database URL from 1Password or environment variable
+- Retrieves database URL from chittysecrets or environment variable
 - Rate limiting: 60 requests/minute per IP
 
 ### Configuration Updates
@@ -96,13 +96,13 @@ All endpoints require ChittyConnect API authentication:
 - Header: `X-ChittyOS-API-Key: <your-api-key>`
 - Alternatively, ChatGPT Custom GPTs handle authentication automatically
 
-## 1Password Integration
+## chittysecrets Integration
 
 ### Chronicle Database Connection
 
 Chronicle retrieves the Neon database URL using the credential helper:
 
-**1Password Path:** `database/neon/chittyos_core`
+**chittysecrets Path:** `database/neon/chittyos_core`
 **Fallback:** `NEON_DATABASE_URL` environment variable
 
 ```javascript
@@ -249,11 +249,11 @@ curl http://localhost:8787/api/chittyquality/rules \
 
 ### Prerequisites
 
-1. **1Password Setup**
+1. **chittysecrets Setup**
    - Add `database/neon/chittyos_core` with Neon database URL
-   - Ensure 1Password Connect is configured for ChittyConnect
+   - Ensure chittysecrets Connect is configured for ChittyConnect
 
-2. **Environment Variables** (fallback if 1Password unavailable)
+2. **Environment Variables** (fallback if chittysecrets unavailable)
    - `NEON_DATABASE_URL` - Neon PostgreSQL connection string
 
 ### Deploy to Staging
@@ -301,13 +301,13 @@ The separate Chronicle and Quality services from `chittymcp` have been consolida
 - `connect.chitty.cc/api/chittyquality/*` - Integrated
 - Unified OpenAPI spec
 - Single authentication via ChittyConnect API keys
-- 1Password integration for credentials
+- chittysecrets integration for credentials
 - Shared CORS, rate limiting, error handling
 
 ### Benefits
 
 1. **Unified Authentication** - One API key for all ChittyConnect services
-2. **1Password Integration** - Centralized credential management
+2. **chittysecrets Integration** - Centralized credential management
 3. **Simplified Architecture** - Fewer services to manage
 4. **Consistent Patterns** - Same middleware, error handling, CORS
 5. **Single OpenAPI Spec** - Easier for ChatGPT Custom GPT setup
@@ -330,7 +330,7 @@ For issues or questions:
 - Check deployment logs: `npm run tail`
 - Review OpenAPI spec: `https://connect.chitty.cc/openapi.json`
 - Test endpoints locally: `npm run dev`
-- Verify 1Password credentials are configured
+- Verify chittysecrets credentials are configured
 - Check database connectivity if Chronicle fails
 
 ---

@@ -125,9 +125,9 @@ executeRoutes.post("/sql/batch", async (c) => {
  *
  * Body: { url: string, method?: string, headers?: object, body?: string,
  *         credential?: string }
- *   credential: 1Password path (e.g. "integrations/notion/api_key") — injected as Bearer token
+ *   credential: chittysecrets path (e.g. "integrations/notion/api_key") — injected as Bearer token
  */
-// Allowlist of (alias → 1Password path) pairs for /fetch credential injection.
+// Allowlist of (alias → chittysecrets path) pairs for /fetch credential injection.
 // Callers reference an alias; the server maps to a path. This prevents callers
 // from naming arbitrary credential paths and exfiltrating tokens.
 const FETCH_CREDENTIAL_ALIASES = {
@@ -135,6 +135,53 @@ const FETCH_CREDENTIAL_ALIASES = {
   google: "integrations/google/access_token",
   github: "integrations/github/token",
 };
+
+// This is the provider-ownership boundary, NOT an operator-selected list of
+// arbitrary egress targets. Do not allow FETCH_ALLOWED_HOSTS to override it.
+// The values are exact hosts (no suffix match, wildcards or userinfo).
+const FETCH_CREDENTIAL_PROVIDER_HOSTS = {
+  notion: new Set(["api.notion.com"]),
+  google: new Set([
+    "www.googleapis.com",
+    "gmail.googleapis.com",
+    "drive.googleapis.com",
+    "sheets.googleapis.com",
+    "calendar.googleapis.com",
+    "people.googleapis.com",
+  ]),
+  github: new Set(["api.github.com"]),
+};
+
+/**
+ * Determine whether a credentialed request stays with its issuing provider.
+ * A missing FETCH_ALLOWED_HOSTS means the owner-host set remains enforced,
+ * not that any Internet destination becomes eligible.
+ *
+ * @returns {boolean} true only if alias, HTTPS origin and both gates pass.
+ */
+export function credentialDestinationAllowed(alias, url, operatorAllowlist = "") {
+  if (typeof alias !== "string" ||
+      !Object.hasOwn(FETCH_CREDENTIAL_ALIASES, alias) ||
+      typeof url !== "string") return false;
+  let destination;
+  try {
+    destination = new URL(url);
+  } catch {
+    return false;
+  }
+  if (destination.protocol !== "https:" ||
+      destination.username || destination.password || destination.port) {
+    return false;
+  }
+  const ownerHosts = FETCH_CREDENTIAL_PROVIDER_HOSTS[alias];
+  if (!ownerHosts?.has(destination.hostname)) return false;
+
+  const operatorHosts = new Set(
+    String(operatorAllowlist || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean),
+  );
+  // Optional operator allowlist can only NARROW the canonical provider scope.
+  return operatorHosts.size === 0 || operatorHosts.has(destination.hostname);
+}
 
 executeRoutes.post("/fetch", async (c) => {
   try {
@@ -144,44 +191,59 @@ executeRoutes.post("/fetch", async (c) => {
       return c.json({ error: "url required" }, 400);
     }
 
-    // Host allowlist: operators opt-in via FETCH_ALLOWED_HOSTS (comma-separated).
-    // Without it, /fetch is restricted to the credential alias's owner host.
-    let parsedUrl;
+    // Parse the destination for every request. Credentialed requests receive
+    // the stricter provider-ownership/HTTPS gate below.
     try {
-      parsedUrl = new URL(url);
+      new URL(url);
     } catch {
       return c.json({ error: "url must be a valid absolute URL" }, 400);
     }
     const allowlistRaw = c.env.FETCH_ALLOWED_HOSTS || "";
-    const allowedHosts = new Set(
-      allowlistRaw.split(",").map((s) => s.trim()).filter(Boolean),
-    );
 
-    const fetchHeaders = { ...headers };
+    // Headers() canonicalizes casing, avoiding duplicate lower/upper-case
+    // Authorization fields when an untrusted caller supplied one.
+    const fetchHeaders = new Headers(headers);
     if (credential) {
-      const credentialPath = FETCH_CREDENTIAL_ALIASES[credential];
-      if (!credentialPath) {
+      if (typeof credential !== "string" ||
+          !Object.hasOwn(FETCH_CREDENTIAL_ALIASES, credential)) {
         return c.json(
-          { error: `unknown credential alias '${credential}'`, allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
+          { error: "unknown credential alias", allowed: Object.keys(FETCH_CREDENTIAL_ALIASES) },
           400,
         );
       }
-      // When using a credential, the destination host must be allowlisted —
-      // either via the operator-configured FETCH_ALLOWED_HOSTS env var, or by
-      // matching a known host owned by the credential alias.
-      if (allowedHosts.size > 0 && !allowedHosts.has(parsedUrl.hostname)) {
-        return c.json({ error: `host '${parsedUrl.hostname}' is not in FETCH_ALLOWED_HOSTS` }, 403);
+
+      // Reuse the existing ChittyConnect admin privilege already required by
+      // high-impact tenant migration. Ordinary API-key authentication alone
+      // never confers permission to use a provider-owned bearer token.
+      const keyInfo = c.get("apiKey") || {};
+      const scopes = Array.isArray(keyInfo.scopes)
+        ? keyInfo.scopes
+        : typeof keyInfo.scopes === "string"
+          ? keyInfo.scopes.split(/\s+/).filter(Boolean)
+          : [];
+      if (keyInfo.role !== "admin" && !scopes.includes("admin")) {
+        return c.json({ error: "admin scope required for credentialed execution" }, 403);
       }
-      const token = await getCredential(c.env, credentialPath, null);
-      if (token) {
-        fetchHeaders["Authorization"] = `Bearer ${token}`;
+
+      // Validate the target BEFORE resolving or injecting any credential.
+      if (!credentialDestinationAllowed(credential, url, allowlistRaw)) {
+        return c.json({ error: "credential destination is not authorized for this provider" }, 403);
       }
+      const token = await getCredential(c.env, FETCH_CREDENTIAL_ALIASES[credential], null);
+      if (typeof token !== "string" || token.length === 0) {
+        return c.json({ error: "credential unavailable" }, 503);
+      }
+
+      fetchHeaders.set("Authorization", `Bearer ${token}`);
     }
 
     const response = await fetch(url, {
       method,
       headers: fetchHeaders,
       body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+      // Workers forward Authorization across redirects by default. Never
+      // auto-follow redirects when a broker-managed credential is present.
+      redirect: credential ? "manual" : "follow",
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -208,17 +270,14 @@ const KNOWN_DATABASES = {
   "chittyos-core": {
     credentialPath: "integrations/neon/chittyos-core",
     envFallback: "NEON_CHITTYOS_CORE_URL",
-    kvKey: "secret:neon:chittyos-core:connection_uri",
   },
   "chittycommand": {
     credentialPath: "integrations/neon/chittycommand",
     envFallback: "NEON_CHITTYCOMMAND_URL",
-    kvKey: "secret:neon:chittycommand:connection_uri",
   },
   "chittycounsel": {
     credentialPath: "integrations/neon/chittycounsel",
     envFallback: "NEON_CHITTYCOUNSEL_URL",
-    kvKey: "secret:neon:chittycounsel:connection_uri",
   },
 };
 
@@ -231,15 +290,12 @@ async function resolveNeonConnection(env, database) {
   const known = KNOWN_DATABASES[database];
   if (!known) return null;
 
-  // Try KV cache first (rotated connection strings)
-  if (env.CREDENTIAL_CACHE) {
-    const cached = await env.CREDENTIAL_CACHE.get(known.kvKey);
-    if (cached) return cached;
-  }
-
-  // Try credential broker (1Password)
+  // Connection strings are security-sensitive authority material: never
+  // bypass ChittyConnect's credential broker through eventually consistent KV.
+  // Retain existing binding fallback inside getCredential until the governed
+  // migration verifies all downstream SQL consumers.
   const cred = await getCredential(env, known.credentialPath, known.envFallback);
   return cred || null;
 }
 
-export { executeRoutes };
+export { executeRoutes, resolveNeonConnection };

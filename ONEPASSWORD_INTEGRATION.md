@@ -1,8 +1,8 @@
-# ChittyConnect 1Password Integration Architecture
+# ChittyConnect chittysecrets Integration Architecture
 
 ## 🎯 Vision
 
-ChittyConnect evolves into the **single source of truth** for all ChittyOS service credentials, where **ContextConsciousness™** automatically provisions secure access to exactly what's needed, when it's needed, through 1Password's enterprise vault infrastructure.
+ChittyConnect evolves into the **single source of truth** for all ChittyOS service credentials, where **ContextConsciousness™** automatically provisions secure access to exactly what's needed, when it's needed, through chittysecrets's enterprise vault infrastructure.
 
 ## 🏗️ Architecture Overview
 
@@ -27,13 +27,13 @@ graph TB
 
         subgraph "Credential Services"
             CP[Credential Provisioner]
-            OP[1Password Provider]
+            OP[chittysecrets Provider]
             Cache[KV Cache]
         end
     end
 
-    subgraph "1Password Infrastructure"
-        Connect[1Password Connect API]
+    subgraph "chittysecrets Infrastructure"
+        Connect[chittysecrets Connect API]
 
         subgraph "Vaults"
             Infra[Infrastructure Vault]
@@ -82,10 +82,10 @@ graph TB
 
 ### Zero-Trust Credential Management
 
-1. **No Secrets in Code**: All credentials flow through 1Password at runtime
+1. **No Secrets in Code**: All credentials flow through chittysecrets at runtime
 2. **Context Validation**: Every request validated by ContextConsciousness™
 3. **Least Privilege**: Minimal scopes based on validated context
-4. **Fail Secure**: Deny by default if 1Password unavailable
+4. **Fail Secure**: Deny by default if chittysecrets unavailable
 5. **Audit Everything**: Complete audit trail in ChittyChronicle
 
 ### Risk Assessment Pipeline
@@ -111,7 +111,7 @@ Request → Context Analysis → Risk Scoring → Decision → Audit
 **File**: `/src/services/onepassword-provider.js`
 
 Core capabilities:
-- Direct integration with 1Password Connect API
+- Direct integration with chittysecrets Connect API
 - Context-aware credential retrieval
 - Intelligent caching (5-minute TTL)
 - Rate limiting (100 requests/hour/service)
@@ -122,7 +122,7 @@ Core capabilities:
 **File**: `/src/services/credential-provisioner-enhanced.js`
 
 Enhanced features:
-- Dynamic credential retrieval from 1Password
+- Dynamic credential retrieval from chittysecrets
 - Context validation via ContextConsciousness™
 - Support for multiple credential types:
   - Cloudflare API tokens (deploy, read, R2, D1)
@@ -167,7 +167,7 @@ Endpoints:
 - `POST /api/onepassword/emergency-revoke` - Emergency procedures
 - `GET /api/onepassword/insights/:service` - Access insights
 
-## 🗂️ 1Password Vault Organization
+## 🗂️ chittysecrets Vault Organization
 
 ### Vault: `chittyos-infrastructure`
 ```yaml
@@ -220,7 +220,7 @@ google:
 ## 🔄 Migration Strategy
 
 ### Phase 1: Setup (Week 1)
-1. Deploy 1Password Connect server
+1. Deploy chittysecrets Connect server
 2. Create vault structure
 3. Populate vaults with existing credentials
 4. Deploy enhanced ChittyConnect code
@@ -242,7 +242,7 @@ google:
 
 ### Phase 4: Production Cutover (Week 6)
 1. Remove all legacy secrets from Wrangler
-2. All credentials flow through 1Password
+2. All credentials flow through chittysecrets
 3. Enable strict risk thresholds
 4. Activate alerting for anomalies
 5. Document lessons learned
@@ -264,7 +264,7 @@ google:
    - Emergency revocations
 
 3. **Service Health**
-   - 1Password Connect availability
+   - chittysecrets Connect availability
    - ContextConsciousness™ analysis time
    - Database query performance
    - Rate limit violations
@@ -272,7 +272,7 @@ google:
 ### Alerting Thresholds
 
 - **Critical**: Risk score > 90, Emergency revocation triggered
-- **High**: Failed retrieval rate > 5%, 1Password unavailable
+- **High**: Failed retrieval rate > 5%, chittysecrets unavailable
 - **Medium**: Anomaly rate > 10%, Cache hit rate < 50%
 - **Low**: Unusual access patterns, New service detected
 
@@ -288,7 +288,7 @@ google:
 
 ### For Operations
 
-1. **Rotate 1Password Connect token** monthly
+1. **Rotate chittysecrets Connect token** monthly
 2. **Review audit logs** weekly for anomalies
 3. **Test emergency procedures** quarterly
 4. **Update risk thresholds** based on patterns
@@ -320,11 +320,11 @@ google:
    - Check for data exfiltration
 
 3. **Remediation**:
-   - Rotate affected credentials in 1Password
+   - Rotate affected credentials in chittysecrets
    - Update service configurations
    - Deploy patches if needed
 
-### 1Password Unavailable
+### chittysecrets Unavailable
 
 1. **Fallback Mode**:
    - Cache extends to 15 minutes
@@ -428,7 +428,7 @@ if (result.success) {
 
 1. **"ONEPASSWORD_CONNECT_TOKEN not configured"**
    - Set the token: `wrangler secret put ONEPASSWORD_CONNECT_TOKEN`
-   - Verify 1Password Connect server is running
+   - Verify chittysecrets Connect server is running
 
 2. **"Context validation failed"**
    - Check risk score in response
@@ -442,12 +442,12 @@ if (result.success) {
 
 4. **"Failed to retrieve credential"**
    - Verify vault and item names
-   - Check 1Password permissions
+   - Check chittysecrets permissions
    - Review Connect server logs
 
 ## 📚 Additional Resources
 
-- [1Password Connect Documentation](https://developer.1password.com/docs/connect)
+- [chittysecrets Connect Documentation](https://developer.chittysecrets.com/docs/connect)
 - [ChittyOS Architecture Guide](../CLAUDE.md)
 - [ContextConsciousness™ Design](INNOVATION_ROADMAP.md)
 - [Security Incident Runbook](SECURITY_RUNBOOK.md)

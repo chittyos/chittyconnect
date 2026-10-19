@@ -1,0 +1,39 @@
+# ChittyConnect Agent Integration Guide
+
+> STOP! If you are an AI agent or LLM, read this before attempting to connect to ChittyConnect.
+
+## The Core Concept
+Agents do NOT talk directly to the `connect.chitty.cc` cloud API. You must spawn a local **ChittyCan MCP server** which will proxy your commands securely to the cloud.
+
+## Step 1: Obtain Auth Token
+You must have a valid ChittyConnect API token. If a human has not provided one, instruct them to generate one by visiting: `https://auth.chitty.cc/v1/register`
+
+## Step 2: Set the Correct Environment Variable
+The MCP server will crash immediately if the token is missing. You MUST set this in your environment:
+```bash
+export CHITTY_AUTH_SERVICE_TOKEN="<the-token>"
+# Note: CHITTY_TOKEN is used by the CLI, but the MCP server specifically requires CHITTY_AUTH_SERVICE_TOKEN. Set both to be safe.
+export CHITTY_TOKEN="<the-token>"
+```
+
+## Step 3: Configure Your Agent (Claude Code / Cursor)
+Add this to your project's `.claude/mcp.json` or equivalent configuration:
+```json
+{
+  "mcpServers": {
+    "chittyconnect": {
+      "command": "node",
+      "args": ["/absolute/path/to/chittycan/dist/mcp-server.js"],
+      "env": {
+        "CHITTY_AUTH_SERVICE_TOKEN": "<the-token>",
+        "CHITTYCONNECT_URL": "https://connect.chitty.cc"
+      }
+    }
+  }
+}
+```
+
+## Step 4: Verify the Connection
+Once connected via MCP, **DO NOT assume it is working blindly.** 
+Always call the `chitty_services_status` or `chittyconnect_status` MCP tool first.
+If it returns `status: "connected"`, you now have full access to the `chitty_*` tool suite (Identity, Ledger, Finance, Memory).

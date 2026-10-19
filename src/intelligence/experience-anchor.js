@@ -17,10 +17,11 @@ export class ExperienceAnchor {
 
     // Trust calculation weights
     this.trustWeights = {
-      experienceVolume: 0.2,
-      successRate: 0.3,
-      anomalyPenalty: 0.2,
-      sessionQuality: 0.15,
+      experienceVolume: 0.15,
+      successRate: 0.25,
+      trajectoryEffort: 0.20,
+      anomalyPenalty: 0.15,
+      sessionQuality: 0.10,
       recency: 0.15,
     };
 
@@ -720,17 +721,21 @@ export class ExperienceAnchor {
           JSON.stringify(changeFactors),
         );
 
+        const beacon = await this.fetchDrandBeacon();
+        const logId = crypto.randomUUID();
+
         await this.db
           .prepare(
             `
           INSERT INTO trust_evolution_log
-          (chitty_id, previous_trust_level, new_trust_level,
+          (id, chitty_id, previous_trust_level, new_trust_level,
            previous_trust_score, new_trust_score, change_trigger,
-           change_factors, content_hash)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           change_factors, content_hash, drand_round, drand_randomness)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           )
           .bind(
+            logId,
             chittyId,
             previousLevel,
             newLevel,
@@ -739,6 +744,8 @@ export class ExperienceAnchor {
             "experience_accumulated",
             JSON.stringify(changeFactors),
             contentHash,
+            beacon.round,
+            beacon.randomness
           )
           .run();
       }
@@ -771,6 +778,25 @@ export class ExperienceAnchor {
     // Success rate score (0-100)
     const successScore = (profile.success_rate || 0) * 100;
 
+    // Trajectory of Effort: penalize brute force, reward measured success
+    // High interaction volume with low success = penalty
+    // Moderate/Low interactions with high success = bonus
+    let trajectoryScore = 50; // Neutral baseline
+    if (profile.total_interactions > 100) {
+      const interactionToSuccessRatio = profile.total_interactions / (profile.total_decisions + 1);
+      if (profile.success_rate < 0.3) {
+        trajectoryScore = Math.max(0, 50 - Math.log10(profile.total_interactions) * 15);
+      } else if (profile.success_rate > 0.8 && interactionToSuccessRatio < 5) {
+        // High success with few interactions
+        trajectoryScore = Math.min(100, 50 + (profile.success_rate * 50));
+      } else {
+        trajectoryScore = successScore; // Correlates to success
+      }
+    } else {
+      // Not enough volume to penalize heavily, but can reward early success
+      trajectoryScore = 50 + (profile.success_rate || 0) * 20;
+    }
+
     // Anomaly penalty (0 = no penalty, 100 = max penalty)
     const anomalyPenalty = Math.min(100, (profile.anomaly_count || 0) * 10);
     const anomalyScore = 100 - anomalyPenalty;
@@ -791,6 +817,7 @@ export class ExperienceAnchor {
     const trustScore =
       this.trustWeights.experienceVolume * volumeScore +
       this.trustWeights.successRate * successScore +
+      this.trustWeights.trajectoryEffort * trajectoryScore +
       this.trustWeights.anomalyPenalty * anomalyScore +
       this.trustWeights.sessionQuality * sessionQuality +
       this.trustWeights.recency * recencyScore;
@@ -821,6 +848,27 @@ export class ExperienceAnchor {
     return Array.from(hashArray)
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+  }
+
+  /**
+   * Fetch drand beacon for cryptographic timestamping
+   */
+  async fetchDrandBeacon() {
+    try {
+      // Use Cloudflare drand
+      const response = await fetch("https://drand.cloudflare.com/public/latest");
+      if (response.ok) {
+        return await response.json();
+      }
+      throw new Error(`Drand fetch failed with status ${response.status}`);
+    } catch (err) {
+      console.warn("[ExperienceAnchor™] Drand fetch failed, falling back to local randomness:", err.message);
+      // Fallback for isolated environments
+      return {
+        round: Math.floor(Date.now() / 1000),
+        randomness: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+      };
+    }
   }
 
   // ============================================================================

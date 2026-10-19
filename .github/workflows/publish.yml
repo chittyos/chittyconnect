@@ -55,7 +55,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check 1Password token presence
+      - name: Check chittysecrets token presence
         id: check_op
         run: |
           if [ -n "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" ]; then
@@ -66,9 +66,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Read npm token from 1Password
+      - name: Read npm token from chittysecrets
         if: steps.check_op.outputs.has_token == 'true'
-        uses: 1password/load-secrets-action@v2
+        uses: chittysecrets/load-secrets-action@v2
         with:
           export-env: true
         env:

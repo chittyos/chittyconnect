@@ -7,6 +7,8 @@
  * @module intelligence/context-consciousness
  */
 
+import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
+
 export class ContextConsciousness {
   constructor(env) {
     this.env = env;
@@ -197,7 +199,7 @@ Look for:
 
 Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "severity": "low|medium|high"}]}`;
 
-      const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const response = await this.env.AI.run(resolveAiModel(this.env), {
         messages: [
           {
             role: "system",
@@ -208,7 +210,7 @@ Respond in JSON format: {"anomalies": [{"type": "...", "description": "...", "se
         ],
       });
 
-      const result = JSON.parse(response.response);
+      const result = JSON.parse(extractAiText(response));
       return result.anomalies || [];
     } catch (error) {
       console.warn(

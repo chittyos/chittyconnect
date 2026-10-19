@@ -1,9 +1,9 @@
 /**
  * ChittyFinance API Routes
- * Banking connections and financial operations with 1Password Connect integration
+ * Banking connections and financial operations with chittysecrets Connect integration
  *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Service token retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  */
 
 import { Hono } from "hono";
