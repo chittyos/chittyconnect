@@ -10,7 +10,8 @@ import { githubMergeRoutes } from "../../src/api/routes/github-merge.js";
  * generateAppJWT() runs for real.
  */
 
-const SECRET = "internal-secret-abc123";
+// Generated per run so no secret-shaped literal lives in the repo.
+const SECRET = `test-${crypto.randomUUID()}`;
 
 let appPkPem;
 
