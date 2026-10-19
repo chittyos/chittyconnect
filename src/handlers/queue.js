@@ -291,13 +291,20 @@ async function forwardToDispatch(env, event, mcpEvent) {
       });
     }
 
-    console.log("Dispatch hand-off:", {
+    const outcome = {
       type: mcpEvent.type,
       delivery: mcpEvent.delivery,
       transport: useBinding ? "binding" : "fetch",
-      status: response?.status,
-      ok: response?.ok,
-    });
+      status: response.status,
+    };
+    if (!response.ok) {
+      // A rejected hand-off (wrong secret 401/403, dispatcher 5xx) must not
+      // log at the same level as success, or a persistent misconfiguration
+      // routes nothing while looking healthy. Still fail-safe: no throw.
+      console.error("Dispatch hand-off rejected (continuing):", outcome);
+    } else {
+      console.log("Dispatch hand-off:", outcome);
+    }
   } catch (error) {
     // Fail-safe: log and continue. The webhook is already acked.
     console.error("Dispatch hand-off failed (continuing):", {
