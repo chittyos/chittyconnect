@@ -67,7 +67,8 @@
     { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+    { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+    { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
 
   // ──────────────────────────────────────────────────────────────────
@@ -186,7 +187,8 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
       "vars": {
         "ENVIRONMENT": "staging",
@@ -327,7 +329,8 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" }
+        { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
+        { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
       ],
 
       "routes": [
