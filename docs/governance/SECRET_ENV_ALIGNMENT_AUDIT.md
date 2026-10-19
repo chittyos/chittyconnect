@@ -17,7 +17,18 @@
 
 **Resolved** (commit `06bbd78`): `wrangler.jsonc` now has explicit `env.dev`, `env.staging`, `env.production` blocks with all vars declared per-env. Uncommitted refinements add `TWILIO_PHONE_NUMBER`, staging crons, and comment cleanup.
 
-**Critical gap**: `sync-secrets.yml` catalog only syncs 7 of 33 secrets. The remaining 26 are either manually `wrangler secret put` or missing entirely.
+**Critical gap (SUPERSEDED 2026-09-05)**: this originally read that the `sync-secrets.yml`
+catalog only synced 7 of 33 secrets. That workflow has since been **deleted** — it depended on
+`chittysecrets/install-cli-action@v1` (a 404'd rename of the 1Password action) and never ran once.
+Its sibling `sync-chittysecrets-to-cf-secrets.yml` failed 46/46 runs from 2026-07-24 onward, always
+at the install step. See the retirement PR for the evidence.
+
+The underlying gap is **not** resolved and is now wider than stated: pushing secret *values* into
+the Cloudflare Secrets Store is entirely manual and entirely unmonitored. `secret-rotation.js`
+writes only to KV; `chittysecrets-rotation-audit.yml` validates catalog JSON and never contacts
+Cloudflare; `binding-drift-audit.yml` compares declared vs attached bindings and will pass green on
+a binding that points at an empty store slot. Nothing is red about this any more, which is exactly
+why it is recorded here.
 
 **Critical gap**: 4 phantom bindings (`CONVERSATIONS`, `PREDICTION_CACHE`, `DOCUMENT_STORAGE`, `SESSION_STATE`) are accessed unconditionally in production code paths and will throw if unbound.
 
@@ -257,11 +268,19 @@ Code references 5 KV namespaces (`MEMORY_KV`, `CHRONICLE_KV`, `COMMAND_KV`, `CON
 5. ✅ Add missing vars — commit `06bbd78` (OLLAMA_URL, AI_MODEL_PRIMARY, service URLs, etc.)
 6. ⏳ Resolve `CHITTYCHRONICLE_URL` → `CHITTYCHRONICLE_SERVICE_URL` in code
 
-### Phase 2: Secret Catalog (sync-secrets.yml)
-7. Add all 26 missing secrets to the sync catalog
-8. Create corresponding chittysecrets environment entries in `chitty-app-dev`, `chitty-app-stage`, `chitty-app-prod`
-9. Run `sync-secrets.yml` for each environment (dry-run first)
-10. Verify all secrets are set: `wrangler secret list --name chittyconnect`
+### Phase 2: Secret Catalog — ⛔ SUPERSEDED 2026-09-05
+
+Steps 7-10 below targeted `sync-secrets.yml`, which no longer exists. They are retained for
+provenance and are **not executable as written**. A replacement provisioning path has to be
+defined against the live ChittySecrets (`secrets.chitty.cc`) contract by the owning service
+before this phase can be rewritten.
+
+7. ~~Add all 26 missing secrets to the sync catalog~~ (the catalog file itself,
+   `.github/secret-catalog.json`, still exists and is still the right home — the GDrive triple
+   was migrated into it during the retirement so the mapping was not lost)
+8. ~~Create corresponding chittysecrets environment entries in `chitty-app-dev`, `chitty-app-stage`, `chitty-app-prod`~~
+9. ~~Run `sync-secrets.yml` for each environment (dry-run first)~~ — workflow deleted
+10. Verify all secrets are set: `wrangler secret list --name chittyconnect` (still valid)
 
 ### Phase 3: Code Cleanup
 11. Replace `CF_ACCOUNT_ID` with `CHITTYOS_ACCOUNT_ID` in code

@@ -12,10 +12,12 @@
  */
 
 import { Hono } from "hono";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
-import { verifyWebhookSignature } from "./auth/webhook.js";
 import { queueConsumer } from "./handlers/queue.js";
+import { handleGitHubWebhook } from "./handlers/github-webhook.js";
 import { api } from "./api/router.js";
 import {
   ChittyOSEcosystem,
@@ -34,6 +36,11 @@ import { McpConnectAgent } from "./mcp/agent.js";
 import { createOAuthProvider } from "./middleware/oauth-provider.js";
 import { runAllHealthChecks } from "./api/routes/connections.js";
 import { authenticate } from "./api/middleware/auth.js";
+import {
+  secretsPortalGuard,
+  secretsPortalUpsertGuard,
+  makeApiSecretsGuard,
+} from "./auth/secrets-portal-guard.js";
 import { SecretRotationService } from "./services/secret-rotation.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { withSentry } from "@sentry/cloudflare";
@@ -244,76 +251,12 @@ app.use("*", async (c, next) => {
 });
 
 // Secret rotation endpoints are mounted on the top-level app rather than the
-// authenticated API router, so protect them explicitly here.
-function parseCsvEnv(value) {
-  return String(value || "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-}
+// authenticated API router, so protect them explicitly here. The guard itself
+// lives in src/auth/secrets-portal-guard.js so tests drive the real code path
+// rather than a transcription of it.
+app.use("/secrets-portal", secretsPortalGuard);
 
-function isCloudflareAccessAllowed(c) {
-  const email = (
-    c.req.header("CF-Access-Authenticated-User-Email") || ""
-  ).toLowerCase();
-  if (!email) return false;
-
-  const allowedEmails = parseCsvEnv(c.env.SECRETS_PORTAL_ACCESS_EMAILS);
-  const allowedDomains = parseCsvEnv(c.env.SECRETS_PORTAL_ACCESS_DOMAINS);
-
-  if (allowedEmails.length > 0 && allowedEmails.includes(email)) return true;
-  if (allowedDomains.length > 0) {
-    const domain = email.split("@")[1] || "";
-    if (allowedDomains.includes(domain)) return true;
-  }
-
-  // Default-deny if allow-lists configured but no match.
-  if (allowedEmails.length > 0 || allowedDomains.length > 0) return false;
-
-  // If no allow-list configured, still require Access identity header.
-  return true;
-}
-
-app.use("/secrets-portal", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
-    return c.json(
-      {
-        ok: false,
-        error: "Cloudflare Access required for secrets portal",
-      },
-      401,
-    );
-  }
-  await next();
-});
-
-app.use("/api/v1/secrets/*", async (c, next) => {
-  const accessOnly =
-    String(c.env.SECRETS_PORTAL_ACCESS_ONLY || "").toLowerCase() === "true";
-  const isPortalUpsertPath = c.req.path === "/api/v1/secrets/upsert";
-
-  if (accessOnly && isPortalUpsertPath) {
-    if (!isCloudflareAccessAllowed(c)) {
-      return c.json(
-        {
-          ok: false,
-          error: "Cloudflare Access required for secret upsert",
-        },
-        401,
-      );
-    }
-    c.set("apiKey", {
-      type: "cloudflare-access",
-      name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
-      service: "secrets-portal",
-      status: "active",
-    });
-    await next();
-    return;
-  }
-
-  await authenticate(c, next);
-});
+app.use("/api/v1/secrets/*", makeApiSecretsGuard(authenticate));
 
 /**
  * Root health check endpoint
@@ -1678,21 +1621,7 @@ app.get("/secrets-portal", (c) => {
   return c.html(html);
 });
 
-app.use("/secrets-portal/upsert", async (c, next) => {
-  if (!isCloudflareAccessAllowed(c)) {
-    return c.json(
-      { ok: false, error: "Cloudflare Access required for secrets portal" },
-      401,
-    );
-  }
-  c.set("apiKey", {
-    type: "cloudflare-access",
-    name: c.req.header("CF-Access-Authenticated-User-Email") || "unknown",
-    service: "secrets-portal",
-    status: "active",
-  });
-  await next();
-});
+app.use("/secrets-portal/upsert", secretsPortalUpsertGuard);
 
 app.post("/secrets-portal/upsert", async (c) => secretsUpsertHandler(c));
 app.post("/api/v1/secrets/upsert", async (c) => secretsUpsertHandler(c));
@@ -1953,56 +1882,7 @@ app.all("/:service/api/*", async (c) => {
  * 3. Queue event for async processing
  * 4. Return 200 OK immediately
  */
-app.post("/integrations/github/webhook", async (c) => {
-  const delivery = c.req.header("X-GitHub-Delivery");
-  const event = c.req.header("X-GitHub-Event");
-  const signature = c.req.header("X-Hub-Signature-256");
-
-  if (!delivery || !event || !signature) {
-    return c.text("missing required headers", 400);
-  }
-
-  // Check idempotency first (fastest path for duplicate deliveries)
-  const existing = await c.env.IDEMP_KV.get(delivery);
-  if (existing) {
-    return c.text("ok", 200);
-  }
-
-  // Get raw body for signature verification
-  const body = await c.req.arrayBuffer();
-
-  // Verify webhook signature (constant-time comparison)
-  const isValid = await verifyWebhookSignature(
-    body,
-    signature,
-    c.env.GITHUB_WEBHOOK_SECRET,
-  );
-
-  if (!isValid) {
-    return c.text("unauthorized", 401);
-  }
-
-  // Parse payload
-  let payload;
-  try {
-    payload = JSON.parse(new TextDecoder().decode(body));
-  } catch (err) {
-    return c.text("invalid json payload", 400);
-  }
-
-  // Queue for async MCP dispatch
-  await c.env.EVENT_Q.send({
-    delivery,
-    event,
-    payload,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Mark as received (24h TTL)
-  await c.env.IDEMP_KV.put(delivery, "processing", { expirationTtl: 86400 });
-
-  return c.text("ok", 200);
-});
+app.post("/integrations/github/webhook", handleGitHubWebhook);
 
 /**
  * General Webhook Router
@@ -2604,19 +2484,22 @@ ${errorInfo.stack}`);
           const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL;
           if (!chronicleUrl)
             throw new Error("CHITTYCHRONICLE_SERVICE_URL not configured");
-          const response = await fetch(`${chronicleUrl}/api/sync/chittysecrets`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(env.CHITTY_CHRONICLE_TOKEN
-                ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
-                : {}),
+          const response = await fetch(
+            `${chronicleUrl}/api/sync/chittysecrets`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(env.CHITTY_CHRONICLE_TOKEN
+                  ? { Authorization: `Bearer ${env.CHITTY_CHRONICLE_TOKEN}` }
+                  : {}),
+              },
+              body: JSON.stringify({
+                source: "chittyconnect-cron",
+                timestamp: new Date().toISOString(),
+              }),
             },
-            body: JSON.stringify({
-              source: "chittyconnect-cron",
-              timestamp: new Date().toISOString(),
-            }),
-          });
+          );
           if (!response.ok) {
             console.error(
               `[Scheduled] chittysecrets sync failed: ${response.status}`,
@@ -2634,6 +2517,23 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Finance-only private RPC projection of the existing ChittyConnect broker.
+ * Signature verification remains inside ChittySecrets: no credential material
+ * is returned. The reconciliation method only enqueues validated, nonsecret
+ * provider event identifiers after a verified Finance consumer-readiness gate.
+ * It never provisions Mercury credentials or performs ledger/provider writes.
+ */
+export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
+  async verifyMercuryWebhookSignature(input) {
+    return verifyFinanceMercuryWebhook(this.env, input);
+  }
+
+  async acceptMercuryReconciliationIntent(input) {
+    return acceptFinanceMercuryReconciliationIntent(this.env, input);
+  }
+}
 
 /**
  * Export Durable Object classes

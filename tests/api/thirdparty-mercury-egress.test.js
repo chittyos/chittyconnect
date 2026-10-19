@@ -77,22 +77,22 @@ describe("resolveEgressProfile", () => {
     ).toThrow(/Unknown Mercury egress profile/);
   });
 
-  it("surfaces relay url + Access creds from env", () => {
+  it("surfaces relay config only and never reads Access credential fields from env", () => {
     const r = resolveEgressProfile(
       {
         MERCURY_EGRESS_PROFILE: "relay",
         MERCURY_EGRESS_URL: "https://egress.chitty.cc/mercury",
-        MERCURY_EGRESS_ACCESS_CLIENT_ID: "cid.access",
-        MERCURY_EGRESS_ACCESS_CLIENT_SECRET: "csecret.access",
+        MERCURY_EGRESS_ACCESS_CLIENT_ID: "x",
+        MERCURY_EGRESS_ACCESS_CLIENT_SECRET: "x",
       },
       "aribia-llc",
     );
-    expect(r).toMatchObject({
+    expect(r).toEqual({
       profile: "relay",
       relayUrl: "https://egress.chitty.cc/mercury",
-      accessClientId: "cid.access",
-      accessClientSecret: "csecret.access",
     });
+    expect(r).not.toHaveProperty("accessClientId");
+    expect(r).not.toHaveProperty("accessClientSecret");
   });
 });
 

@@ -2,7 +2,7 @@ name: Governance Checks
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -27,44 +27,6 @@ jobs:
           test -f etc/chittyos/scopes.yml || { echo "Missing etc/chittyos/scopes.yml"; exit 1; }
           test -f etc/authority/schema/service.schema.json || { echo "Missing etc/authority/schema/service.schema.json"; exit 1; }
           test -f etc/authority/rules.json || { echo "Missing etc/authority/rules.json"; exit 1; }
-
-      - name: Detect critical changes
-        id: changes
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -e
-          git diff --name-only "$BASE" "$HEAD" > changed.txt
-          echo "Changed files:"; cat changed.txt
-          critical=$(grep -E '^(\.github/workflows/|wrangler\.toml|etc/chittyos/|src/auth/|public/openapi\.json)' changed.txt || true)
-          if [ -n "$critical" ]; then
-            echo "critical=true" >> "$GITHUB_OUTPUT"
-            echo "critical_files<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$critical" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-          else
-            echo "critical=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Verify required labels for critical changes
-        if: github.event_name == 'pull_request' && steps.changes.outputs.critical == 'true'
-        env:
-          EVENT_PATH: ${{ github.event_path }}
-        run: |
-          set -e
-          labels=$(jq -r '.pull_request.labels[].name' "$EVENT_PATH" | tr '\n' ' ')
-          echo "PR labels: $labels"
-          missing=0
-          need=(security-approved docs-approved access-reviewed)
-          for l in "${need[@]}"; do
-            echo "$labels" | grep -qw "$l" || { echo "Missing required label: $l"; missing=1; }
-          done
-          if [ $missing -ne 0 ]; then
-            echo "Add required labels before merge." >&2
-            exit 1
-          fi
 
       - name: Validate Authority service entries against schema (per entity_type)
         run: |

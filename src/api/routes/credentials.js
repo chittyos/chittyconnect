@@ -399,9 +399,23 @@ credentialsRoutes.delete("/revoke", async (c) => {
       );
     }
 
-    // Revoke token via Cloudflare API
+    const accountId = c.env.CHITTYOS_ACCOUNT_ID;
+    if (!accountId) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Credential revocation not available (CHITTYOS_ACCOUNT_ID not configured)",
+        },
+        503,
+      );
+    }
+
+    // Revoke token via Cloudflare API. Account-owned tokens live under
+    // /accounts/{id}/tokens — the /user/tokens family answers 403 code
+    // 9109 for an account-owned bearer, so revocation had been failing.
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/user/tokens/${token_id}`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/${token_id}`,
       {
         method: "DELETE",
         headers: {
@@ -647,6 +661,7 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       status = 400;
       code = "INVALID_PATH";
     } else if (
+      error?.code === "CREDENTIAL_NOT_FOUND" ||
       error.message.includes("not found") ||
       error.message.includes("has no value")
     ) {
