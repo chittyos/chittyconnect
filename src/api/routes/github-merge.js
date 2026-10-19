@@ -64,6 +64,9 @@ function timingSafeEqual(a, b) {
  *   { "merged": true, "sha": "<merge-sha>", "message": "...", "status": 200 }
  *
  * Error JSON (fail-safe) on any failure with appropriate status.
+ * If the merge PUT was sent but no response arrived and GitHub does not
+ * confirm the PR merged, responds 502 MERGE_OUTCOME_UNKNOWN with
+ * "merged": null — the caller must re-verify before treating it as failed.
  */
 githubMergeRoutes.post("/merge-pr", async (c) => {
   // --- Internal auth: fail closed ---
@@ -206,19 +209,61 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
       mergeBody.sha = expected_head_sha;
     }
 
-    const ghResp = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/pulls/${pr_number}/merge`,
-      {
-        method: "PUT",
+    const fetchPr = () =>
+      fetch(`https://api.github.com/repos/${owner}/${name}/pulls/${pr_number}`, {
         headers: {
           Authorization: `token ${token}`,
           Accept: "application/vnd.github+json",
           "User-Agent": "ChittyConnect/1.0",
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify(mergeBody),
-      },
-    );
+      });
+
+    let ghResp;
+    try {
+      ghResp = await fetch(
+        `https://api.github.com/repos/${owner}/${name}/pulls/${pr_number}/merge`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `token ${token}`,
+            Accept: "application/vnd.github+json",
+            "User-Agent": "ChittyConnect/1.0",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(mergeBody),
+        },
+      );
+    } catch (putError) {
+      // The merge request was sent but no response came back: GitHub may or
+      // may not have applied it. Re-read the PR; report merged only if GitHub
+      // confirms it, otherwise say the outcome is unknown (merged: null) —
+      // never assert merged: false for a merge that may have happened.
+      const prJson = await fetchPr()
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({}));
+      if (prJson?.merged === true) {
+        return c.json(
+          {
+            merged: true,
+            sha: prJson.merge_commit_sha,
+            message: "Pull request already merged",
+            status: 200,
+          },
+          200,
+        );
+      }
+      return c.json(
+        {
+          merged: null,
+          error: {
+            code: "MERGE_OUTCOME_UNKNOWN",
+            message: `Merge request sent but no response received; re-verify PR state before retrying (${putError?.message || "network error"})`,
+          },
+          status: 502,
+        },
+        502,
+      );
+    }
 
     const ghJson = await ghResp.json().catch(() => ({}));
 
@@ -240,16 +285,7 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
     // 405 == already-merged; confirm via the PR's merged state before
     // reporting success, otherwise surface the failure.
     if (ghResp.status === 405 || ghResp.status === 409) {
-      const prResp = await fetch(
-        `https://api.github.com/repos/${owner}/${name}/pulls/${pr_number}`,
-        {
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "ChittyConnect/1.0",
-          },
-        },
-      );
+      const prResp = await fetchPr();
       const prJson = await prResp.json().catch(() => ({}));
       if (prResp.ok && prJson.merged === true) {
         // Idempotent success: already merged.

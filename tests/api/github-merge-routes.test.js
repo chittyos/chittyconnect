@@ -115,10 +115,19 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
    *  - PUT  .../merge         -> caller-supplied mergeResult
    *  - GET  .../pulls/{n}     -> caller-supplied prResult (idempotency check)
    */
-  function stubGitHub({ mergeStatus, mergeJson, prStatus, prJson, captureMerge }) {
+  function stubGitHub({
+    mergeStatus,
+    mergeJson,
+    prStatus,
+    prJson,
+    captureMerge,
+    mergeThrows,
+    installationThrows,
+  }) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       const u = String(url);
       if (u.endsWith("/installation")) {
+        if (installationThrows) throw new TypeError("network connection lost");
         return new Response(JSON.stringify({ id: 99 }), { status: 200 });
       }
       if (u.endsWith("/access_tokens")) {
@@ -131,7 +140,8 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
         );
       }
       if (u.endsWith("/merge") && init?.method === "PUT") {
-        if (captureMerge) captureMerge(JSON.parse(init.body));
+        if (captureMerge) captureMerge(JSON.parse(init.body), u);
+        if (mergeThrows) throw new TypeError("network connection lost");
         return new Response(JSON.stringify(mergeJson), {
           status: mergeStatus,
         });
@@ -145,10 +155,14 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
 
   it("merges with squash default and passes expected_head_sha as TOCTOU guard", async () => {
     let mergeBody;
+    let mergeUrl;
     stubGitHub({
       mergeStatus: 200,
       mergeJson: { merged: true, sha: "mergesha", message: "Pull Request successfully merged" },
-      captureMerge: (b) => (mergeBody = b),
+      captureMerge: (b, u) => {
+        mergeBody = b;
+        mergeUrl = u;
+      },
     });
     const app = makeApp();
     const res = await app.request(
@@ -168,6 +182,7 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
       merge_method: "squash",
       sha: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
     });
+    expect(mergeUrl).toBe("https://api.github.com/repos/CHITTYOS/x/pulls/7/merge");
   });
 
   it("returns merged:true idempotently when GitHub 405s but PR is already merged", async () => {
@@ -225,5 +240,45 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     const body = await res.json();
     expect(body.merged).toBe(false);
     expect(body.error.code).toBe("HEAD_MOVED_OR_NOT_MERGEABLE");
+  });
+
+  it("reports MERGE_OUTCOME_UNKNOWN (merged: null), not merged:false, when the merge PUT gets no response", async () => {
+    stubGitHub({ mergeThrows: true, prStatus: 200, prJson: { merged: false } });
+    const app = makeApp();
+    const res = await app.request(
+      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGE_OUTCOME_UNKNOWN");
+  });
+
+  it("reports merged:true when the merge PUT gets no response but GitHub confirms the PR merged", async () => {
+    stubGitHub({
+      mergeThrows: true,
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "already" },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ merged: true, sha: "already" });
+  });
+
+  it("keeps merged:false / MERGE_EXECUTION_ERROR when failure precedes the merge request", async () => {
+    let putSent = false;
+    stubGitHub({ installationThrows: true, captureMerge: () => (putSent = true) });
+    const app = makeApp();
+    const res = await app.request(
+      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.merged).toBe(false);
+    expect(body.error.code).toBe("MERGE_EXECUTION_ERROR");
+    expect(putSent).toBe(false);
   });
 });
