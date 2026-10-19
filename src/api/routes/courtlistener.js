@@ -21,6 +21,9 @@
  *
  * Edge behaviors:
  *   - 15-minute Cache API wrap on GETs (bypass via `X-Bypass-Cache: 1`).
+ *     The stored copy carries `Cache-Control: max-age=900` (without it the
+ *     Cache API applies its heuristic TTL — 2 hours for a 200); the header
+ *     is stripped from every client-facing response.
  *     The cache key is the absolute upstream URL — intentionally NOT
  *     tenant-scoped because CourtListener data is public Free Law Project
  *     content and identical across tenants.
@@ -46,7 +49,7 @@ const CL_API = "https://www.courtlistener.com/api/rest/v4";
 
 // Allowlist of resources reachable through this proxy. Unknown resources
 // are rejected with 400 path_not_allowed before any upstream call is made.
-const RESOURCE_ALLOWLIST = new Set([
+export const RESOURCE_ALLOWLIST = new Set([
   "search",
   "opinions",
   "clusters",
@@ -73,8 +76,19 @@ async function getCourtListenerToken(env) {
       try {
         const resolved = await v.get();
         if (resolved) return resolved;
-      } catch {
-        // fall through to broker
+      } catch (err) {
+        // Non-fatal: fall through to the broker, but leave a breadcrumb in the
+        // same shape as credential-helper's emitCredentialEvent so a throwing
+        // binding is distinguishable from an absent one.
+        console.warn(
+          `[credential] ${JSON.stringify({
+            service: "CourtListener",
+            tier: "binding",
+            binding: "COURTLISTENER_API_TOKEN",
+            outcome: "error",
+            reason: err?.message,
+          })}`,
+        );
       }
     }
   }
@@ -139,6 +153,8 @@ async function clGet(c, upstreamUrl) {
         // Clone — Cache API responses are immutable
         const cloned = new Response(hit.body, hit);
         cloned.headers.set("X-Cache", "HIT");
+        // The stored copy's TTL directive must not reach clients.
+        cloned.headers.delete("Cache-Control");
         return cloned;
       }
     } catch {
@@ -174,11 +190,11 @@ async function clGet(c, upstreamUrl) {
     return c.json({ error: "CourtListener API returned invalid JSON" }, 502);
   }
 
-  // Cache-Control is intentionally omitted on the client-facing response.
-  // The Worker Cache API stores responses internally and does not require
-  // a Cache-Control header for HIT semantics; emitting `public, max-age=…`
-  // would also instruct downstream browsers/CDNs to cache responses from
-  // an authenticated proxy, which is undesirable. Matches google.js.
+  // Cache-Control is intentionally omitted on the client-facing response:
+  // emitting `max-age=…` would instruct downstream browsers/CDNs to cache
+  // responses from an authenticated proxy. The copy handed to cache.put()
+  // DOES carry `max-age=900` — the Cache API derives the stored TTL from it,
+  // and without it a 200 is kept for the heuristic 2 hours, not 15 minutes.
   const res = new Response(JSON.stringify(json), {
     status: 200,
     headers: {
@@ -189,10 +205,13 @@ async function clGet(c, upstreamUrl) {
 
   if (cache) {
     try {
-      // Cache a clone so we can still return the original body
+      // Cache a clone (so we can still return the original body) carrying
+      // the 15-minute TTL directive.
+      const toCache = new Response(res.clone().body, res);
+      toCache.headers.set("Cache-Control", "max-age=900");
       c.executionCtx && c.executionCtx.waitUntil
-        ? c.executionCtx.waitUntil(cache.put(cacheReq, res.clone()))
-        : await cache.put(cacheReq, res.clone());
+        ? c.executionCtx.waitUntil(cache.put(cacheReq, toCache))
+        : await cache.put(cacheReq, toCache);
     } catch {
       // cache.put failure is non-fatal
     }

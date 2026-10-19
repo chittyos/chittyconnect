@@ -15,7 +15,7 @@ vi.mock("../../src/lib/credential-helper.js", () => ({
   getCredential: (...args) => mockGetCredential(...args),
 }));
 
-const { courtlistenerRoutes } = await import(
+const { courtlistenerRoutes, RESOURCE_ALLOWLIST } = await import(
   "../../src/api/routes/courtlistener.js"
 );
 
@@ -37,7 +37,7 @@ function errorResponse(status, text = "Error") {
   return new Response(text, { status });
 }
 
-async function req(method, path, env, { query = "", body, headers = {} } = {}) {
+async function req(method, path, env, { query = "", body, headers = {}, ctx } = {}) {
   const url = `http://localhost${path}${query ? `?${query}` : ""}`;
   const init = { method, headers };
   if (body !== undefined) {
@@ -45,7 +45,7 @@ async function req(method, path, env, { query = "", body, headers = {} } = {}) {
     init.headers["Content-Type"] = init.headers["Content-Type"] || "application/json";
   }
   // Pass an empty caches stub by default — Cache API isn't present in vitest
-  return courtlistenerRoutes.fetch(new Request(url, init), env);
+  return courtlistenerRoutes.fetch(new Request(url, init), env, ctx);
 }
 
 const get = (path, env, opts) => req("GET", path, env, opts);
@@ -88,6 +88,21 @@ describe("CourtListener token resolution", () => {
     await get("/search", env, { query: "q=foo" });
     const [, init] = globalThis.fetch.mock.calls[0];
     expect(init.headers.Authorization).toBe("Token secrets-store-token");
+  });
+
+  it("logs a [credential] breadcrumb when the Secrets Store binding throws, then uses the broker", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetCredential.mockResolvedValueOnce("broker-cl-token");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ count: 0, results: [] }));
+    const env = makeEnv({
+      COURTLISTENER_API_TOKEN: { get: vi.fn().mockRejectedValue(new Error("store down")) },
+    });
+    await get("/search", env, { query: "q=foo" });
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Token broker-cl-token");
+    const lines = warn.mock.calls.map((a) => String(a[0]));
+    expect(lines.some((l) => l.startsWith("[credential]") && l.includes("COURTLISTENER_API_TOKEN") && l.includes("store down"))).toBe(true);
+    warn.mockRestore();
   });
 
   it("fails closed with 503 POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE when no token available", async () => {
@@ -249,6 +264,16 @@ describe("GET /:resource allowlist", () => {
     expect(url).not.toMatch(/\/clusters\/abc\/def\//);
   });
 
+  it("allowlist is exactly the 10 spec resources (citation-lookup reachable via POST only)", async () => {
+    expect([...RESOURCE_ALLOWLIST].sort()).toEqual([
+      "audio", "citation-lookup", "clusters", "courts", "docket-entries",
+      "dockets", "opinions", "people", "recap-documents", "search",
+    ]);
+    // Allowlisted (405, not 400 path_not_allowed) but GET is refused.
+    const res = await get("/citation-lookup", env);
+    expect(res.status).toBe(405);
+  });
+
   it("allows all spec-required resources", async () => {
     const allowed = [
       "search",
@@ -407,6 +432,34 @@ describe("Cache API wrap on GETs", () => {
     expect(res.status).toBe(200);
     expect(globalThis.caches.default.match).not.toHaveBeenCalled();
     expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("stores the MISS response with a 15-minute TTL (Cache-Control: max-age=900)", async () => {
+    const cachePut = vi.fn().mockResolvedValue(undefined);
+    globalThis.caches = { default: { match: vi.fn().mockResolvedValue(undefined), put: cachePut } };
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ count: 0, results: [] }));
+    const pending = [];
+    const ctx = { waitUntil: (p) => pending.push(p), passThroughOnException() {} };
+
+    const res = await get("/search", env, { query: "q=ttl", ctx });
+    await Promise.all(pending);
+    expect(cachePut).toHaveBeenCalledOnce();
+    const [, stored] = cachePut.mock.calls[0];
+    expect(stored.headers.get("Cache-Control")).toBe("max-age=900");
+    // The client-facing response still carries no Cache-Control.
+    expect(res.headers.get("Cache-Control")).toBeNull();
+    expect((await stored.json()).count).toBe(0);
+  });
+
+  it("strips the stored Cache-Control directive from cache HIT responses", async () => {
+    const cached = new Response(JSON.stringify({ count: 1 }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "max-age=900" },
+    });
+    globalThis.caches = { default: { match: vi.fn().mockResolvedValue(cached), put: vi.fn() } };
+    globalThis.fetch = vi.fn();
+    const res = await get("/search", env, { query: "q=hit" });
+    expect(res.headers.get("X-Cache")).toBe("HIT");
+    expect(res.headers.get("Cache-Control")).toBeNull();
   });
 
   it("sets X-Cache: MISS + Cache-Control on cache miss", async () => {
