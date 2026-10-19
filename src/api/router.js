@@ -22,7 +22,6 @@ import { registryRoutes } from "./routes/registry.js";
 import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { googleRoutes } from "./routes/google.js";
-import { courtlistenerRoutes } from "./routes/courtlistener.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
 import { mcpRoutes } from "./routes/mcp.js";
@@ -74,7 +73,6 @@ api.use(
       "X-ChittyID",
       "Mcp-Session-Id",
       "Mcp-Protocol-Version",
-      "X-Bypass-Cache",
     ],
     exposeHeaders: ["Content-Length", "X-Request-ID", "Mcp-Session-Id", "ETag"],
     maxAge: 86400,
@@ -163,7 +161,6 @@ api.route("/api/services", servicesRoutes);
 api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/google", googleRoutes);
-api.route("/api/proxy/courtlistener", courtlistenerRoutes);
 
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
 // Rewrites to /api/thirdparty/mercury/* so the thirdparty handler picks them up.
