@@ -1,6 +1,6 @@
 /**
  * Hono middleware that resolves a ChittyOS service token via the credential
- * broker (1Password → env fallback) and attaches it to the context.
+ * broker (chittysecrets → env fallback) and attaches it to the context.
  *
  * Usage:
  *   import { requireServiceToken } from "../../middleware/require-service-token.js";
@@ -22,7 +22,7 @@ export function requireServiceToken(serviceName) {
         {
           error: `${serviceName} service token not configured`,
           details:
-            "Neither 1Password Connect nor environment variable available",
+            "Neither chittysecrets Connect nor environment variable available",
         },
         503,
       );

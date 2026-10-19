@@ -140,7 +140,7 @@ async function main() {
 
   if (!jwtSecret) {
     console.log('JWT_SECRET not found in environment.');
-    console.log('You can get it from ChittyAuth Cloudflare secrets or 1Password.');
+    console.log('You can get it from ChittyAuth Cloudflare secrets or chittysecrets.');
     console.log();
     jwtSecret = await prompt('Enter JWT_SECRET: ');
   }
@@ -219,7 +219,7 @@ VALUES (
   console.log('- These tokens expire in 1 year');
   console.log('- Rotate before expiration');
   console.log('- Do NOT commit tokens to git');
-  console.log('- Store JWT_SECRET securely in 1Password');
+  console.log('- Store JWT_SECRET securely in chittysecrets');
   console.log();
 
   // Option to save to file

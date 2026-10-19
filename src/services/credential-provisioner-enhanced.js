@@ -1,13 +1,13 @@
 /**
- * Enhanced Credential Provisioning Service with 1Password Integration
+ * Enhanced Credential Provisioning Service with chittysecrets Integration
  *
- * This enhanced version integrates with 1Password Connect to retrieve
+ * This enhanced version integrates with chittysecrets Connect to retrieve
  * root credentials dynamically, eliminating the need to store sensitive
  * keys in environment variables.
  *
  * Security principles:
  * - Never store root credentials in environment variables
- * - Retrieve credentials from 1Password on-demand
+ * - Retrieve credentials from chittysecrets on-demand
  * - Context-aware provisioning with ContextConsciousness™
  * - Always create scoped, time-limited tokens
  * - Log all provisioning operations
@@ -197,7 +197,7 @@ export class EnhancedCredentialProvisioner {
 
   /**
    * Provision a credential based on type and context
-   * Enhanced with 1Password retrieval and ContextConsciousness validation
+   * Enhanced with chittysecrets retrieval and ContextConsciousness validation
    *
    * @param {string} type - Credential type
    * @param {object} context - Context information
@@ -355,7 +355,12 @@ export class EnhancedCredentialProvisioner {
    * @param {string} apiKey - Cloudflare API key
    * @returns {Promise<object>} Permission groups mapped by name
    */
-  async fetchCloudflarePermissions(apiKey) {
+  async fetchCloudflarePermissions(apiKey, accountId) {
+    if (!accountId) {
+      throw new Error(
+        "fetchCloudflarePermissions requires accountId — the permission-groups catalog is account-scoped",
+      );
+    }
     try {
       // Check cache first
       if (
@@ -370,8 +375,12 @@ export class EnhancedCredentialProvisioner {
         "[EnhancedCredentialProvisioner] Fetching Cloudflare permission groups from API",
       );
 
+      // Account-owned tokens must read the account-scoped catalog. The
+      // /user/tokens/* family answers 403 code 9109 "Valid user-level
+      // authentication not found" for an account-owned bearer, which is
+      // how this call had been failing into the static fallback below.
       const response = await fetch(
-        "https://api.cloudflare.com/client/v4/user/tokens/permission_groups",
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/permission_groups`,
         {
           method: "GET",
           headers: {
@@ -435,9 +444,17 @@ export class EnhancedCredentialProvisioner {
         ) {
           key = "workersDurableObjectsWrite";
         } else if (
-          normalizedName.includes("d1Database") &&
-          normalizedName.includes("Write")
+          normalizedName.includes("Write") &&
+          (normalizedName.includes("d1Database") ||
+            normalizedName.startsWith("d1"))
         ) {
+          // Cloudflare's account catalog names group
+          // 5e2c30acd1434ea2adfb8442c3cbbbea "D1 Write", while the static
+          // fallback spells it "D1 Database Write". Matching only
+          // "d1Database" left every real catalog read with
+          // d1DatabaseWrite unresolved, so the provenance gate below
+          // permanently blocked cloudflare_d1_access. Accept both
+          // spellings; requiring "Write" keeps "D1 Read" out.
           key = "d1DatabaseWrite";
         } else if (
           normalizedName.includes("workersRoutes") &&
@@ -464,6 +481,21 @@ export class EnhancedCredentialProvisioner {
         ...this.cloudflarePermissionsFallback,
         ...permissions,
       };
+      // Provenance: which groups came from the live catalog vs. the
+      // hardcoded fallback. A token minted entirely from fallback IDs
+      // carries permissions nobody verified against this account.
+      this.permissionGroupsSource = Object.keys(permissions).length > 0
+        ? "account-catalog"
+        : "fallback";
+      // Per-key provenance. The merge below lets a hardcoded fallback ID
+      // stand in for a group the live catalog did not resolve, so a
+      // whole-object flag is too coarse to gate a mint on.
+      this.catalogResolvedKeys = new Set(Object.keys(permissions));
+      // Names only, no IDs. Without this, a catalog that reads fine but
+      // whose group names miss the normalizer's substring patterns below
+      // is indistinguishable from a missing grant — both surface as a
+      // refusal to mint, and you cannot tell which from the error.
+      this.catalogGroupNames = data.result.map((g) => g.name);
 
       // Cache the results
       this.permissionGroupsCache = mergedPermissions;
@@ -478,10 +510,17 @@ export class EnhancedCredentialProvisioner {
         "[EnhancedCredentialProvisioner] Failed to fetch permissions dynamically:",
         error,
       );
-      console.log(
-        "[EnhancedCredentialProvisioner] Using fallback permission IDs",
+      // Fail closed. This catch previously swallowed every error — the
+      // 403 included — and returned hardcoded permission-group IDs, so
+      // a token could be minted from a catalog nobody had read. Two
+      // separated reviews landed on this independently. A mint that
+      // cannot verify its own scope must not happen.
+      this.permissionGroupsSource = "unavailable";
+      this.catalogResolvedKeys = new Set();
+      this.catalogGroupNames = null;
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_CATALOG_UNAVAILABLE: cannot read the account permission-groups catalog, so a minted token's effective scope would be unverified (${error.message})`,
       );
-      return this.cloudflarePermissionsFallback;
     }
   }
 
@@ -492,16 +531,18 @@ export class EnhancedCredentialProvisioner {
    * @param {string} apiKey - Cloudflare API key
    * @returns {Promise<object>} Permission groups
    */
-  async getCloudflarePermissions(apiKey) {
+  async getCloudflarePermissions(apiKey, accountId) {
     if (!this.cloudflarePermissions) {
-      this.cloudflarePermissions =
-        await this.fetchCloudflarePermissions(apiKey);
+      this.cloudflarePermissions = await this.fetchCloudflarePermissions(
+        apiKey,
+        accountId,
+      );
     }
     return this.cloudflarePermissions;
   }
 
   /**
-   * Provision Cloudflare API token with credentials from 1Password
+   * Provision Cloudflare API token with credentials from chittysecrets
    *
    * @private
    * @param {string} type - Token type
@@ -512,7 +553,7 @@ export class EnhancedCredentialProvisioner {
   async provisionCloudflareToken(type, context, requestingService) {
     const { service, purpose, environment = "production" } = context;
 
-    // Retrieve Cloudflare credentials from 1Password
+    // Retrieve Cloudflare credentials from chittysecrets
     const makeApiKey = await this.onePassword.getInfrastructureCredential(
       "cloudflare",
       "make_api_key",
@@ -530,56 +571,100 @@ export class EnhancedCredentialProvisioner {
         environment,
       })
       .catch((err) => {
-        console.warn("[EnhancedCredentialProvisioner] 1Password account_id fetch failed:", err.message);
+        console.warn("[EnhancedCredentialProvisioner] chittysecrets account_id fetch failed:", err.message);
         return this.env.CHITTYOS_ACCOUNT_ID;
       });
 
     if (!accountId) {
-      throw new Error("Cloudflare Account ID unavailable — both 1Password and CHITTYOS_ACCOUNT_ID env var are empty");
+      throw new Error("Cloudflare Account ID unavailable — both chittysecrets and CHITTYOS_ACCOUNT_ID env var are empty");
     }
     if (!makeApiKey) {
       throw new Error(
-        "Failed to retrieve Cloudflare credentials from 1Password",
+        "Failed to retrieve Cloudflare credentials from chittysecrets",
       );
     }
 
-    // Get permission groups dynamically
-    const cloudflarePermissions =
-      await this.getCloudflarePermissions(makeApiKey);
+    // Get permission groups dynamically (account-scoped catalog)
+    const cloudflarePermissions = await this.getCloudflarePermissions(
+      makeApiKey,
+      accountId,
+    );
 
     // Get type configuration
     const typeConfig = this.credentialTypes[type];
-    const permissions = typeConfig.permissions.map(
-      (p) => cloudflarePermissions[p],
-    );
-    const missingPermissions = permissions.filter((p) => !p);
+    // Carry the config key alongside the resolved group. The provenance
+    // gate below reports on keys and the scope partition needs the
+    // group, so a bare array of groups loses half of what is needed.
+    const resolved = typeConfig.permissions.map((key) => ({
+      key,
+      group: cloudflarePermissions[key],
+    }));
+    const missingPermissions = resolved.filter((p) => !p.group);
     if (missingPermissions.length > 0) {
       throw new Error(
         `Unable to resolve all Cloudflare permission groups for ${type}`,
       );
     }
 
-    // Partition permissions by scope. Account-scoped permissions go in
-    // a single policy block keyed by the account; zone-scoped ones
-    // need a separate policy block per zone with a zone-keyed
-    // resources object — Cloudflare rejects mixing scopes in one block.
-    const accountPermissions = permissions.filter(
-      (p) => (p.scope || "account") === "account",
-    );
-    const zonePermissions = permissions.filter((p) => p.scope === "zone");
-
+    // Partition by scope BEFORE the provenance gate. Account-scoped
+    // permissions go in a single policy block keyed by the account;
+    // zone-scoped ones need a separate policy block per zone with a
+    // zone-keyed resources object — Cloudflare rejects mixing scopes in
+    // one block. The order matters: zone-scoped permissions are dropped
+    // when the caller supplies no zones, and a permission that never
+    // reaches the token must not be able to block the mint.
     const requestedZones = Array.isArray(context.zones)
       ? context.zones.filter((z) => typeof z === "string" && z.length > 0)
       : [];
 
-    if (zonePermissions.length > 0 && requestedZones.length === 0) {
+    const accountEntries = resolved.filter(
+      (p) => (p.group.scope || "account") === "account",
+    );
+    const zoneEntries = resolved.filter((p) => p.group.scope === "zone");
+
+    if (zoneEntries.length > 0 && requestedZones.length === 0) {
       // Drop zone-scoped perms when no zones provided. Caller still
       // gets the account-scoped subset. If the dropped perms are load-
       // bearing (e.g. wrangler deploy of a worker with `routes`), the
       // resulting deploy will fail with code 10000 — which is the
       // existing behavior, so no regression.
       console.warn(
-        `[EnhancedCredentialProvisioner] Dropping zone-scoped permissions ${zonePermissions.map((p) => p.name).join(", ")} from token for ${type} — caller did not provide context.zones`,
+        `[EnhancedCredentialProvisioner] Dropping zone-scoped permissions ${zoneEntries.map((p) => p.group.name).join(", ")} from token for ${type} — caller did not provide context.zones`,
+      );
+    }
+
+    const includedEntries =
+      requestedZones.length > 0 ? resolved : accountEntries;
+    const accountPermissions = accountEntries.map((p) => p.group);
+    const zonePermissions =
+      requestedZones.length > 0 ? zoneEntries.map((p) => p.group) : [];
+
+    // Every group that actually lands in the token must have come from
+    // this account's live catalog. A hardcoded fallback ID may be absent
+    // from, or mean something narrower in, the account-scoped catalog —
+    // which mints an under-scoped token successfully instead of
+    // erroring. Permissions dropped just above are excluded on purpose:
+    // they are not in the token, so their provenance is not a claim the
+    // mint is making.
+    const requiredKeys = includedEntries.map((p) => p.key);
+    const unverified = requiredKeys.filter(
+      (name) => !this.catalogResolvedKeys?.has(name),
+    );
+    if (unverified.length > 0) {
+      const verifiedKeys = requiredKeys.filter((name) =>
+        this.catalogResolvedKeys?.has(name),
+      );
+      // Two very different causes reach this throw: the catalog was
+      // never read at all, or it was read and some required keys did not
+      // come back under a name the normalizer recognizes. In the second
+      // case this error genuinely cannot tell a renamed group from an
+      // ungranted one — report the partial result instead of asserting
+      // either cause.
+      const diagnosis = this.catalogGroupNames
+        ? `catalog read OK and returned ${this.catalogGroupNames.length} groups (${this.catalogGroupNames.join(" | ") || "none"}); ${verifiedKeys.length} of ${requiredKeys.length} required keys resolved from it (${verifiedKeys.join(", ") || "none"}). The unresolved ones are either named differently than the normalizer expects or not granted on this account — this error cannot distinguish those two`
+        : `catalog was never successfully read, so this is upstream of name matching`;
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${unverified.join(", ")} resolved from the static fallback, not this account's catalog; refusing to mint a token whose scope is unverified. Diagnosis: ${diagnosis}`,
       );
     }
 
@@ -638,7 +723,7 @@ export class EnhancedCredentialProvisioner {
 
     // Create token via Cloudflare API
     const response = await fetch(
-      "https://api.cloudflare.com/client/v4/user/tokens",
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens`,
       {
         method: "POST",
         headers: {
@@ -663,6 +748,20 @@ export class EnhancedCredentialProvisioner {
 
     const token = result.result;
 
+    // Provenance reported to callers and to Chronicle is derived from the
+    // groups actually in this token, not from the catalog-wide flag. The
+    // catalog-wide flag reads "account-catalog" as soon as ONE group
+    // resolves, so it can claim a token was verified against the account
+    // while some of its IDs came from the static fallback. The gate above
+    // makes that impossible for the included set — this makes the reported
+    // value provably derived from it rather than merely consistent with it.
+    const includedScopeNames = includedEntries.map((p) => p.group.name);
+    const permissionSource =
+      includedEntries.length > 0 &&
+      includedEntries.every((p) => this.catalogResolvedKeys?.has(p.key))
+        ? "account-catalog"
+        : this.permissionGroupsSource || "unknown";
+
     // Log provision event
     await this.logProvisionEvent({
       type,
@@ -672,9 +771,10 @@ export class EnhancedCredentialProvisioner {
       tokenId: token.id,
       tokenName: token.name,
       expiresAt: token.expires_on,
-      scopes: permissions.map((p) => p.name),
+      scopes: includedScopeNames,
       environment,
       contextAnalysis: true, // Flag that context was validated
+      permissionSource,
     });
 
     return {
@@ -683,7 +783,7 @@ export class EnhancedCredentialProvisioner {
         type: "cloudflare_api_token",
         value: token.value,
         expires_at: token.expires_on,
-        scopes: permissions.map((p) => p.name),
+        scopes: includedScopeNames,
         account_id: accountId,
         token_id: token.id,
         environment,
@@ -692,7 +792,8 @@ export class EnhancedCredentialProvisioner {
       metadata: {
         provisioned_by: "ChittyConnect Enhanced",
         context_validated: true,
-        retrieved_from: "1Password",
+        retrieved_from: "chittysecrets",
+        permission_source: permissionSource,
         timestamp: new Date().toISOString(),
       },
     };
@@ -709,7 +810,7 @@ export class EnhancedCredentialProvisioner {
   async provisionServiceToken(context, requestingService) {
     const { source_service, target_service, scopes = [] } = context;
 
-    // Retrieve the target service's token from 1Password
+    // Retrieve the target service's token from chittysecrets
     const token = await this.onePassword.getServiceToken(target_service, {
       service: source_service,
       purpose: "inter-service-call",
@@ -767,7 +868,7 @@ export class EnhancedCredentialProvisioner {
     const { repository, permissions = ["contents:write", "actions:write"] } =
       context;
 
-    // Retrieve GitHub App credentials from 1Password
+    // Retrieve GitHub App credentials from chittysecrets
     const appId = await this.onePassword.getInfrastructureCredential(
       "github",
       "app_id",
@@ -789,7 +890,7 @@ export class EnhancedCredentialProvisioner {
     );
 
     if (!appId || !privateKey) {
-      throw new Error("Failed to retrieve GitHub credentials from 1Password");
+      throw new Error("Failed to retrieve GitHub credentials from chittysecrets");
     }
 
     // Generate installation access token
@@ -837,7 +938,7 @@ export class EnhancedCredentialProvisioner {
   async provisionNeonConnection(context, requestingService) {
     const { database, readonly = false } = context;
 
-    // Retrieve Neon credentials from 1Password
+    // Retrieve Neon credentials from chittysecrets
     const databaseUrl = await this.onePassword.getInfrastructureCredential(
       "neon",
       "database_url",
@@ -849,7 +950,7 @@ export class EnhancedCredentialProvisioner {
     );
 
     if (!databaseUrl) {
-      throw new Error("Failed to retrieve Neon credentials from 1Password");
+      throw new Error("Failed to retrieve Neon credentials from chittysecrets");
     }
 
     // Create a database-specific connection string if needed
@@ -892,7 +993,7 @@ export class EnhancedCredentialProvisioner {
    * Generic integration API key provisioner
    *
    * Dynamically provisions API keys for any configured integration platform.
-   * Uses credential type metadata to determine 1Password path, env var name, etc.
+   * Uses credential type metadata to determine chittysecrets path, env var name, etc.
    *
    * @private
    * @param {string} type - Credential type name (e.g., 'neon_api_key')
@@ -914,7 +1015,7 @@ export class EnhancedCredentialProvisioner {
       `[EnhancedCredentialProvisioner] Provisioning ${platform} API key via dynamic handler`,
     );
 
-    // Retrieve API key from 1Password using configured path
+    // Retrieve API key from chittysecrets using configured path
     const apiKey = await this.onePassword.get(onePasswordPath, {
       service: requestingService,
       purpose,
@@ -923,7 +1024,7 @@ export class EnhancedCredentialProvisioner {
 
     if (!apiKey) {
       throw new Error(
-        `Failed to retrieve ${platform} API key from 1Password (path: ${onePasswordPath})`,
+        `Failed to retrieve ${platform} API key from chittysecrets (path: ${onePasswordPath})`,
       );
     }
 

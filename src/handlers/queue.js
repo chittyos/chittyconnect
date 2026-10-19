@@ -22,11 +22,16 @@ const normalizeGitHubEvent = ({
   tenantId,
   payload,
 });
+import { consumeFinanceMercuryReconciliationMessage } from "../lib/mercury-webhook-verifier.js";
+import { forwardCheckSuiteCompleted } from "./check-suite-forward.js";
 import { getCachedInstallationToken } from "../auth/github.js";
 import { createComplianceCheck } from "../github/checks.js";
 import { autoLabelPullRequest } from "../github/labels.js";
 import { summarizePullRequest } from "../github/comments.js";
 import { requestReviewers } from "../github/reviewers.js";
+
+// Back off between redeliveries so an autoassist outage is not hammered.
+const RETRY_DELAY_SECONDS = 30;
 
 /**
  * Fetch changed file paths for a pull request
@@ -74,8 +79,15 @@ export async function queueConsumer(batch, env) {
     }
   });
 
-  // Ack all messages (even failures, to avoid infinite retries)
-  batch.messages.forEach((msg) => msg.ack());
+  // Retry only failures marked retryable (e.g. autoassist 5xx); ack the rest,
+  // failures included, to avoid infinite retries.
+  batch.messages.forEach((msg, i) => {
+    if (results[i].status === "rejected" && results[i].reason?.retryable) {
+      msg.retry({ delaySeconds: RETRY_DELAY_SECONDS });
+    } else {
+      msg.ack();
+    }
+  });
 }
 
 /**
@@ -84,6 +96,13 @@ export async function queueConsumer(batch, env) {
  * @param {object} env - Worker environment
  */
 async function processEvent(message, env) {
+  // Mercury reconciliation is a separate branch of this *existing* queue.
+  // Do not invoke any GitHub installation lookup or GitHub-only IDEMP_KV
+  // failure/success markers for a provider banking event.
+  if (message?.kind === "mercury.reconciliation") {
+    return consumeFinanceMercuryReconciliationMessage(env, message);
+  }
+
   const { delivery, event, payload } = message;
 
   try {
@@ -130,7 +149,7 @@ async function processEvent(message, env) {
     await forwardToDispatch(env, event, mcpEvent);
 
     // Execute v1 automations based on event type
-    await runAutomations(env, event, payload, installationId);
+    await runAutomations(env, event, payload, installationId, delivery);
 
     // Mark as completed
     await env.IDEMP_KV.put(delivery, "completed", { expirationTtl: 86400 });
@@ -149,8 +168,16 @@ async function processEvent(message, env) {
       stack: error.stack,
     });
 
-    // Mark as failed
-    await env.IDEMP_KV.put(delivery, "failed", { expirationTtl: 86400 });
+    // Mark as failed. A KV outage must not swallow the original error: the
+    // caller still needs it to decide retry vs ack.
+    try {
+      await env.IDEMP_KV.put(delivery, "failed", { expirationTtl: 86400 });
+    } catch (kvError) {
+      console.error("Failed to record failed status:", {
+        delivery,
+        error: kvError.message,
+      });
+    }
     throw error;
   }
 }
@@ -305,8 +332,15 @@ async function lookupTenant(env, installationId) {
  * @param {string} event
  * @param {object} payload
  * @param {number} installationId
+ * @param {string} delivery - GitHub delivery id
  */
-async function runAutomations(env, event, payload, installationId) {
+async function runAutomations(
+  env,
+  event,
+  payload,
+  installationId,
+  delivery,
+) {
   const token = await getCachedInstallationToken(env, installationId);
 
   switch (event) {
@@ -369,6 +403,23 @@ async function runAutomations(env, event, payload, installationId) {
             changedFiles,
           }),
         ]);
+      }
+      break;
+
+    case "check_suite":
+      // Wake autoassist loops waiting on this head (pr_land_v1)
+      {
+        const out = await forwardCheckSuiteCompleted(
+          env,
+          payload,
+          token,
+          delivery,
+        );
+        if (out.retry) {
+          const error = new Error("autoassist loop event delivery failed");
+          error.retryable = true;
+          throw error;
+        }
       }
       break;
 

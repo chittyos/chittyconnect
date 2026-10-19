@@ -2,7 +2,7 @@
  * Credential Provisioning Routes
  *
  * Secure credential management for ChittyOS ecosystem services.
- * Provisions appropriately scoped credentials from 1Password and
+ * Provisions appropriately scoped credentials from chittysecrets and
  * creates time-limited tokens for service-to-service operations.
  *
  * All routes require ChittyAuth authentication.
@@ -399,9 +399,23 @@ credentialsRoutes.delete("/revoke", async (c) => {
       );
     }
 
-    // Revoke token via Cloudflare API
+    const accountId = c.env.CHITTYOS_ACCOUNT_ID;
+    if (!accountId) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Credential revocation not available (CHITTYOS_ACCOUNT_ID not configured)",
+        },
+        503,
+      );
+    }
+
+    // Revoke token via Cloudflare API. Account-owned tokens live under
+    // /accounts/{id}/tokens — the /user/tokens family answers 403 code
+    // 9109 for an account-owned bearer, so revocation had been failing.
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/user/tokens/${token_id}`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/${token_id}`,
       {
         method: "DELETE",
         headers: {
@@ -501,7 +515,7 @@ credentialsRoutes.get("/twilio", async (c) => {
           error: {
             code: "CREDENTIALS_NOT_FOUND",
             message:
-              "Twilio credentials not configured in 1Password or environment",
+              "Twilio credentials not configured in chittysecrets or environment",
           },
         },
         503,
@@ -548,11 +562,11 @@ credentialsRoutes.get("/twilio", async (c) => {
 /**
  * GET /api/credentials/:vault/:item/:field
  *
- * Retrieve a specific credential from 1Password by path.
+ * Retrieve a specific credential from chittysecrets by path.
  * This is the secure way for ChittyOS services to access credentials.
  *
  * Path parameters:
- * - vault: The 1Password vault (infrastructure, services, integrations)
+ * - vault: The chittysecrets vault (infrastructure, services, integrations)
  * - item: The item name in the vault
  * - field: The field name within the item
  *
@@ -604,7 +618,7 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
     // Build credential path
     const credentialPath = `${vault}/${item}/${field}`;
 
-    // Fetch via broker (ChittyServ or 1Password depending on config)
+    // Fetch via broker (ChittyServ or chittysecrets depending on config)
     const value = await broker.get(credentialPath);
 
     // Log credential access (no sensitive data)
@@ -647,6 +661,7 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       status = 400;
       code = "INVALID_PATH";
     } else if (
+      error?.code === "CREDENTIAL_NOT_FOUND" ||
       error.message.includes("not found") ||
       error.message.includes("has no value")
     ) {
@@ -673,8 +688,8 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
 /**
  * PUT /api/credentials/:vault/:item/:field
  *
- * Store or update a credential in 1Password via ChittyConnect.
- * Source of truth: value -> 1Password -> cached in KV.
+ * Store or update a credential in chittysecrets via ChittyConnect.
+ * Source of truth: value -> chittysecrets -> cached in KV.
  *
  * Body: { "value": "secret", "notes": "optional context" }
  */
@@ -699,14 +714,14 @@ credentialsRoutes.put("/:vault/:item/:field", async (c) => {
 
     console.log(`[Credentials] Storing ${vault}/${item}/${field} (by ${requestingService})`);
 
-    const { OnePasswordConnectClient } = await import("../../services/1password-connect-client.js");
+    const { OnePasswordConnectClient } = await import("../../services/chittysecrets-connect-client.js");
     const client = new OnePasswordConnectClient(c.env);
     const result = await client.put(`${vault}/${item}/${field}`, body.value, { notes: body.notes });
 
     try {
       await c.env.DB.prepare(
         `INSERT INTO credential_provisions (type, service, purpose, requesting_service, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
-      ).bind("1password_store", item, field, requestingService).run();
+      ).bind("chittysecrets_store", item, field, requestingService).run();
     } catch (dbErr) {
       console.warn("[Credentials] Audit log failed:", dbErr.message);
     }

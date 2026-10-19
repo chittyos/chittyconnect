@@ -1,9 +1,9 @@
 /**
  * ChittyDisputes API Routes
- * Dispute/issue management for ChittyOS with 1Password Connect integration
+ * Dispute/issue management for ChittyOS with chittysecrets Connect integration
  *
- * Service token retrieved dynamically from 1Password with automatic
- * failover to environment variables if 1Password Connect is unavailable.
+ * Service token retrieved dynamically from chittysecrets with automatic
+ * failover to environment variables if chittysecrets Connect is unavailable.
  *
  * ChittyDisputes Registry: REG-WQ6W5M
  * Canonical URI: chittycanon://core/services/disputes

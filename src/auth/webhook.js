@@ -2,23 +2,26 @@
  * Webhook signature verification
  *
  * Implements constant-time HMAC-SHA256 verification
- * for GitHub webhook signatures (X-Hub-Signature-256)
+ * for GitHub, Linear, Stripe, and generic webhook signatures
  */
 
 /**
- * Verify GitHub webhook signature
+ * Verify webhook signature (supports 'sha256=<hex>' and raw '<hex>')
  * @param {ArrayBuffer} body - Raw request body
- * @param {string} signature - X-Hub-Signature-256 header value
+ * @param {string} signature - Header signature value
  * @param {string} secret - Webhook secret
  * @returns {Promise<boolean>}
  */
 export async function verifyWebhookSignature(body, signature, secret) {
-  if (!signature || !signature.startsWith("sha256=")) {
+  if (!signature) {
     return false;
   }
 
   const expected = await signHmac(secret, body);
-  return constantTimeEqual(signature, expected);
+  const expectedHex = expected.replace(/^sha256=/, "");
+  const sigHex = signature.replace(/^sha256=/, "");
+
+  return constantTimeEqual(sigHex.toLowerCase(), expectedHex.toLowerCase());
 }
 
 /**

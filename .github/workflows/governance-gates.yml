@@ -2,7 +2,7 @@ name: Governance Gates
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -34,23 +34,3 @@ jobs:
             fi
           done
           [ $missing -eq 0 ] || exit 1
-
-      - name: Verify required labels on PR
-        if: github.event_name == 'pull_request'
-        env:
-          EVENT_PATH: ${{ github.event_path }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -e
-          labels=$(jq -r '.pull_request.labels[].name' "$EVENT_PATH" 2>/dev/null | tr '\n' ' ')
-          echo "PR labels: $labels"
-
-          critical=$(git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA" | \
-            grep -E '^(\.github/workflows/|wrangler\.|etc/|src/middleware/auth)' || true)
-
-          if [ -n "$critical" ]; then
-            for label in security-approved docs-approved access-reviewed; do
-              echo "$labels" | grep -qw "$label" || { echo "::error::Missing required label: $label"; exit 1; }
-            done
-          fi

@@ -6,7 +6,7 @@ I have provided complete, production-ready implementations for your top 3 Cloudf
 
 1. **Durable Objects for ContextConsciousness™ Session State**
 2. **R2 Document Storage with D1 Metadata Indexing**
-3. **Cloudflare Tunnel + 1Password Connect Integration**
+3. **Cloudflare Tunnel + chittysecrets Connect Integration**
 
 All implementations include:
 - ✅ Complete, working code (2,587 lines total)
@@ -32,9 +32,9 @@ All implementations include:
 - `/src/api/routes/documents.js` - 448 lines
 - `/migrations/003_document_storage.sql` - 161 lines
 
-**1Password Connect (466 lines)**:
-- `/infrastructure/1password-connect/docker-compose.yml` - 275 lines
-- `/infrastructure/1password-connect/nginx/nginx.conf` - 191 lines
+**chittysecrets Connect (466 lines)**:
+- `/infrastructure/chittysecrets-connect/docker-compose.yml` - 275 lines
+- `/infrastructure/chittysecrets-connect/nginx/nginx.conf` - 191 lines
 
 **API Routes (341 lines)**:
 - `/src/api/routes/sessions.js` - 341 lines
@@ -119,13 +119,13 @@ All implementations include:
 - `src/api/routes/documents.js` (448 lines)
 - `migrations/003_document_storage.sql` (161 lines)
 
-### 3. Cloudflare Tunnel + 1Password Connect
+### 3. Cloudflare Tunnel + chittysecrets Connect
 
-**Architecture**: Zero-trust access via Cloudflare Tunnel to 1Password Connect server
+**Architecture**: Zero-trust access via Cloudflare Tunnel to chittysecrets Connect server
 
 **Docker Services**:
-1. `connect-api` - 1Password Connect API server
-2. `connect-sync` - 1Password Connect sync server
+1. `connect-api` - chittysecrets Connect API server
+2. `connect-sync` - chittysecrets Connect sync server
 3. `cloudflare-tunnel` - Tunnel client
 4. `nginx-proxy` - Reverse proxy with caching and rate limiting
 5. `connect-exporter` - Prometheus metrics
@@ -141,14 +141,14 @@ All implementations include:
 
 **Cost**: **$13/month**
 - Cloudflare Tunnel: $0 (free)
-- 1Password Connect: $8/month
+- chittysecrets Connect: $8/month
 - Hetzner VPS (2GB): $5/month
 
 **Performance**: Dynamic credential retrieval with audit logging
 
 **Files**:
-- `infrastructure/1password-connect/docker-compose.yml` (275 lines)
-- `infrastructure/1password-connect/nginx/nginx.conf` (191 lines)
+- `infrastructure/chittysecrets-connect/docker-compose.yml` (275 lines)
+- `infrastructure/chittysecrets-connect/nginx/nginx.conf` (191 lines)
 
 ---
 
@@ -178,10 +178,10 @@ All implementations include:
 - Migrate existing documents
 - Monitor usage
 
-### Phase 3: 1Password Connect (Weeks 5-6)
+### Phase 3: chittysecrets Connect (Weeks 5-6)
 
 **Week 5: Infrastructure**
-- Provision 1Password credentials
+- Provision chittysecrets credentials
 - Set up Docker stack
 - Configure Cloudflare Tunnel
 
@@ -202,7 +202,7 @@ All implementations include:
 - Cloudflare Tunnel: $0
 
 **Third-Party Services**:
-- 1Password Connect: $8
+- chittysecrets Connect: $8
 - Hetzner VPS (2GB): $5
 
 **Total: $13/month** ($156/year)
@@ -231,7 +231,7 @@ All implementations include:
 - **Download latency**: -70% (300ms → 90ms, edge caching)
 - **Cost**: -100% ($50/month → $0/month)
 
-### Credential Access (1Password vs static)
+### Credential Access (chittysecrets vs static)
 - **Security**: +90% (dynamic vs static)
 - **Audit**: None → Complete
 - **Rotation**: Manual → Automated
@@ -265,7 +265,7 @@ All implementations include:
 - [ ] Access audit logging
 - [ ] Lifecycle policies
 
-### 1Password Connect (11 items)
+### chittysecrets Connect (11 items)
 - [ ] Connect API health
 - [ ] Connect Sync health
 - [ ] Tunnel connection
@@ -319,9 +319,9 @@ Each implementation includes detailed rollback procedures with zero data loss.
 **Q: How to handle large file uploads (multipart)?**
 **A**: Implemented multipart flow: create upload session, upload 5MB chunks, complete upload. Supports files up to 5TB.
 
-### 1Password Connect
+### chittysecrets Connect
 
-**Q: Should 1Password Connect run on same server?**
+**Q: Should chittysecrets Connect run on same server?**
 **A**: Separate server recommended for security isolation, but can share with Docker network isolation if cost-constrained.
 
 **Q: How to handle tunnel certificate rotation?**
@@ -395,7 +395,7 @@ Each implementation includes detailed rollback procedures with zero data loss.
 - Run migrations
 - Deploy and test
 
-**Weeks 5-6**: 1Password Connect
+**Weeks 5-6**: chittysecrets Connect
 - Set up infrastructure
 - Deploy Docker stack
 - Integrate with ChittyConnect

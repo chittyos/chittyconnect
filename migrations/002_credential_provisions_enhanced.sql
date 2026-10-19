@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_credential_access_patterns_service
 CREATE INDEX IF NOT EXISTS idx_credential_access_patterns_path
   ON credential_access_patterns(credential_path);
 
--- Create table for 1Password cache metadata
+-- Create table for chittysecrets cache metadata
 CREATE TABLE IF NOT EXISTS onepassword_cache_metadata (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
 

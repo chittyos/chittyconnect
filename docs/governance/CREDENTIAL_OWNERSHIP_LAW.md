@@ -13,7 +13,7 @@ Define non-overlapping ownership for credential issuance, certificate issuance, 
 3. `chittymint` consumes credentials for mint operations and does not own cross-service credential lifecycle.
 4. `chittycert` issues and revokes certificates; `chittytrust` evaluates trust and proxies certificate operations.
 5. `chittyid` governs identity format and issuance pipeline policy.
-6. Runtime secret delivery is Cloudflare Secrets Store; source-of-truth remains 1Password.
+6. Runtime secret delivery is Cloudflare Secrets Store; source-of-truth remains chittysecrets.
 
 ## Required Naming in ChittyConnect
 

@@ -3,7 +3,7 @@
 **Date**: 2026-03-25
 **Auditor**: Claude Opus 4.6
 **Scope**: All env vars, secrets, bindings, and credential patterns in chittyconnect
-**Standard**: 3-env model (dev/stage/prod), 1Password cold → Cloudflare Secrets hot, KV only for short-lived rotated values
+**Standard**: 3-env model (dev/stage/prod), chittysecrets cold → Cloudflare Secrets hot, KV only for short-lived rotated values
 
 **NOTE**: `registry.chitty.cc` (ChittyRegistry — catalog/discovery) and `register.chitty.cc` (ChittyRegister — compliance/registration) are **two distinct live services**. ChittyConnect correctly uses `registry.chitty.cc` for service discovery.
 
@@ -35,7 +35,7 @@ ChittyConnect now has **3 self-contained env blocks** (dev/staging/production) i
 
 ### Documented (22)
 
-| Name | 1Password Source? | Per-Env? | Action |
+| Name | chittysecrets Source? | Per-Env? | Action |
 |------|-------------------|----------|--------|
 | `GITHUB_APP_ID` | Should be | YES | 1P cold → CF hot per env |
 | `GITHUB_APP_PK` | Should be | YES | 1P cold → CF hot per env |
@@ -131,7 +131,7 @@ ChittyConnect now has **3 self-contained env blocks** (dev/staging/production) i
 - [x] Comprehensive secrets manifest in comments
 
 ### Phase 3: Secret Provisioning — OPS TASK (no code changes)
-- [ ] Document all secrets in 1Password with canonical item names
+- [ ] Document all secrets in chittysecrets with canonical item names
 - [ ] Run `wrangler secret put <NAME> --env production` for each (not bare)
 - [ ] Run `wrangler secret put <NAME> --env staging` for each
 - [ ] Dev secrets via `.dev.vars` file (gitignored)

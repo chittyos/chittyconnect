@@ -3,12 +3,13 @@
  * Routes incoming webhooks to appropriate agents after logging to ChittyChronicle
  */
 
-import { verifyWebhookSignature as verifyGitHubSignature } from "../auth/webhook.js";
+import { verifyWebhookSignature } from "../auth/webhook.js";
 
 // Agent webhook endpoints
 const AGENTS = {
   notion: "https://notion-ops.chitty.cc/webhook",
   github: null, // Handled internally
+  linear: "https://tasks.chitty.cc/api/v1/webhook/linear",
   cloudflare: "https://cloudflare-ops.chitty.cc/webhook",
   stripe: "https://stripe-ops.chitty.cc/webhook",
   // Add more agents as needed
@@ -16,7 +17,7 @@ const AGENTS = {
 
 /**
  * Route webhook to appropriate agent
- * @param {string} source - Webhook source (notion, cloudflare, etc.)
+ * @param {string} source - Webhook source (notion, linear, cloudflare, etc.)
  * @param {object} payload - Webhook payload
  * @param {object} env - Environment variables
  * @returns {object} Routing result
@@ -27,10 +28,42 @@ export async function routeWebhook(source, payload, env) {
   // Log to ChittyChronicle
   await logWebhook(env, {
     source,
-    event_type: payload.type || payload.event || "unknown",
+    event_type: payload.type || payload.event || payload.action || "unknown",
     timestamp,
     payload_size: JSON.stringify(payload).length,
   });
+
+  // Forward review-triggering events to chittyclaw Oracle node for separated adversarial review
+  const isReviewTrigger =
+    (source === "linear" &&
+      (payload.action === "update" || payload.action === "create") &&
+      payload.data?.state?.name?.toLowerCase().includes("review")) ||
+    (source === "github" &&
+      (payload.action === "review_requested" || payload.action === "opened"));
+
+  if (isReviewTrigger) {
+    const clawUrl =
+      env.CHITTYCLAW_REVIEW_URL ||
+      "http://100.69.69.7:18789/hooks/adversarial-review";
+    fetch(clawUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Webhook-Source": source,
+        "X-Webhook-Timestamp": timestamp,
+        "X-Forwarded-By": "chittyconnect",
+        ...(env.INTERNAL_WEBHOOK_SECRET && {
+          "X-Webhook-Secret": env.INTERNAL_WEBHOOK_SECRET,
+        }),
+      },
+      body: JSON.stringify(payload),
+    }).catch((e) =>
+      console.warn(
+        `[webhook-router] Forward to chittyclaw review failed:`,
+        e.message,
+      ),
+    );
+  }
 
   // Get agent endpoint
   const agentUrl = AGENTS[source];
@@ -99,9 +132,12 @@ async function logWebhook(env, event) {
     }
 
     // Also log to Chronicle API if available
-    const chronicleUrl = env.CHITTYCHRONICLE_SERVICE_URL || env.CHITTYCHRONICLE_URL;
+    const chronicleUrl =
+      env.CHITTYCHRONICLE_SERVICE_URL || env.CHITTYCHRONICLE_URL;
     if (env.CHITTYCHRONICLE_URL && !env.CHITTYCHRONICLE_SERVICE_URL) {
-      console.warn('[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL');
+      console.warn(
+        "[webhook-router] CHITTYCHRONICLE_URL is deprecated, use CHITTYCHRONICLE_SERVICE_URL",
+      );
     }
     if (chronicleUrl) {
       const resp = await fetch(`${chronicleUrl}/events`, {
@@ -118,7 +154,9 @@ async function logWebhook(env, event) {
       });
       if (!resp.ok) {
         const body = await resp.text().catch(() => "");
-        console.warn(`[webhook-router] Chronicle log returned ${resp.status}: ${body}`);
+        console.warn(
+          `[webhook-router] Chronicle log returned ${resp.status}: ${body}`,
+        );
       }
     }
   } catch (e) {
@@ -140,6 +178,7 @@ export function getConfiguredAgents() {
  */
 export async function validateWebhookSignature(source, request, env) {
   const signature =
+    request.headers.get("X-Linear-Signature") ||
     request.headers.get("X-Webhook-Signature") ||
     request.headers.get("X-Hub-Signature-256") ||
     request.headers.get("X-Signature");
@@ -159,9 +198,9 @@ export async function validateWebhookSignature(source, request, env) {
     };
   }
 
-  // Use HMAC-SHA256 verification (same algorithm used by GitHub, Stripe, etc.)
+  // Use HMAC-SHA256 verification
   const body = await request.clone().arrayBuffer();
-  const isValid = await verifyGitHubSignature(body, signature, secret);
+  const isValid = await verifyWebhookSignature(body, signature, secret);
 
   return {
     valid: isValid,

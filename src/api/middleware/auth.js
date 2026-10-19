@@ -29,6 +29,21 @@ function isJwtAuthOwnedPath(c) {
   }
 }
 
+// Policy bundle is non-secret governance — must be reachable by any channel
+// (Desktop, Mobile, web, ChatGPT, …) on session start so policy travels with
+// the entity, not the channel. See policy-bundle/v1/.
+function isPolicyBundlePath(c) {
+  try {
+    const url = new URL(c.req.raw?.url || "http://localhost");
+    return (
+      c.req.method === "GET" &&
+      /^\/api\/v1\/identity\/[^/]+\/policy-bundle(\/check)?$/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function cfAccessHeadersMatch(c) {
   const incomingId = c.req.header("CF-Access-Client-Id") || "";
   const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
@@ -59,6 +74,12 @@ export async function authenticate(c, next) {
   const bearerToken = bearerMatch ? bearerMatch[1].trim() : null;
 
   const apiKey = c.req.header("X-ChittyOS-API-Key") || bearerToken;
+
+  if (isPolicyBundlePath(c)) {
+    c.set("apiKey", { type: "public", service: "policy-bundle", status: "active" });
+    await next();
+    return;
+  }
 
   if (!apiKey) {
     if (isContextSyncPath(c) && cfAccessHeadersMatch(c)) {

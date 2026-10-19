@@ -87,7 +87,7 @@ The audit step at the end will confirm bindings are restored or fail loud.
 
 Secrets are managed via the canonical flow:
 
-1. **1Password** (cold source of truth) →
+1. **chittysecrets** (cold source of truth) →
 2. **Cloudflare Secrets Store** (`default_secrets_store`, account-shared) →
 3. Bound into the worker via `secrets_store_secrets` in `wrangler.jsonc`.
 

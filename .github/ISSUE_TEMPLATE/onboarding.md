@@ -16,7 +16,7 @@ labels: [onboarding]
 
 ## Secrets & Access
 - Required env/secrets:
-- Provisioning flow (ChittyAuth / 1Password):
+- Provisioning flow (ChittyAuth / chittysecrets):
 - Rotation plan:
 
 ## Docs

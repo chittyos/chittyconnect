@@ -10,6 +10,7 @@
 
 import { Hono } from "hono";
 import { dispatchToolCall } from "../../mcp/tool-dispatcher.js";
+import { resolveAiModel, extractAiText } from "../../lib/ai-model.js";
 import { MCP_TOOLS } from "../../mcp/tool-registry.js";
 
 const mcpRoutes = new Hono();
@@ -463,8 +464,7 @@ mcpRoutes.post("/sampling/sample", async (c) => {
       aiMessages.push({ role: msg.role, content: textContent });
     }
 
-    const model =
-      modelPreferences?.hints?.[0]?.name || "@cf/meta/llama-3.1-8b-instruct";
+    const model = modelPreferences?.hints?.[0]?.name || resolveAiModel(c.env);
 
     const aiResult = await c.env.AI.run(model, {
       messages: aiMessages,
@@ -474,7 +474,7 @@ mcpRoutes.post("/sampling/sample", async (c) => {
     return c.json({
       model,
       role: "assistant",
-      content: { type: "text", text: aiResult.response },
+      content: { type: "text", text: extractAiText(aiResult) },
       stopReason: "endTurn",
     });
   } catch (error) {

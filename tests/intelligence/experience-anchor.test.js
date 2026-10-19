@@ -43,11 +43,12 @@ describe('ExperienceAnchor', () => {
   describe('Constructor', () => {
     it('should initialize with correct trust weights', () => {
       expect(anchor.trustWeights).toEqual({
-        experienceVolume: 0.20,
-        successRate: 0.30,
-        anomalyPenalty: 0.20,
-        sessionQuality: 0.15,
-        recency: 0.15
+        experienceVolume: 0.15,
+        successRate: 0.25,
+        anomalyPenalty: 0.15,
+        sessionQuality: 0.10,
+        recency: 0.15,
+        trajectoryEffort: 0.20
       });
     });
 

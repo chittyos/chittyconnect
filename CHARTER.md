@@ -155,7 +155,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 > requests signing / ledger emission as needed.
 >
 > **Signing is mandatory and non-overridable** for commit and tag operations.
-> Signing keys are resolved from 1Password and never leave the broker; only
+> Signing keys are resolved from chittysecrets and never leave the broker; only
 > the produced signature is returned.
 
 #### `[SPEC] POST /api/v1/capabilities/mint`
@@ -334,7 +334,7 @@ tokens with `POLICY_BLOCKED_CONFIRMATION_INVALID`.
 #### `[SPEC] POST /api/v1/signing/sign-commit`
 
 Produce a detached signature over the canonical commit payload supplied by the
-resource server. The signing key (resolved from 1Password by the broker) never
+resource server. The signing key (resolved from chittysecrets by the broker) never
 leaves ChittyConnect. The resource server MUST present a valid capability
 token whose scope satisfies `operation="commit"` and matches `repo_path` and `ref`. A capability minted for `tag` or `push` is rejected.
 
@@ -357,7 +357,7 @@ token whose scope satisfies `operation="commit"` and matches `repo_path` and `re
     "additionalProperties": false,
     "properties": {
       "signature":       { "type": "string", "description": "ASCII-armored signature block." },
-      "key_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 hex digest of the signing public key. Non-sensitive identifier; safe to log. The actual signing key reference (op:// path / 1Password UUID) is broker-internal and MUST NEVER appear in any response, ledger payload, or error envelope." }
+      "key_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 hex digest of the signing public key. Non-sensitive identifier; safe to log. The actual signing key reference (op:// path / chittysecrets UUID) is broker-internal and MUST NEVER appear in any response, ledger payload, or error envelope." }
     }
   }
 }
@@ -462,7 +462,7 @@ client. Domain tag is fixed to `git` on this surface.
 
 #### Policy gates (binding)
 
-1. **Signing key** — resolved from 1Password via `op://` reference per the sensitive-intent contract. Never read from env vars, disk, or chat. Signing is mandatory for commit and tag flows; broker exposes no disable knob. If 1Password is unreachable → fail closed.
+1. **Signing key** — resolved from chittysecrets via `op://` reference per the sensitive-intent contract. Never read from env vars, disk, or chat. Signing is mandatory for commit and tag flows; broker exposes no disable knob. If chittysecrets is unreachable → fail closed.
 2. **Remote allowlist** — per-tenant config returned by `policy.resolve`. Default: `github.com/CHITTYOS/*`, `github.com/CHITTYFOUNDATION/*`. Resource server MUST refuse push to non-allowlisted remotes → `POLICY_BLOCKED_REMOTE_NOT_ALLOWED`.
 3. **Repo allowlist** — per-tenant. Resource server MUST refuse repos outside the list → `POLICY_BLOCKED_REPO_NOT_ALLOWED`.
 4. **Force-push guard** — minting a capability with `force_class != "none"` requires a fresh `confirmation_token` from `/api/v1/capabilities/confirm`. Confirmation tokens are single-use and bound to (caller, tenant, repo, force_class). Force-push to any branch in `protected_branches` is hard-denied regardless of token → `POLICY_BLOCKED_FORCE_TO_PROTECTED`. `force` and `force_with_lease` are distinct values of `force_class` — they cannot be combined.
@@ -471,7 +471,7 @@ client. Domain tag is fixed to `git` on this surface.
 7. **Credential redaction (binding contract)** — any string the resource server places in a `ledger.emit` payload or any error envelope it returns to the client MUST pass through a redaction filter:
    - URL userinfo: strip the `userinfo` component from any URL, rewriting `https?://[^@]+@` to scheme-only `https?://`. Applies to remote URLs and any URL in error messages.
    - CLI output: omit raw `git` stdout/stderr from error envelopes, or pass it through the userinfo strip plus a token-pattern scrub (`gh[pousr]_[A-Za-z0-9_]{20,}`, `github_pat_[A-Za-z0-9_]{20,}`, `xox[bpars]-[A-Za-z0-9-]{10,}`, 40+ char hex/base64 secrets adjacent to `://` or `Authorization:`). When in doubt, omit.
-   - Capability tokens, confirmation tokens, signatures, and signing-key references (op:// paths, 1Password UUIDs, secret names, env-var names referencing keys) MUST NEVER appear in any broker response (including `/signing/*` outputs), ledger payloads, or error envelopes. Only the non-sensitive `key_fingerprint` (sha256 of the public key) is exported.
+   - Capability tokens, confirmation tokens, signatures, and signing-key references (op:// paths, chittysecrets UUIDs, secret names, env-var names referencing keys) MUST NEVER appear in any broker response (including `/signing/*` outputs), ledger payloads, or error envelopes. Only the non-sensitive `key_fingerprint` (sha256 of the public key) is exported.
 
 #### Error codes
 
@@ -483,7 +483,7 @@ client. Domain tag is fixed to `git` on this surface.
 | `POLICY_BLOCKED_CONFIRMATION_REQUIRED` | `force_class != "none"` without valid `confirmation_token` |
 | `POLICY_BLOCKED_CONFIRMATION_INVALID` | Confirmation token expired, reused, or scope-mismatched |
 | `POLICY_BLOCKED_CAPABILITY_INVALID` | Capability token expired, malformed, or scope-mismatched |
-| `POLICY_BLOCKED_SIGNING_KEY_UNAVAILABLE` | 1Password unreachable or key missing |
+| `POLICY_BLOCKED_SIGNING_KEY_UNAVAILABLE` | chittysecrets unreachable or key missing |
 | `POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE` | Broker unreachable; resource server fails closed |
 | `GIT_DIRTY_INDEX` | Commit attempted with no staged changes and no `paths` (raised at resource server) |
 | `GIT_REMOTE_REJECTED` | Underlying push returned non-zero. Embedded output MUST be redacted per the contract above; when in doubt the resource server omits raw output and returns only the exit code. |
