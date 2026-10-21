@@ -161,9 +161,11 @@ describe("buildEgressRequest — relay", () => {
       options: { method: "GET" },
     });
     const env = JSON.parse(req.body);
+    // The relay re-hosts onto the api.mercury.com ORIGIN, so the /api/v1 version
+    // prefix travels in the envelope (bare "/accounts" was a live 404, 2026-10-21).
     expect(env).toEqual({
       method: "GET",
-      path: "/account/xyz/transactions",
+      path: "/api/v1/account/xyz/transactions",
       body: null,
     });
     // path is relative — relay re-hosts onto api.mercury.com; no caller host leaks
@@ -215,7 +217,7 @@ describe("buildEgressRequest — relay", () => {
       path: "/account/abc/transactions?limit=10",
     });
     expect(JSON.parse(req.body).path).toBe(
-      "/account/abc/transactions?limit=10",
+      "/api/v1/account/abc/transactions?limit=10",
     );
   });
 
