@@ -69,3 +69,9 @@ wrangler d1 execute chittyconnect-production --env=production --file=migrations/
 3. Use `IF NOT EXISTS` clauses for idempotency
 4. Test locally before applying to staging/production
 5. Update this README with the migration description
+
+
+- **020_git_repo_provider_native.sql** - Provider-native Git repository policy reconciliation
+  - Reuses `git_repo_allowlist.path_prefix`; no new table/schema
+  - Replaces seeded VM filesystem prefixes with canonical GitHub `owner/` prefixes
+  - Idempotent insert/delete migration for chittyconnect#209/#211
