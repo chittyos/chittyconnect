@@ -103,3 +103,52 @@ describe("secret-scan workflow trust model", () => {
     expect(allRunScript).toContain("--redact");
   });
 });
+
+describe("secret-scan workflow supply chain and scan coverage", () => {
+  it("pins both actions to immutable commit SHAs, not mutable tags", () => {
+    // CWE-829. A retagged or compromised upstream v4 would change the code
+    // executed here without this repository changing at all.
+    const used = steps.filter((s) => s.uses).map((s) => s.uses);
+    expect(used.length).toBeGreaterThan(0);
+    for (const u of used) {
+      expect(u).toMatch(/@[0-9a-f]{40}$/);
+    }
+  });
+
+  it("scans every commit a newly created ref carried, not just its tip", () => {
+    // `-1 $PUSH_AFTER` scanned the tip alone. gitleaks git mode reads ADDED
+    // lines out of `git log -p`, so a secret added in the first pushed commit
+    // and removed in a later one of the same push was invisible. --no-walk over
+    // the exact pushed ids scans each without walking pre-existing history,
+    // which is what simply dropping -1 would have done.
+    const range = steps.find((s) => s.id === "range");
+    expect(range.env.PUSHED_IDS).toContain("github.event.commits");
+    expect(range.run).toContain("--no-walk");
+    // The executable assignments must not reintroduce a tip-only scan. Comments
+    // may quote it while explaining why it was wrong, so test the real lines.
+    const assignments = range.run
+      .split("\n")
+      .filter((l) => l.includes("log_opts=") && !l.trim().startsWith("#"));
+    expect(assignments.length).toBe(3);
+    for (const line of assignments) {
+      expect(line).not.toMatch(/-1 \$PUSH_AFTER/);
+    }
+  });
+
+  it("refuses to report success when a push carried no commit ids", () => {
+    // An empty id list would make --no-walk scan nothing and exit 0 — a gate
+    // reporting clean because it looked at zero commits.
+    const range = steps.find((s) => s.id === "range");
+    expect(range.run).toMatch(/refusing to scan nothing/);
+    expect(range.run).toMatch(/exit 1/);
+  });
+
+  it("does not delete the separators between pushed commit ids", () => {
+    // `tr -d '[:space:]'` welds "a b c" into "abc" — one unparseable token.
+    const range = steps.find((s) => s.id === "range");
+    const execLines = range.run
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("#"));
+    expect(execLines.join("\n")).not.toContain("tr -d '[:space:]'");
+  });
+});
