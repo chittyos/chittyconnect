@@ -223,6 +223,20 @@ async function loadState(env, owner, repo, prNumber) {
 }
 
 async function runTrace(env, token, owner, repo, pr, projectionFiles) {
+  if (projectionFiles.length === 0) {
+    return {
+      gate_state: "PENDING_CANON_RESOLUTION",
+      structural: [],
+      canon_snapshot_sha256: null,
+      diagnostics: {
+        unresolved_queries: [
+          { token: "projection_contract", reason: "NO_GOVERNED_PROJECTION_FOUND" },
+        ],
+        conflicts: [],
+      },
+    };
+  }
+
   const structural = projectionFiles.map((file) => ({
     path: file.path,
     result: validateCanonBindingsAndTemporalBounds(
