@@ -57,7 +57,7 @@ function timingSafeEqual(a, b) {
  *     "repo": "owner/name",
  *     "pr_number": 123,
  *     "merge_method": "squash" | "merge" | "rebase"   (default "squash")
- *     "expected_head_sha": "<sha>"                     (optional TOCTOU guard)
+ *     "expected_head_sha": "<sha>"                     (required TOCTOU guard, 7-40 hex)
  *   }
  *
  * Response 200:
@@ -229,6 +229,35 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
         },
       });
 
+    // A re-read showing merged:true is ours only if GitHub merged the head the
+    // caller approved (expected_head_sha may be an abbreviated 7-40 hex prefix).
+    // Merged at any other head (or no head reported) must not be blessed.
+    const respondMergedState = (prJson) => {
+      const observedHead = String(prJson?.head?.sha ?? "");
+      if (!observedHead.toLowerCase().startsWith(expected_head_sha.toLowerCase())) {
+        return c.json(
+          {
+            merged: null,
+            error: {
+              code: "MERGED_AT_UNEXPECTED_HEAD",
+              message: `Pull request was merged at a head other than expected_head_sha ${expected_head_sha}${observedHead ? ` (observed head ${observedHead})` : ""}`,
+            },
+            status: 409,
+          },
+          409,
+        );
+      }
+      return c.json(
+        {
+          merged: true,
+          sha: prJson.merge_commit_sha,
+          message: "Pull request already merged",
+          status: 200,
+        },
+        200,
+      );
+    };
+
     // The merge request reached GitHub but its outcome is unknown (no
     // response, or a 5xx). Re-read the PR; report merged only if GitHub
     // confirms it, otherwise say the outcome is unknown (merged: null) —
@@ -238,17 +267,7 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
       const prJson = await fetchPr()
         .then((r) => (r.ok ? r.json() : {}))
         .catch(() => ({}));
-      if (prJson?.merged === true) {
-        return c.json(
-          {
-            merged: true,
-            sha: prJson.merge_commit_sha,
-            message: "Pull request already merged",
-            status: 200,
-          },
-          200,
-        );
-      }
+      if (prJson?.merged === true) return respondMergedState(prJson);
       return c.json(
         {
           merged: null,
@@ -304,18 +323,7 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
     if (ghResp.status === 405 || ghResp.status === 409) {
       const prResp = await fetchPr();
       const prJson = await prResp.json().catch(() => ({}));
-      if (prResp.ok && prJson.merged === true) {
-        // Idempotent success: already merged.
-        return c.json(
-          {
-            merged: true,
-            sha: prJson.merge_commit_sha,
-            message: "Pull request already merged",
-            status: 200,
-          },
-          200,
-        );
-      }
+      if (prResp.ok && prJson.merged === true) return respondMergedState(prJson);
 
       return c.json(
         {

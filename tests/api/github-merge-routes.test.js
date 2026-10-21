@@ -206,7 +206,7 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
       mergeStatus: 405,
       mergeJson: { message: "Pull Request is not mergeable" },
       prStatus: 200,
-      prJson: { merged: true, merge_commit_sha: "already" },
+      prJson: { merged: true, merge_commit_sha: "already", head: { sha: HEAD_SHA } },
     });
     const app = makeApp();
     const res = await app.request(
@@ -283,7 +283,7 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     stubGitHub({
       mergeThrows: true,
       prStatus: 200,
-      prJson: { merged: true, merge_commit_sha: "already" },
+      prJson: { merged: true, merge_commit_sha: "already", head: { sha: HEAD_SHA } },
     });
     const app = makeApp();
     const res = await app.request(
@@ -358,7 +358,7 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
       mergeStatus: 503,
       mergeJson: { message: "Service Unavailable" },
       prStatus: 200,
-      prJson: { merged: true, merge_commit_sha: "landed" },
+      prJson: { merged: true, merge_commit_sha: "landed", head: { sha: HEAD_SHA } },
     });
     const app = makeApp();
     const res = await app.request(
@@ -407,5 +407,88 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     const body = await res.json();
     expect(body.merged).toBe(false);
     expect(body.error.code).toBe("GITHUB_MERGE_FAILED");
+  });
+
+  it("refuses to bless a 405 when the PR was merged at a different head", async () => {
+    stubGitHub({
+      mergeStatus: 405,
+      mergeJson: { message: "Pull Request is not mergeable" },
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "other", head: { sha: "fedcba9876543210fedcba9876543210fedcba98" } },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGED_AT_UNEXPECTED_HEAD");
+    expect(body.error.message).toContain("expected_head_sha");
+    expect(body.error.message).toContain("fedcba9876543210fedcba9876543210fedcba98");
+    expect(body.sha).toBeUndefined();
+  });
+
+  it("refuses to bless a 5xx re-read showing a merge at a different head", async () => {
+    stubGitHub({
+      mergeStatus: 503,
+      mergeJson: { message: "Service Unavailable" },
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "other", head: { sha: "fedcba9876543210fedcba9876543210fedcba98" } },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGED_AT_UNEXPECTED_HEAD");
+    expect(body.error.message).toContain("expected_head_sha");
+  });
+
+  it("refuses to bless a network-error re-read that merged with no head field", async () => {
+    stubGitHub({
+      mergeThrows: true,
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "nohead" },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGED_AT_UNEXPECTED_HEAD");
+    expect(body.error.message).toContain("expected_head_sha");
+  });
+
+  it("accepts an abbreviated 7-char expected_head_sha that prefixes the merged head", async () => {
+    stubGitHub({
+      mergeStatus: 405,
+      mergeJson: { message: "Pull Request is not mergeable" },
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "short", head: { sha: HEAD_SHA } },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA.slice(0, 7).toUpperCase() },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ merged: true, sha: "short" });
   });
 });
