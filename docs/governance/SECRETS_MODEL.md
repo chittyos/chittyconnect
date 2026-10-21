@@ -190,7 +190,7 @@ Provision when features are promoted to production.
 |----------|----------|--------|
 | Service tokens | 90 days | chittysecrets rotate + `wrangler secret put --env` |
 | OAuth tokens | Per-provider expiry | SecretRotationService (cron every 50 min) |
-| Neon passwords | 7 days | SecretRotationService |
+| Neon passwords | **Suspended** | ChittySecrets custody gate required; old `SecretRotationService` reset/KV path disabled pending a verified provider→broker→consumer handoff |
 | Emergency | Immediate on incident | `EMERGENCY_REVOKE_TOKEN` + audit all provisions |
 
 ## Provisioning Workflow

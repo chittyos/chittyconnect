@@ -661,6 +661,7 @@ credentialsRoutes.get("/:vault/:item/:field", async (c) => {
       status = 400;
       code = "INVALID_PATH";
     } else if (
+      error?.code === "CREDENTIAL_NOT_FOUND" ||
       error.message.includes("not found") ||
       error.message.includes("has no value")
     ) {

@@ -26,11 +26,12 @@ const ROTATION_REGISTRY = {
     rotator: 'rotateGDriveToken',
   },
   neon_password: {
-    description: 'Neon database role password',
-    kvKey: 'secret:neon:connection_uri',
+    description: 'Neon database role password (rotation suspended: broker custody required)',
+    kvKey: 'secret:neon:connection_uri', // deprecated historical key: DO NOT read or write
     metaKey: 'secret:neon:meta',
-    refreshIntervalMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    refreshIntervalMs: 7 * 24 * 60 * 60 * 1000, // retained for status compatibility
     rotator: 'rotateNeonPassword',
+    enabled: false, // no verified atomic ChittySecrets delivery/consumer cutover
   },
 };
 
@@ -60,6 +61,13 @@ export class SecretRotationService {
 
     for (const [name, config] of Object.entries(ROTATION_REGISTRY)) {
       try {
+        // Never schedule a password reset unless ChittySecrets can atomically
+        // publish the replacement and all consumers prove they can read it.
+        // A new KV connection URI alone is NOT an authorized rotation path.
+        if (config.enabled === false) {
+          report.skipped.push({ name, reason: 'policy_blocked_credential_custody' });
+          continue;
+        }
         const meta = await this.getMeta(config.metaKey);
         const lastRotatedAt = meta?.lastRotatedAt ? new Date(meta.lastRotatedAt).getTime() : 0;
         const age = Date.now() - lastRotatedAt;
@@ -103,6 +111,11 @@ export class SecretRotationService {
     if (!config) {
       return { ok: false, error: `Unknown secret: ${name}` };
     }
+    if (config.enabled === false) {
+      // Forced requests are NOT an authorization to bypass the secret custody
+      // boundary. Do not mutate metadata, KV, or the external provider.
+      return { ok: false, error: 'POLICY_BLOCKED_CHITTYSECRETS_ROTATION_NOT_BROKERED' };
+    }
 
     try {
       const result = await this[config.rotator]();
@@ -133,13 +146,15 @@ export class SecretRotationService {
 
       secrets[name] = {
         description: config.description,
+        enabled: config.enabled !== false,
+        blockedReason: config.enabled === false ? 'POLICY_BLOCKED_CHITTYSECRETS_ROTATION_NOT_BROKERED' : null,
         lastRotatedAt: meta?.lastRotatedAt || null,
         lastResult: meta?.lastResult || 'never',
         lastError: meta?.lastError || null,
         ageMs: lastRotatedAt ? age : null,
         intervalMs: config.refreshIntervalMs,
-        isDue: age >= config.refreshIntervalMs,
-        fresh: lastRotatedAt > 0 && age < config.refreshIntervalMs,
+        isDue: config.enabled !== false && age >= config.refreshIntervalMs,
+        fresh: config.enabled !== false && lastRotatedAt > 0 && age < config.refreshIntervalMs,
       };
     }
 
@@ -319,64 +334,18 @@ export class SecretRotationService {
   }
 
   /**
-   * Rotate Neon database password via the Neon API.
+   * Neon password rotation is explicitly suspended.
    *
-   * Flow:
-   *   1. Read Neon API key from Worker env
-   *   2. Generate new password via Neon roles API
-   *   3. Update CREDENTIAL_CACHE with new connection string
+   * The retired implementation reset the live Neon password and published the
+   * only replacement connection string to eventually consistent CREDENTIAL_CACHE
+   * KV, bypassing ChittySecrets and breaking brokered consumer consistency.
    *
-   * @returns {Promise<{ok: boolean, error?: string}>}
+   * Restart only through the existing ChittyConnect/ChittySecrets custody
+   * authority after a verified atomic handoff, consumer-read receipt,
+   * rollback plan, and separate production approval. No new store or token.
    */
   async rotateNeonPassword() {
-    const neonApiKey = this.env.NEON_API_KEY;
-    const neonProjectId = this.env.NEON_PROJECT_ID;
-    const neonBranchId = this.env.NEON_BRANCH_ID;
-    const neonHost = this.env.NEON_HOST;
-    const neonRoleName = this.env.NEON_ROLE_NAME || 'chittyos_app';
-    const neonDb = this.env.NEON_DATABASE || 'neondb';
-
-    if (!neonApiKey || !neonProjectId || !neonBranchId) {
-      return { ok: false, error: 'Missing Neon API credentials (NEON_API_KEY, NEON_PROJECT_ID, NEON_BRANCH_ID are all required)' };
-    }
-
-    if (!neonHost) {
-      return { ok: false, error: 'NEON_HOST is required — without it the rotated password cannot be cached as a connection URI' };
-    }
-
-    // Step 1: Reset the role password via Neon API
-    const resetUrl = `https://console.neon.tech/api/v2/projects/${neonProjectId}/branches/${neonBranchId}/roles/${neonRoleName}/reset_password`;
-    const resetResponse = await fetch(resetUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${neonApiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!resetResponse.ok) {
-      const body = await resetResponse.text();
-      return { ok: false, error: `Neon password reset failed: ${resetResponse.status} — ${body}` };
-    }
-
-    const resetData = await resetResponse.json();
-    const newPassword = resetData.role?.password;
-
-    if (!newPassword) {
-      return { ok: false, error: 'Neon API did not return a new password' };
-    }
-
-    // Step 2: Build new connection URI and cache it
-    const newUri = `postgresql://${neonRoleName}:${encodeURIComponent(newPassword)}@${neonHost}/${neonDb}?sslmode=require`;
-    await this.kv.put('secret:neon:connection_uri', newUri, {
-      expirationTtl: 8 * 24 * 60 * 60, // 8 days (rotation is weekly)
-    });
-
-    // Step 3: Cache the rotated-at timestamp (password itself is NOT cached in KV)
-    await this.kv.put('secret:neon:password_rotated_at', new Date().toISOString());
-
-    console.log(`[SecretRotation] Neon password rotated for role ${neonRoleName}`);
-    return { ok: true };
+    return { ok: false, error: 'POLICY_BLOCKED_CHITTYSECRETS_ROTATION_NOT_BROKERED' };
   }
 
   // --- KV Helpers ---
@@ -415,11 +384,10 @@ export async function getCachedGDriveToken(kv, opts = {}) {
 }
 
 /**
- * Get the cached Neon connection URI (rotated password).
- *
- * @param {KVNamespace} kv - CREDENTIAL_CACHE binding
- * @returns {Promise<string|null>}
+ * Retained legacy method signature; never returns a database credential
+ * directly from KV. Existing callers must route through ChittyConnect's
+ * authorized credential broker. No in-repository callers remain.
  */
-export async function getCachedNeonUri(kv) {
-  return kv.get('secret:neon:connection_uri');
+export async function getCachedNeonUri(_kv) {
+  return null;
 }

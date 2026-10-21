@@ -53,6 +53,8 @@ const PATH_TO_ENV = {
   "services/chittyauth/auth_salt": "AUTH_SALT",
   "services/chittyconnect/service_token": "CHITTYCONNECT_SERVICE_TOKEN",
   "services/chittyconnect/mcp_token": "CHITTYCONNECT_TOKEN",
+  "services/chittymcp/service_token": "CH1TTY_MCP_TOKEN",
+  "services/chittymcp/token": "CH1TTY_MCP_TOKEN",
   "services/chittyid/service_token": "CHITTY_ID_TOKEN",
   "services/chittyid/token": "CHITTY_ID_TOKEN",
   "services/chittyregistry/token": "CHITTY_REGISTRY_TOKEN",
@@ -147,6 +149,12 @@ export class CloudflareSecretsClient {
     // secret put` name both exist, a transient store failure on candidate #1
     // took down a lookup that had a working candidate #2.
     const attempts = [];
+    // A candidate that THREW is not the same as a candidate that was absent.
+    // If any binding actually failed (store 503, entry deleted, binding
+    // revoked), this lookup cannot honestly report "no such credential" —
+    // that would fire the operator-provisioning channel for what is really a
+    // retry condition. See chittyos/chittyconnect#303 review round 2.
+    let anyCandidateFailed = false;
     for (const name of candidates) {
       try {
         const value = await resolveBinding(this.env[name]);
@@ -155,15 +163,26 @@ export class CloudflareSecretsClient {
       } catch (err) {
         // Record and continue. The binding NAME is safe to log; the value is
         // never touched.
+        anyCandidateFailed = true;
         attempts.push(`${name}: ${err?.message ?? "resolution failed"}`);
       }
     }
 
-    throw new Error(
+    // Tagged so callers can tell "this credential does not exist anywhere" from
+    // "the broker could not be reached". Those map to different canonical error
+    // classes, and only the former may request operator provisioning
+    // (MISSING_CREDENTIAL_MATERIAL). Matching on the message string would be
+    // brittle; the code is the contract. See chittyos/chittyconnect#303.
+    const notFound = new Error(
       `Credential not found in env bindings: ${credentialPath}. ` +
         `Tried ${attempts.length ? attempts.join("; ") : "no candidates"}. ` +
         `Add mapping to PATH_TO_ENV or ensure secret is deployed via sync-secrets.sh`,
     );
+    // Only claim NOT_FOUND when every candidate was cleanly absent.
+    if (!anyCandidateFailed) {
+      notFound.code = "CREDENTIAL_NOT_FOUND";
+    }
+    throw notFound;
   }
 
   /**

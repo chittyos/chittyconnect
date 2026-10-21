@@ -1,0 +1,77 @@
+diff -u -r a/MIGRATE-TUNNEL.md b/MIGRATE-TUNNEL.md
+--- a/MIGRATE-TUNNEL.md	2026-10-03 07:54:36.127945242 +0000
++++ b/MIGRATE-TUNNEL.md	2026-10-03 07:54:36.145741955 +0000
+@@ -15,7 +15,6 @@
+ 
+ | Subdomain | Domain | Service |
+ |-----------|--------|---------|
+-| 1password-connect | chitty.cc | http://localhost:8080 |
+ | ollama | chitty.cc | http://localhost:11434 |
+ | mercury-proxy | chitty.cc | http://localhost:8790 |
+ 
+@@ -70,9 +69,8 @@
+ 
+ ```bash
+ curl -s https://mercury-proxy.chitty.cc/health | jq .
+-# Should return: {"status":"ok","service":"mercury-proxy","ip":"164.152.111.166"}
++# Should return: {"status":"ok","service":"mercury-proxy","ip":"<real egress IP, currently 147.224.157.155>"}
+ 
+-curl -s https://1password-connect.chitty.cc/heartbeat
+ curl -s https://ollama.chitty.cc/api/version
+ ```
+ 
+diff -u -r a/server.js b/server.js
+--- a/server.js	2026-10-03 07:54:36.127904641 +0000
++++ b/server.js	2026-10-03 07:54:36.145568314 +0000
+@@ -14,11 +14,29 @@
+ const PROXY_TOKEN = process.env.PROXY_TOKEN || '';
+ const MERCURY_BASE = 'https://api.mercury.com';
+ 
++// Real egress IP: fetched once at startup from ipify and cached. /health
++// reports this value (or null + egressError) instead of a hard-coded address.
++let egressIp = null;
++let egressError = null;
++async function detectEgressIp() {
++  try {
++    const r = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
++    if (!r.ok) throw new Error(`ipify HTTP ${r.status}`);
++    const { ip } = await r.json();
++    if (typeof ip !== 'string' || !ip) throw new Error('ipify returned no ip');
++    egressIp = ip;
++    egressError = null;
++  } catch (err) {
++    egressError = err.message;
++  }
++  console.log(`[mercury-proxy] Egress IP: ${egressIp ?? `unknown (${egressError})`}`);
++}
++
+ /**
+  * Mercury API Write Proxy
+  *
+- * Runs on chittyserv-dev (164.152.111.166) behind a Cloudflare Tunnel.
+- * Mercury allowlists this IP for write operations (transfers, payments).
++ * Runs on chittyserv-vm behind a Cloudflare Tunnel.
++ * Mercury allowlists its egress IP (see /health) for write operations (transfers, payments).
+  *
+  * Request format:
+  *   POST /proxy
+@@ -35,7 +53,7 @@
+   // Health check
+   if (req.method === 'GET' && req.url === '/health') {
+     res.writeHead(200, { 'Content-Type': 'application/json' });
+-    res.end(JSON.stringify({ status: 'ok', service: 'mercury-proxy', ip: '164.152.111.166' }));
++    res.end(JSON.stringify({ status: 'ok', service: 'mercury-proxy', ip: egressIp, ...(egressError ? { ipError: egressError } : {}) }));
+     return;
+   }
+ 
+@@ -127,8 +145,9 @@
+   }
+ });
+ 
++await detectEgressIp();
++
+ server.listen(PORT, '127.0.0.1', () => {
+   console.log(`[mercury-proxy] Listening on 127.0.0.1:${PORT}`);
+-  console.log(`[mercury-proxy] Egress IP: 164.152.111.166`);
+   console.log(`[mercury-proxy] Auth: ${PROXY_TOKEN ? 'enabled' : 'DISABLED (set PROXY_TOKEN)'}`);
+ });

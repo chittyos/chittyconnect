@@ -15,7 +15,7 @@
     "deploy:audit": "./scripts/audit-bindings.sh production",
     "policy-bundle:build": "node scripts/build-policy-bundle.mjs",
     "kv:seed": "./scripts/seed-kv.sh",
-    "test": "vitest",
+    "test": "vitest run && vitest run --config vitest.workers.config.js",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.{js,ts,json}'",
@@ -25,7 +25,8 @@
     "mcp:setup": "./scripts/setup-mcp.sh",
     "mcp:setup:desktop": "./scripts/setup-mcp.sh desktop",
     "mcp:setup:code": "./scripts/setup-mcp.sh code",
-    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js"
+    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js",
+    "test:workers": "vitest run --config vitest.workers.config.js"
   },
   "keywords": [
     "chittyos",
@@ -50,20 +51,21 @@
   "dependencies": {
     "@cloudflare/actors": "^0.0.1-beta.6",
     "@cloudflare/workers-oauth-provider": "^0.2.2",
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@neondatabase/serverless": "^0.10.4",
-    "@sentry/cloudflare": "^10.58.0",
-    "agents": "^0.19.0",
+    "@sentry/cloudflare": "^10.73.0",
+    "agents": "^0.29.0",
     "hono": "^4.12.18",
     "jose": "^5.2.0",
     "node-fetch": "^3.3.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@cloudflare/workers-types": "^5.20260926.1",
     "eslint": "^8.56.0",
     "husky": "^9.0.0",
-    "lint-staged": "^15.2.0",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.2.0",
     "vitest": "^4.0.8",
     "wrangler": "^4.76.0"
@@ -75,6 +77,9 @@
     ]
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.22.1"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   }
 }
