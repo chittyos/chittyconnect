@@ -53,6 +53,11 @@ mint_cap() {
   curl -sS -f -X POST "${CONNECT_URL}/api/v1/capabilities/mint"     "${auth[@]}" -d "${body}"
 }
 
+introspect() {
+  local token="$1"
+  curl -sS -X POST "${CONNECT_URL}/api/v1/capabilities/introspect"     "${auth[@]}" -d "$(jq -cn --arg token "${token}" '{token:$token}')"
+}
+
 echo "== Gate 4: mint single-operation opaque capabilities =="
 READ_MINT="$(mint_cap read "" "")"
 COMMIT_MINT="$(mint_cap commit "${TARGET_REF}" "")"
@@ -67,8 +72,25 @@ for cap in "${READ_CAP}" "${COMMIT_CAP}" "${PUSH_CAP}"; do
   [[ "${cap}" != ghs_* && "${cap}" != ghp_* ]] || fail "provider credential leaked from mint"
 done
 
-echo "== Gate 5: real read -> signed commit -> push -> PR -> ledger receipts =="
-TX_RES="$(curl -sS -f -X POST "${ENTITY_URL}/v1/execute-pr-transaction"   -H "Content-Type: application/json"   -d "$(jq -cn     --arg repo "${DISPOSABLE_REPO}"     --arg branch "${TEST_BRANCH}"     --arg read_cap "${READ_CAP}"     --arg commit_cap "${COMMIT_CAP}"     --arg push_cap "${PUSH_CAP}" '
+jq -e --arg repo "${DISPOSABLE_REPO}" '
+  .active == true and .scope.operation == "read" and .scope.repo_path == $repo
+' <<<"$(introspect "${READ_CAP}")" >/dev/null || fail "read capability scope is incorrect"
+
+jq -e --arg repo "${DISPOSABLE_REPO}" --arg ref "${TARGET_REF}" '
+  .active == true and .scope.operation == "commit" and .scope.repo_path == $repo and .scope.ref == $ref
+' <<<"$(introspect "${COMMIT_CAP}")" >/dev/null || fail "commit capability scope is incorrect"
+
+jq -e --arg repo "${DISPOSABLE_REPO}" --arg ref "${TARGET_REF}" --arg remote "${REMOTE_URL}" '
+  .active == true and .scope.operation == "push" and .scope.repo_path == $repo and .scope.ref == $ref and .scope.remote == $remote
+' <<<"$(introspect "${PUSH_CAP}")" >/dev/null || fail "push capability scope is incorrect"
+
+transaction_payload() {
+  local repo="$1"
+  local read_cap="$2"
+  local commit_cap="$3"
+  local push_cap="$4"
+
+  jq -cn     --arg repo "${repo}"     --arg branch "${TEST_BRANCH}"     --arg read_cap "${read_cap}"     --arg commit_cap "${commit_cap}"     --arg push_cap "${push_cap}" '
       {
         repo: $repo,
         target_branch: $branch,
@@ -85,7 +107,11 @@ TX_RES="$(curl -sS -f -X POST "${ENTITY_URL}/v1/execute-pr-transaction"   -H "Co
         pr_title: "[Verify #228] Brokered GitOps Transaction",
         pr_body: "Automated verification of the #209 <-> #789 closure gate."
       }
-    ')")"
+    '
+}
+
+echo "== Gate 5: real read -> signed commit -> push -> PR -> ledger receipts =="
+TX_RES="$(curl -sS -f -X POST "${ENTITY_URL}/v1/execute-pr-transaction"   -H "Content-Type: application/json"   -d "$(transaction_payload "${DISPOSABLE_REPO}" "${READ_CAP}" "${COMMIT_CAP}" "${PUSH_CAP}")")"
 
 jq -e '
   .commit_sha != null and
@@ -97,38 +123,44 @@ jq -e '
 
 echo "== Gate 6: fail-closed scope and credential rejection =="
 
-assert_inactive() {
-  local token="$1"
-  local expected_op="$2"
-  local repo="$3"
-  local ref="$4"
-  local payload response_file code
+assert_entity_denied() {
+  local repo="$1"
+  local read_cap="$2"
+  local commit_cap="$3"
+  local push_cap="$4"
+  local out code
 
-  payload="$(jq -cn     --arg token "${token}"     --arg op "${expected_op}"     --arg repo "${repo}"     --arg ref "${ref}" '
-      {token: $token, expected: {operation: $op, repo_path: $repo}}
-      + (if $ref != "" then {expected: (.expected + {ref: $ref})} else {} end)
-    ')"
-  response_file="$(mktemp)"
-  code="$(curl -sS -o "${response_file}" -w "%{http_code}" -X POST     "${CONNECT_URL}/api/v1/capabilities/introspect" "${auth[@]}" -d "${payload}")"
-  jq -e '.active == false' "${response_file}" >/dev/null     || { cat "${response_file}" >&2; rm -f "${response_file}"; fail "expected inactive capability (HTTP ${code})"; }
-  rm -f "${response_file}"
+  out="$(mktemp)"
+  code="$(curl -sS -o "${out}" -w "%{http_code}" -X POST     "${ENTITY_URL}/v1/execute-pr-transaction"     -H "Content-Type: application/json"     -d "$(transaction_payload "${repo}" "${read_cap}" "${commit_cap}" "${push_cap}")")"
+
+  if [[ "${code}" =~ ^2 ]]; then
+    cat "${out}" >&2
+    rm -f "${out}"
+    fail "resource server accepted a scope-mismatched capability set"
+  fi
+  rm -f "${out}"
 }
 
-assert_inactive "${READ_CAP}" tag "${DISPOSABLE_REPO}" ""
-assert_inactive "${READ_CAP}" read "chittyos/unauthorized-repo" ""
-assert_inactive "ghs_SimulatedRawGitHubToken12345" read "${DISPOSABLE_REPO}" ""
+# A read capability must not authorize commit.
+assert_entity_denied "${DISPOSABLE_REPO}" "${READ_CAP}" "${READ_CAP}" "${PUSH_CAP}"
+
+# A capability set for one repo must not authorize a different repo.
+assert_entity_denied "chittyos/unauthorized-repo" "${READ_CAP}" "${COMMIT_CAP}" "${PUSH_CAP}"
+
+# Raw provider credentials must never be valid ChittyConnect capabilities.
+jq -e '.active == false' <<<"$(introspect "ghs_SimulatedRawGitHubToken12345")" >/dev/null   || fail "raw GitHub credential was accepted as a ChittyConnect capability"
 
 if [[ "${VERIFY_EXPIRY}" == "1" ]]; then
   expires_at="$(jq -r '.expires_at' <<<"${READ_MINT}")"
   now_epoch="$(date +%s)"
-  exp_epoch="$(date -d "${expires_at}" +%s 2>/dev/null || python3 - <<'PY' "${expires_at}"
+  exp_epoch="$(date -d "${expires_at}" +%s 2>/dev/null || python3 - "${expires_at}" <<'PY'
 import datetime, sys
-print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))
+print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))
 PY
 )"
   sleep_for="$(( exp_epoch - now_epoch + 2 ))"
   if (( sleep_for > 0 )); then sleep "${sleep_for}"; fi
-  assert_inactive "${READ_CAP}" read "${DISPOSABLE_REPO}" ""
+  jq -e '.active == false' <<<"$(introspect "${READ_CAP}")" >/dev/null     || fail "expired capability remained active"
 else
   fail "VERIFY_EXPIRY must remain enabled for a complete #228 closure proof"
 fi
