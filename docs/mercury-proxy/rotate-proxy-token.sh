@@ -52,14 +52,24 @@ done
 
 # --- 1. Generate and publish to Secrets Store (permission probe) ----------
 T="$(openssl rand -hex 32)"
-RESP="$(jq -n --arg n "$SECRET_NAME" --arg v "$T" --arg c "mercury-proxy bearer (PROXY_TOKEN on chittyserv-vm), rotated $(date -u +%F)" \
-  '[{name: $n, value: $v, scopes: ["workers"], comment: $c}]' \
+# The value reaches jq on STDIN (printf is a shell builtin), never as an argument:
+# `jq --arg v "$T"` would put the bearer in jq's argv, readable via ps or /proc.
+RESP="$(printf '%s' "$T" \
+  | jq -Rs --arg n "$SECRET_NAME" --arg c "mercury-proxy bearer (PROXY_TOKEN on chittyserv-vm), rotated $(date -u +%F)" \
+      '[{name: $n, value: ., scopes: ["workers"], comment: $c}]' \
   | curl -sS -X POST -H @"$WORK/cf.hdr" -H 'Content-Type: application/json' --data-binary @- "$API")"
 if [ "$(echo "$RESP" | jq -r .success)" != "true" ]; then
   echo "$RESP" | jq -c '{success, errors}' >&2
   die "Secrets Store create failed; host untouched"
 fi
 echo "ok   1 $SECRET_NAME created in Secrets Store"
+# RECOVERY: from here on the secret exists, so a re-run stops at step 0. If any
+# later step fails, delete $SECRET_NAME from the store (DELETE $API/<secret id>)
+# and re-run the whole script: it generates a fresh value and overwrites $ENVF,
+# so the store and the relay agree again. Do not hand-edit $ENVF to match.
+# Once chittysecrets has sealed the value (its daily job, chittysecrets#27), a
+# re-rotation must also replace that escrow copy; future rotation belongs to the
+# token-issuing service (chittyfoundation/chittyauth#72), not to this bootstrap.
 
 # --- 2. Root-only env file -------------------------------------------------
 sudo install -d -m 0700 -o root -g root /etc/mercury-proxy
