@@ -68,7 +68,7 @@ echo "ok   2 $ENVF written (root:root 0600)"
 
 # --- 3. Delete the stale copy from the project .env ------------------------
 # server.js loads .env at startup and it OVERRIDES the systemd environment, so this must run
-# before the restart, and the line must be deleted: a blank "PROXY_TOKEN=" sets it to '' and
+# before the restart, and the line must be deleted: a PROXY_TOKEN line with an empty value sets it to the empty string, and
 # server.js then runs with auth DISABLED.
 if [ -f "$PROJECT_ENV" ]; then
   sed -i -E '/^[[:space:]]*PROXY_TOKEN[[:space:]]*=/d' "$PROJECT_ENV"
