@@ -21,6 +21,7 @@ export async function createComplianceCheck(
   options = {},
 ) {
   const {
+    name = "Chitty Compliance/CI",
     status = "completed",
     conclusion = "success",
     title = "ChittyMCP checks passed",
@@ -38,7 +39,7 @@ export async function createComplianceCheck(
         "User-Agent": "ChittyConnect/1.0",
       },
       body: JSON.stringify({
-        name: "Chitty Compliance/CI",
+        name,
         head_sha: sha,
         status,
         conclusion,
