@@ -1,6 +1,7 @@
-# Actions minutes exhausted 2026-10-21 (org-wide hosted-runner block).
-# Hourly instead of every 15 minutes, on self-hosted chittymini runners
-# (unbilled). Operator decision.
+# Hourly instead of every 15 minutes (operator decision, 2026-10-21). Stays on
+# GitHub-hosted runners: this repo is public, hosted minutes are free for public
+# repos, and the org runner group does not serve public repos (and should not:
+# fork PRs would run on the fleet).
 name: Binding Drift Audit
 
 # Detects when the live chittyconnect worker is missing bindings declared in
@@ -22,7 +23,7 @@ on:
 
 jobs:
   audit:
-    runs-on: [self-hosted, chittymini]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
