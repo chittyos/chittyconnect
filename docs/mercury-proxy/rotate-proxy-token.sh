@@ -66,7 +66,17 @@ sudo install -d -m 0700 -o root -g root /etc/mercury-proxy
 printf 'PROXY_TOKEN=%s\n' "$T" | sudo sh -c "umask 077 && cat > $ENVF.new && chown root:root $ENVF.new && mv -f $ENVF.new $ENVF"
 echo "ok   2 $ENVF written (root:root 0600)"
 
-# --- 3. Unit: drop the inline token, load the env file ----------------------
+# --- 3. Delete the stale copy from the project .env ------------------------
+# server.js loads .env at startup and it OVERRIDES the systemd environment, so this must run
+# before the restart, and the line must be deleted: a blank "PROXY_TOKEN=" sets it to '' and
+# server.js then runs with auth DISABLED.
+if [ -f "$PROJECT_ENV" ]; then
+  sed -i -E '/^[[:space:]]*PROXY_TOKEN[[:space:]]*=/d' "$PROJECT_ENV"
+  grep -qE '^[[:space:]]*PROXY_TOKEN' "$PROJECT_ENV" && die "PROXY_TOKEN still in $PROJECT_ENV"
+  echo "ok   3 PROXY_TOKEN removed from $PROJECT_ENV"
+fi
+
+# --- 4. Unit: drop the inline token, load the env file ----------------------
 if sudo grep -qE '^Environment="?PROXY_TOKEN=' "$UNIT"; then
   sudo sed -i -E "/^Environment=\"?PROXY_TOKEN=/c\\EnvironmentFile=$ENVF" "$UNIT"
 elif ! sudo grep -qx "EnvironmentFile=$ENVF" "$UNIT"; then
@@ -77,13 +87,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart mercury-proxy
 sleep 2
 systemctl is-active --quiet mercury-proxy || die "mercury-proxy not active after restart (journalctl -u mercury-proxy -n 30)"
-echo "ok   3 unit uses EnvironmentFile; service restarted"
-
-# --- 4. Blank the stale copy in the project .env (nothing loads it) --------
-if [ -f "$PROJECT_ENV" ]; then
-  sed -i -E 's/^PROXY_TOKEN=.*/PROXY_TOKEN=/' "$PROJECT_ENV"
-  echo "ok   4 PROXY_TOKEN blanked in $PROJECT_ENV"
-fi
+echo "ok   4 unit uses EnvironmentFile; service restarted"
 
 # --- 5. Verify against the relay directly (no Mercury call) ---------------
 printf 'Authorization: Bearer %s\n' "$T" > "$WORK/relay.hdr"
