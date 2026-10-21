@@ -1109,6 +1109,8 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
 // each with its own API key in credentials JSONB.
 
 const MERCURY_API = "https://api.mercury.com/api/v1";
+// "/api/v1": the path part of MERCURY_API, prepended to relay envelope paths.
+const MERCURY_API_PATH_PREFIX = new URL(MERCURY_API).pathname;
 
 /**
  * Read a Worker binding that may be a Cloudflare Secrets Store secret
@@ -1417,8 +1419,11 @@ export function buildEgressRequest({
       headers,
       body: JSON.stringify({
         method: (options.method || "GET").toUpperCase(),
-        // Relative Mercury API path only — relay re-hosts onto api.mercury.com.
-        path,
+        // The relay re-hosts `path` onto https://api.mercury.com (origin only), so
+        // the API version prefix must travel in the envelope. Without it the relay
+        // requested https://api.mercury.com/accounts and Mercury answered 404
+        // (observed live 2026-10-21). Same base the direct profile uses.
+        path: `${MERCURY_API_PATH_PREFIX}${path}`,
         body: options.body ?? null,
       }),
     };
