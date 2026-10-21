@@ -20,6 +20,13 @@ export class McpConnectAgent extends McpAgent {
 
     // createMcpServer returns a fully configured McpServer with all registered tools
     this.server = createMcpServer(this.env, { baseUrl, authToken });
+
+    // Runtime probe for tests/workers/mcp-agent-runtime.test.js. `this.props`
+    // is populated by the Agents SDK lifecycle, so an SDK upgrade that moved
+    // props or populated them after init() would silently leave authToken
+    // undefined and drop the Authorization header in tool-dispatcher.js.
+    // Records presence only — never the token value.
+    this.initProbe = { baseUrl, authTokenPresent: Boolean(authToken) };
   }
 
   /**

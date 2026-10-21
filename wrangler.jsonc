@@ -344,6 +344,10 @@
         // not live anywhere a caller can write (see routes/google.js).
         "GDRIVE_SHARED_DRIVE_USER_IDS": "svc:chittyevidence-db:drive-ingress",
         "MERCURY_EGRESS_PROFILE": "direct",
+        // Relay canary: only slug "aribia" egresses via mercury-proxy (static IP).
+        // Proves chittysecrets://mercury/egress/* resolve + relay auth end to end
+        // on a read (POST /api/thirdparty/mercury/refresh -> GET /accounts).
+        "MERCURY_EGRESS_PROFILE_ARIBIA": "relay",
         "MERCURY_EGRESS_URL": "https://mercury-proxy.chitty.cc/proxy",
         "CHITTYID_SERVICE_URL": "https://id.chitty.cc",
         "CHITTYAUTH_SERVICE_URL": "https://auth.chitty.cc",
