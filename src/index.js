@@ -44,6 +44,8 @@ import {
 import { SecretRotationService } from "./services/secret-rotation.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { withSentry } from "@sentry/cloudflare";
+import { introspectGitCapability } from "./api/routes/git-broker.js";
+import { resolvePolicy } from "./git/broker-policy.js";
 
 const app = new Hono();
 
@@ -2517,6 +2519,32 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Git-broker private RPC projection.
+ *
+ * Tier-0 intra-account callers bind directly to this named WorkerEntrypoint.
+ * No API key or bearer credential is minted for the service-to-service hop.
+ * The caller still presents the opaque end-user/operation capability being
+ * introspected; provider credentials remain inside ChittyConnect.
+ */
+export class ChittyConnectGitBroker extends WorkerEntrypoint {
+  async introspectCapability(token) {
+    return introspectGitCapability(this.env, token);
+  }
+
+  async resolvePolicy(input) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      typeof input.tenant_id !== "string" ||
+      typeof input.operation !== "string"
+    ) {
+      return { ok: false, reason: "invalid_policy_request" };
+    }
+    return resolvePolicy(this.env, input.tenant_id, input.operation);
+  }
+}
 
 /**
  * Finance-only private RPC projection of the existing ChittyConnect broker.
