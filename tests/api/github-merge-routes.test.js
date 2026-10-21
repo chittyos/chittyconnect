@@ -105,9 +105,25 @@ describe("POST /integrations/github/merge-pr — validation", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("INVALID_MERGE_METHOD");
   });
+
+  it("rejects malformed expected_head_sha with INVALID_EXPECTED_HEAD_SHA", async () => {
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 1, expected_head_sha: "not-a-sha" },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.merged).toBe(false);
+    expect(body.error.code).toBe("INVALID_EXPECTED_HEAD_SHA");
+  });
 });
 
 describe("POST /integrations/github/merge-pr — merge execution", () => {
+  const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
+
   /**
    * Stub the GitHub HTTP boundary. Routes the three GitHub calls:
    *  - GET .../installation   -> { id }
@@ -194,7 +210,10 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     });
     const app = makeApp();
     const res = await app.request(
-      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -210,7 +229,10 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     });
     const app = makeApp();
     const res = await app.request(
-      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
     );
     expect(res.status).toBe(405);
     const body = await res.json();
@@ -246,7 +268,10 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     stubGitHub({ mergeThrows: true, prStatus: 200, prJson: { merged: false } });
     const app = makeApp();
     const res = await app.request(
-      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
     );
     expect(res.status).toBe(502);
     const body = await res.json();
@@ -262,7 +287,10 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     });
     const app = makeApp();
     const res = await app.request(
-      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ merged: true, sha: "already" });
@@ -273,12 +301,111 @@ describe("POST /integrations/github/merge-pr — merge execution", () => {
     stubGitHub({ installationThrows: true, captureMerge: () => (putSent = true) });
     const app = makeApp();
     const res = await app.request(
-      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
     );
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.merged).toBe(false);
     expect(body.error.code).toBe("MERGE_EXECUTION_ERROR");
     expect(putSent).toBe(false);
+  });
+
+  it("rejects missing expected_head_sha with MISSING_EXPECTED_HEAD_SHA and never calls GitHub", async () => {
+    let putSent = false;
+    const fetchSpy = stubGitHub({
+      mergeStatus: 200,
+      mergeJson: { merged: true, sha: "mergesha" },
+      captureMerge: () => (putSent = true),
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req({ repo: "CHITTYOS/x", pr_number: 7 }, { "X-Webhook-Secret": SECRET }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.merged).toBe(false);
+    expect(body.error.code).toBe("MISSING_EXPECTED_HEAD_SHA");
+    expect(putSent).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("reports MERGE_OUTCOME_UNKNOWN (merged: null), not merged:false, when GitHub 5xxs and the re-read shows not merged", async () => {
+    stubGitHub({
+      mergeStatus: 502,
+      mergeJson: { message: "Server Error" },
+      prStatus: 200,
+      prJson: { merged: false },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGE_OUTCOME_UNKNOWN");
+    expect(body.error.message).toContain("GitHub returned 502");
+  });
+
+  it("reports merged:true when GitHub 5xxs but the re-read confirms the PR merged", async () => {
+    stubGitHub({
+      mergeStatus: 503,
+      mergeJson: { message: "Service Unavailable" },
+      prStatus: 200,
+      prJson: { merged: true, merge_commit_sha: "landed" },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ merged: true, sha: "landed" });
+  });
+
+  it("reports merged:null when GitHub 5xxs and the re-read itself fails", async () => {
+    stubGitHub({
+      mergeStatus: 500,
+      mergeJson: { message: "Server Error" },
+      prStatus: 500,
+      prJson: { message: "Server Error" },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.merged).toBeNull();
+    expect(body.error.code).toBe("MERGE_OUTCOME_UNKNOWN");
+  });
+
+  it("keeps merged:false / GITHUB_MERGE_FAILED for a 4xx other than 405/409", async () => {
+    stubGitHub({
+      mergeStatus: 422,
+      mergeJson: { message: "Validation Failed" },
+    });
+    const app = makeApp();
+    const res = await app.request(
+      req(
+        { repo: "CHITTYOS/x", pr_number: 7, expected_head_sha: HEAD_SHA },
+        { "X-Webhook-Secret": SECRET },
+      ),
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.merged).toBe(false);
+    expect(body.error.code).toBe("GITHUB_MERGE_FAILED");
   });
 });

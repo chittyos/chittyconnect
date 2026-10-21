@@ -173,13 +173,27 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
     );
   }
 
-  // expected_head_sha is the TOCTOU guard — only meaningful if it's a real
-  // git object id. Reject non-string/whitespace early rather than forwarding a
-  // malformed guard to GitHub where it would fail less predictably.
+  // expected_head_sha is the TOCTOU guard and is required: without it GitHub
+  // merges whatever the head is at PUT time, not the head the executor
+  // decided on. It is only meaningful if it's a real git object id, so reject
+  // non-string/whitespace early rather than forwarding a malformed guard to
+  // GitHub where it would fail less predictably.
+  if (expected_head_sha === undefined || expected_head_sha === null) {
+    return c.json(
+      {
+        merged: false,
+        error: {
+          code: "MISSING_EXPECTED_HEAD_SHA",
+          message: "expected_head_sha is required (7-40 char hex git sha)",
+        },
+        status: 400,
+      },
+      400,
+    );
+  }
   if (
-    expected_head_sha !== undefined &&
-    (typeof expected_head_sha !== "string" ||
-      !/^[0-9a-fA-F]{7,40}$/.test(expected_head_sha))
+    typeof expected_head_sha !== "string" ||
+    !/^[0-9a-fA-F]{7,40}$/.test(expected_head_sha)
   ) {
     return c.json(
       {
@@ -202,12 +216,9 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
     const token = await getCachedInstallationToken(c.env, installationId);
 
     // --- Execute GitHub merge with TOCTOU sha guard ---
-    const mergeBody = { merge_method: method };
-    if (expected_head_sha) {
-      // GitHub rejects (409) if the PR head has moved since the executor's
-      // decision — this is the TOCTOU guard.
-      mergeBody.sha = expected_head_sha;
-    }
+    // GitHub rejects (409) if the PR head has moved since the executor's
+    // decision — this is the TOCTOU guard.
+    const mergeBody = { merge_method: method, sha: expected_head_sha };
 
     const fetchPr = () =>
       fetch(`https://api.github.com/repos/${owner}/${name}/pulls/${pr_number}`, {
@@ -217,6 +228,36 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
           "User-Agent": "ChittyConnect/1.0",
         },
       });
+
+    // The merge request reached GitHub but its outcome is unknown (no
+    // response, or a 5xx). Re-read the PR; report merged only if GitHub
+    // confirms it, otherwise say the outcome is unknown (merged: null) —
+    // never assert merged: false for a merge that may have happened. A failed
+    // re-read is also unknown.
+    const respondOutcomeUnknown = async (message) => {
+      const prJson = await fetchPr()
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({}));
+      if (prJson?.merged === true) {
+        return c.json(
+          {
+            merged: true,
+            sha: prJson.merge_commit_sha,
+            message: "Pull request already merged",
+            status: 200,
+          },
+          200,
+        );
+      }
+      return c.json(
+        {
+          merged: null,
+          error: { code: "MERGE_OUTCOME_UNKNOWN", message },
+          status: 502,
+        },
+        502,
+      );
+    };
 
     let ghResp;
     try {
@@ -235,33 +276,9 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
       );
     } catch (putError) {
       // The merge request was sent but no response came back: GitHub may or
-      // may not have applied it. Re-read the PR; report merged only if GitHub
-      // confirms it, otherwise say the outcome is unknown (merged: null) —
-      // never assert merged: false for a merge that may have happened.
-      const prJson = await fetchPr()
-        .then((r) => (r.ok ? r.json() : {}))
-        .catch(() => ({}));
-      if (prJson?.merged === true) {
-        return c.json(
-          {
-            merged: true,
-            sha: prJson.merge_commit_sha,
-            message: "Pull request already merged",
-            status: 200,
-          },
-          200,
-        );
-      }
-      return c.json(
-        {
-          merged: null,
-          error: {
-            code: "MERGE_OUTCOME_UNKNOWN",
-            message: `Merge request sent but no response received; re-verify PR state before retrying (${putError?.message || "network error"})`,
-          },
-          status: 502,
-        },
-        502,
+      // may not have applied it.
+      return respondOutcomeUnknown(
+        `Merge request sent but no response received; re-verify PR state before retrying (${putError?.message || "network error"})`,
       );
     }
 
@@ -318,7 +335,15 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
       );
     }
 
-    // Any other non-OK status from GitHub: surface it.
+    // A 5xx on the merge PUT does not tell us whether GitHub applied the
+    // merge, so it is an unknown outcome, not a failure.
+    if (ghResp.status >= 500) {
+      return respondOutcomeUnknown(
+        `GitHub returned ${ghResp.status} to the merge request; re-verify PR state before retrying`,
+      );
+    }
+
+    // Any other non-OK status from GitHub (4xx): surface it as a failure.
     return c.json(
       {
         merged: false,
