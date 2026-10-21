@@ -12,10 +12,12 @@
  */
 
 import { Hono } from "hono";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { verifyFinanceMercuryWebhook, acceptFinanceMercuryReconciliationIntent } from "./lib/mercury-webhook-verifier.js";
 import { corsHeaders } from "./lib/cors.js";
 import { StreamingManager } from "./intelligence/streaming-manager.js";
-import { verifyWebhookSignature } from "./auth/webhook.js";
 import { queueConsumer } from "./handlers/queue.js";
+import { handleGitHubWebhook } from "./handlers/github-webhook.js";
 import { api } from "./api/router.js";
 import {
   ChittyOSEcosystem,
@@ -1880,56 +1882,7 @@ app.all("/:service/api/*", async (c) => {
  * 3. Queue event for async processing
  * 4. Return 200 OK immediately
  */
-app.post("/integrations/github/webhook", async (c) => {
-  const delivery = c.req.header("X-GitHub-Delivery");
-  const event = c.req.header("X-GitHub-Event");
-  const signature = c.req.header("X-Hub-Signature-256");
-
-  if (!delivery || !event || !signature) {
-    return c.text("missing required headers", 400);
-  }
-
-  // Check idempotency first (fastest path for duplicate deliveries)
-  const existing = await c.env.IDEMP_KV.get(delivery);
-  if (existing) {
-    return c.text("ok", 200);
-  }
-
-  // Get raw body for signature verification
-  const body = await c.req.arrayBuffer();
-
-  // Verify webhook signature (constant-time comparison)
-  const isValid = await verifyWebhookSignature(
-    body,
-    signature,
-    c.env.GITHUB_WEBHOOK_SECRET,
-  );
-
-  if (!isValid) {
-    return c.text("unauthorized", 401);
-  }
-
-  // Parse payload
-  let payload;
-  try {
-    payload = JSON.parse(new TextDecoder().decode(body));
-  } catch (err) {
-    return c.text("invalid json payload", 400);
-  }
-
-  // Queue for async MCP dispatch
-  await c.env.EVENT_Q.send({
-    delivery,
-    event,
-    payload,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Mark as received (24h TTL)
-  await c.env.IDEMP_KV.put(delivery, "processing", { expirationTtl: 86400 });
-
-  return c.text("ok", 200);
-});
+app.post("/integrations/github/webhook", handleGitHubWebhook);
 
 /**
  * General Webhook Router
@@ -2564,6 +2517,23 @@ ${errorInfo.stack}`);
     },
   },
 );
+
+/**
+ * Finance-only private RPC projection of the existing ChittyConnect broker.
+ * Signature verification remains inside ChittySecrets: no credential material
+ * is returned. The reconciliation method only enqueues validated, nonsecret
+ * provider event identifiers after a verified Finance consumer-readiness gate.
+ * It never provisions Mercury credentials or performs ledger/provider writes.
+ */
+export class ChittyConnectFinanceWebhookVerifier extends WorkerEntrypoint {
+  async verifyMercuryWebhookSignature(input) {
+    return verifyFinanceMercuryWebhook(this.env, input);
+  }
+
+  async acceptMercuryReconciliationIntent(input) {
+    return acceptFinanceMercuryReconciliationIntent(this.env, input);
+  }
+}
 
 /**
  * Export Durable Object classes

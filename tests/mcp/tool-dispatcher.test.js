@@ -25,6 +25,7 @@ vi.mock("@neondatabase/serverless", () => ({
 
 import { dispatchToolCall } from "../../src/mcp/tool-dispatcher.js";
 import { Client } from "@neondatabase/serverless";
+import { serviceFetch } from "../../src/lib/service-switch.js";
 
 // Mock credential-helper
 vi.mock("../../src/lib/credential-helper.js", () => ({
@@ -43,6 +44,7 @@ import {
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 const mockStorageFetch = vi.fn();
+const mockFinanceFetch = vi.fn();
 
 // Mock service-switch: serviceFetch delegates to global fetch so existing
 // mockFetch expectations continue to work. Reconstructs realistic URLs
@@ -66,6 +68,20 @@ const { getServiceToken: _gst } = await import(
 );
 vi.mock("../../src/lib/service-switch.js", () => ({
   serviceFetch: vi.fn(async (_env, svc, path, options = {}) => {
+    if (svc === "finance" && _env?.SVC_FINANCE?.fetch) {
+      const headers = {
+        "Content-Type": "application/json",
+        "X-ChittyOS-Caller": "chittyconnect",
+        ...options.headers,
+      };
+      const req = new Request(`https://internal${path}`, {
+        method: options.method || "GET",
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      return _env.SVC_FINANCE.fetch(req);
+    }
+
     const base = SERVICE_URL_MAP[svc] || `https://${svc}.chitty.cc`;
     // Simulate HTTP mode: resolve service token and add Authorization header
     let token;
@@ -116,6 +132,7 @@ beforeEach(() => {
   neonMocks.query.mockReset();
   neonMocks.end.mockReset();
   mockStorageFetch.mockReset();
+  mockFinanceFetch.mockReset();
 });
 
 describe("dispatchToolCall", () => {
@@ -1089,24 +1106,37 @@ describe("dispatchToolCall", () => {
   // ── Finance tools ─────────────────────────────────────────────
 
   describe("chitty_finance_entities", () => {
-    it("uses service token (not caller auth) for finance.chitty.cc calls", async () => {
-      getServiceToken.mockResolvedValue("finance-svc-token");
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ entities: ["ARIAS LLC", "BIANCHI TRUST"] }),
-      });
+    it("uses the private SVC_FINANCE binding and never resolves a service token", async () => {
+      getServiceToken.mockRejectedValue(new Error("must not resolve finance token"));
+      mockFinanceFetch.mockResolvedValue(
+        new Response(JSON.stringify({
+          entities: [{ id: "t1", name: "ARIBIA LLC", accounts: [] }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
 
-      await dispatchToolCall("chitty_finance_entities", {}, mockEnv, {
+      const envWithFinance = {
+        ...mockEnv,
+        SVC_FINANCE: { fetch: mockFinanceFetch },
+      };
+
+      const result = await dispatchToolCall("chitty_finance_entities", {}, envWithFinance, {
         authToken: "user-api-key-should-not-be-forwarded",
       });
 
-      const headers = mockFetch.mock.calls[0][1].headers;
-      expect(headers.Authorization).toBe("Bearer finance-svc-token");
-      expect(headers.Authorization).not.toContain("user-api-key");
+      expect(result.isError).toBeUndefined();
+      expect(getServiceToken).not.toHaveBeenCalled();
+      expect(serviceFetch).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockFinanceFetch).toHaveBeenCalledTimes(1);
+
+      const request = mockFinanceFetch.mock.calls[0][0];
+      expect(request.url).toBe("https://internal/internal/chittyconnect/entities");
+      expect(request.headers.get("X-ChittyOS-Caller")).toBe("chittyconnect");
+      expect(request.headers.get("Authorization")).toBeNull();
     });
 
-    it("returns error when no service token is available", async () => {
-      getServiceToken.mockResolvedValue(null);
+    it("fails closed when the private finance service binding is unavailable", async () => {
+      getServiceToken.mockResolvedValue("must-not-be-used");
 
       const result = await dispatchToolCall(
         "chitty_finance_entities",
@@ -1116,33 +1146,78 @@ describe("dispatchToolCall", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("503");
+      expect(result.content[0].text).toContain("SVC_FINANCE");
+      expect(getServiceToken).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("routes balance and transaction reads through the private projection", async () => {
+      mockFinanceFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify({ summary: { net: 100 } }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
+
+      const envWithFinance = {
+        ...mockEnv,
+        SVC_FINANCE: { fetch: mockFinanceFetch },
+      };
+
+      await dispatchToolCall("chitty_finance_balances", { entity: "aribia-llc" }, envWithFinance);
+      await dispatchToolCall(
+        "chitty_finance_transactions",
+        { entity: "aribia-llc", start: "2026-10-01", end: "2026-10-31" },
+        envWithFinance,
+      );
+
+      expect(mockFinanceFetch.mock.calls[0][0].url)
+        .toBe("https://internal/internal/chittyconnect/entities/aribia-llc/balances");
+      expect(mockFinanceFetch.mock.calls[1][0].url)
+        .toContain("https://internal/internal/chittyconnect/entities/aribia-llc/transactions?");
+    });
+
+    it("disables the legacy broad Mercury sync tool", async () => {
+      const result = await dispatchToolCall(
+        "chitty_finance_sync",
+        {},
+        { ...mockEnv, SVC_FINANCE: { fetch: mockFinanceFetch } },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("webhook-first");
+      expect(mockFinanceFetch).not.toHaveBeenCalled();
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 
   describe("chitty_finance_xfer_detect", () => {
-    it("whitelists args — does not forward arbitrary fields", async () => {
-      getServiceToken.mockResolvedValue("finance-svc-token");
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ transfers: [] }),
-      });
+    it("whitelists args and stays on the private finance binding", async () => {
+      mockFinanceFetch.mockResolvedValue(
+        new Response(JSON.stringify({ transfers: [] }), { status: 200 }),
+      );
+
+      const envWithFinance = {
+        ...mockEnv,
+        SVC_FINANCE: { fetch: mockFinanceFetch },
+      };
 
       await dispatchToolCall(
         "chitty_finance_xfer_detect",
         {
-          entity: "arias-llc",
+          entity: "aribia-llc",
           start: "2025-01-01",
           end: "2025-12-31",
           threshold: 1000,
           __proto__: { polluted: true },
           malicious_field: "should not appear",
         },
-        mockEnv,
+        envWithFinance,
       );
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.entity).toBe("arias-llc");
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(getServiceToken).not.toHaveBeenCalled();
+      const request = mockFinanceFetch.mock.calls[0][0];
+      expect(request.url).toBe("https://internal/api/transfers/detect");
+      const body = JSON.parse(await request.text());
+      expect(body.entity).toBe("aribia-llc");
       expect(body.start).toBe("2025-01-01");
       expect(body.end).toBe("2025-12-31");
       expect(body.threshold).toBe(1000);
