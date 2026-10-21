@@ -33,7 +33,13 @@ gitBrokerRoutes.post("/capabilities/mint", async (c) => {
 
   const body = await c.req.json().catch(() => null);
   const parsed = validateMintBody(body);
-  if (!parsed.ok) return error(c, parsed.error, 400);
+  if (!parsed.ok) {
+    return error(
+      c,
+      parsed.error,
+      String(parsed.error).startsWith("POLICY_BLOCKED_") ? 403 : 400,
+    );
+  }
 
   const scope = parsed.value;
   const repoCheck = await resolveRepoPolicy(
