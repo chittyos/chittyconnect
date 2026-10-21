@@ -93,31 +93,22 @@ gitBrokerRoutes.post("/capabilities/mint", async (c) => {
   });
 });
 
-gitBrokerRoutes.post("/capabilities/introspect", async (c) => {
-  if (!c.env.TOKEN_KV || typeof c.env.TOKEN_KV.get !== "function") {
-    return c.json({ active: false }, 503);
+export async function introspectGitCapability(env, token) {
+  if (!env.TOKEN_KV || typeof env.TOKEN_KV.get !== "function") {
+    return { active: false, backend_unavailable: true };
+  }
+  if (typeof token !== "string" || !token.startsWith("cap_")) {
+    return { active: false };
   }
 
-  const body = await c.req.json().catch(() => null);
-  if (
-    !body ||
-    typeof body !== "object" ||
-    Array.isArray(body) ||
-    Object.keys(body).some((key) => key !== "token") ||
-    typeof body.token !== "string" ||
-    !body.token.startsWith("cap_")
-  ) {
-    return c.json({ active: false });
-  }
-
-  const raw = await c.env.TOKEN_KV.get(await tokenStorageKey(body.token));
-  if (!raw) return c.json({ active: false });
+  const raw = await env.TOKEN_KV.get(await tokenStorageKey(token));
+  if (!raw) return { active: false };
 
   let record;
   try {
     record = JSON.parse(raw);
   } catch {
-    return c.json({ active: false });
+    return { active: false };
   }
 
   if (
@@ -125,14 +116,30 @@ gitBrokerRoutes.post("/capabilities/introspect", async (c) => {
     record.expires_at_epoch <= Math.floor(Date.now() / 1000) ||
     !record.scope
   ) {
-    return c.json({ active: false });
+    return { active: false };
   }
 
-  return c.json({
+  return {
     active: true,
     expires_at: new Date(record.expires_at_epoch * 1000).toISOString(),
     scope: record.scope,
-  });
+  };
+}
+
+gitBrokerRoutes.post("/capabilities/introspect", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).some((key) => key !== "token")
+  ) {
+    return c.json({ active: false });
+  }
+
+  const result = await introspectGitCapability(c.env, body.token);
+  if (result.backend_unavailable) return c.json({ active: false }, 503);
+  return c.json(result);
 });
 
 gitBrokerRoutes.post("/policy/resolve", async (c) => {
