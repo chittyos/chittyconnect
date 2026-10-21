@@ -232,7 +232,7 @@ export class ChittyOSEcosystem {
       // cascade logged as "non-critical" roughly once a second in production.
       // The snake_case and `id` arms are defensive only — neither is emitted
       // by id.chitty.cc today.
-      const chittyId = result.chittyId ?? result.chitty_id ?? result.id;
+      const chittyId = result?.chittyId ?? result?.chitty_id ?? result?.id;
 
       // Fail closed. A 2xx that carries no ChittyID is a failed mint, and
       // returning undefined converts it into a silent, cascading one.

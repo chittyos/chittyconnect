@@ -202,6 +202,19 @@ describe("ChittyID mint contract", () => {
     await expect(ecosystem().mintChittyID({ entity: "P" })).rejects.toThrow();
   });
 
+  it("reaches the fail-closed throw on a 200 whose body is literal null", async () => {
+    // `await response.json()` on a body of `null` yields null, not {}. Reading
+    // `result.chittyId` off it raised a TypeError BEFORE the fail-closed throw
+    // and the field-list diagnostic below it could run, so the one shape those
+    // two were written to explain was the one shape they never saw. Raised by
+    // copilot-pull-request-reviewer on this PR; it was marked outdated because
+    // the anchor line moved, not because it was fixed.
+    stubFetch(200, null);
+    await expect(ecosystem().mintChittyID({ entity: "P" })).rejects.toThrow(
+      /without a chittyId/,
+    );
+  });
+
   it("keeps defensive arms for snake_case and `id`, neither emitted today", async () => {
     stubFetch(200, { chitty_id: "03-1-USA-4448-P-2609-0-88" });
     expect(await ecosystem().mintChittyID({ entity: "P" })).toBe(
