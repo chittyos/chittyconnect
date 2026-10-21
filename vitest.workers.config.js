@@ -12,9 +12,19 @@ import { cloudflareTest } from "@cloudflare/vitest-plugin";
 export default defineConfig({
   plugins: [
     cloudflareTest({
+      // A test-only entry Worker (not src/index.js) so the pool can bind
+      // McpConnectAgent as a real Durable Object and SELF can drive the real
+      // McpAgent.serve() handler. Keeping src/index.js out of `main` keeps the
+      // rest of its module scope out of the test runtime.
+      main: "tests/workers/fixtures/mcp-agent-worker.js",
       miniflare: {
         compatibilityDate: "2026-08-07",
         compatibilityFlags: ["nodejs_compat"],
+        // useSQLite: the agents SDK Agent base class stores state in
+        // ctx.storage.sql.
+        durableObjects: {
+          MCP_AGENT: { className: "McpConnectAgent", useSQLite: true },
+        },
       },
     }),
   ],
