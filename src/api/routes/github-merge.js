@@ -57,7 +57,7 @@ function timingSafeEqual(a, b) {
  *     "repo": "owner/name",
  *     "pr_number": 123,
  *     "merge_method": "squash" | "merge" | "rebase"   (default "squash")
- *     "expected_head_sha": "<sha>"                     (required TOCTOU guard, 7-40 hex)
+ *     "expected_head_sha": "<sha>"                     (required TOCTOU guard, full 40-char hex)
  *   }
  *
  * Response 200:
@@ -184,7 +184,7 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
         merged: false,
         error: {
           code: "MISSING_EXPECTED_HEAD_SHA",
-          message: "expected_head_sha is required (7-40 char hex git sha)",
+          message: "expected_head_sha is required (40-char hex git sha)",
         },
         status: 400,
       },
@@ -193,14 +193,14 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
   }
   if (
     typeof expected_head_sha !== "string" ||
-    !/^[0-9a-fA-F]{7,40}$/.test(expected_head_sha)
+    !/^[0-9a-fA-F]{40}$/.test(expected_head_sha)
   ) {
     return c.json(
       {
         merged: false,
         error: {
           code: "INVALID_EXPECTED_HEAD_SHA",
-          message: "expected_head_sha must be a 7-40 char hex git sha",
+          message: "expected_head_sha must be a 40-char hex git sha",
         },
         status: 400,
       },
@@ -230,11 +230,12 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
       });
 
     // A re-read showing merged:true is ours only if GitHub merged the head the
-    // caller approved (expected_head_sha may be an abbreviated 7-40 hex prefix).
+    // caller approved (expected_head_sha is a full 40-hex sha, compared exactly
+    // and case-insensitively).
     // Merged at any other head (or no head reported) must not be blessed.
     const respondMergedState = (prJson) => {
       const observedHead = String(prJson?.head?.sha ?? "");
-      if (!observedHead.toLowerCase().startsWith(expected_head_sha.toLowerCase())) {
+      if (observedHead.toLowerCase() !== expected_head_sha.toLowerCase()) {
         return c.json(
           {
             merged: null,
@@ -321,9 +322,29 @@ githubMergeRoutes.post("/merge-pr", async (c) => {
     // 405 == already-merged; confirm via the PR's merged state before
     // reporting success, otherwise surface the failure.
     if (ghResp.status === 405 || ghResp.status === 409) {
-      const prResp = await fetchPr();
+      let prResp;
+      try {
+        prResp = await fetchPr();
+      } catch {
+        prResp = null;
+      }
+      // A 405 can mean "already merged"; if we cannot re-read the PR we do not
+      // know the outcome, so never assert merged:false.
+      if (!prResp || !prResp.ok) {
+        return c.json(
+          {
+            merged: null,
+            error: {
+              code: "MERGE_OUTCOME_UNKNOWN",
+              message: `GitHub returned ${ghResp.status} to the merge request and the PR state could not be re-read; re-verify PR state before retrying`,
+            },
+            status: 502,
+          },
+          502,
+        );
+      }
       const prJson = await prResp.json().catch(() => ({}));
-      if (prResp.ok && prJson.merged === true) return respondMergedState(prJson);
+      if (prJson.merged === true) return respondMergedState(prJson);
 
       return c.json(
         {
