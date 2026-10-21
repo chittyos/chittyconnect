@@ -1291,14 +1291,17 @@ export function resolveWriteCredentialReference(code) {
 }
 
 /**
- * Business logins that read through their WRITE token. No read token was ever
- * issued for these codes (MERCURY_TOKEN_MNW / MERCURY_TOKEN_NAJB do not exist),
- * so their read routes would fail. The write token is IP-allowlisted to the
- * mercury-proxy relay, so reads with it are only safe via the relay, and only
- * as GET: brokerMercuryFetch enforces both. Closed and explicit — a code is
- * added here only once it is confirmed to have no read token.
+ * Business logins that read through their WRITE token: all nine (operator
+ * direction, 2026-10-21). One credential per login, and every one in use is
+ * IP-allowlisted to the mercury-proxy relay, so a leaked token is useless off
+ * that host (the read tokens worked from anywhere). brokerMercuryFetch forces
+ * relay egress and permits only GET for these. MNW/NAJB never had read tokens;
+ * the other seven MERCURY_TOKEN_* read tokens are no longer used and can be
+ * retired. Closed and explicit.
  */
-export const WRITE_TOKEN_READ_CODES = Object.freeze(new Set(["MNW", "NAJB"]));
+export const WRITE_TOKEN_READ_CODES = Object.freeze(
+  new Set(["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"]),
+);
 
 const MERCURY_WRITE_CREDENTIAL_REFS = new Set(
   Object.values(MERCURY_WRITE_REFERENCES).map((ref) => ref.credentialRef),

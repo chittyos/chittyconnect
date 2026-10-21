@@ -13,12 +13,12 @@ import {
 // a synthetic SVC_SECRETS fixture and fetch is replaced to record the request.
 
 const RELAY = "https://mercury-proxy.chitty.cc/proxy";
+const ALL_CODES = ["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"];
 
 function brokerEnv(overrides = {}) {
   const calls = [];
   const values = new Map([
-    ["MERCURY_WRITE_TOKEN_MNW", "wt-mnw"],
-    ["MERCURY_WRITE_TOKEN_NAJB", "wt-najb"],
+    ...ALL_CODES.map((c) => [`MERCURY_WRITE_TOKEN_${c}`, `wt-${c.toLowerCase()}`]),
     ["MERCURY_TOKEN_ARIBIA_LLC", "rt-aribia"],
     ["MERCURY_EGRESS_PROXY_TOKEN", "px"],
     ["MERCURY_EGRESS_ACCESS_CLIENT_ID", "aid"],
@@ -57,8 +57,8 @@ afterEach(() => {
 });
 
 describe("write-token read codes", () => {
-  it("is exactly MNW and NAJB", () => {
-    expect([...WRITE_TOKEN_READ_CODES].sort()).toEqual(["MNW", "NAJB"]);
+  it("is exactly the nine business logins", () => {
+    expect([...WRITE_TOKEN_READ_CODES].sort()).toEqual([...ALL_CODES].sort());
   });
 
   it("resolves MNW and NAJB read routes to the WRITE descriptor", () => {
@@ -66,13 +66,15 @@ describe("write-token read codes", () => {
     expect(resolveMercuryReadCredential("NAJB")).toBe(MERCURY_WRITE_REFERENCES.NAJB);
   });
 
-  it("leaves codes that have a read token on their read descriptor", () => {
-    expect(resolveMercuryReadCredential("aribia-llc")).toBe(MERCURY_READ_REFERENCES.ARIBIA);
+  it("resolves long-form slug aliases to the WRITE descriptor too", () => {
+    expect(resolveMercuryReadCredential("aribia-llc")).toBe(MERCURY_WRITE_REFERENCES.ARIBIA);
+    expect(resolveMercuryReadCredential("aribia-llc-city-studio")).toBe(MERCURY_WRITE_REFERENCES.CITY);
+    expect(resolveMercuryReadCredential("jean-arlene-venturing")).toBe(MERCURY_WRITE_REFERENCES.JAVL);
   });
 });
 
 describe("MNW / NAJB read routes", () => {
-  for (const [code, token] of [["MNW", "wt-mnw"], ["NAJB", "wt-najb"]]) {
+  for (const [code, token] of ALL_CODES.map((c) => [c, `wt-${c.toLowerCase()}`])) {
     it(`${code}: direct profile still goes via relay, GET envelope with /api/v1 path`, async () => {
       const { env, calls } = brokerEnv();
       recordFetch();
@@ -133,21 +135,20 @@ describe("GET-only guard on write-token reads", () => {
   }
 });
 
-describe("codes with a read token are unchanged", () => {
-  it("ARIBIA reads with its read token on the direct profile", async () => {
+describe("no read token is used any more", () => {
+  it("aribia-llc reads via the relay with the WRITE token; no MERCURY_TOKEN_* is resolved", async () => {
     const { env, calls } = brokerEnv();
     recordFetch();
-    const res = await thirdpartyRoutes.request("/mercury/accounts?slug=aribia", {}, env);
+    const res = await thirdpartyRoutes.request("/mercury/accounts?slug=aribia-llc", {}, env);
     expect(res.status).toBe(200);
-    expect(calls).toEqual([
-      {
-        secretName: "MERCURY_TOKEN_ARIBIA_LLC",
-        credentialRef: "chittysecrets://mercury/aribia/read",
-      },
-    ]);
+    expect(calls.some((c) => c.secretName.startsWith("MERCURY_TOKEN_"))).toBe(false);
+    expect(calls).toContainEqual({
+      secretName: "MERCURY_WRITE_TOKEN_ARIBIA",
+      credentialRef: "chittysecrets://mercury/aribia/write",
+    });
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe("https://api.mercury.com/api/v1/accounts");
-    expect(requests[0].init.method).toBe("GET");
-    expect(requests[0].init.headers.Authorization).toBe("Bearer rt-aribia");
+    expect(requests[0].url).toBe(RELAY);
+    expect(requests[0].init.headers["X-Mercury-Token"]).toBe("wt-aribia");
+    expect(JSON.parse(requests[0].init.body).method).toBe("GET");
   });
 });
