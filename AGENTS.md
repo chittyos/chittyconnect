@@ -49,3 +49,13 @@ This guide helps contributors work effectively in this repository. It summarizes
 - Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys
 - For npm publish, CI loads tokens via GitHub/chittysecrets; local publishes require `--access public` for scoped packages
 
+
+
+## Git broker resource-server contract
+
+- ChittyConnect authorizes but does not host git MCP tools.
+- `chittyagent-git` introspects a fresh opaque capability for every operation.
+- Capabilities are single-operation and scoped to canonical GitHub `owner/repo`; write operations also bind a concrete ref and push binds a remote.
+- The token store keys capability records by a SHA-256 digest of the opaque handle; provider credentials and signing keys never cross this boundary.
+- Force remains denied until single-use confirmation is implemented.
+- Commit/tag signing and successful-write ledger emission remain mandatory downstream gates; a minted capability alone does not authorize bypassing them.
