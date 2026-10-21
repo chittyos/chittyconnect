@@ -30,7 +30,9 @@ die() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(id -u)" -ne 0 ] || die "run as ubuntu, not root (the CF token lives in the ubuntu env)"
 [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || die "CLOUDFLARE_API_TOKEN unset"
 [ -f "$UNIT" ] || die "unit not found: $UNIT"
-sudo -v || die "sudo required"
+# -n true, not -v: -v demands a password if ANY of the user's entries does (verifypw=all),
+# e.g. the %sudo group rule, even when a NOPASSWD entry also matches.
+sudo -n true 2>/dev/null || die "passwordless sudo required (sudo -n true failed)"
 
 WORK="$(mktemp -d)"
 chmod 0700 "$WORK"
