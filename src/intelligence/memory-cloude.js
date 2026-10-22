@@ -743,38 +743,45 @@ export class MemoryCloude {
    * Recall similar decompositions for Cognitive-Coordination™
    */
   async recallSimilarDecompositions(subtask, syntheticPersonId) {
-    // Search for similar task decompositions in memory
-    if (!this.hasAiSearch) {
-      return [];
-    }
+    if (!this.hasAiSearch) return [];
 
-    // Same rule as semanticRecall: no entity, no instance, no search. Returning []
-    // is correct here — a decomposition hint is an optimisation, and losing it costs
-    // nothing next to answering from another entity's memory.
     const instanceId = this.memoryInstanceFor(syntheticPersonId);
     if (!instanceId) return [];
 
     try {
-      const instance = this.searchNamespace.get(instanceId);
+      const instance = await this.getOrCreateMemoryInstance(instanceId);
       const searchResults = await instance.search({
         messages: [{ role: "user", content: JSON.stringify(subtask) }],
         ai_search_options: {
-          retrieval: {
-            top_k: 5,
-            filters: { type: "task_decomposition" }
-          }
-        }
+          retrieval: { top_k: 10 },
+        },
       });
 
-      if (!searchResults || !searchResults.chunks) {
-        return [];
+      if (!searchResults?.chunks) return [];
+
+      const matches = [];
+      for (const chunk of searchResults.chunks) {
+        const parsed = this.parseExperienceItemKey(chunk.item?.key);
+        if (!parsed) continue;
+
+        const data = await this.kv.get(
+          this.interactionStorageKey(parsed.sessionId, parsed.interactionId),
+          "json",
+        );
+        if (!data || data.type !== "task_decomposition") continue;
+
+        matches.push({
+          task: data.task,
+          taskGraph: data.taskGraph,
+          executionPlan: data.executionPlan,
+          performance: data.performance,
+          synthesis: data.synthesis,
+          sourceSessionId: parsed.sessionId,
+          relevanceScore: Number(chunk.score || 0),
+        });
       }
 
-      return searchResults.chunks.map((chunk) => ({
-        task: chunk.item.metadata.task,
-        approach: chunk.item.metadata.approach,
-        performance: chunk.item.metadata.performance,
-      }));
+      return matches.slice(0, 5);
     } catch (error) {
       console.warn(
         "[MemoryCloude™] Similar decomposition recall failed:",
