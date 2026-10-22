@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { authorizeMemorySession } from "../../src/lib/memory-authorization.js";
 
 function context({ keyInfo = {}, header } = {}) {
