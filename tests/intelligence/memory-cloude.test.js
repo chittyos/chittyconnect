@@ -189,7 +189,7 @@ describe("MemoryCloude Experience Projection scoping", () => {
             expect(sessionId).toBe("session-bound");
             return {
               async first() {
-                return { context_chitty_id: expected };
+                return { chitty_id: expected, context_chitty_id: expected };
               },
             };
           },
