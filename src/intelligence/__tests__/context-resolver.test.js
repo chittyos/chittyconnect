@@ -300,4 +300,30 @@ describe("ContextResolver", () => {
       expect(result.action).not.toBe("create_new");
     });
   });
+  describe("bindSession identity integrity", () => {
+    it("rejects a cached ChittyID that does not match the context entity", async () => {
+      mockEnv.DB = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => ({
+              chitty_id: "03-1-USA-5537-P-2602-0-38",
+              status: "active",
+            }),
+          }),
+        }),
+      };
+      resolver = new ContextResolver(mockEnv);
+
+      await expect(
+        resolver.bindSession(
+          "ctx-123",
+          "03-1-USA-5538-P-2602-0-39",
+          "session-mismatch",
+          "test",
+        ),
+      ).rejects.toThrow("Context ChittyID does not match requested session binding");
+    });
+  });
+
+
 });
