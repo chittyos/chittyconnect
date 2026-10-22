@@ -957,10 +957,14 @@ async function executeCoordinationTask(args, c) {
     throw new Error("task is required");
   }
 
-  const result = await coordinator.executeComplex(
-    task,
-    sessionId || "mcp-session",
-  );
+  if (!sessionId) {
+    throw new Error("sessionId is required for memory-scoped coordination");
+  }
+  const memory = c.get("memory");
+  const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
+  const result = await coordinator.executeComplex(task, sessionId, {
+    syntheticPersonId,
+  });
 
   return result;
 }
