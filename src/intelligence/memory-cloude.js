@@ -87,6 +87,14 @@ export class MemoryCloude {
       options.syntheticPersonId || (await this.resolveSessionSyntheticPerson(sessionId));
     let semanticIndexed = false;
 
+    if (this.hasAiSearch && !syntheticPersonId) {
+      const error = new Error(
+        "Session is not bound to an active Synthetic Person; memory persistence refused",
+      );
+      error.code = "MEMORY_SCOPE_UNRESOLVED";
+      throw error;
+    }
+
     let interactionId;
     let rawKey;
     if (idempotencyKey) {
@@ -208,7 +216,7 @@ export class MemoryCloude {
 
   memoryInstanceFor(syntheticPersonId) {
     if (!this.isCanonicalPersonId(syntheticPersonId)) return null;
-    const instance = `memory-${syntheticPersonId}`;
+    const instance = `memory-${syntheticPersonId.toLowerCase()}`;
     if (MEMORY_INSTANCE_DENYLIST.has(instance)) return null;
     return instance;
   }
