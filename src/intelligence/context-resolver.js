@@ -612,8 +612,13 @@ export class ContextResolver {
       .bind(contextId)
       .first();
 
-    if (!boundContext || boundContext.status !== "active") {
-      throw new Error("Context must exist and be active before session binding");
+    if (
+      !boundContext ||
+      !["active", "dormant"].includes(boundContext.status)
+    ) {
+      throw new Error(
+        "Context must exist and be active or dormant before session binding",
+      );
     }
     if (boundContext.chitty_id !== chittyId) {
       throw new Error("Context ChittyID does not match requested session binding");
@@ -627,7 +632,8 @@ export class ContextResolver {
         id, session_id, context_id, context_chitty_id, context_hash, platform
       )
       SELECT ?, ?, ?, chitty_id, context_hash, ?
-      FROM context_entities WHERE id = ? AND chitty_id = ? AND status = 'active'
+      FROM context_entities
+      WHERE id = ? AND chitty_id = ? AND status IN ('active', 'dormant')
     `,
       )
       .bind(bindingId, sessionId, contextId, platform, contextId, chittyId)
