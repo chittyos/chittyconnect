@@ -85,8 +85,7 @@ export class MemoryCloude {
     const idempotencyKey =
       options.idempotencyKey || interaction?.idempotencyKey || interaction?.idempotency_key;
     const timestamp = Date.now();
-    const syntheticPersonId =
-      options.syntheticPersonId || (await this.resolveSessionSyntheticPerson(sessionId));
+    const syntheticPersonId = options.syntheticPersonId || null;
     let semanticIndexed = false;
 
     if (this.hasAiSearch && !syntheticPersonId) {
@@ -435,8 +434,7 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
-    const syntheticPersonId =
-      options.syntheticPersonId || (await this.resolveSessionSyntheticPerson(sessionId));
+    const syntheticPersonId = options.syntheticPersonId || null;
     const instanceId = this.memoryInstanceFor(syntheticPersonId);
     const wantsSemantic = options.semantic !== false && this.hasAiSearch;
 
