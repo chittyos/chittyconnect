@@ -317,10 +317,14 @@ intelligence.post("/coordination/execute", async (c) => {
       return c.json({ error: "task required" }, 400);
     }
 
-    const result = await coordinator.executeComplex(
-      task,
-      sessionId || "default",
-    );
+    if (!sessionId) {
+      return c.json({ error: "sessionId required for memory-scoped coordination" }, 400);
+    }
+    const memory = c.get("memory");
+    const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
+    const result = await coordinator.executeComplex(task, sessionId, {
+      syntheticPersonId,
+    });
 
     return c.json({
       success: true,
