@@ -1109,6 +1109,8 @@ thirdpartyRoutes.get("/google/calendar/events", async (c) => {
 // each with its own API key in credentials JSONB.
 
 const MERCURY_API = "https://api.mercury.com/api/v1";
+// "/api/v1": the path part of MERCURY_API, prepended to relay envelope paths.
+const MERCURY_API_PATH_PREFIX = new URL(MERCURY_API).pathname;
 
 /**
  * Read a Worker binding that may be a Cloudflare Secrets Store secret
@@ -1288,6 +1290,35 @@ export function resolveWriteCredentialReference(code) {
   return MERCURY_WRITE_REFERENCES[key];
 }
 
+/**
+ * Business logins that read through their WRITE token: all nine (operator
+ * direction, 2026-10-21). One credential per login, and every one in use is
+ * IP-allowlisted to the mercury-proxy relay, so a leaked token is useless off
+ * that host (the read tokens worked from anywhere). brokerMercuryFetch forces
+ * relay egress and permits only GET for these. MNW/NAJB never had read tokens;
+ * the other seven MERCURY_TOKEN_* read tokens are no longer used and can be
+ * retired. Closed and explicit.
+ */
+export const WRITE_TOKEN_READ_CODES = Object.freeze(
+  new Set(["ARIBIA", "APT", "CITY", "FC", "CHIT", "ICB", "JAVL", "MNW", "NAJB"]),
+);
+
+const MERCURY_WRITE_CREDENTIAL_REFS = new Set(
+  Object.values(MERCURY_WRITE_REFERENCES).map((ref) => ref.credentialRef),
+);
+
+/**
+ * Credential descriptor for a Mercury READ route: the read reference, or the
+ * write reference for a WRITE_TOKEN_READ_CODES login.
+ */
+export function resolveMercuryReadCredential(integrationSlug) {
+  const read = resolveMercuryReadReference(integrationSlug);
+  const code = Object.keys(MERCURY_READ_REFERENCES).find(
+    (key) => MERCURY_READ_REFERENCES[key] === read,
+  );
+  return WRITE_TOKEN_READ_CODES.has(code) ? MERCURY_WRITE_REFERENCES[code] : read;
+}
+
 async function resolveWriteToken(env, code) {
   return resolveBrokerCredential(env, resolveWriteCredentialReference(code));
 }
@@ -1417,8 +1448,11 @@ export function buildEgressRequest({
       headers,
       body: JSON.stringify({
         method: (options.method || "GET").toUpperCase(),
-        // Relative Mercury API path only — relay re-hosts onto api.mercury.com.
-        path,
+        // The relay re-hosts `path` onto https://api.mercury.com (origin only), so
+        // the API version prefix must travel in the envelope. Without it the relay
+        // requested https://api.mercury.com/accounts and Mercury answered 404
+        // (observed live 2026-10-21). Same base the direct profile uses.
+        path: `${MERCURY_API_PATH_PREFIX}${path}`,
         body: options.body ?? null,
       }),
     };
@@ -1494,7 +1528,7 @@ function getSlug(c) {
 async function requireMercuryCredential(c, next) {
   const slug = c.get("mercurySlug") ?? getSlug(c);
   try {
-    const descriptor = resolveMercuryReadReference(slug);
+    const descriptor = resolveMercuryReadCredential(slug);
     c.set("mercuryCredential", descriptor);
     c.set("mercurySlug", slug);
     c.set("mercuryEgress", resolveEgressProfile(c.env, slug));
@@ -1509,10 +1543,25 @@ async function requireMercuryCredential(c, next) {
   await next();
 }
 
-async function brokerMercuryFetch(env, descriptor, path, options = {}, egress = { profile: EGRESS_DIRECT }) {
-  const token = await resolveBrokerCredential(env, descriptor);
+/**
+ * The single provider-execution point for every Mercury read route. When the
+ * descriptor is a WRITE credential (a WRITE_TOKEN_READ_CODES login), two rules
+ * hold here so no route can bypass them: the method must be GET (checked
+ * before any broker or network I/O), and egress is forced to the relay,
+ * ignoring MERCURY_EGRESS_PROFILE*. resolveWriteEgress fails closed when the
+ * relay is not configured.
+ */
+export async function brokerMercuryFetch(env, descriptor, path, options = {}, egress = { profile: EGRESS_DIRECT }) {
+  const writeTokenRead = MERCURY_WRITE_CREDENTIAL_REFS.has(descriptor?.credentialRef);
+  if (writeTokenRead && String(options.method || "GET").toUpperCase() !== "GET") {
+    throw new Error(
+      `Mercury write-token reads permit only GET; got ${String(options.method).toUpperCase()}`,
+    );
+  }
+  // Egress first, so a missing relay fails closed before any token is hydrated.
   const hydratedEgress =
-    egress.profile === EGRESS_RELAY ? await resolveWriteEgress(env) : egress;
+    writeTokenRead || egress.profile === EGRESS_RELAY ? await resolveWriteEgress(env) : egress;
+  const token = await resolveBrokerCredential(env, descriptor);
   return mercuryFetch(token, path, options, hydratedEgress);
 }
 
