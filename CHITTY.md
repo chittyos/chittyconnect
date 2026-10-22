@@ -29,6 +29,7 @@ Cloudflare Worker deployed at connect.chitty.cc with Neon PostgreSQL, KV, and Du
   - `neon_auth.{user,account,session,verification,organization,member,invitation}` — **ChittyConnect-owned** user identity surface, JWKS-federated from `auth.chitty.cc` with RLS bound to JWT `sub` (migration 019)
   - `neon_auth.{jwks,project_config}` — owned by ChittyAuth (read-only here)
 - **Integrations**: Notion, OpenAI, Google Calendar, Neon, Cloudflare AI
+- **Memory topology**: `memory` AI Search namespace; one lazily provisioned provider-safe `memory-<P_ID>` instance per active Synthetic Person; logical `/experiences/` Experience Projection; ContextConsciousness holds working memory/attention.
 
 ### Three Interfaces
 1. **REST API** — Custom GPT Actions with OpenAPI 3.0 spec
