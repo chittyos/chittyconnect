@@ -363,4 +363,132 @@ describe("MemoryCloude Experience Projection scoping", () => {
     const off = new MemoryCloude({ TOKEN_KV: new MockKV() });
     expect(off.hasAiSearch).toBe(false);
   });
+  it("rejects malformed or lowercase P identifiers before instance provisioning", () => {
+    const m = build();
+    expect(m.isCanonicalPersonId("03-1-USA-0650-P-2606-1-24/extra")).toBe(false);
+    expect(m.isCanonicalPersonId("03-1-usa-0650-p-2606-1-24")).toBe(false);
+  });
+
+  it("rejects a binding whose cached P differs from the authoritative context P", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async first() {
+                // The production query requires equality, so a mismatched join returns no row.
+                return null;
+              },
+            };
+          },
+        };
+      },
+    };
+    const m = build({ DB: db });
+    await expect(m.resolveSessionSyntheticPerson("session-mismatch")).resolves.toBeNull();
+  });
+
+  it("recovers when another isolate wins first-instance provisioning", async () => {
+    let createCalls = 0;
+    const existing = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+    };
+    const m = build({
+      AI_SEARCH: {
+        get() {
+          return existing;
+        },
+        async create() {
+          createCalls += 1;
+          const err = new Error("409 already exists");
+          err.status = 409;
+          throw err;
+        },
+      },
+    });
+
+    // First info must look missing; after the create conflict, get().info() succeeds.
+    let first = true;
+    m.searchNamespace.get = () => ({
+      async info() {
+        if (first) {
+          first = false;
+          const err = new Error("404 not found");
+          err.status = 404;
+          throw err;
+        }
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+    });
+
+    const instance = await m.getOrCreateMemoryInstance(
+      "memory-03-1-usa-0650-p-2606-1-24",
+    );
+    expect(createCalls).toBe(1);
+    expect(await instance.info()).toEqual({
+      id: "memory-03-1-usa-0650-p-2606-1-24",
+    });
+  });
+
+  it("repairs semantic indexing on idempotent replay", async () => {
+    const kv = new MockKV();
+    let uploads = 0;
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      items: {
+        async upload() {
+          uploads += 1;
+        },
+      },
+    };
+    const m = new MemoryCloude({
+      TOKEN_KV: kv,
+      AI_SEARCH: { get: () => instance },
+    });
+
+    const options = {
+      idempotencyKey: "repair-me",
+      syntheticPersonId: "03-1-USA-0650-P-2606-1-24",
+    };
+    await m.persistInteraction(
+      "session-repair",
+      { content: "first", userId: "03-1-USA-0650-P-2606-1-24" },
+      options,
+    );
+    await m.persistInteraction(
+      "session-repair",
+      { content: "first", userId: "03-1-USA-0650-P-2606-1-24" },
+      options,
+    );
+
+    expect(uploads).toBe(2);
+  });
+
+  it("requires an explicit authorized P for decomposition recall", async () => {
+    let searched = false;
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      async search() {
+        searched = true;
+        return { chunks: [] };
+      },
+    };
+    const m = build({ AI_SEARCH: { get: () => instance } });
+
+    await expect(m.recallSimilarDecompositions({ description: "task" })).resolves.toEqual([]);
+    expect(searched).toBe(false);
+
+    await m.recallSimilarDecompositions(
+      { description: "task" },
+      "03-1-USA-0650-P-2606-1-24",
+    );
+    expect(searched).toBe(true);
+  });
+
 });
