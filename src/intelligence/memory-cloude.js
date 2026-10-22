@@ -17,6 +17,8 @@ import { ChittyIDClient } from "../lib/chittyid-client.js";
  * These are the pre-scoping shared buckets; reaching one is a cross-entity read.
  */
 const MEMORY_INSTANCE_DENYLIST = new Set(["memory-cloude", "memory-context-embeddings"]);
+const CANONICAL_CHITTYID_RE =
+  /^\d{2}-[A-Z0-9]-[A-Z]{3}-\d{4}-[PLTEA]-\d{3,4}-[0-5]-\d{1,2}$/;
 
 export class MemoryCloude {
   constructor(env) {
@@ -143,6 +145,15 @@ export class MemoryCloude {
       if (interaction.decisions) {
         await this.persistDecisions(sessionId, interaction.decisions);
       }
+    } else if (this.hasAiSearch && syntheticPersonId) {
+      // A replay also repairs semantic indexing. This covers a first-write race
+      // where KV succeeded but instance provisioning/upload lost a conflict.
+      semanticIndexed = await this.storeEmbedding(
+        interactionId,
+        sessionId,
+        existingRaw,
+        syntheticPersonId,
+      );
     }
 
     // Index repair is safe on replay because both methods deduplicate by id.
@@ -180,6 +191,9 @@ export class MemoryCloude {
    * @returns {string|null} instance id, or null when unscoped
    */
   isCanonicalPersonId(entityId) {
+    if (typeof entityId !== "string" || !CANONICAL_CHITTYID_RE.test(entityId)) {
+      return false;
+    }
     const parsed = ChittyIDClient.parse(entityId);
     return !!parsed && parsed.entityType === "P";
   }
@@ -191,19 +205,20 @@ export class MemoryCloude {
       const row = await this.db
         .prepare(
           `
-          SELECT csb.context_chitty_id
+          SELECT ce.chitty_id, csb.context_chitty_id
           FROM context_session_bindings csb
           JOIN context_entities ce ON ce.id = csb.context_id
           WHERE csb.session_id = ?
             AND csb.unbound_at IS NULL
             AND ce.status = 'active'
+            AND ce.chitty_id = csb.context_chitty_id
           LIMIT 1
         `,
         )
         .bind(sessionId)
         .first();
 
-      const chittyId = row?.context_chitty_id;
+      const chittyId = row?.chitty_id;
       return this.isCanonicalPersonId(chittyId) ? chittyId : null;
     } catch (error) {
       console.warn(
@@ -258,10 +273,26 @@ export class MemoryCloude {
       if (!this.isNotFoundError(error)) throw error;
     }
 
-    const created = await this.searchNamespace.create({ id: instanceId });
-    this.knownMemoryInstances.add(instanceId);
-    console.log("[MemoryCloude™] Provisioned isolated AI Search instance " + instanceId);
-    return created;
+    try {
+      const created = await this.searchNamespace.create({ id: instanceId });
+      this.knownMemoryInstances.add(instanceId);
+      console.log("[MemoryCloude™] Provisioned isolated AI Search instance " + instanceId);
+      return created;
+    } catch (error) {
+      // Multiple Worker isolates may race on first use. If another isolate won,
+      // resolve the now-existing instance and continue rather than dropping indexing.
+      const status = error?.status || error?.statusCode || error?.cause?.status;
+      if (
+        status === 409 ||
+        /already exists|conflict|409/i.test(String(error?.message || ""))
+      ) {
+        const existing = this.searchNamespace.get(instanceId);
+        await existing.info();
+        this.knownMemoryInstances.add(instanceId);
+        return existing;
+      }
+      throw error;
+    }
   }
 
   async storeEmbedding(interactionId, sessionId, interaction, syntheticPersonId) {
@@ -713,7 +744,7 @@ export class MemoryCloude {
   /**
    * Recall similar decompositions for Cognitive-Coordination™
    */
-  async recallSimilarDecompositions(subtask) {
+  async recallSimilarDecompositions(subtask, syntheticPersonId) {
     // Search for similar task decompositions in memory
     if (!this.hasAiSearch) {
       return [];
@@ -722,7 +753,7 @@ export class MemoryCloude {
     // Same rule as semanticRecall: no entity, no instance, no search. Returning []
     // is correct here — a decomposition hint is an optimisation, and losing it costs
     // nothing next to answering from another entity's memory.
-    const instanceId = this.memoryInstanceFor(subtask);
+    const instanceId = this.memoryInstanceFor(syntheticPersonId);
     if (!instanceId) return [];
 
     try {
