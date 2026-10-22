@@ -138,8 +138,10 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 
 ### Git Broker Surface (REST, sensitive) — SPEC
 
-> **Status: SPEC** — these REST broker primitives are NOT YET IMPLEMENTED.
-> Implementation tracked in chittyos/chittyconnect#209.
+> **Status: PARTIAL IMPLEMENTATION** — capability mint/introspection and policy
+> resolution are implemented under chittyos/chittyconnect#209. Force-push
+> confirmation, commit/tag signing, and ledger emission remain fail-closed SPEC
+> surfaces until their custody/dependency gates are implemented.
 >
 > **Architecture (binding).** ChittyConnect is an **authorization server +
 > credential broker**, not an MCP tool host. The MCP surface for git lives on
@@ -179,7 +181,7 @@ from `/api/v1/capabilities/confirm` is required.
       "caller_chittyid":    { "type": "string", "pattern": "^[A-Z0-9]{2}-[A-Z0-9]-[A-Z0-9]{3}-[A-Z0-9]{4}-[PLTEA]-[0-9]{4}-[0-5]-[0-9]{2}$", "description": "Canonical ChittyID VV-G-LLL-SSSS-T-YYMM-C-XX per chittycanon://gov/governance. T in {P,L,T,E,A}; YYMM is year-month; C is trust level 0-5; XX is mod-97 checksum." },
       "tenant_id":          { "type": "string", "minLength": 1, "maxLength": 128 },
       "operation":          { "type": "string", "enum": ["read", "commit", "tag", "push"] },
-      "repo_path":          { "type": "string", "minLength": 1, "description": "Absolute path; validated against tenant repo allowlist." },
+      "repo_path":          { "type": "string", "minLength": 1, "description": "Canonical GitHub repository identifier owner/repo; validated against tenant repo allowlist." },
       "remote":             { "type": "string", "description": "Required when operation='push'." },
       "ref":                { "type": "string", "description": "Required when operation ∈ {commit, tag, push}. Concrete ref (e.g. refs/heads/main, refs/tags/v1.2.3) the capability binds to." },
       "force_class":        { "type": "string", "enum": ["none", "force", "force_with_lease"], "default": "none" },
@@ -415,7 +417,7 @@ default author identity. Called by the resource server during admission.
     "required": ["allowed_repos", "allowed_remotes", "force_push_allowed", "protected_branches"],
     "additionalProperties": false,
     "properties": {
-      "allowed_repos":      { "type": "array", "items": { "type": "string" }, "description": "Absolute path globs." },
+      "allowed_repos":      { "type": "array", "items": { "type": "string" }, "description": "Canonical GitHub owner/repo prefixes for the provider-native resource server." },
       "allowed_remotes":    { "type": "array", "items": { "type": "string" }, "description": "URL globs (e.g. github.com/CHITTYOS/*)." },
       "force_push_allowed": { "type": "boolean" },
       "protected_branches": { "type": "array", "items": { "type": "string" }, "description": "Branches where force-push is hard-denied regardless of confirmation." },
@@ -464,7 +466,11 @@ client. Domain tag is fixed to `git` on this surface.
 
 1. **Signing key** — resolved from chittysecrets via `op://` reference per the sensitive-intent contract. Never read from env vars, disk, or chat. Signing is mandatory for commit and tag flows; broker exposes no disable knob. If chittysecrets is unreachable → fail closed.
 2. **Remote allowlist** — per-tenant config returned by `policy.resolve`. Default: `github.com/CHITTYOS/*`, `github.com/CHITTYFOUNDATION/*`. Resource server MUST refuse push to non-allowlisted remotes → `POLICY_BLOCKED_REMOTE_NOT_ALLOWED`.
-3. **Repo allowlist** — per-tenant. Resource server MUST refuse repos outside the list → `POLICY_BLOCKED_REPO_NOT_ALLOWED`.
+3. **Repo allowlist** — per-tenant, expressed as canonical GitHub `owner/repo`
+   prefixes in the existing `git_repo_allowlist.path_prefix` column. Resource
+   server MUST refuse repos outside the list → `POLICY_BLOCKED_REPO_NOT_ALLOWED`.
+   Host filesystem paths are legacy and are migrated by
+   `020_git_repo_provider_native.sql`.
 4. **Force-push guard** — minting a capability with `force_class != "none"` requires a fresh `confirmation_token` from `/api/v1/capabilities/confirm`. Confirmation tokens are single-use and bound to (caller, tenant, repo, force_class). Force-push to any branch in `protected_branches` is hard-denied regardless of token → `POLICY_BLOCKED_FORCE_TO_PROTECTED`. `force` and `force_with_lease` are distinct values of `force_class` — they cannot be combined.
 5. **Audit** — every successful write requires the resource server to call `/api/v1/ledger/emit`. The returned `ledger_event_id` is included in the response to the client. Domain tag is `git`, hash-chained per the canonical projection model.
 6. **Broker liveness** — if the broker is unreachable from the resource server, the resource server fails closed with `POLICY_BLOCKED_CHITTYCONNECT_UNAVAILABLE`. No local fallback.

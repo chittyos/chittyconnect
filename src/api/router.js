@@ -22,6 +22,7 @@ import { registryRoutes } from "./routes/registry.js";
 import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
 import { googleRoutes } from "./routes/google.js";
+import { gitBrokerRoutes } from "./routes/git-broker.js";
 import { courtlistenerRoutes } from "./routes/courtlistener.js";
 import { credentialsRoutes } from "./routes/credentials.js";
 import { intelligence } from "./routes/intelligence.js";
@@ -163,6 +164,7 @@ api.route("/api/services", servicesRoutes);
 api.route("/api/v1/services", servicesRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/google", googleRoutes);
+api.route("/api/v1", gitBrokerRoutes);
 api.route("/api/proxy/courtlistener", courtlistenerRoutes);
 
 // Mercury routes at /api/mercury/* — legacy path used by ChittyFinance.
