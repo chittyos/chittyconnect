@@ -598,18 +598,39 @@ export class ContextResolver {
   async bindSession(contextId, chittyId, sessionId, platform = "unknown") {
     const bindingId = crypto.randomUUID();
 
-    // Create session binding
+    // Bindings may cache the ChittyID for lookup, but the context entity is
+    // authoritative. Refuse mismatched caller-supplied IDs before writing.
+    const boundContext = await this.db
+      .prepare(
+        `
+      SELECT chitty_id, status
+      FROM context_entities
+      WHERE id = ?
+      LIMIT 1
+    `,
+      )
+      .bind(contextId)
+      .first();
+
+    if (!boundContext || boundContext.status !== "active") {
+      throw new Error("Context must exist and be active before session binding");
+    }
+    if (boundContext.chitty_id !== chittyId) {
+      throw new Error("Context ChittyID does not match requested session binding");
+    }
+
+    // Create session binding from the verified context identity.
     await this.db
       .prepare(
         `
       INSERT INTO context_session_bindings (
         id, session_id, context_id, context_chitty_id, context_hash, platform
       )
-      SELECT ?, ?, ?, ?, context_hash, ?
-      FROM context_entities WHERE id = ?
+      SELECT ?, ?, ?, chitty_id, context_hash, ?
+      FROM context_entities WHERE id = ? AND chitty_id = ? AND status = 'active'
     `,
       )
-      .bind(bindingId, sessionId, contextId, chittyId, platform, contextId)
+      .bind(bindingId, sessionId, contextId, platform, contextId, chittyId)
       .run();
 
     // Update context's session tracking
