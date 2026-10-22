@@ -8,8 +8,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { sessionRoutes } from "../../src/api/routes/sessions.js";
 
+const SYNTHETIC_PERSON_ID = "03-1-USA-5537-P-2602-0-38";
+
 const mockMemory = {
   persistInteraction: vi.fn().mockResolvedValue(undefined),
+  resolveSessionSyntheticPerson: vi.fn().mockResolvedValue(SYNTHETIC_PERSON_ID),
+  isCanonicalPersonId: vi.fn((value) => value === SYNTHETIC_PERSON_ID),
 };
 
 const mockContextResolver = {
@@ -49,6 +53,7 @@ function createTestApp() {
   app.use("*", async (c, next) => {
     c.set("memory", mockMemory);
     c.set("contextResolver", mockContextResolver);
+    c.set("apiKey", { userId: SYNTHETIC_PERSON_ID, status: "active" });
     c.env = c.env || {};
     await next();
   });
@@ -180,9 +185,10 @@ describe("POST /api/v1/sessions/sync", () => {
       "session-1234",
       expect.objectContaining({
         type: "session_sync_end",
-        userId: "03-1-USA-5537-P-2602-0-38",
+        userId: SYNTHETIC_PERSON_ID,
         content: expect.stringContaining("Built session sync endpoint"),
       }),
+      { syntheticPersonId: SYNTHETIC_PERSON_ID },
     );
 
     // Verify project context was saved for next session
