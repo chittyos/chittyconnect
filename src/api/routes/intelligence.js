@@ -8,6 +8,10 @@
  */
 
 import { Hono } from "hono";
+import {
+  authorizeMemorySession,
+  memoryAuthorizationResponse,
+} from "../../lib/memory-authorization.js";
 
 const intelligence = new Hono();
 
@@ -32,6 +36,9 @@ intelligence.get("/consciousness/awareness", async (c) => {
       ...awareness,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -63,6 +70,9 @@ intelligence.post("/consciousness/snapshot", async (c) => {
       predictions,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -101,6 +111,9 @@ intelligence.post("/consciousness/heal", async (c) => {
       message: `Self-healing triggered for ${service}`,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -140,8 +153,10 @@ intelligence.post("/memory/persist", async (c) => {
       return c.json({ error: "Idempotency-Key must be 256 characters or fewer" }, 400);
     }
 
+    const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
     const persisted = await memory.persistInteraction(sessionId, interaction, {
       idempotencyKey,
+      syntheticPersonId,
     });
 
     return c.json({
@@ -151,6 +166,9 @@ intelligence.post("/memory/persist", async (c) => {
       deduplicated: persisted?.deduplicated ?? false,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -178,9 +196,11 @@ intelligence.post("/memory/recall", async (c) => {
       return c.json({ error: "sessionId and query required" }, 400);
     }
 
+    const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
     const contexts = await memory.recallContext(sessionId, query, {
       limit: limit || 5,
       semantic: semantic !== false,
+      syntheticPersonId,
     });
 
     return c.json({
@@ -190,6 +210,9 @@ intelligence.post("/memory/recall", async (c) => {
       contexts,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -211,6 +234,7 @@ intelligence.get("/memory/session/:sessionId", async (c) => {
     }
 
     const sessionId = c.req.param("sessionId");
+    await authorizeMemorySession(c, memory, sessionId);
     const summary = await memory.getSessionSummary(sessionId);
     const stats = await memory.getStats(sessionId);
 
@@ -221,6 +245,9 @@ intelligence.get("/memory/session/:sessionId", async (c) => {
       stats,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -247,6 +274,7 @@ intelligence.post("/memory/summarize", async (c) => {
       return c.json({ error: "sessionId required" }, 400);
     }
 
+    await authorizeMemorySession(c, memory, sessionId);
     const summary = await memory.summarizeSession(sessionId);
 
     return c.json({
@@ -255,6 +283,9 @@ intelligence.post("/memory/summarize", async (c) => {
       summary,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -296,6 +327,9 @@ intelligence.post("/coordination/execute", async (c) => {
       result,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -329,6 +363,9 @@ intelligence.post("/coordination/analyze", async (c) => {
       analysis,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
@@ -356,6 +393,9 @@ intelligence.get("/coordination/stats", async (c) => {
       stats,
     });
   } catch (error) {
+    if (error?.code?.startsWith("MEMORY_")) {
+      return memoryAuthorizationResponse(c, error);
+    }
     return c.json(
       {
         success: false,
