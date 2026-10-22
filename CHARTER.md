@@ -30,7 +30,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - GitHub App integration with fast-ack webhook processing
 - Third-party integration proxy (Notion, OpenAI, Neon, Google Calendar, Cloudflare AI)
 - ContextConsciousness™ - Cross-session context maintenance
-- MemoryCloude™ - Persistent memory for Claude interactions
+- MemoryCloude™ - Persistent Experience Projection for Synthetic Persons: one authorized `memory-<P_ID>` AI Search instance per active Synthetic Person, with logical `/experiences/` organization and cross-session recall. Session IDs refine retrieval but never authorize it; unresolved or mismatched principal scope fails closed.
 - Service health monitoring across ChittyOS ecosystem
 - API key management and rate limiting
 - ChittyID minting coordination

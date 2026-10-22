@@ -300,7 +300,8 @@ export class CognitiveCoordinator {
   /**
    * Execute a complex task with cognitive coordination
    */
-  async executeComplex(task, sessionId) {
+  async executeComplex(task, sessionId, options = {}) {
+    const syntheticPersonId = options.syntheticPersonId || null;
     console.log(
       `[Cognitive-Coordination™] Analyzing task: ${task.description || task.type}`,
     );
@@ -314,7 +315,11 @@ export class CognitiveCoordinator {
     }
 
     // 2. Intelligent decomposition into dependency graph
-    const taskGraph = await this.decomposeIntelligently(task, analysis);
+    const taskGraph = await this.decomposeIntelligently(
+      task,
+      analysis,
+      syntheticPersonId,
+    );
 
     // 3. Create optimal execution plan
     const executionPlan = await this.createExecutionPlan(taskGraph);
@@ -339,7 +344,7 @@ export class CognitiveCoordinator {
       results,
       synthesis,
       performance: this.measurePerformance(results),
-    });
+    }, { syntheticPersonId });
 
     return synthesis;
   }
@@ -412,7 +417,7 @@ Respond in JSON format: {
   /**
    * Intelligently decompose task into dependency graph
    */
-  async decomposeIntelligently(task, analysis) {
+  async decomposeIntelligently(task, analysis, syntheticPersonId) {
     const graph = new TaskGraph();
 
     // Add each subtask to the graph
@@ -426,7 +431,10 @@ Respond in JSON format: {
         });
 
       // Use MemoryCloude™ to learn from past decompositions
-      const learned = await this.memory.recallSimilarDecompositions(subtask);
+      const learned = await this.memory.recallSimilarDecompositions(
+        subtask,
+        syntheticPersonId,
+      );
 
       graph.addNode({
         subtask,

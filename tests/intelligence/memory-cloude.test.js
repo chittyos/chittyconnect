@@ -155,74 +155,340 @@ describe("MemoryCloude session summary — blank-envelope guard", () => {
   });
 });
 
-describe("MemoryCloude entity scoping", () => {
-  // Scope is the instance, never a filter. These assert the boundary itself, so they
-  // are written to FAIL if the resolver ever falls back to a shared instance.
-  const build = (env = {}) => new MemoryCloude({ TOKEN_KV: new MockKV(), ...env });
+describe("MemoryCloude Experience Projection scoping", () => {
+  const build = (env = {}) =>
+    new MemoryCloude({ TOKEN_KV: new MockKV(), ...env });
 
-  it("derives one instance per primary synthetic entity", () => {
+  it("derives one provider-safe instance per canonical Synthetic Person", () => {
     const m = build();
-    expect(m.memoryInstanceFor({ entityId: "03-1-USA-0650-P-2606-1-24" })).toBe(
-      "memory-03-1-USA-0650-P-2606-1-24",
+    expect(m.memoryInstanceFor("03-1-USA-0650-P-2606-1-24")).toBe(
+      "memory-03-1-usa-0650-p-2606-1-24",
     );
   });
 
-  it("gives two entities two different instances", () => {
+  it("gives two Synthetic Persons two different instances", () => {
     const m = build();
-    const a = m.memoryInstanceFor({ entityId: "03-1-USA-0650-P-2606-1-24" });
-    const b = m.memoryInstanceFor({ entityId: "03-1-USA-0651-P-2606-1-25" });
+    const a = m.memoryInstanceFor("03-1-USA-0650-P-2606-1-24");
+    const b = m.memoryInstanceFor("03-1-USA-0651-P-2606-1-25");
     expect(a).not.toBe(b);
   });
 
-  it("returns null rather than a shared instance when no entity is identifiable", () => {
+  it("rejects non-P identities and malformed identifiers", () => {
     const m = build();
-    for (const input of [{}, undefined, null, { entityId: "" }, { entityId: 42 }]) {
-      expect(m.memoryInstanceFor(input)).toBeNull();
-    }
+    expect(m.memoryInstanceFor("03-1-USA-0650-T-2606-1-24")).toBeNull();
+    expect(m.memoryInstanceFor("not-a-chittyid")).toBeNull();
+    expect(m.memoryInstanceFor(null)).toBeNull();
   });
 
-  it("does not let a non-string entity id coerce into an instance name", () => {
-    const m = build();
-    // `memory-[object Object]` would be a single shared bucket every caller lands in.
-    expect(m.memoryInstanceFor({ entityId: { toString: () => "x" } })).toBeNull();
+  it("resolves memory scope from the active session binding, not caller fields", async () => {
+    const expected = "03-1-USA-0650-P-2606-1-24";
+    const db = {
+      prepare() {
+        return {
+          bind(sessionId) {
+            expect(sessionId).toBe("session-bound");
+            return {
+              async first() {
+                return { chitty_id: expected, context_chitty_id: expected };
+              },
+            };
+          },
+        };
+      },
+    };
+    const m = build({ DB: db });
+    await expect(m.resolveSessionSyntheticPerson("session-bound")).resolves.toBe(
+      expected,
+    );
   });
 
-  it("refuses the legacy shared instances a caller could name directly", () => {
-    const m = build();
-    // entityId "cloude" would otherwise resolve to `memory-cloude`, the pre-scoping
-    // everyone-bucket. Naming it must not be a way back into shared memory.
-    expect(m.memoryInstanceFor({ entityId: "cloude" })).toBeNull();
-    expect(m.memoryInstanceFor({ entityId: "context-embeddings" })).toBeNull();
+  it("fails closed for semantic recall when no Synthetic Person scope resolves", async () => {
+    const m = build({
+      AI_SEARCH: {
+        get() {
+          throw new Error("must not touch namespace without scope");
+        },
+      },
+    });
+
+    await expect(
+      m.recallContext("session-unbound", "anything", { semantic: true }),
+    ).rejects.toMatchObject({ code: "MEMORY_SCOPE_UNRESOLVED" });
   });
 
-  it("rejects entity ids that are not plain identifiers", () => {
-    const m = build();
-    for (const bad of ["../evidence", "a/b", "x y", "a".repeat(80), "ab", "-lead", "has.dot"]) {
-      expect(m.memoryInstanceFor({ entityId: bad })).toBeNull();
-    }
+  it("fails closed before persistence when AI Search is active but scope is unresolved", async () => {
+    const kv = new MockKV();
+    const m = new MemoryCloude({
+      TOKEN_KV: kv,
+      AI_SEARCH: {},
+    });
+
+    await expect(
+      m.persistInteraction("session-unbound", {
+        type: "request",
+        content: "must not persist unscoped",
+      }),
+    ).rejects.toMatchObject({ code: "MEMORY_SCOPE_UNRESOLVED" });
+
+    expect([...kv.store.keys()]).toHaveLength(0);
+  });
+
+  it("lazy-provisions a missing per-P AI Search instance", async () => {
+    let createdId = null;
+    const created = { items: { upload: async () => {} } };
+    const m = build({
+      AI_SEARCH: {
+        get(id) {
+          return {
+            async info() {
+              const err = new Error("404 not found");
+              err.status = 404;
+              throw err;
+            },
+          };
+        },
+        async create({ id }) {
+          createdId = id;
+          return created;
+        },
+      },
+    });
+
+    const instance = await m.getOrCreateMemoryInstance(
+      "memory-03-1-usa-0650-p-2606-1-24",
+    );
+    expect(createdId).toBe("memory-03-1-usa-0650-p-2606-1-24");
+    expect(instance).toBe(created);
+  });
+
+  it("stores Experience Projection items under experiences/", async () => {
+    const uploaded = [];
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      items: {
+        async upload(key, content) {
+          uploaded.push({ key, content });
+        },
+      },
+    };
+    const m = build({
+      AI_SEARCH: {
+        get() {
+          return instance;
+        },
+      },
+    });
+
+    const indexed = await m.storeEmbedding(
+      "interaction-1",
+      "session-a",
+      { content: "retained experience" },
+      "03-1-USA-0650-P-2606-1-24",
+    );
+
+    expect(indexed).toBe(true);
+    expect(uploaded).toEqual([
+      {
+        key: "experiences/session-a/interaction-1.txt",
+        content: "retained experience",
+      },
+    ]);
+  });
+
+  it("recalls relevant experiences across sessions inside the same P instance", async () => {
+    const kv = new MockKV();
+    await kv.put(
+      "session:session-a:1",
+      JSON.stringify({
+        id: "session-a-1",
+        content: "older cross-session experience",
+      }),
+    );
+    await kv.put(
+      "session:session-b:2",
+      JSON.stringify({
+        id: "session-b-2",
+        content: "current session experience",
+      }),
+    );
+
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      async search() {
+        return {
+          chunks: [
+            {
+              score: 0.95,
+              item: { key: "experiences/session-a/session-a-1.txt" },
+            },
+            {
+              score: 0.80,
+              item: { key: "experiences/session-b/session-b-2.txt" },
+            },
+          ],
+        };
+      },
+    };
+
+    const m = new MemoryCloude({
+      TOKEN_KV: kv,
+      AI_SEARCH: {
+        get() {
+          return instance;
+        },
+      },
+    });
+
+    const out = await m.semanticRecall(
+      "session-b",
+      "experience",
+      5,
+      "memory-03-1-usa-0650-p-2606-1-24",
+    );
+
+    expect(out).toHaveLength(2);
+    expect(out.map((x) => x.sourceSessionId)).toEqual([
+      "session-a",
+      "session-b",
+    ]);
   });
 
   it("has AI Search state before initialize() is awaited", () => {
-    // src/index.js calls initialize() without awaiting it. If hasAiSearch were only
-    // set there, a request arriving first would silently skip indexing — exactly the
-    // dead-flag bug this file's fix removed. Derive it in the constructor.
     const m = new MemoryCloude({ TOKEN_KV: new MockKV(), AI_SEARCH: {} });
     expect(m.hasAiSearch).toBe(true);
     const off = new MemoryCloude({ TOKEN_KV: new MockKV() });
     expect(off.hasAiSearch).toBe(false);
   });
-
-  it("falls back to keyword recall — not a shared instance — when unscoped", async () => {
+  it("rejects malformed or lowercase P identifiers before instance provisioning", () => {
     const m = build();
-    m.hasAiSearch = true;
-    m.searchNamespace = {
-      get() {
-        throw new Error("semantic path must not be reached without an entity");
+    expect(m.isCanonicalPersonId("03-1-USA-0650-P-2606-1-24/extra")).toBe(false);
+    expect(m.isCanonicalPersonId("03-1-usa-0650-p-2606-1-24")).toBe(false);
+  });
+
+  it("rejects a binding whose cached P differs from the authoritative context P", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async first() {
+                // The production query requires equality, so a mismatched join returns no row.
+                return null;
+              },
+            };
+          },
+        };
       },
     };
-    // No entityId in options => must take the KV keyword path, which cannot cross
-    // an entity boundary because it reads session:{id}:* directly.
-    const out = await m.recallContext("session-1", "anything", { limit: 1 });
-    expect(Array.isArray(out)).toBe(true);
+    const m = build({ DB: db });
+    await expect(m.resolveSessionSyntheticPerson("session-mismatch")).resolves.toBeNull();
   });
+
+  it("recovers when another isolate wins first-instance provisioning", async () => {
+    let createCalls = 0;
+    const existing = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+    };
+    const m = build({
+      AI_SEARCH: {
+        get() {
+          return existing;
+        },
+        async create() {
+          createCalls += 1;
+          const err = new Error("409 already exists");
+          err.status = 409;
+          throw err;
+        },
+      },
+    });
+
+    // First info must look missing; after the create conflict, get().info() succeeds.
+    let first = true;
+    m.searchNamespace.get = () => ({
+      async info() {
+        if (first) {
+          first = false;
+          const err = new Error("404 not found");
+          err.status = 404;
+          throw err;
+        }
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+    });
+
+    const instance = await m.getOrCreateMemoryInstance(
+      "memory-03-1-usa-0650-p-2606-1-24",
+    );
+    expect(createCalls).toBe(1);
+    expect(await instance.info()).toEqual({
+      id: "memory-03-1-usa-0650-p-2606-1-24",
+    });
+  });
+
+  it("repairs semantic indexing on idempotent replay", async () => {
+    const kv = new MockKV();
+    let uploads = 0;
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      items: {
+        async upload() {
+          uploads += 1;
+        },
+      },
+    };
+    const m = new MemoryCloude({
+      TOKEN_KV: kv,
+      AI_SEARCH: { get: () => instance },
+    });
+
+    const options = {
+      idempotencyKey: "repair-me",
+      syntheticPersonId: "03-1-USA-0650-P-2606-1-24",
+    };
+    await m.persistInteraction(
+      "session-repair",
+      { content: "first", userId: "03-1-USA-0650-P-2606-1-24" },
+      options,
+    );
+    await m.persistInteraction(
+      "session-repair",
+      { content: "first", userId: "03-1-USA-0650-P-2606-1-24" },
+      options,
+    );
+
+    expect(uploads).toBe(2);
+  });
+
+  it("requires an explicit authorized P for decomposition recall", async () => {
+    let searched = false;
+    const instance = {
+      async info() {
+        return { id: "memory-03-1-usa-0650-p-2606-1-24" };
+      },
+      async search() {
+        searched = true;
+        return { chunks: [] };
+      },
+    };
+    const m = build({ AI_SEARCH: { get: () => instance } });
+
+    await expect(m.recallSimilarDecompositions({ description: "task" })).resolves.toEqual([]);
+    expect(searched).toBe(false);
+
+    await m.recallSimilarDecompositions(
+      { description: "task" },
+      "03-1-USA-0650-P-2606-1-24",
+    );
+    expect(searched).toBe(true);
+  });
+
 });

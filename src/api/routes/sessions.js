@@ -12,6 +12,7 @@
 import { Hono } from "hono";
 import { SessionStateService } from "../../services/SessionStateService.js";
 import { getCredential } from "../../lib/credential-helper.js";
+import { authorizeMemorySession } from "../../lib/memory-authorization.js";
 
 const sessionRoutes = new Hono();
 
@@ -324,7 +325,31 @@ sessionRoutes.post("/sync", async (c) => {
         };
       }
 
-      // All end operations are independent writes — run in parallel
+      // Resolve and authorize the memory scope while the binding is still active.
+      // Persist final experience before unbinding so teardown cannot race scope resolution.
+      let memoryPersistAction = null;
+      if (interaction && memory) {
+        try {
+          const syntheticPersonId = await authorizeMemorySession(
+            c,
+            memory,
+            sessionId,
+          );
+          await memory.persistInteraction(sessionId, interaction, {
+            syntheticPersonId,
+          });
+          memoryPersistAction = "memory_persisted";
+        } catch (err) {
+          console.error(
+            "[Sessions/Sync] Memory persist failed:",
+            err.message,
+          );
+          memoryPersistAction = "memory_persist_failed";
+        }
+      }
+
+      // Remaining end operations may run in parallel after memory persistence
+      // has consumed the active session binding.
       const endOps = [
         // 1. Update session status
         sessionService
@@ -360,19 +385,7 @@ sessionRoutes.post("/sync", async (c) => {
               })
           : Promise.resolve(null),
 
-        // 3. Persist to MemoryCloude™
-        interaction
-          ? memory
-              .persistInteraction(sessionId, interaction)
-              .then(() => "memory_persisted")
-              .catch((err) => {
-                console.error(
-                  "[Sessions/Sync] Memory persist failed:",
-                  err.message,
-                );
-                return "memory_persist_failed";
-              })
-          : Promise.resolve(null),
+        // 3. Memory persistence ran before unbind above.
 
         // 4. Save project context for next session hydration
         projectContextKey && context
@@ -399,6 +412,7 @@ sessionRoutes.post("/sync", async (c) => {
       ];
 
       const endResults = await Promise.all(endOps);
+      if (memoryPersistAction) result.actions.push(memoryPersistAction);
       for (const action of endResults) {
         if (action) result.actions.push(action);
       }

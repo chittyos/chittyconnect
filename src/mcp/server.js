@@ -6,6 +6,7 @@
 
 import { Hono } from "hono";
 import { mcpAuthMiddleware } from "../middleware/mcp-auth.js";
+import { authorizeMemorySession } from "../lib/memory-authorization.js";
 import rulesCorpus from "../../../../corpus/cook-county-rules/cook_county_corpus.json";
 
 const mcp = new Hono();
@@ -882,7 +883,8 @@ async function persistMemoryInteraction(args, c) {
     throw new Error("sessionId and interaction are required");
   }
 
-  await memory.persistInteraction(sessionId, interaction);
+  const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
+  await memory.persistInteraction(sessionId, interaction, { syntheticPersonId });
 
   return {
     success: true,
@@ -903,9 +905,11 @@ async function recallMemoryContext(args, c) {
     throw new Error("sessionId and query are required");
   }
 
+  const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
   const contexts = await memory.recallContext(sessionId, query, {
     limit: limit || 5,
     semantic: true,
+    syntheticPersonId,
   });
 
   return {
@@ -929,6 +933,7 @@ async function getMemorySessionSummary(args, c) {
     throw new Error("sessionId is required");
   }
 
+  await authorizeMemorySession(c, memory, sessionId);
   const summary = await memory.getSessionSummary(sessionId);
   const stats = await memory.getStats(sessionId);
 
@@ -952,10 +957,14 @@ async function executeCoordinationTask(args, c) {
     throw new Error("task is required");
   }
 
-  const result = await coordinator.executeComplex(
-    task,
-    sessionId || "mcp-session",
-  );
+  if (!sessionId) {
+    throw new Error("sessionId is required for memory-scoped coordination");
+  }
+  const memory = c.get("memory");
+  const syntheticPersonId = await authorizeMemorySession(c, memory, sessionId);
+  const result = await coordinator.executeComplex(task, sessionId, {
+    syntheticPersonId,
+  });
 
   return result;
 }

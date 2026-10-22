@@ -44,6 +44,16 @@ This guide helps contributors work effectively in this repository. It summarizes
 - PRs: include description, linked issues, test plan, and any config changes
 - CI must pass; format and lint clean before request
 
+## Memory Runtime Invariants
+
+- Bind AI Search only to namespace `memory`; never `default` for MemoryCloude.
+- Resolve memory scope from the active `context_session_bindings` -> `context_entities` Synthetic Person binding.
+- Require the authenticated principal P to match the bound P. A caller-provided session ID or `X-ChittyID` never grants access by itself.
+- Use one provider-safe `memory-<P_ID>` instance per Synthetic Person and lazy-provision only after scope authorization.
+- Store searchable retained material under the logical `/experiences/` Experience Projection.
+- Cross-session recall is allowed only inside the same P instance. Cross-P search requires a separately authorized federation path.
+- Legal/evidentiary corpora never share the memory namespace or memory instances.
+
 ## Security & Configuration Tips
 
 - Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys

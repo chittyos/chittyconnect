@@ -10,18 +10,23 @@
  */
 
 import { resolveAiModel, extractAiText } from "../lib/ai-model.js";
+import { ChittyIDClient } from "../lib/chittyid-client.js";
 
 /**
  * Instances that are NOT per-entity and must never be resolved from caller input.
  * These are the pre-scoping shared buckets; reaching one is a cross-entity read.
  */
 const MEMORY_INSTANCE_DENYLIST = new Set(["memory-cloude", "memory-context-embeddings"]);
+const CANONICAL_CHITTYID_RE =
+  /^\d{2}-[A-Z0-9]-[A-Z]{3}-\d{4}-[PLTEA]-\d{3,4}-[0-5]-\d{1,2}$/;
 
 export class MemoryCloude {
   constructor(env) {
     this.env = env;
     this.kv = env.MEMORY_KV || env.TOKEN_KV; // Fallback to TOKEN_KV for now
+    this.db = env.DB;
     this.searchNamespace = env.AI_SEARCH; // Cloudflare AI Search namespace binding
+    this.knownMemoryInstances = new Set();
     // Derived here, NOT in initialize(). src/index.js calls initialize() without
     // awaiting it (`.initialize().catch(...)`), so a request arriving first would see
     // this undefined and silently skip indexing — the same silent-skip that left
@@ -80,6 +85,16 @@ export class MemoryCloude {
     const idempotencyKey =
       options.idempotencyKey || interaction?.idempotencyKey || interaction?.idempotency_key;
     const timestamp = Date.now();
+    const syntheticPersonId = options.syntheticPersonId || null;
+    let semanticIndexed = false;
+
+    if (this.hasAiSearch && !syntheticPersonId) {
+      const error = new Error(
+        "Session is not bound to an active Synthetic Person; memory persistence refused",
+      );
+      error.code = "MEMORY_SCOPE_UNRESOLVED";
+      throw error;
+    }
 
     let interactionId;
     let rawKey;
@@ -108,8 +123,17 @@ export class MemoryCloude {
       );
 
       // 2. AI Search item id is deterministic on idempotent writes.
-      if (this.hasAiSearch) {
-        await this.storeEmbedding(interactionId, sessionId, interaction);
+      if (this.hasAiSearch && syntheticPersonId) {
+        semanticIndexed = await this.storeEmbedding(
+          interactionId,
+          sessionId,
+          interaction,
+          syntheticPersonId,
+        );
+      } else if (this.hasAiSearch) {
+        console.warn(
+          "[MemoryCloude™] Session is not bound to a Synthetic Person; semantic persistence refused",
+        );
       }
 
       // These derivative counters are legacy non-transactional behavior. They
@@ -120,6 +144,15 @@ export class MemoryCloude {
       if (interaction.decisions) {
         await this.persistDecisions(sessionId, interaction.decisions);
       }
+    } else if (this.hasAiSearch && syntheticPersonId) {
+      // A replay also repairs semantic indexing. This covers a first-write race
+      // where KV succeeded but instance provisioning/upload lost a conflict.
+      semanticIndexed = await this.storeEmbedding(
+        interactionId,
+        sessionId,
+        existingRaw,
+        syntheticPersonId,
+      );
     }
 
     // Index repair is safe on replay because both methods deduplicate by id.
@@ -129,7 +162,7 @@ export class MemoryCloude {
     console.log(
       `[MemoryCloude™] Persisted interaction ${interactionId}${deduplicated ? " (deduplicated)" : ""}`,
     );
-    return { interactionId, deduplicated };
+    return { interactionId, deduplicated, syntheticPersonId, semanticIndexed };
   }
 
   /**
@@ -156,49 +189,136 @@ export class MemoryCloude {
    * @param {{entityId?: string, userId?: string}} interaction
    * @returns {string|null} instance id, or null when unscoped
    */
-  memoryInstanceFor(interaction) {
-    const entity = interaction?.entityId || interaction?.userId || this.env?.CHITTY_ENTITY_ID;
-    if (!entity || typeof entity !== "string") return null;
-    // Reject anything that is not a plain identifier. The value reaches here from
-    // request-shaped objects, so it is attacker-influenceable: unconstrained, a caller
-    // could pick a name that resolves to an instance it does not own. The `memory-`
-    // prefix already makes an evidence instance unreachable, but not a sibling one.
-    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(entity)) return null;
-    const instance = `memory-${entity}`;
-    // Legacy shared instances predate per-entity scoping and belong to no entity.
-    // Without this, entityId "cloude" resolves to the old everyone-bucket.
+  isCanonicalPersonId(entityId) {
+    if (typeof entityId !== "string" || !CANONICAL_CHITTYID_RE.test(entityId)) {
+      return false;
+    }
+    const parsed = ChittyIDClient.parse(entityId);
+    return !!parsed && parsed.entityType === "P";
+  }
+
+  async resolveSessionSyntheticPerson(sessionId) {
+    if (!sessionId || !this.db?.prepare) return null;
+
+    try {
+      const row = await this.db
+        .prepare(
+          `
+          SELECT ce.chitty_id, csb.context_chitty_id
+          FROM context_session_bindings csb
+          JOIN context_entities ce ON ce.id = csb.context_id
+          WHERE csb.session_id = ?
+            AND csb.unbound_at IS NULL
+            AND ce.status = 'active'
+            AND ce.chitty_id = csb.context_chitty_id
+          LIMIT 1
+        `,
+        )
+        .bind(sessionId)
+        .first();
+
+      const chittyId = row?.chitty_id;
+      return this.isCanonicalPersonId(chittyId) ? chittyId : null;
+    } catch (error) {
+      console.warn(
+        "[MemoryCloude™] Failed to resolve session Synthetic Person:",
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  memoryInstanceFor(syntheticPersonId) {
+    if (!this.isCanonicalPersonId(syntheticPersonId)) return null;
+    const instance = `memory-${syntheticPersonId.toLowerCase()}`;
     if (MEMORY_INSTANCE_DENYLIST.has(instance)) return null;
     return instance;
   }
 
-  async storeEmbedding(interactionId, sessionId, interaction) {
+  experienceItemKey(sessionId, interactionId) {
+    return `experiences/${encodeURIComponent(sessionId)}/${encodeURIComponent(interactionId)}.txt`;
+  }
+
+  parseExperienceItemKey(key) {
+    if (typeof key !== "string" || !key.startsWith("experiences/")) return null;
+    const parts = key.split("/");
+    if (parts.length !== 3) return null;
     try {
-      if (this.hasAiSearch) {
-        const instanceId = this.memoryInstanceFor(interaction);
-        if (!instanceId) {
-          console.warn(
-            "[MemoryCloude™] No entity id on interaction; skipping AI Search index (unscoped write refused)",
-          );
-          return;
-        }
-        const text = this.extractTextContent(interaction);
-        const instance = this.searchNamespace.get(instanceId);
-        await instance.items.upload(
-          interactionId,
-          text,
-          {
-            metadata: {
-              sessionId: String(sessionId),
-              timestamp: String(Date.now()),
-              userId: String(interaction.userId || ""),
-              type: String(interaction.type || ""),
-            }
-          }
-        );
-        console.log(`[MemoryCloude™] Stored interaction ${interactionId} in AI Search`);
-      }
+      const sessionId = decodeURIComponent(parts[1]);
+      const interactionId = decodeURIComponent(parts[2].replace(/\.txt$/, ""));
+      return { sessionId, interactionId };
+    } catch {
+      return null;
+    }
+  }
+
+  isNotFoundError(error) {
+    const status = error?.status || error?.statusCode || error?.cause?.status;
+    return status === 404 || /not found|404/i.test(String(error?.message || ""));
+  }
+
+  async getOrCreateMemoryInstance(instanceId) {
+    if (!this.searchNamespace || !instanceId) return null;
+    if (this.knownMemoryInstances.has(instanceId)) {
+      return this.searchNamespace.get(instanceId);
+    }
+
+    const instance = this.searchNamespace.get(instanceId);
+    try {
+      await instance.info();
+      this.knownMemoryInstances.add(instanceId);
+      return instance;
     } catch (error) {
-      console.warn("[MemoryCloude™] Interaction storage failed:", error.message);
+      if (!this.isNotFoundError(error)) throw error;
+    }
+
+    try {
+      const created = await this.searchNamespace.create({ id: instanceId });
+      this.knownMemoryInstances.add(instanceId);
+      console.log("[MemoryCloude™] Provisioned isolated AI Search instance " + instanceId);
+      return created;
+    } catch (error) {
+      // Multiple Worker isolates may race on first use. If another isolate won,
+      // resolve the now-existing instance and continue rather than dropping indexing.
+      const status = error?.status || error?.statusCode || error?.cause?.status;
+      if (
+        status === 409 ||
+        /already exists|conflict|409/i.test(String(error?.message || ""))
+      ) {
+        const existing = this.searchNamespace.get(instanceId);
+        await existing.info();
+        this.knownMemoryInstances.add(instanceId);
+        return existing;
+      }
+      throw error;
+    }
+  }
+
+  async storeEmbedding(interactionId, sessionId, interaction, syntheticPersonId) {
+    try {
+      if (!this.hasAiSearch) return false;
+
+      const instanceId = this.memoryInstanceFor(syntheticPersonId);
+      if (!instanceId) {
+        console.warn(
+          "[MemoryCloude™] Invalid Synthetic Person scope; AI Search write refused",
+        );
+        return false;
+      }
+
+      const text = this.extractTextContent(interaction);
+      const instance = await this.getOrCreateMemoryInstance(instanceId);
+      await instance.items.upload(
+        this.experienceItemKey(sessionId, interactionId),
+        text,
+      );
+      console.log(
+        "[MemoryCloude™] Stored experience " + interactionId + " in " + instanceId,
+      );
+      return true;
+    } catch (error) {
+      console.warn("[MemoryCloude™] Experience storage failed:", error.message);
+      return false;
     }
   }
 
@@ -314,18 +434,23 @@ export class MemoryCloude {
    */
   async recallContext(sessionId, query, options = {}) {
     const limit = options.limit || 5;
-    // Semantic recall requires a resolvable entity, because the entity's instance IS
-    // the scope. Unscoped, the only safe answer is the KV-backed keyword path, which
-    // reads `session:{sessionId}:*` and therefore cannot cross an entity boundary.
-    const instanceId = this.memoryInstanceFor(options);
-    const useSemanticSearch =
-      options.semantic !== false && this.hasAiSearch && !!instanceId;
+    const syntheticPersonId = options.syntheticPersonId || null;
+    const instanceId = this.memoryInstanceFor(syntheticPersonId);
+    const wantsSemantic = options.semantic !== false && this.hasAiSearch;
 
-    if (useSemanticSearch) {
-      return await this.semanticRecall(sessionId, query, limit, instanceId);
-    } else {
-      return await this.keywordRecall(sessionId, query, limit);
+    if (wantsSemantic && !instanceId) {
+      const error = new Error(
+        "Session is not bound to an active Synthetic Person; semantic memory scope unresolved",
+      );
+      error.code = "MEMORY_SCOPE_UNRESOLVED";
+      throw error;
     }
+
+    if (wantsSemantic) {
+      return await this.semanticRecall(sessionId, query, limit, instanceId);
+    }
+
+    return await this.keywordRecall(sessionId, query, limit);
   }
 
   /**
@@ -342,44 +467,42 @@ export class MemoryCloude {
    */
   async semanticRecall(sessionId, query, limit, instanceId) {
     try {
-      const instance = this.searchNamespace.get(instanceId);
+      const instance = await this.getOrCreateMemoryInstance(instanceId);
       const searchResults = await instance.search({
         messages: [{ role: "user", content: query }],
         ai_search_options: {
-          retrieval: { top_k: limit * 2 }
-        }
+          retrieval: { top_k: Math.max(limit * 3, limit) },
+        },
       });
 
-      if (!searchResults || !searchResults.chunks) {
-        throw new Error("No results from AI Search");
-      }
+      if (!searchResults || !searchResults.chunks) return [];
 
-      // Filter by session and format
-      const sessionMatches = searchResults.chunks
-        .filter((chunk) => chunk.item.metadata && chunk.item.metadata.sessionId === sessionId)
-        .map((chunk) => ({
-          id: chunk.item.key,
-          score: chunk.score,
-          metadata: chunk.item.metadata,
-        }));
+      const matches = searchResults.chunks
+        .map((chunk) => {
+          const parsed = this.parseExperienceItemKey(chunk.item?.key);
+          if (!parsed) return null;
+          return {
+            id: parsed.interactionId,
+            sourceSessionId: parsed.sessionId,
+            score:
+              Number(chunk.score || 0) +
+              (parsed.sessionId === sessionId ? 0.05 : 0),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
 
-      // Re-rank by recency and relevance
-      const reranked = this.rerank(sessionMatches, {
-        recencyWeight: 0.3,
-        relevanceWeight: 0.7,
-      });
-
-      // Fetch full interaction data
       const contexts = [];
-      for (const match of reranked.slice(0, limit)) {
+      for (const match of matches.slice(0, limit)) {
         const data = await this.kv.get(
-          this.interactionStorageKey(sessionId, match.id),
+          this.interactionStorageKey(match.sourceSessionId, match.id),
           "json",
         );
 
         if (data) {
           contexts.push({
             ...data,
+            sourceSessionId: match.sourceSessionId,
             relevanceScore: match.score,
           });
         }
@@ -619,39 +742,46 @@ export class MemoryCloude {
   /**
    * Recall similar decompositions for Cognitive-Coordination™
    */
-  async recallSimilarDecompositions(subtask) {
-    // Search for similar task decompositions in memory
-    if (!this.hasAiSearch) {
-      return [];
-    }
+  async recallSimilarDecompositions(subtask, syntheticPersonId) {
+    if (!this.hasAiSearch) return [];
 
-    // Same rule as semanticRecall: no entity, no instance, no search. Returning []
-    // is correct here — a decomposition hint is an optimisation, and losing it costs
-    // nothing next to answering from another entity's memory.
-    const instanceId = this.memoryInstanceFor(subtask);
+    const instanceId = this.memoryInstanceFor(syntheticPersonId);
     if (!instanceId) return [];
 
     try {
-      const instance = this.searchNamespace.get(instanceId);
+      const instance = await this.getOrCreateMemoryInstance(instanceId);
       const searchResults = await instance.search({
         messages: [{ role: "user", content: JSON.stringify(subtask) }],
         ai_search_options: {
-          retrieval: {
-            top_k: 5,
-            filters: { type: "task_decomposition" }
-          }
-        }
+          retrieval: { top_k: 10 },
+        },
       });
 
-      if (!searchResults || !searchResults.chunks) {
-        return [];
+      if (!searchResults?.chunks) return [];
+
+      const matches = [];
+      for (const chunk of searchResults.chunks) {
+        const parsed = this.parseExperienceItemKey(chunk.item?.key);
+        if (!parsed) continue;
+
+        const data = await this.kv.get(
+          this.interactionStorageKey(parsed.sessionId, parsed.interactionId),
+          "json",
+        );
+        if (!data || data.type !== "task_decomposition") continue;
+
+        matches.push({
+          task: data.task,
+          taskGraph: data.taskGraph,
+          executionPlan: data.executionPlan,
+          performance: data.performance,
+          synthesis: data.synthesis,
+          sourceSessionId: parsed.sessionId,
+          relevanceScore: Number(chunk.score || 0),
+        });
       }
 
-      return searchResults.chunks.map((chunk) => ({
-        task: chunk.item.metadata.task,
-        approach: chunk.item.metadata.approach,
-        performance: chunk.item.metadata.performance,
-      }));
+      return matches.slice(0, 5);
     } catch (error) {
       console.warn(
         "[MemoryCloude™] Similar decomposition recall failed:",
