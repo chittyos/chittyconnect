@@ -482,7 +482,16 @@ async function requestWithRedirects(
       new URL(location, url),
     );
 
-    if (nextUrl.hostname.toLowerCase() !== url.hostname.toLowerCase()) {
+    const hostChanged =
+      nextUrl.hostname.toLowerCase() !== url.hostname.toLowerCase();
+    if (hostChanged && method !== "GET" && method !== "HEAD") {
+      throw new LegalVaultConnectorError(
+        "LEGAL_VAULT_REDIRECT_BLOCKED",
+        "Provider attempted to redirect an authenticated request across hosts",
+        502,
+      );
+    }
+    if (hostChanged) {
       headers.delete("Authorization");
     }
 
@@ -635,7 +644,17 @@ async function formRead(fetchImpl, config, target, password) {
   const fields = new URLSearchParams();
   fields.set(config.usernameField, config.loginEmail);
   fields.set(config.passwordField, password);
+  const reservedFields = new Set(
+    [config.usernameField, config.passwordField, config.csrfField].filter(Boolean),
+  );
   for (const [key, value] of Object.entries(config.extraFields)) {
+    if (reservedFields.has(key)) {
+      throw new LegalVaultConnectorError(
+        "LEGAL_VAULT_CONFIG_INVALID",
+        "LEGAL_VAULT_LOGIN_EXTRA_FIELDS may not override authentication fields",
+        503,
+      );
+    }
     fields.set(key, value);
   }
   if (config.csrfField) {
