@@ -229,10 +229,14 @@ export function getLegalVaultConfig(env = {}) {
     ),
     secretName,
     credentialRef,
-    maxRedirects: Math.min(
-      10,
-      Math.max(0, Number(env.LEGAL_VAULT_MAX_REDIRECTS || DEFAULT_MAX_REDIRECTS)),
-    ),
+    maxRedirects: (() => {
+      const parsed = Number(
+        env.LEGAL_VAULT_MAX_REDIRECTS ?? DEFAULT_MAX_REDIRECTS,
+      );
+      return Number.isFinite(parsed)
+        ? Math.min(10, Math.max(0, Math.trunc(parsed)))
+        : DEFAULT_MAX_REDIRECTS;
+    })(),
   };
 }
 
@@ -293,6 +297,7 @@ export function buildLegalVaultReadUrl(config, requestedPath) {
     );
   }
   const inScope =
+    config.pathPrefix === "/" ||
     url.pathname === config.pathPrefix ||
     url.pathname.startsWith(`${config.pathPrefix}/`);
   if (!inScope) {
