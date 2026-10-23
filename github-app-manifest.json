@@ -15,7 +15,8 @@
   "default_permissions": {
     "actions": "read",
     "checks": "write",
-    "contents": "read",
+    "contents": "write",
+    "deployments": "write",
     "issues": "write",
     "pull_requests": "write",
     "repository_hooks": "read",
@@ -26,6 +27,7 @@
   "default_events": [
     "check_run",
     "check_suite",
+    "deployment_protection_rule",
     "issues",
     "issue_comment",
     "pull_request",
