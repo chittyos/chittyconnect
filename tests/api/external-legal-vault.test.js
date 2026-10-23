@@ -145,7 +145,7 @@ describe("external legal-vault authentication", () => {
     expect(brokerCalls).toHaveLength(1);
     expect(requests).toHaveLength(2);
     expect(requests[0].init.headers?.Authorization).toBeUndefined();
-    expect(requests[1].init.headers.Authorization).toMatch(/^Basic /);
+    expect(requests[1].init.headers.get("Authorization")).toMatch(/^Basic /);
     expect(requests[1].url).toBe("https://vault.example.test/client");
   });
 
