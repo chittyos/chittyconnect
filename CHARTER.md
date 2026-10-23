@@ -29,6 +29,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - MCP (Model Context Protocol) server for Claude integration
 - GitHub App integration with fast-ack webhook processing
 - Third-party integration proxy (Notion, OpenAI, Neon, Google Calendar, Cloudflare AI)
+- Brokered, read-only external legal client-vault access with runtime-only provider identity, principal scoping, host/path allowlisting, and ChittySecrets custody
 - ContextConsciousness™ - Cross-session context maintenance
 - MemoryCloude™ - Persistent Experience Projection for Synthetic Persons: one authorized `memory-<P_ID>` AI Search instance per active Synthetic Person, with logical `/experiences/` organization and cross-session recall. Session IDs refine retrieval but never authorize it; unresolved or mismatched principal scope fails closed.
 - Service health monitoring across ChittyOS ecosystem
@@ -93,6 +94,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | External | OpenAI API | Chat completions |
 | External | Google Calendar | Event management |
 | External | Neon Database | SQL queries |
+| External | Legal client vault | Read-only provider retrieval through runtime allowlists and brokered credentials |
 
 ## API Contract
 
@@ -108,6 +110,9 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | `/api/services/status` | GET | All services status |
 | `/api/thirdparty/notion/query` | POST | Query Notion |
 | `/api/thirdparty/openai/chat` | POST | OpenAI proxy |
+| `/api/thirdparty/legal-vault/status` | GET | Read-only legal-vault runtime status |
+| `/api/thirdparty/legal-vault/probe` | GET | Sanitized provider/auth probe |
+| `/api/thirdparty/legal-vault/read` | GET | Brokered read within configured client-vault scope |
 
 ### MCP Endpoints
 | Endpoint | Method | Purpose |

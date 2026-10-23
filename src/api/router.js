@@ -21,6 +21,7 @@ import { chittyevidenceRoutes } from "./routes/chittyevidence.js";
 import { registryRoutes } from "./routes/registry.js";
 import { servicesRoutes } from "./routes/services.js";
 import { thirdpartyRoutes } from "./routes/thirdparty.js";
+import { legalVaultRoutes } from "./routes/external-legal-vault.js";
 import { googleRoutes } from "./routes/google.js";
 import { courtlistenerRoutes } from "./routes/courtlistener.js";
 import { credentialsRoutes } from "./routes/credentials.js";
@@ -123,6 +124,7 @@ api.get("/api/health", (c) => {
       registry: "/api/registry",
       services: "/api/services",
       thirdparty: "/api/thirdparty",
+      legalVault: "/api/thirdparty/legal-vault",
       credentials: "/api/credentials",
       intelligence: "/api/intelligence",
       dashboard: "/api/dashboard",
@@ -161,6 +163,7 @@ api.route("/api/chittyevidence", chittyevidenceRoutes);
 api.route("/api/registry", registryRoutes);
 api.route("/api/services", servicesRoutes);
 api.route("/api/v1/services", servicesRoutes);
+api.route("/api/thirdparty/legal-vault", legalVaultRoutes);
 api.route("/api/thirdparty", thirdpartyRoutes);
 api.route("/api/google", googleRoutes);
 api.route("/api/proxy/courtlistener", courtlistenerRoutes);

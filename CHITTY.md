@@ -28,7 +28,7 @@ Cloudflare Worker deployed at connect.chitty.cc with Neon PostgreSQL, KV, and Du
   - `public.context_*`, `public.document_*`, `public.credential_*`, etc. — ChittyConnect application schema (migrations 001–018, D1 mirror)
   - `neon_auth.{user,account,session,verification,organization,member,invitation}` — **ChittyConnect-owned** user identity surface, JWKS-federated from `auth.chitty.cc` with RLS bound to JWT `sub` (migration 019)
   - `neon_auth.{jwks,project_config}` — owned by ChittyAuth (read-only here)
-- **Integrations**: Notion, OpenAI, Google Calendar, Neon, Cloudflare AI
+- **Integrations**: Notion, OpenAI, Google Calendar, Neon, Cloudflare AI, runtime-configured external legal client vaults (brokered, read-only)
 - **Memory topology**: `memory` AI Search namespace; one lazily provisioned provider-safe `memory-<P_ID>` instance per active Synthetic Person; logical `/experiences/` Experience Projection; ContextConsciousness holds working memory/attention.
 
 ### Three Interfaces
@@ -74,6 +74,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 | ChittyCases | Case management |
 | ChittyEvidence | Evidence management |
 | ChittyLedger | Transaction recording |
+| External legal-vault provider | Read-only client-vault retrieval; provider identity and scope remain runtime-only |
 
 ### Endpoints
 | Path | Method | Auth | Purpose |
@@ -84,6 +85,9 @@ Source: `chittycanon://gov/governance#three-aspects`
 | `/api/chittyid/validate` | POST | Yes | Validate ChittyID |
 | `/api/services/status` | GET | Yes | All services status |
 | `/api/thirdparty/notion/query` | POST | Yes | Query Notion |
+| `/api/thirdparty/legal-vault/status` | GET | Yes | Legal-vault runtime readiness |
+| `/api/thirdparty/legal-vault/probe` | GET | Yes | Sanitized provider/auth probe |
+| `/api/thirdparty/legal-vault/read` | GET | Yes | Brokered read within configured client scope |
 | `/mcp/tools/list` | GET | Yes | MCP tools |
 | `/mcp/tools/call` | POST | Yes | Execute MCP tool |
 

@@ -1984,6 +1984,161 @@
           }
         }
       }
+    },
+    "/api/thirdparty/legal-vault/status": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Get external legal-vault connector status",
+        "description": "Returns generic runtime readiness without resolving or exposing provider credentials.",
+        "operationId": "getExternalLegalVaultStatus",
+        "responses": {
+          "200": {
+            "description": "Connector runtime status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": [
+                        "read-only"
+                      ]
+                    },
+                    "runtime": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          }
+        }
+      }
+    },
+    "/api/thirdparty/legal-vault/probe": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Probe external legal-vault transport and authentication",
+        "description": "Performs an unauthenticated, allowlisted provider probe and returns sanitized transport metadata only. Provider body, credentials, cookies, and session material are never returned.",
+        "operationId": "probeExternalLegalVault",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional read path constrained to the runtime-configured vault scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized probe result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "final_host": {
+                      "type": "string"
+                    },
+                    "final_path": {
+                      "type": "string"
+                    },
+                    "authentication": {
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Destination falls outside the configured provider scope"
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          },
+          "502": {
+            "description": "Provider network or response failure"
+          },
+          "503": {
+            "description": "Connector runtime configuration is incomplete"
+          }
+        }
+      }
+    },
+    "/api/thirdparty/legal-vault/read": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Read from an external legal client vault",
+        "description": "Resolves the provider credential through the private ChittySecrets service binding, authenticates inside the provider boundary, and returns read-only content from the configured client-vault scope. Provider cookies and auth-adjacent response headers are stripped.",
+        "operationId": "readExternalLegalVault",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional read path constrained to the runtime-configured vault scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider content",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Destination falls outside the configured provider scope"
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          },
+          "502": {
+            "description": "Provider authentication/network failure"
+          },
+          "503": {
+            "description": "Credential broker, credential policy, or provider protocol is unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2385,6 +2540,10 @@
     {
       "name": "Tenant Management",
       "description": "Project-per-tenant Neon database isolation \u2014 provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
+    },
+    {
+      "name": "External Legal Vault",
+      "description": "Authenticated, principal-scoped, read-only access to runtime-configured external legal client vaults. Provider credentials remain in ChittySecrets."
     }
   ]
 }
