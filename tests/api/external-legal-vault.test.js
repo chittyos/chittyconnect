@@ -66,6 +66,7 @@ describe("external legal-vault configuration", () => {
     expect(
       legalVaultPrincipalAuthorized({ userId: "user:other" }, env),
     ).toBe(false);
+    expect(legalVaultPrincipalAuthorized({ name: "user:test" }, env)).toBe(false);
     expect(legalVaultPrincipalAuthorized({ type: "oauth" }, env)).toBe(false);
   });
 });
