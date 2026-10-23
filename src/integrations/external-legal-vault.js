@@ -249,17 +249,9 @@ export function legalVaultPrincipalAuthorized(keyInfo, env = {}) {
   );
   if (allowed.size === 0) return false;
 
-  const candidates = [
-    keyInfo.userId,
-    keyInfo.email,
-    keyInfo.name,
-    keyInfo.subject,
-    keyInfo.sub,
-  ]
-    .filter((value) => typeof value === "string" && value.trim())
-    .map((value) => value.trim().toLowerCase());
-
-  return candidates.some((candidate) => allowed.has(candidate));
+  const userId =
+    typeof keyInfo.userId === "string" ? keyInfo.userId.trim().toLowerCase() : "";
+  return Boolean(userId) && allowed.has(userId);
 }
 
 export function validateLegalVaultProviderUrl(config, input) {
