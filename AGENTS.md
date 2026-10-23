@@ -57,5 +57,8 @@ This guide helps contributors work effectively in this repository. It summarizes
 ## Security & Configuration Tips
 
 - Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys
+- External legal-vault integrations keep provider identity, login principal, client path, and credential references in runtime configuration; do not commit client-specific values to this public repository
+- Legal-vault passwords resolve only through the private `SVC_SECRETS` broker at the provider-execution boundary; never add a plaintext env fallback, log credential/cookie/form values, or return provider session headers
+- External legal-vault provider access is read-only; POST is permitted only inside authentication flows, and every provider host/redirect must remain on the runtime allowlist
 - For npm publish, CI loads tokens via GitHub/chittysecrets; local publishes require `--access public` for scoped packages
 
