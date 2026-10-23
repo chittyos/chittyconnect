@@ -203,6 +203,62 @@ describe("external legal-vault authentication", () => {
     expect(requests[2].url).toBe("https://vault.example.test/client");
   });
 
+  it("blocks cross-host redirects that would replay an authentication POST", async () => {
+    const { env } = baseEnv({
+      LEGAL_VAULT_LOGIN_MODE: "form",
+      LEGAL_VAULT_LOGIN_URL: "https://auth.example.test/login",
+      LEGAL_VAULT_LOGIN_POST_URL: "https://auth.example.test/session",
+      LEGAL_VAULT_USERNAME_FIELD: "login",
+      LEGAL_VAULT_PASSWORD_FIELD: "password",
+    });
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response('<form><input type="password" name="password"></form>', {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+      return new Response(null, {
+        status: 307,
+        headers: { Location: "https://vault.example.test/session-continue" },
+      });
+    };
+
+    await expect(readLegalVault(env, { fetchImpl })).rejects.toMatchObject({
+      code: "LEGAL_VAULT_REDIRECT_BLOCKED",
+      status: 502,
+    });
+    expect(calls).toBe(2);
+  });
+
+  it("does not allow extra form fields to override credential fields", async () => {
+    const { env } = baseEnv({
+      LEGAL_VAULT_LOGIN_MODE: "form",
+      LEGAL_VAULT_LOGIN_URL: "https://auth.example.test/login",
+      LEGAL_VAULT_USERNAME_FIELD: "login",
+      LEGAL_VAULT_PASSWORD_FIELD: "password",
+      LEGAL_VAULT_LOGIN_EXTRA_FIELDS: JSON.stringify({
+        password: "not-allowed",
+      }),
+    });
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return new Response('<form><input type="password" name="password"></form>', {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    };
+
+    await expect(readLegalVault(env, { fetchImpl })).rejects.toMatchObject({
+      code: "LEGAL_VAULT_CONFIG_INVALID",
+      status: 503,
+    });
+    expect(calls).toBe(1);
+  });
+
   it("blocks redirects to a host outside the runtime allowlist", async () => {
     const { env } = baseEnv({ LEGAL_VAULT_LOGIN_MODE: "basic" });
     let calls = 0;
