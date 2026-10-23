@@ -50,7 +50,7 @@ in source and tests.
 | `LEGAL_VAULT_BASE_URL` | yes | HTTPS origin for the vault, e.g. `https://vault.example.test` |
 | `LEGAL_VAULT_PATH_PREFIX` | yes | Client boundary, e.g. `/client` |
 | `LEGAL_VAULT_ALLOWED_HOSTS` | yes | Comma-separated provider hosts allowed for login/redirects |
-| `LEGAL_VAULT_ALLOWED_PRINCIPALS` | yes | Comma-separated trusted API-key principal identifiers |
+| `LEGAL_VAULT_ALLOWED_PRINCIPALS` | yes | Comma-separated authenticated ChittyConnect `userId` values |
 | `LEGAL_VAULT_LOGIN_EMAIL` | yes | Provider login principal; runtime-only |
 | `LEGAL_VAULT_LOGIN_MODE` | no | `auto` (default), `basic`, or `form` |
 | `LEGAL_VAULT_LOGIN_URL` | form | Login form URL |
@@ -111,7 +111,9 @@ the caller.
 ## API
 
 All endpoints inherit ChittyConnect's normal `/api/*` authentication and then
-apply the narrower legal-vault principal allowlist.
+apply the narrower legal-vault principal allowlist against the authenticated
+`apiKey.userId`. Display names, headers, and provider login identifiers do not
+grant access.
 
 ### `GET /api/thirdparty/legal-vault/status`
 
