@@ -999,15 +999,23 @@
                 "properties": {
                   "entity_type": {
                     "type": "string",
-                    "enum": ["P", "L", "T", "E", "A"],
+                    "enum": [
+                      "P",
+                      "L",
+                      "T",
+                      "E",
+                      "A"
+                    ],
                     "default": "T",
-                    "description": "Canonical entity type (chittycanon://gov/governance#core-types). Optional \u2014 if omitted it defaults to 'T'. An explicitly empty or non-string value is rejected rather than defaulted."
+                    "description": "Canonical entity type (chittycanon://gov/governance#core-types). Optional — if omitted it defaults to 'T'. An explicitly empty or non-string value is rejected rather than defaulted."
                   },
                   "subtype": {
                     "type": "string",
-                    "description": "Optional \u2014 if omitted it defaults to 'service' when entity_type is 'T'. Agent-like subtypes (synthetic, agent, subagent, channel) require entity_type='P'; actors with agency are never Things."
+                    "description": "Optional — if omitted it defaults to 'service' when entity_type is 'T'. Agent-like subtypes (synthetic, agent, subagent, channel) require entity_type='P'; actors with agency are never Things."
                   },
-                  "name": { "type": "string" },
+                  "name": {
+                    "type": "string"
+                  },
                   "description": {
                     "type": "string",
                     "description": "Required for the T/service profile."
@@ -1026,7 +1034,9 @@
                   },
                   "triggers": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                      "type": "string"
+                    },
                     "description": "Required and non-empty for the T/skill profile."
                   },
                   "skill_file": {
@@ -1043,7 +1053,9 @@
                   }
                 },
                 "description": "Required fields are conditional on the entity profile. Only 'name' is unconditionally required; the rest are enforced per profile by the broker and, authoritatively, by chittyregister.",
-                "required": ["name"]
+                "required": [
+                  "name"
+                ]
               }
             }
           }
@@ -1197,7 +1209,9 @@
         "summary": "Get Identity Policy Bundle",
         "description": "Return the system-wide governance policy bundle keyed by ChittyID so the governance contract travels with the identity across any channel (Claude, Desktop, Mobile, web, ChatGPT). Public, non-secret governance — no authentication required. Supports conditional requests via the ETag header (derived from the bundle's content hash): send a matching If-None-Match to receive 304 Not Modified.",
         "operationId": "getIdentityPolicyBundle",
-        "tags": ["Identity"],
+        "tags": [
+          "Identity"
+        ],
         "security": [],
         "parameters": [
           {
@@ -1205,14 +1219,18 @@
             "in": "path",
             "required": true,
             "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "If-None-Match",
             "in": "header",
             "required": false,
             "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1221,11 +1239,15 @@
             "headers": {
               "ETag": {
                 "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               },
               "Cache-Control": {
                 "description": "public, max-age=300, must-revalidate",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -1233,18 +1255,33 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "chittyId": { "type": "string" },
-                    "version": { "type": "string", "example": "v1" },
-                    "scope": { "type": "string", "example": "system-wide" },
-                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" },
+                    "chittyId": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "v1"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "example": "system-wide"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "description": "SHA-256 of the bundle file contents"
+                    },
                     "bundle": {
                       "type": "object",
                       "description": "Map of bundle file keys to { name, content }.",
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "name": { "type": "string" },
-                          "content": { "type": "string" }
+                          "name": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string"
+                          }
                         }
                       }
                     }
@@ -1258,7 +1295,9 @@
             "headers": {
               "ETag": {
                 "description": "Current bundle ETag (W/\"<sha256>\").",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1269,8 +1308,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
-                    "message": { "type": "string" }
+                    "error": {
+                      "type": "string",
+                      "example": "INVALID_CHITTYID"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -1284,7 +1328,9 @@
         "summary": "Check Identity Policy Bundle Version",
         "description": "Lightweight version probe for the identity policy bundle. Returns the bundle version and content hash without the full file payload so a client can detect drift cheaply. Public, non-secret governance — no authentication required. Supports conditional requests via ETag/If-None-Match (304 Not Modified).",
         "operationId": "checkIdentityPolicyBundle",
-        "tags": ["Identity"],
+        "tags": [
+          "Identity"
+        ],
         "security": [],
         "parameters": [
           {
@@ -1292,14 +1338,18 @@
             "in": "path",
             "required": true,
             "description": "Canonical ChittyID (VV-G-LLL-SSSS-T-YYMM-C-XX, entity type T in P/L/T/E/A)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "If-None-Match",
             "in": "header",
             "required": false,
             "description": "Bundle ETag from a prior response. If it matches the current bundle, the server returns 304 with no body.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1308,7 +1358,9 @@
             "headers": {
               "ETag": {
                 "description": "Weak validator derived from the bundle content hash (W/\"<sha256>\").",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -1316,9 +1368,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "chittyId": { "type": "string" },
-                    "version": { "type": "string", "example": "v1" },
-                    "sha256": { "type": "string", "description": "SHA-256 of the bundle file contents" }
+                    "chittyId": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "v1"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "description": "SHA-256 of the bundle file contents"
+                    }
                   }
                 }
               }
@@ -1329,7 +1389,9 @@
             "headers": {
               "ETag": {
                 "description": "Current bundle ETag (W/\"<sha256>\").",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1340,8 +1402,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": { "type": "string", "example": "INVALID_CHITTYID" },
-                    "message": { "type": "string" }
+                    "error": {
+                      "type": "string",
+                      "example": "INVALID_CHITTYID"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -1869,14 +1936,8 @@
               }
             }
           },
-          "502": {
-            "description": "Bad Gateway \u2014 upstream fetch failed or returned invalid JSON"
-          },
-          "503": {
-            "description": "CourtListener token not provisioned"
-          },
           "400": {
-            "description": "path_not_allowed \u2014 resource not in allowlist",
+            "description": "path_not_allowed — resource not in allowlist",
             "content": {
               "application/json": {
                 "schema": {
@@ -1899,6 +1960,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Bad Gateway — upstream fetch failed or returned invalid JSON"
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
           }
         }
       }
@@ -1948,14 +2015,8 @@
               }
             }
           },
-          "502": {
-            "description": "Bad Gateway \u2014 upstream fetch failed or returned invalid JSON"
-          },
-          "503": {
-            "description": "CourtListener token not provisioned"
-          },
           "400": {
-            "description": "path_not_allowed \u2014 resource not in allowlist",
+            "description": "path_not_allowed — resource not in allowlist",
             "content": {
               "application/json": {
                 "schema": {
@@ -1981,6 +2042,169 @@
           },
           "404": {
             "description": "Item not found at upstream"
+          },
+          "502": {
+            "description": "Bad Gateway — upstream fetch failed or returned invalid JSON"
+          },
+          "503": {
+            "description": "CourtListener token not provisioned"
+          }
+        }
+      }
+    },
+    "/api/thirdparty/legal-vault/status": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Get external legal-vault connector status",
+        "description": "Returns generic runtime readiness without resolving or exposing provider credentials.",
+        "operationId": "getExternalLegalVaultStatus",
+        "responses": {
+          "200": {
+            "description": "Connector runtime status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": [
+                        "read-only"
+                      ]
+                    },
+                    "runtime": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          }
+        }
+      }
+    },
+    "/api/thirdparty/legal-vault/probe": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Probe external legal-vault transport and authentication",
+        "description": "Performs an unauthenticated, allowlisted provider probe and returns sanitized transport metadata only. Provider body, credentials, cookies, and session material are never returned.",
+        "operationId": "probeExternalLegalVault",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional read path constrained to the runtime-configured vault scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized probe result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "final_host": {
+                      "type": "string"
+                    },
+                    "final_path": {
+                      "type": "string"
+                    },
+                    "authentication": {
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Destination falls outside the configured provider scope"
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          },
+          "502": {
+            "description": "Provider network or response failure"
+          },
+          "503": {
+            "description": "Connector runtime configuration is incomplete"
+          }
+        }
+      }
+    },
+    "/api/thirdparty/legal-vault/read": {
+      "get": {
+        "tags": [
+          "External Legal Vault"
+        ],
+        "summary": "Read from an external legal client vault",
+        "description": "Resolves the provider credential through the private ChittySecrets service binding, authenticates inside the provider boundary, and returns read-only content from the configured client-vault scope. Provider cookies and auth-adjacent response headers are stripped.",
+        "operationId": "readExternalLegalVault",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional read path constrained to the runtime-configured vault scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider content",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Destination falls outside the configured provider scope"
+          },
+          "403": {
+            "description": "Authenticated principal is not authorized for legal-vault access"
+          },
+          "502": {
+            "description": "Provider authentication/network failure"
+          },
+          "503": {
+            "description": "Credential broker, credential policy, or provider protocol is unavailable"
           }
         }
       }
@@ -2384,7 +2608,11 @@
     },
     {
       "name": "Tenant Management",
-      "description": "Project-per-tenant Neon database isolation \u2014 provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
+      "description": "Project-per-tenant Neon database isolation — provision, query, export, and replicate data to physically isolated tenant databases for data ownership and portability"
+    },
+    {
+      "name": "External Legal Vault",
+      "description": "Authenticated, principal-scoped, read-only access to runtime-configured external legal client vaults. Provider credentials remain in ChittySecrets."
     }
   ]
 }
