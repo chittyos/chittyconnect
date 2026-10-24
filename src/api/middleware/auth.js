@@ -143,6 +143,19 @@ export async function authenticate(c, next) {
     return c.json({ error: "API key is inactive" }, 401);
   }
 
+  // The MCP-key middleware already enforces expiresAt, but the main
+  // ChittyConnect /api/* authentication path previously ignored it. That let
+  // an expired parent key create fresh self-service keys (#313) and allowed
+  // an expired key to access any API route indefinitely. Match the established
+  // MCP semantics and fail closed on malformed stored expiry metadata.
+  if (keyInfo.expiresAt !== null && keyInfo.expiresAt !== undefined &&
+      keyInfo.expiresAt !== "") {
+    const expiry = Date.parse(keyInfo.expiresAt);
+    if (!Number.isFinite(expiry) || expiry <= Date.now()) {
+      return c.json({ error: "API key expired", code: "API_KEY_EXPIRED" }, 401);
+    }
+  }
+
   // Optional KV-based rate limiting (only if RATE_LIMIT is bound)
   // In environments without RATE_LIMIT KV, skip this and rely on
   // the dedicated token-bucket middleware when enabled.
