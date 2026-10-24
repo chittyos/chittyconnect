@@ -88,7 +88,7 @@ promptRoutes.get("/:id", async (c) => {
 
   // RY: check consumer gate on read
   const getApiKey = c.get("apiKey");
-  const getConsumerService = getApiKey?.service || getApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const getConsumerService = getApiKey?.service || getApiKey?.chittyId || "unknown";
   const consumerCheck = checkConsumerGate(prompt, getConsumerService);
   if (!consumerCheck.allowed) {
     return c.json({ error: "Unauthorized: consumer gate denied", reason: consumerCheck.reason }, 403);
@@ -112,7 +112,7 @@ promptRoutes.get("/", async (c) => {
 
   // RY: filter results by consumer gate
   const listApiKey = c.get("apiKey");
-  const listConsumerService = listApiKey?.service || listApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const listConsumerService = listApiKey?.service || listApiKey?.chittyId || "unknown";
   const filtered = (results.results || []).filter((row) => checkConsumerGate(row, listConsumerService).allowed);
 
   return c.json({ prompts: filtered.map(formatPrompt), total: filtered.length });
@@ -197,7 +197,7 @@ promptRoutes.post("/resolve", async (c) => {
 
   const environment = body.environment || "production";
   const apiKey = c.get("apiKey");
-  const consumerService = apiKey?.service || apiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerService = apiKey?.service || apiKey?.chittyId || "unknown";
   const consumerId = apiKey?.chittyId || apiKey?.userId || null;
 
   // RY: check consumer gate
@@ -265,7 +265,7 @@ promptRoutes.post("/execute", async (c) => {
 
   const environment = body.environment || "production";
   const apiKeyExec = c.get("apiKey");
-  const consumerService = apiKeyExec?.service || apiKeyExec?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const consumerService = apiKeyExec?.service || apiKeyExec?.chittyId || "unknown";
   const consumerId = apiKeyExec?.chittyId || apiKeyExec?.userId || null;
 
   // RY: gates
@@ -421,7 +421,7 @@ promptRoutes.post("/executions/:executionId/quality", async (c) => {
 
   // Verify the execution exists and belongs to the caller
   const qualityApiKey = c.get("apiKey");
-  const callerService = qualityApiKey?.service || qualityApiKey?.chittyId || c.req.header("X-Source-Service") || "unknown";
+  const callerService = qualityApiKey?.service || qualityApiKey?.chittyId || "unknown";
   const callerId = qualityApiKey?.chittyId || qualityApiKey?.userId || null;
 
   const execution = await db.prepare(
@@ -569,9 +569,11 @@ function checkAuthorGate(prompt, consumerId) {
 
 function checkConsumerGate(prompt, consumerService) {
   const gate = safeParseJson(prompt.consumer_gate);
-  if (!gate.allowedServices || gate.allowedServices.includes("*")) {
-    return { allowed: true };
+  if (!Object.hasOwn(gate, "allowedServices")) return { allowed: true };
+  if (!Array.isArray(gate.allowedServices)) {
+    return { allowed: false, reason: "invalid allowedServices in consumer gate" };
   }
+  if (gate.allowedServices.includes("*")) return { allowed: true };
   if (!gate.allowedServices.includes(consumerService)) {
     return { allowed: false, reason: `Service ${consumerService} not in allowedServices` };
   }
