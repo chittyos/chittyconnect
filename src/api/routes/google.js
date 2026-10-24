@@ -299,6 +299,71 @@ googleRoutes.get("/gdrive/files/:fileId/content", async (c) => {
   });
 });
 
+/**
+ * GET /gdrive/files/:fileId/text
+ * Export a native Google Doc as UTF-8 text without exposing the Google token.
+ * This is the read half of ChittyConnect #362 for ChittyConfig projections.
+ *
+ * Only Google Docs are accepted here. Sheets/Slides keep their existing content
+ * behavior; projection reconciliation requires deterministic authored text.
+ */
+googleRoutes.get("/gdrive/files/:fileId/text", async (c) => {
+  const fileId = c.req.param("fileId");
+  const token = await getGoogleToken(c.env, { scope: "drive" });
+  if (!token) return c.json({ error: "Google access token not available" }, 503);
+
+  const encodedFileId = encodeURIComponent(fileId);
+  const metadataParams = withAllDrives(
+    c,
+    new URLSearchParams({ fields: "id,name,mimeType,modifiedTime" }),
+  );
+  const metadataResponse = await fetch(
+    `${DRIVE_API}/files/${encodedFileId}?${metadataParams}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  if (!metadataResponse.ok) {
+    return c.json(
+      { error: `Failed to fetch file metadata: ${metadataResponse.status}` },
+      metadataResponse.status,
+    );
+  }
+
+  const metadata = await metadataResponse.json();
+  if (metadata.mimeType !== "application/vnd.google-apps.document") {
+    return c.json(
+      {
+        error: "Drive text export requires a native Google Doc",
+        mime_type: metadata.mimeType || null,
+      },
+      415,
+    );
+  }
+
+  const exportUrl =
+    `${DRIVE_API}/files/${encodedFileId}/export?mimeType=` +
+    encodeURIComponent("text/plain");
+  const response = await fetch(exportUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    return c.json(
+      { error: `Drive text export failed: ${response.status}` },
+      response.status,
+    );
+  }
+
+  return new Response(response.body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-Chitty-Drive-File-Id": String(metadata.id || fileId),
+      "X-Chitty-Drive-Modified-Time": String(metadata.modifiedTime || ""),
+    },
+  });
+});
+
 // ============================================
 // GMAIL
 // ============================================
