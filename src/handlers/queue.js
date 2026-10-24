@@ -29,6 +29,7 @@ import { createComplianceCheck } from "../github/checks.js";
 import { autoLabelPullRequest } from "../github/labels.js";
 import { summarizePullRequest } from "../github/comments.js";
 import { requestReviewers } from "../github/reviewers.js";
+import { handleEpistemicCommand } from "../github/epistemic-commands.js";
 
 // Back off between redeliveries so an autoassist outage is not hammered.
 const RETRY_DELAY_SECONDS = 30;
@@ -431,6 +432,11 @@ async function runAutomations(
       break;
 
     case "issue_comment":
+      {
+        const commandResult = await handleEpistemicCommand(env, token, payload);
+        if (commandResult.handled) break;
+      }
+
       // Re-summarize on "/chitty summarize" command
       if (payload.comment?.body?.includes("/chitty summarize")) {
         const issue = payload.issue;
