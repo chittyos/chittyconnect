@@ -47,7 +47,8 @@
   "migrations": [
     { "tag": "v3", "new_classes": ["MCPSessionDurableObject"] },
     { "tag": "v4", "renamed_classes": [{"from": "MCPSessionDurableObject", "to": "MCPSessionGraveyard"}], "new_sqlite_classes": ["McpConnectAgent"] },
-    { "tag": "v5", "new_sqlite_classes": ["SessionStateActor"] }
+    { "tag": "v5", "new_sqlite_classes": ["SessionStateActor"] },
+    { "tag": "v6", "new_sqlite_classes": ["GitHubIssueIdempotency"] }
   ],
 
   // ──────────────────────────────────────────────────────────────────
@@ -135,7 +136,8 @@
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
-          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" },
+          { "name": "GITHUB_ISSUE_IDEMPOTENCY", "class_name": "GitHubIssueIdempotency" }
         ]
       },
       "d1_databases": [
@@ -269,7 +271,8 @@
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
-          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" },
+          { "name": "GITHUB_ISSUE_IDEMPOTENCY", "class_name": "GitHubIssueIdempotency" }
         ]
       },
       "d1_databases": [
@@ -412,7 +415,8 @@
       "durable_objects": {
         "bindings": [
           { "name": "MCP_AGENT", "class_name": "McpConnectAgent" },
-          { "name": "SESSION_STATE", "class_name": "SessionStateActor" }
+          { "name": "SESSION_STATE", "class_name": "SessionStateActor" },
+          { "name": "GITHUB_ISSUE_IDEMPOTENCY", "class_name": "GitHubIssueIdempotency" }
         ]
       },
       "d1_databases": [

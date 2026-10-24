@@ -39,7 +39,16 @@ export async function generateAppJWT(appId, privateKeyPem) {
  * @param {string} appJwt - App JWT
  * @returns {Promise<{token: string, expiresAt: string, permissions: object}>}
  */
-export async function getInstallationToken(installationId, appJwt) {
+export async function getInstallationToken(installationId, appJwt, options = {}) {
+  const body = {};
+  if (Array.isArray(options.repositories) && options.repositories.length > 0) {
+    body.repositories = options.repositories;
+  }
+  if (options.permissions && Object.keys(options.permissions).length > 0) {
+    body.permissions = options.permissions;
+  }
+  const hasBody = Object.keys(body).length > 0;
+
   const response = await fetch(
     `https://api.github.com/app/installations/${installationId}/access_tokens`,
     {
@@ -47,8 +56,11 @@ export async function getInstallationToken(installationId, appJwt) {
       headers: {
         Authorization: `Bearer ${appJwt}`,
         Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2026-03-10",
         "User-Agent": "ChittyConnect/1.0",
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
       },
+      ...(hasBody ? { body: JSON.stringify(body) } : {}),
     },
   );
 
