@@ -17,13 +17,16 @@
  *   3. Executes the query inside a transaction. The LOCAL setting is
  *      cleared by COMMIT/ROLLBACK before the connection is closed.
  *
- * This module never bypasses RLS. The owner role (neondb_owner) is exempt
- * from RLS by default in Postgres; if/when the production deploy uses a
- * non-owner role, the policies do the rest. Migration 019 deliberately
- * does NOT issue `FORCE ROW LEVEL SECURITY` so existing owner-role-backed
- * admin paths (migrations, support tooling) continue to work. Per-user
- * request paths in this file always run the `set_config` so RLS applies
- * regardless of role privilege.
+ * This module must run under a role that is subject to RLS. The owner role
+ * (neondb_owner) has rolbypassrls=true and bypasses RLS even with FORCE, so
+ * NEON_AUTH_DATABASE_URL must point to the non-bypass runtime role
+ * `protected_app_rw` (per the Neon Auth ownership-split authority — using the
+ * `neon_auth` owner role instead would hand ChittyConnect authority over
+ * ChittyAuth's jwks/project_config tables). Migration 020 issues both
+ * `ENABLE` and `FORCE ROW LEVEL SECURITY` (the latter as defense-in-depth
+ * against an accidental owner-role connection) plus least-privilege grants to
+ * protected_app_rw. `withRlsBinding` below fails closed if the connected role
+ * bypasses RLS, so misconfiguration cannot silently serve cross-tenant data.
  */
 
 import { Hono } from "hono";
@@ -71,6 +74,25 @@ async function withRlsBinding(env, sub, fn) {
     await client.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [
       sub,
     ]);
+    // Fail closed: this user-store MUST run under a role that is itself subject
+    // to RLS. If the connection role bypasses RLS (rolbypassrls — e.g. the
+    // owner role neondb_owner that NEON_DATABASE_URL points to), the per-DID
+    // policies are silently inert and every query would return cross-tenant
+    // rows. Refuse rather than serve unscoped data. NEON_AUTH_DATABASE_URL must
+    // point to a non-BYPASSRLS role (protected_app_rw). This guard is what makes
+    // the inert-RLS regression (PR #241 → #245/#256) impossible to reintroduce
+    // unnoticed: enforcement is verified at runtime, not assumed from config.
+    const guard = await client.query(
+      "SELECT (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypass",
+    );
+    if (guard.rows[0]?.bypass) {
+      const err = new Error(
+        "RLS not enforced: user-store connection role bypasses row-level security. " +
+          "Set NEON_AUTH_DATABASE_URL to a non-BYPASSRLS role (protected_app_rw).",
+      );
+      err.code = "rls_not_enforced";
+      throw err;
+    }
     const result = await fn(client);
     await client.query("COMMIT");
     return result;
