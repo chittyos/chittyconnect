@@ -232,6 +232,23 @@ export class ChittyOSEcosystem {
       // cascade logged as "non-critical" roughly once a second in production.
       // The snake_case and `id` arms are defensive only — neither is emitted
       // by id.chitty.cc today.
+      // `success: false` means the mint FAILED, whatever else the body carries.
+      // Checked BEFORE reading an identifier, because an ID-bearing failure
+      // envelope — {success:false, chittyId, error} — would otherwise sail past
+      // the length check below and be returned as a real ChittyID. Downstream
+      // that ID reaches ChittyDNA initialisation and installation persistence,
+      // which is the same cascade the undefined case caused, only harder to see
+      // because the value LOOKS like an ID.
+      //
+      // Strict `=== false`: a body with no `success` field is not a failure
+      // claim, and id.chitty.cc omits the flag on some shapes. Only an explicit
+      // false is rejected here.
+      if (result?.success === false) {
+        throw new Error(
+          `ChittyID minting failed: ${result.error ?? "service reported success:false with no error field"}`,
+        );
+      }
+
       const chittyId = result?.chittyId ?? result?.chitty_id ?? result?.id;
 
       // Fail closed. A 2xx that carries no ChittyID is a failed mint, and

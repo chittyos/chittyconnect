@@ -215,6 +215,39 @@ describe("ChittyID mint contract", () => {
     );
   });
 
+  it("rejects an ID-bearing failure envelope instead of returning the ID", async () => {
+    // {success:false} means the mint failed, whatever else the body carries.
+    // The code read chittyId without consulting the flag, so a failure response
+    // that happened to carry an ID returned it — and because the value LOOKS
+    // like a real ChittyID, the downstream ChittyDNA/installation cascade it
+    // causes is harder to spot than the undefined one. Raised by coderabbitai
+    // on PR #305, which asked for exactly this fixture.
+    stubFetch(200, {
+      success: false,
+      chittyId: "03-1-USA-4448-P-2609-0-88",
+      error: "entityType rejected after id allocation",
+    });
+    await expect(ecosystem().mintChittyID({ entity: "P" })).rejects.toThrow(
+      /entityType rejected after id allocation/,
+    );
+  });
+
+  it("rejects success:false even when the body carries no error field", async () => {
+    stubFetch(200, { success: false, chittyId: "03-1-USA-4448-P-2609-0-88" });
+    await expect(ecosystem().mintChittyID({ entity: "P" })).rejects.toThrow(
+      /success:false with no error field/,
+    );
+  });
+
+  it("does not treat a missing success field as a failure", async () => {
+    // id.chitty.cc omits the flag on some shapes, so only an explicit false is
+    // a failure claim. A strict `=== false` is what keeps these passing.
+    stubFetch(200, { chittyId: "03-1-USA-4448-P-2609-0-88" });
+    expect(await ecosystem().mintChittyID({ entity: "P" })).toBe(
+      "03-1-USA-4448-P-2609-0-88",
+    );
+  });
+
   it("keeps defensive arms for snake_case and `id`, neither emitted today", async () => {
     stubFetch(200, { chitty_id: "03-1-USA-4448-P-2609-0-88" });
     expect(await ecosystem().mintChittyID({ entity: "P" })).toBe(
