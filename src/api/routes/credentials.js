@@ -53,7 +53,10 @@ const credentialsRoutes = new Hono();
  * deliver_to_required without it). A rejected write revokes the token
  * (502 deliver_failed); a timed-out write does not (502 deliver_unknown,
  * with token_id for reconciliation). Re-delivery revokes the target's
- * previous token; previous_token reports the outcome.
+ * previous token; previous_token reports the outcome. One delivery per
+ * target at a time: an overlapping request gets 409 deliver_in_progress
+ * before any Cloudflare call. Without deliver_to, a context.purpose
+ * starting "deliver_to:" is refused (400 purpose_reserved).
  */
 credentialsRoutes.post("/provision", async (c) => {
   try {

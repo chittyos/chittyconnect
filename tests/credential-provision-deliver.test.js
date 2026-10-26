@@ -15,12 +15,13 @@ import { credentialsRoutes } from '../src/api/routes/credentials.js';
 
 const ACCOUNT_ID = '0bc21e3a5a9de1a4cc843be9c3e98121';
 const CF = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}`;
+const CHRONICLE = 'https://chronicle.chitty.cc';
 
 function makeD1() {
   const db = new DatabaseSync(':memory:');
-  db.exec(
-    readFileSync(new URL('../migrations/001_credential_provisions.sql', import.meta.url), 'utf8'),
-  );
+  for (const file of ['001_credential_provisions.sql', '020_credential_delivery_leases.sql']) {
+    db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  }
   return {
     raw: db,
     prepare(sql) {
@@ -42,6 +43,7 @@ function makeEnv(db = makeD1()) {
     CREDENTIAL_BROKER_TYPE: 'cloudflare-secrets',
     CLOUDFLARE_MAKE_API_KEY: 'test-binding-value-not-a-real-credential',
     CHITTYOS_ACCOUNT_ID: ACCOUNT_ID,
+    CHITTYCHRONICLE_SERVICE_URL: CHRONICLE,
     DB: db,
     RATE_LIMIT: {
       get: async (k) => kv.get(k) ?? null,
@@ -94,8 +96,10 @@ describe('POST /provision with context.deliver_to (#380)', () => {
   let seen;
   let tokenValues;
   let mintCount;
-  // 'ok' | 'error' | 'success-false' | 'unparseable' | 'throw'
+  // 'ok' | 'error' | 'success-false' | 'unparseable' | 'throw' | 'hold-once'
   let secretsPut;
+  // For 'hold-once': the first PUT resolves `entered` and waits on `release`.
+  let hold;
   let deleteStatus;
   let logged;
 
@@ -104,6 +108,7 @@ describe('POST /provision with context.deliver_to (#380)', () => {
     seen = [];
     secretsPut = 'ok';
     deleteStatus = 200;
+    hold = null;
     mintCount = 0;
     // Fresh per mint so a match can only come from this run.
     tokenValues = [];
@@ -141,6 +146,12 @@ describe('POST /provision with context.deliver_to (#380)', () => {
         });
       }
       if (u.startsWith(`${CF}/workers/scripts/`) && method === 'PUT') {
+        if (secretsPut === 'hold-once') {
+          secretsPut = 'ok';
+          hold.entered();
+          await hold.released;
+          return jsonOk({ success: true, result: { name: 'x', type: 'secret_text' } });
+        }
         switch (secretsPut) {
           case 'ok':
             return jsonOk({ success: true, result: { name: 'x', type: 'secret_text' } });
@@ -166,6 +177,7 @@ describe('POST /provision with context.deliver_to (#380)', () => {
   });
 
   afterEach(() => {
+    hold?.release();
     globalThis.fetch = realFetch;
     vi.restoreAllMocks();
   });
@@ -173,12 +185,15 @@ describe('POST /provision with context.deliver_to (#380)', () => {
   const tokenCreates = () =>
     seen.filter((r) => r.url === `${CF}/tokens` && r.method === 'POST');
   const deletes = () => seen.filter((r) => r.method === 'DELETE');
+  const cloudflareCalls = () => seen.filter((r) => r.url.startsWith('https://api.cloudflare.com/'));
+  const chroniclePosts = () => seen.filter((r) => r.url.startsWith(CHRONICLE));
 
   function expectNoValueLeak(text, db) {
     expect(tokenValues.length).toBeGreaterThan(0);
     for (const value of tokenValues) {
       expect(text).not.toContain(value);
       for (const line of logged) expect(line).not.toContain(value);
+      for (const r of chroniclePosts()) expect(String(r.body)).not.toContain(value);
       if (db) {
         const rows = db.raw.prepare('SELECT * FROM credential_provisions').all();
         expect(JSON.stringify(rows)).not.toContain(value);
@@ -200,6 +215,8 @@ describe('POST /provision with context.deliver_to (#380)', () => {
 
     expect(res.status).toBe(200);
     expect(logged.length).toBeGreaterThan(0);
+    // The Chronicle leak check below is not vacuous: the event was posted.
+    expect(chroniclePosts()).toHaveLength(1);
     expectNoValueLeak(text, env.DB);
 
     const body = JSON.parse(text);
@@ -388,5 +405,119 @@ describe('POST /provision with context.deliver_to (#380)', () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect((await res.json()).error.message).toMatch(/POLICY_BLOCKED_PERMISSION_UNVERIFIED: mcpPortalsWrite/);
     expect(tokenCreates()).toHaveLength(0);
+  });
+
+  it('M1: a delivery overlapping an in-flight one to the same target gets 409 with zero Cloudflare calls', async () => {
+    const env = makeEnv();
+    let entered;
+    let release;
+    const enteredP = new Promise((r) => (entered = r));
+    const released = new Promise((r) => (release = r));
+    hold = { entered, released, release };
+    secretsPut = 'hold-once';
+
+    const first = post(DELIVER_BODY, env);
+    await enteredP; // the first request is inside the secrets PUT
+
+    const cfBefore = cloudflareCalls().length;
+    const second = await post(DELIVER_BODY, env);
+    const secondText = await second.text();
+    expect(second.status).toBe(409);
+    expect(JSON.parse(secondText).error.code).toBe('deliver_in_progress');
+    expect(cloudflareCalls()).toHaveLength(cfBefore);
+    expect(mintCount).toBe(1);
+
+    release();
+    const firstRes = await first;
+    const firstText = await firstRes.text();
+    expect(firstRes.status).toBe(200);
+    expect(JSON.parse(firstText).token_id).toBe('tok-1');
+    expect(deletes()).toHaveLength(0);
+
+    // The lease was released: a third delivery proceeds and revokes tok-1.
+    const third = await post(DELIVER_BODY, env);
+    const thirdText = await third.text();
+    expect(third.status).toBe(200);
+    expect(JSON.parse(thirdText)).toMatchObject({
+      token_id: 'tok-2',
+      previous_token: { status: 'revoked', token_ids: ['tok-1'] },
+    });
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+    expectNoValueLeak(secondText + firstText + thirdText, env.DB);
+  });
+
+  it('M1: an expired lease left by a crashed delivery is taken over', async () => {
+    const env = makeEnv();
+    env.DB.raw
+      .prepare('INSERT INTO credential_delivery_leases (target, holder, expires_at) VALUES (?, ?, ?)')
+      .run('chittyagent-mcp-builder/CF_API_TOKEN', 'crashed-request', Date.now() - 1);
+    const res = await post(DELIVER_BODY, env);
+    expect(res.status).toBe(200);
+    expect(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM credential_delivery_leases').get().n).toBe(0);
+  });
+
+  it('L3: a timed-out delivery leaves a pending-tracked row and the next delivery revokes that token', async () => {
+    const env = makeEnv();
+    secretsPut = 'throw';
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    expect(JSON.parse(text).error.code).toBe('deliver_unknown');
+    const row = env.DB.raw
+      .prepare('SELECT delivery_state, revoked_at FROM credential_provisions WHERE token_id = ?')
+      .get('tok-1');
+    expect(row).toEqual({ delivery_state: 'unknown', revoked_at: null });
+
+    secretsPut = 'ok';
+    const next = await post(DELIVER_BODY, env);
+    const nextText = await next.text();
+    expect(next.status).toBe(200);
+    expect(JSON.parse(nextText).previous_token).toEqual({ status: 'revoked', token_ids: ['tok-1'] });
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+    expectNoValueLeak(text + nextText, env.DB);
+  });
+
+  it('L3: a failed delivery whose revoke also failed is revoked by the next delivery', async () => {
+    const env = makeEnv();
+    secretsPut = 'error';
+    deleteStatus = 500;
+    const res = await post(DELIVER_BODY, env);
+    expect(res.status).toBe(502);
+    expect(
+      env.DB.raw.prepare('SELECT delivery_state, revoked_at FROM credential_provisions WHERE token_id = ?').get('tok-1'),
+    ).toEqual({ delivery_state: 'failed', revoked_at: null });
+
+    secretsPut = 'ok';
+    deleteStatus = 200;
+    const next = await post(DELIVER_BODY, env);
+    expect((await next.json()).previous_token).toEqual({ status: 'revoked', token_ids: ['tok-1'] });
+  });
+
+  it('L2: a non-delivery request with a deliver_to: purpose is refused before any Cloudflare call', async () => {
+    await expectRefusedBeforeCloudflare(
+      {
+        type: 'cloudflare_workers_read',
+        context: {
+          service: 'chittyagent-mcp-builder',
+          purpose: 'deliver_to:chittyagent-mcp-builder/CF_API_TOKEN',
+        },
+      },
+      400,
+      'purpose_reserved',
+    );
+  });
+
+  it('L2: a non-delivery row matching the target is never selected for revocation', async () => {
+    const env = makeEnv();
+    env.DB.raw
+      .prepare(
+        `INSERT INTO credential_provisions (type, service, purpose, requesting_service, token_id)
+         VALUES ('cloudflare_workers_read', 'chittyagent-mcp-builder',
+                 'deliver_to:chittyagent-mcp-builder/CF_API_TOKEN', 'unknown', 'tok-foreign')`,
+      )
+      .run();
+    const res = await post(DELIVER_BODY, env);
+    expect((await res.json()).previous_token).toEqual({ status: 'none', token_ids: [] });
+    expect(deletes()).toHaveLength(0);
   });
 });
