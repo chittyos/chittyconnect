@@ -18,6 +18,36 @@ import { createCredentialBroker } from "../lib/credential-broker.js";
 import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
+ * Worker scripts a provisioned token may be delivered into via
+ * `context.deliver_to` (issue #380). Delivery writes the token straight
+ * into the target worker's secret store so the value never transits an
+ * HTTP response. Anything not listed here is refused with
+ * `deliver_target_not_allowed` before a token is created.
+ */
+export const DELIVERABLE_SCRIPTS = new Set(["chittyagent-mcp-builder"]);
+
+// Credential types whose provisioner implements deliver_to. Any other
+// type returns its value in the response body, so accepting deliver_to
+// there would silently hand back the value the caller asked to keep out.
+const DELIVERABLE_TYPES = new Set([
+  "cloudflare_workers_deploy",
+  "cloudflare_workers_read",
+  "cloudflare_r2_access",
+  "cloudflare_d1_access",
+  "cloudflare_access_mcp_portals",
+]);
+
+const SECRET_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const ENVIRONMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+function provisionError(message, code, status) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  return error;
+}
+
+/**
  * Enhanced Credential provisioner for ChittyOS ecosystem
  */
 export class EnhancedCredentialProvisioner {
@@ -76,6 +106,16 @@ export class EnhancedCredentialProvisioner {
         name: "D1 Database Write",
         scope: "account",
       },
+      // Cloudflare publishes this group as "MCP Portals Write". Its ID is
+      // not pinned here: it must resolve from the account's live
+      // permission-groups catalog, and the provenance gate in
+      // provisionCloudflareToken refuses to mint from a fallback entry
+      // anyway, so a guessed ID would only ever be dead weight.
+      mcpPortalsWrite: {
+        id: null,
+        name: "MCP Portals Write",
+        scope: "account",
+      },
       // Zone-scoped. Required for `wrangler deploy` against a worker
       // with a `routes` block — without this permission group, deploy
       // fails post-upload at PUT /zones/{zid}/workers/routes with
@@ -122,6 +162,11 @@ export class EnhancedCredentialProvisioner {
         permissions: ["d1DatabaseWrite", "accountSettingsRead"],
         ttl: 180 * 24 * 60 * 60 * 1000, // 180 days
         requiresContext: ["service", "database"],
+      },
+      cloudflare_access_mcp_portals: {
+        permissions: ["mcpPortalsWrite", "accountSettingsRead"],
+        ttl: 90 * 24 * 60 * 60 * 1000, // 90 days
+        requiresContext: ["service"],
       },
       chittyos_service_token: {
         type: "service_token",
@@ -225,6 +270,7 @@ export class EnhancedCredentialProvisioner {
       case "cloudflare_workers_read":
       case "cloudflare_r2_access":
       case "cloudflare_d1_access":
+      case "cloudflare_access_mcp_portals":
         return await this.provisionCloudflareToken(
           type,
           context,
@@ -461,6 +507,13 @@ export class EnhancedCredentialProvisioner {
           normalizedName.includes("Write")
         ) {
           key = "workersRoutesWrite";
+        } else if (
+          normalizedName.includes("MCPPortals") &&
+          normalizedName.includes("Write")
+        ) {
+          // "MCP Portals Write" -> "MCPPortalsWrite". Substring match so a
+          // prefixed spelling ("Access: MCP Portals Write") also resolves.
+          key = "mcpPortalsWrite";
         }
 
         if (key) {
@@ -552,6 +605,10 @@ export class EnhancedCredentialProvisioner {
    */
   async provisionCloudflareToken(type, context, requestingService) {
     const { service, purpose, environment = "production" } = context;
+
+    // Checked again here, not only in validateRequest, so no caller of
+    // this method can reach token creation with an unlisted target.
+    const deliverTarget = this.resolveDeliverTarget(type, context);
 
     // Retrieve Cloudflare credentials from chittysecrets
     const makeApiKey = await this.onePassword.getInfrastructureCredential(
@@ -748,6 +805,16 @@ export class EnhancedCredentialProvisioner {
 
     const token = result.result;
 
+    let delivered = null;
+    if (deliverTarget) {
+      delivered = await this.deliverTokenToWorkerSecret(
+        token,
+        deliverTarget,
+        accountId,
+        makeApiKey,
+      );
+    }
+
     // Provenance reported to callers and to Chronicle is derived from the
     // groups actually in this token, not from the catalog-wide flag. The
     // catalog-wide flag reads "account-catalog" as soon as ONE group
@@ -775,7 +842,26 @@ export class EnhancedCredentialProvisioner {
       environment,
       contextAnalysis: true, // Flag that context was validated
       permissionSource,
+      ...(delivered && {
+        deliveredTo: {
+          script: delivered.script,
+          secret_name: delivered.secret_name,
+        },
+      }),
     });
+
+    if (delivered) {
+      // Value-free response: the token now lives only in the target
+      // worker's secret store. No value, no usage_instructions, no echo
+      // of any Cloudflare API body.
+      return {
+        token_id: token.id,
+        secret_name: delivered.secret_name,
+        script: delivered.script,
+        expires_on: token.expires_on,
+        permissions: includedScopeNames,
+      };
+    }
 
     return {
       success: true,
@@ -1257,6 +1343,9 @@ export class EnhancedCredentialProvisioner {
       cloudflare_d1_access: {
         note: "Token has D1 Database Write and Account Settings Read permissions",
       },
+      cloudflare_access_mcp_portals: {
+        note: "Token has MCP Portals Write and Account Settings Read permissions",
+      },
     };
 
     return instructions[type] || { note: `Token for ${type}` };
@@ -1387,5 +1476,132 @@ export class EnhancedCredentialProvisioner {
         }
       }
     }
+
+    this.resolveDeliverTarget(type, context);
+  }
+
+  /**
+   * Validate `context.deliver_to` and resolve the worker script it names.
+   * Returns null when no delivery was requested. Throws before any token
+   * exists when the target is not allow-listed or malformed.
+   *
+   * `environment`, when given, addresses the wrangler environment
+   * deployment `${script}-${environment}`; the allow-list is checked
+   * against the base script name.
+   */
+  resolveDeliverTarget(type, context) {
+    const deliverTo = context?.deliver_to;
+    if (deliverTo === undefined || deliverTo === null) return null;
+
+    if (typeof deliverTo !== "object" || Array.isArray(deliverTo)) {
+      throw provisionError(
+        "deliver_to must be an object { script, secret_name, environment? }",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    const { script, secret_name: secretName, environment } = deliverTo;
+    if (typeof script !== "string" || !DELIVERABLE_SCRIPTS.has(script)) {
+      throw provisionError(
+        "deliver_target_not_allowed: deliver_to.script is not an allow-listed delivery target",
+        "deliver_target_not_allowed",
+        403,
+      );
+    }
+    if (!DELIVERABLE_TYPES.has(type)) {
+      throw provisionError(
+        `deliver_to is not supported for credential type ${type}`,
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    if (typeof secretName !== "string" || !SECRET_NAME_PATTERN.test(secretName)) {
+      throw provisionError(
+        "deliver_to.secret_name is required and must match [A-Za-z_][A-Za-z0-9_]*",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    if (
+      environment !== undefined &&
+      (typeof environment !== "string" || !ENVIRONMENT_PATTERN.test(environment))
+    ) {
+      throw provisionError(
+        "deliver_to.environment must be a lowercase wrangler environment name",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+
+    return {
+      script: environment ? `${script}-${environment}` : script,
+      secret_name: secretName,
+    };
+  }
+
+  /**
+   * Write a freshly created token into a worker secret. On any failure the
+   * token is revoked so it does not outlive a delivery nobody received.
+   * Errors never carry the token value or a Cloudflare response body.
+   *
+   * @private
+   */
+  async deliverTokenToWorkerSecret(token, target, accountId, makeApiKey) {
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+    let failure = null;
+    try {
+      const response = await fetch(
+        `${base}/workers/scripts/${encodeURIComponent(target.script)}/secrets`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${makeApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: target.secret_name,
+            text: token.value,
+            type: "secret_text",
+          }),
+        },
+      );
+      if (!response.ok) {
+        failure = `HTTP ${response.status}`;
+      } else {
+        const body = await response.json().catch(() => null);
+        if (!body?.success) failure = "Cloudflare reported success=false";
+      }
+    } catch {
+      // The thrown error is not surfaced: a fetch error message is not a
+      // channel this path controls.
+      failure = "request failed";
+    }
+
+    if (!failure) return target;
+
+    let revoked = false;
+    try {
+      const revoke = await fetch(
+        `${base}/tokens/${encodeURIComponent(token.id)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${makeApiKey}` },
+        },
+      );
+      revoked = revoke.ok;
+    } catch {
+      revoked = false;
+    }
+
+    console.error(
+      `[EnhancedCredentialProvisioner] Delivery of token ${token.id} to ${target.script} failed (${failure}); revoked=${revoked}`,
+    );
+    throw provisionError(
+      revoked
+        ? `deliver_failed: writing secret ${target.secret_name} to ${target.script} failed (${failure}); token ${token.id} was revoked`
+        : `deliver_failed: writing secret ${target.secret_name} to ${target.script} failed (${failure}); REVOKE FAILED for token ${token.id} — revoke it manually`,
+      "deliver_failed",
+      502,
+    );
   }
 }

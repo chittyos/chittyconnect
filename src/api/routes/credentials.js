@@ -43,6 +43,13 @@ const credentialsRoutes = new Hono();
  *     "command": "gh secret set CLOUDFLARE_API_TOKEN"
  *   }
  * }
+ *
+ * Value-free delivery (Cloudflare token types only): with
+ * `context.deliver_to = { script, secret_name, environment? }` the token is
+ * written straight into that worker's secret and the response is only
+ * { token_id, secret_name, script, expires_on, permissions }. Scripts outside
+ * the allow-list get 403 deliver_target_not_allowed before any token exists;
+ * a failed write revokes the token and returns 502 deliver_failed.
  */
 credentialsRoutes.post("/provision", async (c) => {
   try {
@@ -81,6 +88,19 @@ credentialsRoutes.post("/provision", async (c) => {
     return c.json(result);
   } catch (error) {
     console.error("[Credentials] Provision error:", error);
+
+    // Errors raised with an explicit code/status (deliver_to handling,
+    // issue #380) carry their own mapping.
+    if (error.code && error.status) {
+      return c.json(
+        {
+          success: false,
+          error: { code: error.code, message: error.message },
+          metadata: { timestamp: new Date().toISOString() },
+        },
+        error.status,
+      );
+    }
 
     // Determine appropriate status code
     let status = 500;
