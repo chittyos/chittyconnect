@@ -65,6 +65,9 @@
     { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
     { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
     { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+    // Host principal: CF Access service token "ChittyOS MCP Admin Portal" — accepted only on POST /api/credentials/provision
+    { "binding": "HOST_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_MCP_ADMIN_PORTAL" },
+    { "binding": "HOST_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_MCP_ADMIN_PORTAL" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
     { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
@@ -185,6 +188,9 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
         { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+        // Host principal: CF Access service token "ChittyOS MCP Admin Portal" — accepted only on POST /api/credentials/provision
+        { "binding": "HOST_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_MCP_ADMIN_PORTAL" },
+        { "binding": "HOST_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_MCP_ADMIN_PORTAL" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
@@ -327,6 +333,9 @@
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYAGENT" },
         { "binding": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_CHITTYFINANCE" },
         { "binding": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_CHITTYFINANCE" },
+        // Host principal: CF Access service token "ChittyOS MCP Admin Portal" — accepted only on POST /api/credentials/provision
+        { "binding": "HOST_ACCESS_CLIENT_ID", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_ID_MCP_ADMIN_PORTAL" },
+        { "binding": "HOST_ACCESS_CLIENT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CF_ACCESS_CLIENT_SECRET_MCP_ADMIN_PORTAL" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
