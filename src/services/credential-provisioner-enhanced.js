@@ -18,32 +18,42 @@ import { createCredentialBroker } from "../lib/credential-broker.js";
 import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
- * Worker scripts a provisioned token may be delivered into via
- * `context.deliver_to` (issue #380). Delivery writes the token straight
- * into the target worker's secret store so the value never transits an
- * HTTP response. Anything not listed here is refused with
- * `deliver_target_not_allowed` before a token is created.
+ * Exact delivery targets for `context.deliver_to` (issue #380). Delivery
+ * writes the token straight into the target worker's secret store so the
+ * value never transits an HTTP response. A request is accepted only when
+ * its (script, secret_name, credential type) triple matches an entry here
+ * exactly; anything else is refused with `deliver_target_not_allowed`
+ * before any Cloudflare call. Matching the full triple stops a caller from
+ * overwriting a worker's other secrets or planting a broader token type in
+ * a secret meant for a narrower one.
+ *
+ * `script` is the exact deployed script name the secret is written to.
+ * chittyagent-mcp-builder's env.production sets `name =
+ * "chittyagent-mcp-builder"`, so no `-<environment>` suffix is ever added.
  */
-export const DELIVERABLE_SCRIPTS = new Set(["chittyagent-mcp-builder"]);
-
-// Credential types whose provisioner implements deliver_to. Any other
-// type returns its value in the response body, so accepting deliver_to
-// there would silently hand back the value the caller asked to keep out.
-const DELIVERABLE_TYPES = new Set([
-  "cloudflare_workers_deploy",
-  "cloudflare_workers_read",
-  "cloudflare_r2_access",
-  "cloudflare_d1_access",
-  "cloudflare_access_mcp_portals",
+export const DELIVER_TARGETS = Object.freeze([
+  Object.freeze({
+    script: "chittyagent-mcp-builder",
+    secret_name: "CF_API_TOKEN",
+    type: "cloudflare_access_mcp_portals",
+  }),
 ]);
 
-const SECRET_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
-const ENVIRONMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+// Types that may only be provisioned with deliver_to: their value must
+// never be returned in a response body.
+const DELIVER_ONLY_TYPES = new Set(["cloudflare_access_mcp_portals"]);
 
-function provisionError(message, code, status) {
+const DELIVER_TO_KEYS = new Set(["script", "secret_name"]);
+
+// Bound on the secrets PUT. A timeout leaves the outcome unknown (Cloudflare
+// may have applied the write), so it is reported, never revoked.
+const DELIVER_TIMEOUT_MS = 15000;
+
+function provisionError(message, code, status, details) {
   const error = new Error(message);
   error.code = code;
   error.status = status;
+  if (details) error.details = details;
   return error;
 }
 
@@ -815,6 +825,17 @@ export class EnhancedCredentialProvisioner {
       );
     }
 
+    let previousToken = null;
+    if (delivered) {
+      previousToken = await this.rotateDeliveredToken(
+        token,
+        delivered,
+        { type, requestingService },
+        accountId,
+        makeApiKey,
+      );
+    }
+
     // Provenance reported to callers and to Chronicle is derived from the
     // groups actually in this token, not from the catalog-wide flag. The
     // catalog-wide flag reads "account-catalog" as soon as ONE group
@@ -860,6 +881,7 @@ export class EnhancedCredentialProvisioner {
         script: delivered.script,
         expires_on: token.expires_on,
         permissions: includedScopeNames,
+        previous_token: previousToken,
       };
     }
 
@@ -1482,75 +1504,86 @@ export class EnhancedCredentialProvisioner {
 
   /**
    * Validate `context.deliver_to` and resolve the worker script it names.
-   * Returns null when no delivery was requested. Throws before any token
-   * exists when the target is not allow-listed or malformed.
-   *
-   * `environment`, when given, addresses the wrangler environment
-   * deployment `${script}-${environment}`; the allow-list is checked
-   * against the base script name.
+   * Returns null when no delivery was requested (and the type allows
+   * that). Throws before any Cloudflare call when delivery is required
+   * but absent, malformed, or not an exact allow-listed triple.
    */
   resolveDeliverTarget(type, context) {
     const deliverTo = context?.deliver_to;
-    if (deliverTo === undefined || deliverTo === null) return null;
+    if (deliverTo === undefined || deliverTo === null) {
+      if (DELIVER_ONLY_TYPES.has(type)) {
+        throw provisionError(
+          `deliver_to_required: ${type} is only provisioned into a worker secret via context.deliver_to`,
+          "deliver_to_required",
+          400,
+        );
+      }
+      return null;
+    }
 
     if (typeof deliverTo !== "object" || Array.isArray(deliverTo)) {
       throw provisionError(
-        "deliver_to must be an object { script, secret_name, environment? }",
+        "deliver_to must be an object { script, secret_name }",
         "deliver_to_invalid",
         400,
       );
     }
-    const { script, secret_name: secretName, environment } = deliverTo;
-    if (typeof script !== "string" || !DELIVERABLE_SCRIPTS.has(script)) {
+    const unknownKeys = Object.keys(deliverTo).filter(
+      (k) => !DELIVER_TO_KEYS.has(k),
+    );
+    if (unknownKeys.length > 0) {
+      // Includes `environment`: the target is the exact script name.
       throw provisionError(
-        "deliver_target_not_allowed: deliver_to.script is not an allow-listed delivery target",
+        `deliver_to accepts only script and secret_name (unsupported: ${unknownKeys.join(", ")})`,
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    if (context.ip_restrictions !== undefined) {
+      throw provisionError(
+        "ip_restrictions cannot be combined with deliver_to: the token is used by the target worker, not by the caller",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+
+    const { script, secret_name: secretName } = deliverTo;
+    const target = DELIVER_TARGETS.find(
+      (t) =>
+        t.script === script && t.secret_name === secretName && t.type === type,
+    );
+    if (!target) {
+      throw provisionError(
+        "deliver_target_not_allowed: (script, secret_name, type) is not an allow-listed delivery target",
         "deliver_target_not_allowed",
         403,
       );
     }
-    if (!DELIVERABLE_TYPES.has(type)) {
-      throw provisionError(
-        `deliver_to is not supported for credential type ${type}`,
-        "deliver_to_invalid",
-        400,
-      );
-    }
-    if (typeof secretName !== "string" || !SECRET_NAME_PATTERN.test(secretName)) {
-      throw provisionError(
-        "deliver_to.secret_name is required and must match [A-Za-z_][A-Za-z0-9_]*",
-        "deliver_to_invalid",
-        400,
-      );
-    }
-    if (
-      environment !== undefined &&
-      (typeof environment !== "string" || !ENVIRONMENT_PATTERN.test(environment))
-    ) {
-      throw provisionError(
-        "deliver_to.environment must be a lowercase wrangler environment name",
-        "deliver_to_invalid",
-        400,
-      );
-    }
 
-    return {
-      script: environment ? `${script}-${environment}` : script,
-      secret_name: secretName,
-    };
+    return { script: target.script, secret_name: target.secret_name };
   }
 
   /**
-   * Write a freshly created token into a worker secret. On any failure the
-   * token is revoked so it does not outlive a delivery nobody received.
+   * Write a freshly created token into a worker secret.
+   *
+   * - HTTP 2xx: delivered, whatever the body (an unparseable 2xx body does
+   *   not mean the write failed). A parseable body with success === false
+   *   is the one 2xx case treated as failure.
+   * - Non-2xx or success === false: the write did not happen, so the token
+   *   is revoked and 502 deliver_failed is thrown.
+   * - Timeout / network error: the outcome is unknown (Cloudflare may have
+   *   applied it), so the token is NOT revoked; 502 deliver_unknown carries
+   *   the token id for reconciliation.
+   *
    * Errors never carry the token value or a Cloudflare response body.
    *
    * @private
    */
   async deliverTokenToWorkerSecret(token, target, accountId, makeApiKey) {
     const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
-    let failure = null;
+    let response;
     try {
-      const response = await fetch(
+      response = await fetch(
         `${base}/workers/scripts/${encodeURIComponent(target.script)}/secrets`,
         {
           method: "PUT",
@@ -1563,18 +1596,31 @@ export class EnhancedCredentialProvisioner {
             text: token.value,
             type: "secret_text",
           }),
+          signal: AbortSignal.timeout(DELIVER_TIMEOUT_MS),
         },
       );
-      if (!response.ok) {
-        failure = `HTTP ${response.status}`;
-      } else {
-        const body = await response.json().catch(() => null);
-        if (!body?.success) failure = "Cloudflare reported success=false";
-      }
     } catch {
       // The thrown error is not surfaced: a fetch error message is not a
       // channel this path controls.
-      failure = "request failed";
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery of token ${token.id} to ${target.script} has unknown outcome (request failed or timed out); token NOT revoked`,
+      );
+      throw provisionError(
+        `deliver_unknown: writing secret ${target.secret_name} to ${target.script} did not complete (request failed or timed out); token ${token.id} was NOT revoked — reconcile the worker secret against it`,
+        "deliver_unknown",
+        502,
+        { token_id: token.id },
+      );
+    }
+
+    let failure = null;
+    if (!response.ok) {
+      failure = `HTTP ${response.status}`;
+    } else {
+      const body = await response.json().catch(() => undefined);
+      if (body && typeof body === "object" && body.success === false) {
+        failure = "Cloudflare reported success=false";
+      }
     }
 
     if (!failure) return target;
@@ -1603,5 +1649,108 @@ export class EnhancedCredentialProvisioner {
       "deliver_failed",
       502,
     );
+  }
+
+  /**
+   * Record a delivered token against its target in the D1 audit table
+   * (credential_provisions) and revoke any earlier token still recorded as
+   * live for the same target, so re-provisioning does not leave the old
+   * token valid. The target key is stored in the audit row's existing
+   * columns: service = script, purpose = `deliver_to:<script>/<secret>`.
+   *
+   * Never throws: the new token is already in the worker secret, so every
+   * outcome is reported as a non-secret status instead.
+   *
+   * @private
+   * @returns {Promise<{status: string, token_ids: string[]}>}
+   *   status: "none" (no earlier token), "revoked", "revoke_failed", or
+   *   "tracking_unavailable" (audit store unreadable/unwritable).
+   */
+  async rotateDeliveredToken(token, target, meta, accountId, makeApiKey) {
+    const purpose = `deliver_to:${target.script}/${target.secret_name}`;
+    const db = this.env?.DB;
+    if (!db) return { status: "tracking_unavailable", token_ids: [] };
+
+    let previous;
+    try {
+      const rows = await db
+        .prepare(
+          `SELECT token_id FROM credential_provisions
+           WHERE service = ? AND purpose = ? AND revoked_at IS NULL
+             AND token_id IS NOT NULL AND token_id <> ?
+           ORDER BY id`,
+        )
+        .bind(target.script, purpose, token.id)
+        .all();
+      previous = (rows?.results || []).map((r) => r.token_id);
+
+      // Recorded before revoking anything, so the new token is tracked
+      // even if a revoke below fails.
+      await db
+        .prepare(
+          `INSERT INTO credential_provisions
+           (type, service, purpose, requesting_service, token_id, expires_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+        )
+        .bind(
+          meta.type,
+          target.script,
+          purpose,
+          meta.requestingService,
+          token.id,
+          token.expires_on || null,
+        )
+        .run();
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery tracking for ${target.script} unavailable: ${error?.message}`,
+      );
+      return { status: "tracking_unavailable", token_ids: [] };
+    }
+
+    if (previous.length === 0) return { status: "none", token_ids: [] };
+
+    const failed = [];
+    for (const id of previous) {
+      let ok = false;
+      try {
+        const res = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/${encodeURIComponent(id)}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${makeApiKey}` },
+          },
+        );
+        // 404: the token no longer exists (expired or removed), which is
+        // the state revocation is after.
+        ok = res.ok || res.status === 404;
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        failed.push(id);
+        continue;
+      }
+      try {
+        await db
+          .prepare(
+            `UPDATE credential_provisions SET revoked_at = datetime('now') WHERE token_id = ?`,
+          )
+          .bind(id)
+          .run();
+      } catch (error) {
+        console.error(
+          `[EnhancedCredentialProvisioner] Revoked token ${id} but could not mark it revoked: ${error?.message}`,
+        );
+      }
+    }
+
+    if (failed.length > 0) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Revoking previous token(s) ${failed.join(", ")} for ${target.script} failed`,
+      );
+      return { status: "revoke_failed", token_ids: failed };
+    }
+    return { status: "revoked", token_ids: previous };
   }
 }

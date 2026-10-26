@@ -44,12 +44,16 @@ const credentialsRoutes = new Hono();
  *   }
  * }
  *
- * Value-free delivery (Cloudflare token types only): with
- * `context.deliver_to = { script, secret_name, environment? }` the token is
- * written straight into that worker's secret and the response is only
- * { token_id, secret_name, script, expires_on, permissions }. Scripts outside
- * the allow-list get 403 deliver_target_not_allowed before any token exists;
- * a failed write revokes the token and returns 502 deliver_failed.
+ * Value-free delivery: with `context.deliver_to = { script, secret_name }`
+ * the token is written straight into that worker's secret and the response
+ * is only { token_id, secret_name, script, expires_on, permissions,
+ * previous_token }. Only exact allow-listed (script, secret_name, type)
+ * triples are accepted (else 403 deliver_target_not_allowed before any
+ * Cloudflare call). cloudflare_access_mcp_portals is deliver-only (400
+ * deliver_to_required without it). A rejected write revokes the token
+ * (502 deliver_failed); a timed-out write does not (502 deliver_unknown,
+ * with token_id for reconciliation). Re-delivery revokes the target's
+ * previous token; previous_token reports the outcome.
  */
 credentialsRoutes.post("/provision", async (c) => {
   try {
@@ -95,7 +99,11 @@ credentialsRoutes.post("/provision", async (c) => {
       return c.json(
         {
           success: false,
-          error: { code: error.code, message: error.message },
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.details || {}),
+          },
           metadata: { timestamp: new Date().toISOString() },
         },
         error.status,

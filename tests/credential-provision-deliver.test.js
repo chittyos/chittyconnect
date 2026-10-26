@@ -5,19 +5,44 @@
 // real EnhancedCredentialProvisioner. The only stand-in is globalThis.fetch
 // for api.cloudflare.com, the same approach tests/cloudflare-account-token-api
 // .test.js takes: every request the code emits is recorded and asserted on.
+// env.DB is a real SQLite database (node:sqlite) built from the production
+// migration, wrapped in the D1 prepare/bind/run/all surface.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { credentialsRoutes } from '../src/api/routes/credentials.js';
 
 const ACCOUNT_ID = '0bc21e3a5a9de1a4cc843be9c3e98121';
 const CF = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}`;
 
-function makeEnv() {
+function makeD1() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(
+    readFileSync(new URL('../migrations/001_credential_provisions.sql', import.meta.url), 'utf8'),
+  );
+  return {
+    raw: db,
+    prepare(sql) {
+      const stmt = db.prepare(sql);
+      const bound = (args) => ({
+        bind: (...next) => bound(next),
+        run: async () => stmt.run(...args),
+        all: async () => ({ results: stmt.all(...args) }),
+        first: async () => stmt.get(...args) ?? null,
+      });
+      return bound([]);
+    },
+  };
+}
+
+function makeEnv(db = makeD1()) {
   const kv = new Map();
   return {
     CREDENTIAL_BROKER_TYPE: 'cloudflare-secrets',
     CLOUDFLARE_MAKE_API_KEY: 'test-binding-value-not-a-real-credential',
     CHITTYOS_ACCOUNT_ID: ACCOUNT_ID,
+    DB: db,
     RATE_LIMIT: {
       get: async (k) => kv.get(k) ?? null,
       put: async (k, v) => {
@@ -59,7 +84,7 @@ const DELIVER_BODY = {
     purpose: 'mcp-portal-management',
     deliver_to: {
       script: 'chittyagent-mcp-builder',
-      secret_name: 'CF_MCP_PORTALS_TOKEN',
+      secret_name: 'CF_API_TOKEN',
     },
   },
 };
@@ -67,16 +92,21 @@ const DELIVER_BODY = {
 describe('POST /provision with context.deliver_to (#380)', () => {
   let realFetch;
   let seen;
-  let tokenValue;
-  let secretsPutStatus;
+  let tokenValues;
+  let mintCount;
+  // 'ok' | 'error' | 'success-false' | 'unparseable' | 'throw'
+  let secretsPut;
+  let deleteStatus;
   let logged;
 
   beforeEach(() => {
     realFetch = globalThis.fetch;
     seen = [];
-    secretsPutStatus = 200;
-    // Fresh per test so a match can only come from this run's mint.
-    tokenValue = `cftest-${crypto.randomUUID()}`;
+    secretsPut = 'ok';
+    deleteStatus = 200;
+    mintCount = 0;
+    // Fresh per mint so a match can only come from this run.
+    tokenValues = [];
     logged = [];
     for (const level of ['log', 'warn', 'error', 'info', 'debug']) {
       vi.spyOn(console, level).mockImplementation((...args) => {
@@ -97,25 +127,39 @@ describe('POST /provision with context.deliver_to (#380)', () => {
         return jsonOk({ success: true, result: CATALOG });
       }
       if (u === `${CF}/tokens` && method === 'POST') {
+        mintCount += 1;
+        const value = `cftest-${crypto.randomUUID()}`;
+        tokenValues.push(value);
         return jsonOk({
           success: true,
           result: {
-            id: 'tok-380',
+            id: `tok-${mintCount}`,
             name: 'test token',
-            value: tokenValue,
+            value,
             expires_on: '2027-01-24T00:00:00Z',
           },
         });
       }
       if (u.startsWith(`${CF}/workers/scripts/`) && method === 'PUT') {
-        // A failing body that echoes the request, to prove the error path
-        // does not pass a Cloudflare body through.
-        return secretsPutStatus === 200
-          ? jsonOk({ success: true, result: { name: 'x', type: 'secret_text' } })
-          : jsonOk({ success: false, errors: [{ message: `echo ${init.body}` }] }, secretsPutStatus);
+        switch (secretsPut) {
+          case 'ok':
+            return jsonOk({ success: true, result: { name: 'x', type: 'secret_text' } });
+          case 'unparseable':
+            return new Response('<html>ok</html>', { status: 200 });
+          case 'success-false':
+            return jsonOk({ success: false, errors: [{ message: `echo ${init.body}` }] }, 200);
+          case 'throw':
+            throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+          default:
+            // A failing body that echoes the request, to prove the error
+            // path does not pass a Cloudflare body through.
+            return jsonOk({ success: false, errors: [{ message: `echo ${init.body}` }] }, 500);
+        }
       }
       if (u.startsWith(`${CF}/tokens/`) && method === 'DELETE') {
-        return jsonOk({ success: true, result: { id: 'tok-380' } });
+        return deleteStatus === 200
+          ? jsonOk({ success: true, result: { id: u.split('/').pop() } })
+          : jsonOk({ success: false, errors: [{ message: 'nope' }] }, deleteStatus);
       }
       return jsonOk({ success: true, result: {} });
     };
@@ -128,77 +172,193 @@ describe('POST /provision with context.deliver_to (#380)', () => {
 
   const tokenCreates = () =>
     seen.filter((r) => r.url === `${CF}/tokens` && r.method === 'POST');
+  const deletes = () => seen.filter((r) => r.method === 'DELETE');
+
+  function expectNoValueLeak(text, db) {
+    expect(tokenValues.length).toBeGreaterThan(0);
+    for (const value of tokenValues) {
+      expect(text).not.toContain(value);
+      for (const line of logged) expect(line).not.toContain(value);
+      if (db) {
+        const rows = db.raw.prepare('SELECT * FROM credential_provisions').all();
+        expect(JSON.stringify(rows)).not.toContain(value);
+      }
+    }
+  }
+
+  async function expectRefusedBeforeCloudflare(body, status, code) {
+    const res = await post(body, makeEnv());
+    expect(res.status).toBe(status);
+    expect((await res.json()).error.code).toBe(code);
+    expect(seen).toHaveLength(0);
+  }
 
   it('G1: delivers the value to the worker secret and never returns or logs it', async () => {
-    const res = await post(DELIVER_BODY, makeEnv());
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
     const text = await res.text();
 
     expect(res.status).toBe(200);
-    expect(text).not.toContain(tokenValue);
     expect(logged.length).toBeGreaterThan(0);
-    for (const line of logged) expect(line).not.toContain(tokenValue);
+    expectNoValueLeak(text, env.DB);
 
     const body = JSON.parse(text);
-    expect(Object.keys(body).sort()).toEqual(
-      ['expires_on', 'permissions', 'script', 'secret_name', 'token_id'],
-    );
     expect(body).toEqual({
-      token_id: 'tok-380',
-      secret_name: 'CF_MCP_PORTALS_TOKEN',
+      token_id: 'tok-1',
+      secret_name: 'CF_API_TOKEN',
       script: 'chittyagent-mcp-builder',
       expires_on: '2027-01-24T00:00:00Z',
       permissions: ['MCP Portals Write', 'Account Settings Read'],
+      previous_token: { status: 'none', token_ids: [] },
     });
 
     const puts = seen.filter((r) => r.method === 'PUT');
     expect(puts).toHaveLength(1);
-    expect(puts[0].url).toBe(`${CF}/workers/scripts/chittyagent-mcp-builder/secrets`);
     expect(JSON.parse(puts[0].body)).toEqual({
-      name: 'CF_MCP_PORTALS_TOKEN',
-      text: tokenValue,
+      name: 'CF_API_TOKEN',
+      text: tokenValues[0],
       type: 'secret_text',
     });
-    expect(seen.some((r) => r.method === 'DELETE')).toBe(false);
+    expect(deletes()).toHaveLength(0);
   });
 
-  it('G1: deliver_to.environment addresses the wrangler environment script', async () => {
+  it('F1: cloudflare_access_mcp_portals without deliver_to is refused before any Cloudflare call', async () => {
     const body = structuredClone(DELIVER_BODY);
-    body.context.deliver_to.environment = 'production';
-    const res = await post(body, makeEnv());
+    delete body.context.deliver_to;
+    await expectRefusedBeforeCloudflare(body, 400, 'deliver_to_required');
+  });
+
+  it('F2: a wrong secret_name, type, or script is refused with 403 before any Cloudflare call', async () => {
+    const wrongSecret = structuredClone(DELIVER_BODY);
+    wrongSecret.context.deliver_to.secret_name = 'CF_MCP_PORTALS_TOKEN';
+    await expectRefusedBeforeCloudflare(wrongSecret, 403, 'deliver_target_not_allowed');
+
+    const wrongType = structuredClone(DELIVER_BODY);
+    wrongType.type = 'cloudflare_workers_deploy';
+    await expectRefusedBeforeCloudflare(wrongType, 403, 'deliver_target_not_allowed');
+
+    const valueType = {
+      type: 'neon_api_key',
+      context: { purpose: 'x', deliver_to: structuredClone(DELIVER_BODY.context.deliver_to) },
+    };
+    await expectRefusedBeforeCloudflare(valueType, 403, 'deliver_target_not_allowed');
+
+    for (const script of ['chittyconnect', 'chittyagent-mcp-builder-evil', '', null]) {
+      const wrongScript = structuredClone(DELIVER_BODY);
+      wrongScript.context.deliver_to.script = script;
+      await expectRefusedBeforeCloudflare(wrongScript, 403, 'deliver_target_not_allowed');
+    }
+  });
+
+  it('F3: writes to exactly the allow-listed script and rejects deliver_to.environment', async () => {
+    const res = await post(DELIVER_BODY, makeEnv());
     expect(res.status).toBe(200);
     const puts = seen.filter((r) => r.method === 'PUT');
-    expect(puts[0].url).toBe(
-      `${CF}/workers/scripts/chittyagent-mcp-builder-production/secrets`,
-    );
-    expect((await res.json()).script).toBe('chittyagent-mcp-builder-production');
+    expect(puts).toHaveLength(1);
+    expect(puts[0].url).toBe(`${CF}/workers/scripts/chittyagent-mcp-builder/secrets`);
+
+    seen = [];
+    const body = structuredClone(DELIVER_BODY);
+    body.context.deliver_to.environment = 'production';
+    await expectRefusedBeforeCloudflare(body, 400, 'deliver_to_invalid');
   });
 
-  it('G2: a script outside the allow-list is refused with 403 before any token exists', async () => {
-    for (const script of ['chittyconnect', 'chittyagent-mcp-builder-evil', '', null]) {
-      const body = structuredClone(DELIVER_BODY);
-      body.context.deliver_to.script = script;
-      const res = await post(body, makeEnv());
-      expect(res.status).toBe(403);
-      expect((await res.json()).error.code).toBe('deliver_target_not_allowed');
-    }
-    expect(tokenCreates()).toHaveLength(0);
-    expect(seen).toHaveLength(0);
+  it('F4: re-delivery revokes the previous token for the target', async () => {
+    const env = makeEnv();
+    expect((await post(DELIVER_BODY, env)).status).toBe(200);
+    expect(deletes()).toHaveLength(0);
+
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    expectNoValueLeak(text, env.DB);
+    const body = JSON.parse(text);
+    expect(body.token_id).toBe('tok-2');
+    expect(body.previous_token).toEqual({ status: 'revoked', token_ids: ['tok-1'] });
+
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+    const rows = env.DB.raw
+      .prepare('SELECT token_id, revoked_at FROM credential_provisions ORDER BY id')
+      .all();
+    expect(rows.map((r) => [r.token_id, r.revoked_at !== null])).toEqual([
+      ['tok-1', true],
+      ['tok-2', false],
+    ]);
+
+    // A third delivery revokes only tok-2: tok-1 is already marked revoked.
+    const third = await post(DELIVER_BODY, env);
+    expect((await third.json()).previous_token).toEqual({ status: 'revoked', token_ids: ['tok-2'] });
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`, `${CF}/tokens/tok-2`]);
+  });
+
+  it('F4: a failed revoke of the previous token is surfaced, not swallowed', async () => {
+    const env = makeEnv();
+    expect((await post(DELIVER_BODY, env)).status).toBe(200);
+
+    deleteStatus = 500;
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    expectNoValueLeak(text, env.DB);
+    expect(JSON.parse(text).previous_token).toEqual({
+      status: 'revoke_failed',
+      token_ids: ['tok-1'],
+    });
+    const tok1 = env.DB.raw
+      .prepare('SELECT revoked_at FROM credential_provisions WHERE token_id = ?')
+      .get('tok-1');
+    expect(tok1.revoked_at).toBeNull();
+  });
+
+  it('F5: a 2xx secrets PUT with an unparseable body counts as delivered', async () => {
+    secretsPut = 'unparseable';
+    const res = await post(DELIVER_BODY, makeEnv());
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    expectNoValueLeak(text);
+    expect(JSON.parse(text).token_id).toBe('tok-1');
+    expect(deletes()).toHaveLength(0);
+  });
+
+  it('F5: a timed-out secrets PUT returns 502 deliver_unknown with the token id and does not revoke', async () => {
+    secretsPut = 'throw';
+    const res = await post(DELIVER_BODY, makeEnv());
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    expectNoValueLeak(text);
+    const { error } = JSON.parse(text);
+    expect(error.code).toBe('deliver_unknown');
+    expect(error.token_id).toBe('tok-1');
+    expect(deletes()).toHaveLength(0);
+  });
+
+  it('a 200 secrets PUT with success:false is a failure and revokes the token', async () => {
+    secretsPut = 'success-false';
+    const res = await post(DELIVER_BODY, makeEnv());
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    expectNoValueLeak(text);
+    expect(JSON.parse(text).error.code).toBe('deliver_failed');
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+  });
+
+  it('F6: ip_restrictions with deliver_to is refused before any Cloudflare call', async () => {
+    const body = structuredClone(DELIVER_BODY);
+    body.context.ip_restrictions = ['192.0.2.10/32'];
+    await expectRefusedBeforeCloudflare(body, 400, 'deliver_to_invalid');
   });
 
   it('G3: a failed secret write revokes the created token and returns no value', async () => {
-    secretsPutStatus = 500;
+    secretsPut = 'error';
     const res = await post(DELIVER_BODY, makeEnv());
     const text = await res.text();
 
     expect(res.status).toBe(502);
-    expect(text).not.toContain(tokenValue);
-    for (const line of logged) expect(line).not.toContain(tokenValue);
+    expectNoValueLeak(text);
     expect(JSON.parse(text).error.code).toBe('deliver_failed');
 
     expect(tokenCreates()).toHaveLength(1);
-    const deletes = seen.filter((r) => r.method === 'DELETE');
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0].url).toBe(`${CF}/tokens/tok-380`);
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
   });
 
   it('G4: cloudflare_access_mcp_portals requests the MCP Portals Write group', async () => {
@@ -228,34 +388,5 @@ describe('POST /provision with context.deliver_to (#380)', () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect((await res.json()).error.message).toMatch(/POLICY_BLOCKED_PERMISSION_UNVERIFIED: mcpPortalsWrite/);
     expect(tokenCreates()).toHaveLength(0);
-  });
-
-  it('rejects deliver_to on a type whose provisioner returns the value', async () => {
-    const res = await post(
-      {
-        type: 'neon_api_key',
-        context: {
-          purpose: 'x',
-          deliver_to: { script: 'chittyagent-mcp-builder', secret_name: 'NEON_API_KEY' },
-        },
-      },
-      makeEnv(),
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe('deliver_to_invalid');
-    expect(seen).toHaveLength(0);
-  });
-
-  it('without deliver_to, the existing response shape is unchanged', async () => {
-    const body = structuredClone(DELIVER_BODY);
-    delete body.context.deliver_to;
-    const res = await post(body, makeEnv());
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.credential.value).toBe(tokenValue);
-    expect(json.credential.token_id).toBe('tok-380');
-    expect(json.usage_instructions).toBeDefined();
-    expect(seen.some((r) => r.method === 'PUT')).toBe(false);
   });
 });
