@@ -29,6 +29,21 @@ export const HOST_PRINCIPAL_ALLOWED_TYPES = Object.freeze([
 export const HOST_PRINCIPAL_MAX_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * Return a copy of a credential type config with its ttl capped for the host
+ * principal. Throws on a missing config rather than yielding one with no
+ * permissions.
+ */
+export function capHostPrincipalTtl(
+  typeConfig,
+  maxMs = HOST_PRINCIPAL_MAX_TTL_MS,
+) {
+  if (!typeConfig || typeof typeConfig !== "object") {
+    throw new Error("capHostPrincipalTtl: typeConfig is required");
+  }
+  return { ...typeConfig, ttl: Math.min(typeConfig.ttl ?? maxMs, maxMs) };
+}
+
+/**
  * POST /api/credentials/provision
  *
  * Provision a credential for a ChittyOS service
@@ -103,13 +118,7 @@ credentialsRoutes.post("/provision", async (c) => {
       const typeConfig = provisioner.credentialTypes[type];
       provisioner.credentialTypes = {
         ...provisioner.credentialTypes,
-        [type]: {
-          ...typeConfig,
-          ttl: Math.min(
-            typeConfig.ttl ?? HOST_PRINCIPAL_MAX_TTL_MS,
-            HOST_PRINCIPAL_MAX_TTL_MS,
-          ),
-        },
+        [type]: capHostPrincipalTtl(typeConfig),
       };
     }
 

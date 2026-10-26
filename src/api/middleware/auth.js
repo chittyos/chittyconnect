@@ -29,9 +29,15 @@ async function sha256(value) {
   );
 }
 
-// Constant-time comparison: compare fixed-length SHA-256 digests so neither
-// the length nor the content of the expected value leaks through timing.
-async function digestsEqual(a, b) {
+// Compare fixed-length SHA-256 digests, which removes length and content
+// timing differences between the two inputs. This is not a general
+// constant-time primitive. Both inputs must be non-empty strings; anything
+// else (e.g. an object that would coerce to "[object Object]") is rejected
+// before hashing.
+const isNonEmptyString = (v) => typeof v === "string" && v.length > 0;
+
+export async function digestsEqual(a, b) {
+  if (!isNonEmptyString(a) || !isNonEmptyString(b)) return false;
   const [da, db] = await Promise.all([sha256(a), sha256(b)]);
   let diff = 0;
   for (let i = 0; i < da.length; i++) diff |= da[i] ^ db[i];
@@ -51,14 +57,16 @@ async function readBinding(binding) {
 async function hostAccessHeadersMatch(c) {
   const incomingId = c.req.header("CF-Access-Client-Id") || "";
   const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
-  if (!incomingId || !incomingSecret) return false;
+  if (!isNonEmptyString(incomingId) || !isNonEmptyString(incomingSecret)) {
+    return false;
+  }
 
   const [envId, envSecret] = await Promise.all([
     readBinding(c.env.HOST_ACCESS_CLIENT_ID),
     readBinding(c.env.HOST_ACCESS_CLIENT_SECRET),
   ]);
   // Fail closed: an empty or missing binding never matches anything.
-  if (!envId || !envSecret) return false;
+  if (!isNonEmptyString(envId) || !isNonEmptyString(envSecret)) return false;
 
   const [idOk, secretOk] = await Promise.all([
     digestsEqual(incomingId, envId),
