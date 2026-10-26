@@ -14,6 +14,20 @@ import { createCredentialBroker } from "../../lib/credential-broker.js";
 
 const credentialsRoutes = new Hono();
 
+// Principal type set by middleware/auth.js for a CF Access host service token.
+const HOST_ACCESS_PRINCIPAL_TYPE = "cloudflare-access-host";
+
+/**
+ * Credential types a host principal (CF Access service token, see
+ * middleware/auth.js) may request. `cloudflare_workers_deploy` is the
+ * narrowest type in credentialTypes that can run `wrangler deploy`
+ * (`cloudflare_workers_read` cannot write scripts).
+ */
+export const HOST_PRINCIPAL_ALLOWED_TYPES = Object.freeze([
+  "cloudflare_workers_deploy",
+]);
+export const HOST_PRINCIPAL_MAX_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * POST /api/credentials/provision
  *
@@ -50,8 +64,27 @@ credentialsRoutes.post("/provision", async (c) => {
 
     // Get requesting service from API key metadata
     const apiKeyInfo = c.get("apiKey");
-    const requestingService =
+    const isHostPrincipal = apiKeyInfo?.type === HOST_ACCESS_PRINCIPAL_TYPE;
+    let requestingService =
       apiKeyInfo?.service || apiKeyInfo?.name || "unknown";
+
+    if (isHostPrincipal) {
+      if (!HOST_PRINCIPAL_ALLOWED_TYPES.includes(type)) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: "HOST_PRINCIPAL_TYPE_NOT_ALLOWED",
+              message: `Credential type '${type}' is not allowed for host principal; allowed: ${HOST_PRINCIPAL_ALLOWED_TYPES.join(", ")}`,
+            },
+          },
+          403,
+        );
+      }
+      // Record the principal type in the audit trail (D1 requesting_service,
+      // ChittyChronicle entityId) and rate-limit it separately from API keys.
+      requestingService = `${HOST_ACCESS_PRINCIPAL_TYPE}:${requestingService}`;
+    }
 
     // Gather request metadata for ContextConsciousness™
     const requestMetadata = {
@@ -63,6 +96,22 @@ credentialsRoutes.post("/provision", async (c) => {
 
     // Initialize provisioner
     const provisioner = new EnhancedCredentialProvisioner(c.env);
+
+    // Cap TTL for the host principal. credentialTypes is per-instance, so this
+    // override applies to this request only.
+    if (isHostPrincipal) {
+      const typeConfig = provisioner.credentialTypes[type];
+      provisioner.credentialTypes = {
+        ...provisioner.credentialTypes,
+        [type]: {
+          ...typeConfig,
+          ttl: Math.min(
+            typeConfig.ttl ?? HOST_PRINCIPAL_MAX_TTL_MS,
+            HOST_PRINCIPAL_MAX_TTL_MS,
+          ),
+        },
+      };
+    }
 
     // Validate request
     provisioner.validateRequest(type, context, requestingService);

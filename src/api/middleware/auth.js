@@ -2,6 +2,71 @@
  * Authentication middleware for ChittyConnect API
  */
 
+import { resolveBindingValue } from "../../lib/credential-helper.js";
+
+/**
+ * Host principal: a CF Access service token held by a host (chittyserv-vm),
+ * accepted ONLY on POST /api/credentials/provision so the host can request a
+ * short-lived Cloudflare token at call time instead of keeping one in an env
+ * file. The provision route narrows what this principal may mint.
+ */
+const HOST_ACCESS_PRINCIPAL_TYPE = "cloudflare-access-host";
+
+function isHostProvisionPath(c) {
+  try {
+    const url = new URL(c.req.raw?.url || "http://localhost");
+    return (
+      c.req.method === "POST" && url.pathname === "/api/credentials/provision"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function sha256(value) {
+  return new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
+  );
+}
+
+// Constant-time comparison: compare fixed-length SHA-256 digests so neither
+// the length nor the content of the expected value leaks through timing.
+async function digestsEqual(a, b) {
+  const [da, db] = await Promise.all([sha256(a), sha256(b)]);
+  let diff = 0;
+  for (let i = 0; i < da.length; i++) diff |= da[i] ^ db[i];
+  return diff === 0;
+}
+
+async function readBinding(binding) {
+  try {
+    return await resolveBindingValue(binding);
+  } catch {
+    // An unreachable Secrets Store entry must not authenticate anyone, and
+    // must not 500 the API-key path either: treat it as absent.
+    return undefined;
+  }
+}
+
+async function hostAccessHeadersMatch(c) {
+  const incomingId = c.req.header("CF-Access-Client-Id") || "";
+  const incomingSecret = c.req.header("CF-Access-Client-Secret") || "";
+  if (!incomingId || !incomingSecret) return false;
+
+  const [envId, envSecret] = await Promise.all([
+    readBinding(c.env.HOST_ACCESS_CLIENT_ID),
+    readBinding(c.env.HOST_ACCESS_CLIENT_SECRET),
+  ]);
+  // Fail closed: an empty or missing binding never matches anything.
+  if (!envId || !envSecret) return false;
+
+  const [idOk, secretOk] = await Promise.all([
+    digestsEqual(incomingId, envId),
+    digestsEqual(incomingSecret, envSecret),
+  ]);
+  return idOk && secretOk;
+}
+
 function isContextSyncPath(c) {
   try {
     const url = new URL(c.req.raw?.url || "http://localhost");
@@ -74,6 +139,19 @@ export async function authenticate(c, next) {
   const bearerToken = bearerMatch ? bearerMatch[1].trim() : null;
 
   const apiKey = c.req.header("X-ChittyOS-API-Key") || bearerToken;
+
+  // Host principal (CF Access service token), scoped to the provision route.
+  // A mismatch or missing binding falls through to the API-key logic below.
+  if (isHostProvisionPath(c) && (await hostAccessHeadersMatch(c))) {
+    c.set("apiKey", {
+      type: HOST_ACCESS_PRINCIPAL_TYPE,
+      service: "chittyserv-vm",
+      scopes: ["credentials:provision"],
+      status: "active",
+    });
+    await next();
+    return;
+  }
 
   if (isPolicyBundlePath(c)) {
     c.set("apiKey", { type: "public", service: "policy-bundle", status: "active" });
