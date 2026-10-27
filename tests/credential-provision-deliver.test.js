@@ -391,6 +391,8 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     const [create] = tokenCreates();
     const request = JSON.parse(create.body);
     expect(request.policies).toHaveLength(1);
+    // Cloudflare rejects fractional seconds: "2005-12-30T01:02:03Z" only.
+    expect(request.expires_on).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(request.policies[0].resources).toEqual({
       [`com.cloudflare.api.account.${ACCOUNT_ID}`]: '*',
     });
