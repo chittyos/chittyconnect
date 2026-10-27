@@ -23,7 +23,11 @@ const CHRONICLE = 'https://chronicle.chitty.cc';
 function makeD1() {
   const db = new sqlite.DatabaseSync(':memory:');
   for (const file of ['001_credential_provisions.sql', '020_credential_delivery_leases.sql']) {
-    db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+    const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8')
+      .split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+    for (const statement of sql.split(';').map((x) => x.trim()).filter(Boolean)) {
+      db.prepare(statement).run();
+    }
   }
   return {
     raw: db,
@@ -189,7 +193,7 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     seen.filter((r) => r.url === `${CF}/tokens` && r.method === 'POST');
   const deletes = () => seen.filter((r) => r.method === 'DELETE');
   const cloudflareCalls = () => seen.filter((r) => r.url.startsWith('https://api.cloudflare.com/'));
-  const chroniclePosts = () => seen.filter((r) => r.url.startsWith(CHRONICLE));
+  const chroniclePosts = () => seen.filter((r) => new URL(r.url).origin === CHRONICLE);
 
   function expectNoValueLeak(text, db) {
     expect(tokenValues.length).toBeGreaterThan(0);
