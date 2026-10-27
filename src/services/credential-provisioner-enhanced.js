@@ -810,7 +810,7 @@ export class EnhancedCredentialProvisioner {
     const tokenRequest = {
       name: tokenName,
       policies,
-      expires_on: new Date(Date.now() + typeConfig.ttl).toISOString(),
+      expires_on: new Date(Date.now() + typeConfig.ttl).toISOString().replace(/\.\d{3}Z$/, "Z"), // CF rejects fractional seconds
     };
 
     // Add IP restrictions for production tokens
