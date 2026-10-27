@@ -18,6 +18,56 @@ import { createCredentialBroker } from "../lib/credential-broker.js";
 import { CREDENTIAL_PATHS } from "../lib/credential-paths.js";
 
 /**
+ * Exact delivery targets for `context.deliver_to` (issue #380). Delivery
+ * writes the token straight into the target worker's secret store so the
+ * value never transits an HTTP response. A request is accepted only when
+ * its (script, secret_name, credential type) triple matches an entry here
+ * exactly; anything else is refused with `deliver_target_not_allowed`
+ * before any Cloudflare call. Matching the full triple stops a caller from
+ * overwriting a worker's other secrets or planting a broader token type in
+ * a secret meant for a narrower one.
+ *
+ * `script` is the exact deployed script name the secret is written to.
+ * chittyagent-mcp-builder's env.production sets `name =
+ * "chittyagent-mcp-builder"`, so no `-<environment>` suffix is ever added.
+ */
+export const DELIVER_TARGETS = Object.freeze([
+  Object.freeze({
+    script: "chittyagent-mcp-builder",
+    secret_name: "CF_API_TOKEN",
+    type: "cloudflare_access_mcp_portals",
+  }),
+]);
+
+// Types that may only be provisioned with deliver_to: their value must
+// never be returned in a response body.
+const DELIVER_ONLY_TYPES = new Set(["cloudflare_access_mcp_portals"]);
+
+const DELIVER_TO_KEYS = new Set(["script", "secret_name"]);
+
+// Bound on the secrets PUT. A timeout leaves the outcome unknown (Cloudflare
+// may have applied the write), so it is reported, never revoked.
+const DELIVER_TIMEOUT_MS = 15000;
+
+// Lifetime of a per-target delivery lease. Covers the mint, the secrets
+// PUT (bounded above) and the revocation of earlier tokens; a lease left
+// behind by a crashed request is taken over once it expires.
+const DELIVER_LEASE_MS = 120000;
+
+// Reserved prefix of the audit-row purpose written by the delivery path.
+const DELIVER_PURPOSE_PREFIX = "deliver_to:";
+
+const deliveryKey = (target) => `${target.script}/${target.secret_name}`;
+
+function provisionError(message, code, status, details) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  if (details) error.details = details;
+  return error;
+}
+
+/**
  * Enhanced Credential provisioner for ChittyOS ecosystem
  */
 export class EnhancedCredentialProvisioner {
@@ -76,6 +126,16 @@ export class EnhancedCredentialProvisioner {
         name: "D1 Database Write",
         scope: "account",
       },
+      // Cloudflare publishes this group as "MCP Portals Write". Its ID is
+      // not pinned here: it must resolve from the account's live
+      // permission-groups catalog, and the provenance gate in
+      // provisionCloudflareToken refuses to mint from a fallback entry
+      // anyway, so a guessed ID would only ever be dead weight.
+      mcpPortalsWrite: {
+        id: null,
+        name: "MCP Portals Write",
+        scope: "account",
+      },
       // Zone-scoped. Required for `wrangler deploy` against a worker
       // with a `routes` block — without this permission group, deploy
       // fails post-upload at PUT /zones/{zid}/workers/routes with
@@ -122,6 +182,11 @@ export class EnhancedCredentialProvisioner {
         permissions: ["d1DatabaseWrite", "accountSettingsRead"],
         ttl: 180 * 24 * 60 * 60 * 1000, // 180 days
         requiresContext: ["service", "database"],
+      },
+      cloudflare_access_mcp_portals: {
+        permissions: ["mcpPortalsWrite", "accountSettingsRead"],
+        ttl: 90 * 24 * 60 * 60 * 1000, // 90 days
+        requiresContext: ["service"],
       },
       chittyos_service_token: {
         type: "service_token",
@@ -225,6 +290,7 @@ export class EnhancedCredentialProvisioner {
       case "cloudflare_workers_read":
       case "cloudflare_r2_access":
       case "cloudflare_d1_access":
+      case "cloudflare_access_mcp_portals":
         return await this.provisionCloudflareToken(
           type,
           context,
@@ -461,6 +527,13 @@ export class EnhancedCredentialProvisioner {
           normalizedName.includes("Write")
         ) {
           key = "workersRoutesWrite";
+        } else if (
+          normalizedName.includes("MCPPortals") &&
+          normalizedName.includes("Write")
+        ) {
+          // "MCP Portals Write" -> "MCPPortalsWrite". Substring match so a
+          // prefixed spelling ("Access: MCP Portals Write") also resolves.
+          key = "mcpPortalsWrite";
         }
 
         if (key) {
@@ -551,6 +624,38 @@ export class EnhancedCredentialProvisioner {
    * @returns {Promise<object>} Provisioned token
    */
   async provisionCloudflareToken(type, context, requestingService) {
+    // Checked again here, not only in validateRequest, so no caller of
+    // this method can reach token creation with an unlisted target.
+    const deliverTarget = this.resolveDeliverTarget(type, context);
+    if (!deliverTarget) {
+      return this.mintCloudflareToken(type, context, requestingService, null);
+    }
+
+    // One delivery per target at a time, taken before any Cloudflare call:
+    // otherwise a slower delivery's rotation step can revoke the token a
+    // concurrent delivery has just written into the same secret.
+    const leaseHolder = crypto.randomUUID();
+    await this.acquireDeliveryLease(deliverTarget, leaseHolder);
+    try {
+      return await this.mintCloudflareToken(
+        type,
+        context,
+        requestingService,
+        deliverTarget,
+      );
+    } finally {
+      await this.releaseDeliveryLease(deliverTarget, leaseHolder);
+    }
+  }
+
+  /**
+   * Mint a Cloudflare token and, when deliverTarget is set, deliver it.
+   * Callers go through provisionCloudflareToken, which validates the target
+   * and holds the delivery lease.
+   *
+   * @private
+   */
+  async mintCloudflareToken(type, context, requestingService, deliverTarget) {
     const { service, purpose, environment = "production" } = context;
 
     // Retrieve Cloudflare credentials from chittysecrets
@@ -748,6 +853,35 @@ export class EnhancedCredentialProvisioner {
 
     const token = result.result;
 
+    let delivered = null;
+    let previousToken = null;
+    if (deliverTarget) {
+      // Tracked as pending before the write, so a token whose delivery
+      // outcome is unknown, or whose cleanup failed, still has a row the
+      // next successful delivery will revoke.
+      const rowId = await this.recordPendingDelivery(
+        token,
+        deliverTarget,
+        { type, requestingService },
+        accountId,
+        makeApiKey,
+      );
+      delivered = await this.deliverTokenToWorkerSecret(
+        token,
+        deliverTarget,
+        accountId,
+        makeApiKey,
+        rowId,
+      );
+      previousToken = await this.rotateDeliveredToken(
+        token,
+        delivered,
+        rowId,
+        accountId,
+        makeApiKey,
+      );
+    }
+
     // Provenance reported to callers and to Chronicle is derived from the
     // groups actually in this token, not from the catalog-wide flag. The
     // catalog-wide flag reads "account-catalog" as soon as ONE group
@@ -775,7 +909,27 @@ export class EnhancedCredentialProvisioner {
       environment,
       contextAnalysis: true, // Flag that context was validated
       permissionSource,
+      ...(delivered && {
+        deliveredTo: {
+          script: delivered.script,
+          secret_name: delivered.secret_name,
+        },
+      }),
     });
+
+    if (delivered) {
+      // Value-free response: the token now lives only in the target
+      // worker's secret store. No value, no usage_instructions, no echo
+      // of any Cloudflare API body.
+      return {
+        token_id: token.id,
+        secret_name: delivered.secret_name,
+        script: delivered.script,
+        expires_on: token.expires_on,
+        permissions: includedScopeNames,
+        previous_token: previousToken,
+      };
+    }
 
     return {
       success: true,
@@ -1257,6 +1411,9 @@ export class EnhancedCredentialProvisioner {
       cloudflare_d1_access: {
         note: "Token has D1 Database Write and Account Settings Read permissions",
       },
+      cloudflare_access_mcp_portals: {
+        note: "Token has MCP Portals Write and Account Settings Read permissions",
+      },
     };
 
     return instructions[type] || { note: `Token for ${type}` };
@@ -1387,5 +1544,382 @@ export class EnhancedCredentialProvisioner {
         }
       }
     }
+
+    this.resolveDeliverTarget(type, context);
+  }
+
+  /**
+   * Validate `context.deliver_to` and resolve the worker script it names.
+   * Returns null when no delivery was requested (and the type allows
+   * that). Throws before any Cloudflare call when delivery is required
+   * but absent, malformed, or not an exact allow-listed triple.
+   */
+  resolveDeliverTarget(type, context) {
+    const deliverTo = context?.deliver_to;
+    if (deliverTo === undefined || deliverTo === null) {
+      if (
+        typeof context?.purpose === "string" &&
+        context.purpose.startsWith(DELIVER_PURPOSE_PREFIX)
+      ) {
+        throw provisionError(
+          `purpose_reserved: purpose may not start with "${DELIVER_PURPOSE_PREFIX}" without deliver_to`,
+          "purpose_reserved",
+          400,
+        );
+      }
+      if (DELIVER_ONLY_TYPES.has(type)) {
+        throw provisionError(
+          `deliver_to_required: ${type} is only provisioned into a worker secret via context.deliver_to`,
+          "deliver_to_required",
+          400,
+        );
+      }
+      return null;
+    }
+
+    if (typeof deliverTo !== "object" || Array.isArray(deliverTo)) {
+      throw provisionError(
+        "deliver_to must be an object { script, secret_name }",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    const unknownKeys = Object.keys(deliverTo).filter(
+      (k) => !DELIVER_TO_KEYS.has(k),
+    );
+    if (unknownKeys.length > 0) {
+      // Includes `environment`: the target is the exact script name.
+      throw provisionError(
+        `deliver_to accepts only script and secret_name (unsupported: ${unknownKeys.join(", ")})`,
+        "deliver_to_invalid",
+        400,
+      );
+    }
+    if (context.ip_restrictions !== undefined) {
+      throw provisionError(
+        "ip_restrictions cannot be combined with deliver_to: the token is used by the target worker, not by the caller",
+        "deliver_to_invalid",
+        400,
+      );
+    }
+
+    const { script, secret_name: secretName } = deliverTo;
+    const target = DELIVER_TARGETS.find(
+      (t) =>
+        t.script === script && t.secret_name === secretName && t.type === type,
+    );
+    if (!target) {
+      throw provisionError(
+        "deliver_target_not_allowed: (script, secret_name, type) is not an allow-listed delivery target",
+        "deliver_target_not_allowed",
+        403,
+      );
+    }
+
+    return { script: target.script, secret_name: target.secret_name };
+  }
+
+  /**
+   * Write a freshly created token into a worker secret.
+   *
+   * - HTTP 2xx: delivered, whatever the body (an unparseable 2xx body does
+   *   not mean the write failed). A parseable body with success === false
+   *   is the one 2xx case treated as failure.
+   * - Non-2xx or success === false: the write did not happen, so the token
+   *   is revoked and 502 deliver_failed is thrown.
+   * - Timeout / network error: the outcome is unknown (Cloudflare may have
+   *   applied it), so the token is NOT revoked; 502 deliver_unknown carries
+   *   the token id for reconciliation.
+   *
+   * Errors never carry the token value or a Cloudflare response body.
+   *
+   * @private
+   */
+  async deliverTokenToWorkerSecret(token, target, accountId, makeApiKey, rowId) {
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+    let response;
+    try {
+      response = await fetch(
+        `${base}/workers/scripts/${encodeURIComponent(target.script)}/secrets`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${makeApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: target.secret_name,
+            text: token.value,
+            type: "secret_text",
+          }),
+          signal: AbortSignal.timeout(DELIVER_TIMEOUT_MS),
+        },
+      );
+    } catch {
+      // The thrown error is not surfaced: a fetch error message is not a
+      // channel this path controls.
+      await this.markDelivery(rowId, "unknown", false);
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery of token ${token.id} to ${target.script} has unknown outcome (request failed or timed out); token NOT revoked`,
+      );
+      throw provisionError(
+        `deliver_unknown: writing secret ${target.secret_name} to ${target.script} did not complete (request failed or timed out); token ${token.id} was NOT revoked — reconcile the worker secret against it`,
+        "deliver_unknown",
+        502,
+        { token_id: token.id },
+      );
+    }
+
+    let failure = null;
+    if (!response.ok) {
+      failure = `HTTP ${response.status}`;
+    } else {
+      const body = await response.json().catch(() => undefined);
+      if (body && typeof body === "object" && body.success === false) {
+        failure = "Cloudflare reported success=false";
+      }
+    }
+
+    if (!failure) return target;
+
+    const revoked = await this.revokeCloudflareToken(
+      token.id,
+      accountId,
+      makeApiKey,
+    );
+    // A failed revoke leaves the row unrevoked, so the next successful
+    // delivery to this target revokes the token.
+    await this.markDelivery(rowId, "failed", revoked);
+
+    console.error(
+      `[EnhancedCredentialProvisioner] Delivery of token ${token.id} to ${target.script} failed (${failure}); revoked=${revoked}`,
+    );
+    throw provisionError(
+      revoked
+        ? `deliver_failed: writing secret ${target.secret_name} to ${target.script} failed (${failure}); token ${token.id} was revoked`
+        : `deliver_failed: writing secret ${target.secret_name} to ${target.script} failed (${failure}); REVOKE FAILED for token ${token.id} — revoke it manually`,
+      "deliver_failed",
+      502,
+    );
+  }
+
+  /**
+   * Take the per-target delivery lease with one atomic upsert: it succeeds
+   * when no lease exists or the existing one has expired. Throws 409
+   * deliver_in_progress when another delivery holds it, and fails closed
+   * (503) when the lease store is unavailable. Makes no Cloudflare call.
+   *
+   * @private
+   */
+  async acquireDeliveryLease(target, holder) {
+    const key = deliveryKey(target);
+    const now = Date.now();
+    let row;
+    try {
+      row = await this.env.DB.prepare(
+        `INSERT INTO credential_delivery_leases (target, holder, expires_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(target) DO UPDATE
+           SET holder = excluded.holder, expires_at = excluded.expires_at
+           WHERE credential_delivery_leases.expires_at < ?
+         RETURNING holder`,
+      )
+        .bind(key, holder, now + DELIVER_LEASE_MS, now)
+        .first();
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery lease for ${key} unavailable: ${error?.message}`,
+      );
+      throw provisionError(
+        `deliver_lease_unavailable: could not take the delivery lease for ${key}; no token was minted`,
+        "deliver_lease_unavailable",
+        503,
+      );
+    }
+    if (row?.holder !== holder) {
+      throw provisionError(
+        `deliver_in_progress: another delivery to ${key} is in progress; no token was minted — retry after it completes`,
+        "deliver_in_progress",
+        409,
+      );
+    }
+  }
+
+  /** @private Never throws; an unreleased lease expires on its own. */
+  async releaseDeliveryLease(target, holder) {
+    try {
+      await this.env.DB.prepare(
+        `DELETE FROM credential_delivery_leases WHERE target = ? AND holder = ?`,
+      )
+        .bind(deliveryKey(target), holder)
+        .run();
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Could not release delivery lease for ${deliveryKey(target)}: ${error?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Insert the audit row for a minted-but-not-yet-delivered token, marked
+   * delivery_state = 'pending'. The row is keyed to its target by service =
+   * script and purpose = `deliver_to:<script>/<secret>`; delivery_state is
+   * set only on this path. If the row cannot be written the token is
+   * revoked and 503 is thrown, so no live token goes untracked.
+   *
+   * @private
+   * @returns {Promise<number>} the row id
+   */
+  async recordPendingDelivery(token, target, meta, accountId, makeApiKey) {
+    let row = null;
+    try {
+      row = await this.env.DB.prepare(
+        `INSERT INTO credential_provisions
+         (type, service, purpose, requesting_service, token_id, expires_at, created_at, delivery_state)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+         RETURNING id`,
+      )
+        .bind(
+          meta.type,
+          target.script,
+          `${DELIVER_PURPOSE_PREFIX}${deliveryKey(target)}`,
+          meta.requestingService,
+          token.id,
+          token.expires_on || null,
+        )
+        .first();
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Could not record pending delivery of token ${token.id}: ${error?.message}`,
+      );
+    }
+    if (row?.id != null) return row.id;
+
+    const revoked = await this.revokeCloudflareToken(
+      token.id,
+      accountId,
+      makeApiKey,
+    );
+    throw provisionError(
+      revoked
+        ? `deliver_tracking_unavailable: could not record token ${token.id} before delivery; it was revoked and not delivered`
+        : `deliver_tracking_unavailable: could not record token ${token.id} before delivery and REVOKE FAILED — revoke it manually`,
+      "deliver_tracking_unavailable",
+      503,
+    );
+  }
+
+  /** @private Never throws. */
+  async markDelivery(rowId, state, revoked) {
+    try {
+      await this.env.DB.prepare(
+        revoked
+          ? `UPDATE credential_provisions SET delivery_state = ?, revoked_at = datetime('now') WHERE id = ?`
+          : `UPDATE credential_provisions SET delivery_state = ? WHERE id = ?`,
+      )
+        .bind(state, rowId)
+        .run();
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Could not mark delivery row ${rowId} ${state}: ${error?.message}`,
+      );
+    }
+  }
+
+  /**
+   * @private
+   * @returns {Promise<boolean>} true when the token is gone (2xx, or 404:
+   *   it no longer exists, which is the state revocation is after).
+   */
+  async revokeCloudflareToken(tokenId, accountId, makeApiKey) {
+    try {
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/${encodeURIComponent(tokenId)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${makeApiKey}` },
+        },
+      );
+      return res.ok || res.status === 404;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mark this delivery's row delivered and revoke every earlier token still
+   * live for the same target, so re-provisioning does not leave the old
+   * token valid. Only delivery-path rows (delivery_state set) strictly older
+   * than this request's own row are eligible — pending, unknown and
+   * failed-but-unrevoked rows included.
+   *
+   * Never throws: the new token is already in the worker secret, so every
+   * outcome is reported as a non-secret status instead.
+   *
+   * @private
+   * @returns {Promise<{status: string, token_ids: string[]}>}
+   *   status: "none" (no earlier token), "revoked", "revoke_failed", or
+   *   "tracking_unavailable" (audit store unreadable/unwritable).
+   */
+  async rotateDeliveredToken(token, target, rowId, accountId, makeApiKey) {
+    const db = this.env.DB;
+    let previous;
+    try {
+      await db
+        .prepare(
+          `UPDATE credential_provisions SET delivery_state = 'delivered' WHERE id = ?`,
+        )
+        .bind(rowId)
+        .run();
+      const rows = await db
+        .prepare(
+          `SELECT token_id FROM credential_provisions
+           WHERE service = ? AND purpose = ? AND delivery_state IS NOT NULL
+             AND revoked_at IS NULL AND token_id IS NOT NULL AND id < ?
+           ORDER BY id`,
+        )
+        .bind(
+          target.script,
+          `${DELIVER_PURPOSE_PREFIX}${deliveryKey(target)}`,
+          rowId,
+        )
+        .all();
+      previous = (rows?.results || []).map((r) => r.token_id);
+    } catch (error) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery tracking for ${target.script} unavailable: ${error?.message}`,
+      );
+      return { status: "tracking_unavailable", token_ids: [] };
+    }
+
+    if (previous.length === 0) return { status: "none", token_ids: [] };
+
+    const failed = [];
+    for (const id of previous) {
+      if (!(await this.revokeCloudflareToken(id, accountId, makeApiKey))) {
+        failed.push(id);
+        continue;
+      }
+      try {
+        await db
+          .prepare(
+            `UPDATE credential_provisions SET revoked_at = datetime('now') WHERE token_id = ?`,
+          )
+          .bind(id)
+          .run();
+      } catch (error) {
+        console.error(
+          `[EnhancedCredentialProvisioner] Revoked token ${id} but could not mark it revoked: ${error?.message}`,
+        );
+      }
+    }
+
+    if (failed.length > 0) {
+      console.error(
+        `[EnhancedCredentialProvisioner] Revoking previous token(s) ${failed.join(", ")} for ${target.script} failed`,
+      );
+      return { status: "revoke_failed", token_ids: failed };
+    }
+    return { status: "revoked", token_ids: previous };
   }
 }

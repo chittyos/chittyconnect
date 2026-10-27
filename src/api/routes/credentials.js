@@ -43,6 +43,20 @@ const credentialsRoutes = new Hono();
  *     "command": "gh secret set CLOUDFLARE_API_TOKEN"
  *   }
  * }
+ *
+ * Value-free delivery: with `context.deliver_to = { script, secret_name }`
+ * the token is written straight into that worker's secret and the response
+ * is only { token_id, secret_name, script, expires_on, permissions,
+ * previous_token }. Only exact allow-listed (script, secret_name, type)
+ * triples are accepted (else 403 deliver_target_not_allowed before any
+ * Cloudflare call). cloudflare_access_mcp_portals is deliver-only (400
+ * deliver_to_required without it). A rejected write revokes the token
+ * (502 deliver_failed); a timed-out write does not (502 deliver_unknown,
+ * with token_id for reconciliation). Re-delivery revokes the target's
+ * previous token; previous_token reports the outcome. One delivery per
+ * target at a time: an overlapping request gets 409 deliver_in_progress
+ * before any Cloudflare call. Without deliver_to, a context.purpose
+ * starting "deliver_to:" is refused (400 purpose_reserved).
  */
 credentialsRoutes.post("/provision", async (c) => {
   try {
@@ -81,6 +95,23 @@ credentialsRoutes.post("/provision", async (c) => {
     return c.json(result);
   } catch (error) {
     console.error("[Credentials] Provision error:", error);
+
+    // Errors raised with an explicit code/status (deliver_to handling,
+    // issue #380) carry their own mapping.
+    if (error.code && error.status) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.details || {}),
+          },
+          metadata: { timestamp: new Date().toISOString() },
+        },
+        error.status,
+      );
+    }
 
     // Determine appropriate status code
     let status = 500;
