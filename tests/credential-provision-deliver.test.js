@@ -72,7 +72,11 @@ const CATALOG = [
   { id: 'g-mcp-portals-write', name: 'MCP Portals Write' },
   { id: 'g-mcp-portals-read', name: 'MCP Portals Read' },
   { id: 'g-settings', name: 'Account Settings Read' },
+  { id: 'g-workers-scripts-write', name: 'Workers Scripts Write' },
 ];
+
+const HELPER_NAME = /ephemeral delivery helper/;
+const isHelperCreate = (r) => HELPER_NAME.test(JSON.parse(r.body).name);
 
 function post(body, env) {
   return credentialsRoutes.request(
@@ -103,6 +107,10 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
   let seen;
   let tokenValues;
   let mintCount;
+  let helperCount;
+  // 'ok' | 'error' — the helper token create.
+  let helperMint;
+  let helperDeleteStatus;
   // 'ok' | 'error' | 'success-false' | 'unparseable' | 'throw' | 'hold-once'
   let secretsPut;
   // For 'hold-once': the first PUT resolves `entered` and waits on `release`.
@@ -117,6 +125,9 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     deleteStatus = 200;
     hold = null;
     mintCount = 0;
+    helperCount = 0;
+    helperMint = 'ok';
+    helperDeleteStatus = null;
     // Fresh per mint so a match can only come from this run.
     tokenValues = [];
     logged = [];
@@ -134,9 +145,21 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     globalThis.fetch = async (url, init = {}) => {
       const u = String(url);
       const method = init.method || 'GET';
-      seen.push({ url: u, method, body: init.body });
+      seen.push({ url: u, method, body: init.body, auth: init.headers?.Authorization });
       if (u === `${CF}/tokens/permission_groups`) {
         return jsonOk({ success: true, result: CATALOG });
+      }
+      if (u === `${CF}/tokens` && method === 'POST' && HELPER_NAME.test(JSON.parse(init.body).name)) {
+        if (helperMint === 'error') {
+          return jsonOk({ success: false, errors: [{ message: `echo ${init.body}` }] }, 403);
+        }
+        helperCount += 1;
+        const value = `cfhelper-${crypto.randomUUID()}`;
+        tokenValues.push(value);
+        return jsonOk({
+          success: true,
+          result: { id: `helper-${helperCount}`, name: 'helper', value, expires_on: '2027-01-24T00:10:00Z' },
+        });
       }
       if (u === `${CF}/tokens` && method === 'POST') {
         mintCount += 1;
@@ -174,6 +197,9 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
             return jsonOk({ success: false, errors: [{ message: `echo ${init.body}` }] }, 500);
         }
       }
+      if (u.startsWith(`${CF}/tokens/helper-`) && method === 'DELETE' && helperDeleteStatus) {
+        return jsonOk({ success: false, errors: [{ message: 'nope' }] }, helperDeleteStatus);
+      }
       if (u.startsWith(`${CF}/tokens/`) && method === 'DELETE') {
         return deleteStatus === 200
           ? jsonOk({ success: true, result: { id: u.split('/').pop() } })
@@ -189,9 +215,13 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     vi.restoreAllMocks();
   });
 
-  const tokenCreates = () =>
-    seen.filter((r) => r.url === `${CF}/tokens` && r.method === 'POST');
-  const deletes = () => seen.filter((r) => r.method === 'DELETE');
+  const allCreates = () => seen.filter((r) => r.url === `${CF}/tokens` && r.method === 'POST');
+  // The requested (delivered) token's create; helper creates are separate.
+  const tokenCreates = () => allCreates().filter((r) => !isHelperCreate(r));
+  const helperCreates = () => allCreates().filter(isHelperCreate);
+  const allDeletes = () => seen.filter((r) => r.method === 'DELETE');
+  const deletes = () => allDeletes().filter((r) => !r.url.startsWith(`${CF}/tokens/helper-`));
+  const helperDeletes = () => allDeletes().filter((r) => r.url.startsWith(`${CF}/tokens/helper-`));
   const cloudflareCalls = () => seen.filter((r) => r.url.startsWith('https://api.cloudflare.com/'));
   const chroniclePosts = () => seen.filter((r) => new URL(r.url).origin === CHRONICLE);
 
@@ -234,6 +264,7 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
       expires_on: '2027-01-24T00:00:00Z',
       permissions: ['MCP Portals Write', 'Account Settings Read'],
       previous_token: { status: 'none', token_ids: [] },
+      helper_token: { status: 'revoked', token_id: 'helper-1' },
     });
 
     const puts = seen.filter((r) => r.method === 'PUT');
@@ -528,5 +559,122 @@ describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () =>
     const res = await post(DELIVER_BODY, env);
     expect((await res.json()).previous_token).toEqual({ status: 'none', token_ids: [] });
     expect(deletes()).toHaveLength(0);
+  });
+
+  it('H1: the secrets PUT is authorized by a Workers-Scripts-Write helper token, revoked after use', async () => {
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(200);
+
+    expect(allCreates()).toHaveLength(2);
+    expect(tokenCreates()).toHaveLength(1);
+    const [helperCreate] = helperCreates();
+    const request = JSON.parse(helperCreate.body);
+    expect(request.policies).toEqual([
+      {
+        effect: 'allow',
+        resources: { [`com.cloudflare.api.account.${ACCOUNT_ID}`]: '*' },
+        permission_groups: [{ id: 'g-workers-scripts-write', name: 'Workers Scripts Write' }],
+      },
+    ]);
+    expect(request.expires_on).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    const ttl = Date.parse(request.expires_on) - Date.now();
+    expect(ttl).toBeGreaterThan(8 * 60 * 1000);
+    expect(ttl).toBeLessThanOrEqual(10 * 60 * 1000);
+
+    const [delivered, helper] = tokenValues;
+    const puts = seen.filter((r) => r.method === 'PUT');
+    expect(puts).toHaveLength(1);
+    expect(puts[0].auth).toBe(`Bearer ${helper}`);
+    expect(puts[0].auth).not.toBe(`Bearer ${env.CLOUDFLARE_MAKE_API_KEY}`);
+    expect(JSON.parse(puts[0].body).text).toBe(delivered);
+
+    // Order: helper minted, then PUT, then helper DELETE.
+    const idx = (pred) => seen.findIndex(pred);
+    expect(idx((r) => r === helperCreate)).toBeLessThan(idx((r) => r.method === 'PUT'));
+    expect(helperDeletes().map((r) => r.url)).toEqual([`${CF}/tokens/helper-1`]);
+    expect(idx((r) => r.method === 'PUT')).toBeLessThan(idx((r) => r.url === `${CF}/tokens/helper-1`));
+    expect(deletes()).toHaveLength(0);
+
+    expect(JSON.parse(text).helper_token).toEqual({ status: 'revoked', token_id: 'helper-1' });
+    const event = JSON.parse(chroniclePosts()[0].body);
+    expect(event.data.deliveryHelper).toEqual({ status: 'revoked', token_id: 'helper-1' });
+    expect(tokenValues).toHaveLength(2);
+    expectNoValueLeak(text, env.DB);
+  });
+
+  it('H2: a 403 secrets PUT revokes both the delivered token and the helper', async () => {
+    secretsPut = 'error';
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    const { error } = JSON.parse(text);
+    expect(error.code).toBe('deliver_failed');
+    expect(error.helper_token).toEqual({ status: 'revoked', token_id: 'helper-1' });
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+    expect(helperDeletes().map((r) => r.url)).toEqual([`${CF}/tokens/helper-1`]);
+    expect(tokenValues).toHaveLength(2);
+    expectNoValueLeak(text, env.DB);
+  });
+
+  it('H3: a timed-out secrets PUT still revokes the helper; deliver_unknown as before', async () => {
+    secretsPut = 'throw';
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    const { error } = JSON.parse(text);
+    expect(error.code).toBe('deliver_unknown');
+    expect(error.token_id).toBe('tok-1');
+    expect(error.helper_token).toEqual({ status: 'revoked', token_id: 'helper-1' });
+    expect(deletes()).toHaveLength(0);
+    expect(helperDeletes().map((r) => r.url)).toEqual([`${CF}/tokens/helper-1`]);
+    expectNoValueLeak(text, env.DB);
+  });
+
+  it('H4: a failed helper mint revokes the delivered token and never attempts the secrets PUT', async () => {
+    helperMint = 'error';
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(502);
+    expect(JSON.parse(text).error.code).toBe('deliver_helper_failed');
+    expect(seen.filter((r) => r.method === 'PUT')).toHaveLength(0);
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+    expect(helperDeletes()).toHaveLength(0);
+    expect(
+      env.DB.raw.prepare('SELECT delivery_state, revoked_at IS NOT NULL AS revoked FROM credential_provisions WHERE token_id = ?').get('tok-1'),
+    ).toEqual({ delivery_state: 'failed', revoked: 1 });
+    expectNoValueLeak(text, env.DB);
+  });
+
+  it('H4: refuses the helper when Workers Scripts Write is absent from the account catalog', async () => {
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (url, init) =>
+      String(url).endsWith('/tokens/permission_groups')
+        ? jsonOk({ success: true, result: CATALOG.filter((g) => g.name !== 'Workers Scripts Write') })
+        : inner(url, init);
+    const res = await post(DELIVER_BODY, makeEnv());
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe('deliver_helper_failed');
+    expect(helperCreates()).toHaveLength(0);
+    expect(seen.filter((r) => r.method === 'PUT')).toHaveLength(0);
+    expect(deletes().map((r) => r.url)).toEqual([`${CF}/tokens/tok-1`]);
+  });
+
+  it('H5: a failed helper revoke on a successful delivery is reported, not a failure', async () => {
+    helperDeleteStatus = 500;
+    const env = makeEnv();
+    const res = await post(DELIVER_BODY, env);
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    const body = JSON.parse(text);
+    expect(body.token_id).toBe('tok-1');
+    expect(body.helper_token).toEqual({ status: 'revoke_failed', token_id: 'helper-1' });
+    expect(helperDeletes()).toHaveLength(1);
+    expect(logged.some((l) => l.includes('helper-1'))).toBe(true);
+    expectNoValueLeak(text, env.DB);
   });
 });

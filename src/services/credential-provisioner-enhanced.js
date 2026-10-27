@@ -54,6 +54,12 @@ const DELIVER_TIMEOUT_MS = 15000;
 // behind by a crashed request is taken over once it expires.
 const DELIVER_LEASE_MS = 120000;
 
+// The make key creates tokens but lacks Workers Scripts Write, so the
+// secrets PUT is authorized by a single-group helper token minted for it
+// and revoked in a finally. Its lifetime caps a helper whose revoke fails.
+const DELIVER_HELPER_PERMISSION_KEY = "workersScriptsWrite";
+const DELIVER_HELPER_TTL_MS = 10 * 60 * 1000;
+
 // Reserved prefix of the audit-row purpose written by the delivery path.
 const DELIVER_PURPOSE_PREFIX = "deliver_to:";
 
@@ -826,34 +832,14 @@ export class EnhancedCredentialProvisioner {
       `[EnhancedCredentialProvisioner] Creating Cloudflare token: ${tokenName}`,
     );
 
-    // Create token via Cloudflare API
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${makeApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(tokenRequest),
-      },
+    const token = await this.createCloudflareToken(
+      tokenRequest,
+      accountId,
+      makeApiKey,
     );
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(
-        `Failed to create Cloudflare token: ${response.status} - ${error}`,
-      );
-    }
-
-    const result = await response.json();
-    if (!result.success) {
-      throw new Error(`Cloudflare API error: ${JSON.stringify(result.errors)}`);
-    }
-
-    const token = result.result;
-
     let delivered = null;
+    let deliveryHelper = null;
     let previousToken = null;
     if (deliverTarget) {
       // Tracked as pending before the write, so a token whose delivery
@@ -866,13 +852,14 @@ export class EnhancedCredentialProvisioner {
         accountId,
         makeApiKey,
       );
-      delivered = await this.deliverTokenToWorkerSecret(
-        token,
-        deliverTarget,
-        accountId,
-        makeApiKey,
-        rowId,
-      );
+      ({ target: delivered, helper: deliveryHelper } =
+        await this.deliverTokenToWorkerSecret(
+          token,
+          deliverTarget,
+          accountId,
+          makeApiKey,
+          rowId,
+        ));
       previousToken = await this.rotateDeliveredToken(
         token,
         delivered,
@@ -914,6 +901,7 @@ export class EnhancedCredentialProvisioner {
           script: delivered.script,
           secret_name: delivered.secret_name,
         },
+        deliveryHelper,
       }),
     });
 
@@ -928,6 +916,7 @@ export class EnhancedCredentialProvisioner {
         expires_on: token.expires_on,
         permissions: includedScopeNames,
         previous_token: previousToken,
+        helper_token: deliveryHelper,
       };
     }
 
@@ -1620,6 +1609,87 @@ export class EnhancedCredentialProvisioner {
   }
 
   /**
+   * POST /accounts/{id}/tokens with the make key. Shared by the requested
+   * token and the ephemeral delivery helper.
+   *
+   * @private
+   * @returns {Promise<object>} the Cloudflare token object (carries .value)
+   */
+  async createCloudflareToken(tokenRequest, accountId, makeApiKey) {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${makeApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(tokenRequest),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(
+        `Failed to create Cloudflare token: ${response.status} - ${error}`,
+      );
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(`Cloudflare API error: ${JSON.stringify(result.errors)}`);
+    }
+    return result.result;
+  }
+
+  /**
+   * Mint the short-lived token that authorizes the secrets PUT. The make
+   * key can create tokens but does not itself hold Workers Scripts Write,
+   * so the write is made with a single-group, account-scoped token that
+   * lives DELIVER_HELPER_TTL_MS at most and is revoked right after use.
+   * The group id must resolve from this account's live catalog.
+   *
+   * @private
+   * @returns {Promise<{id: string, value: string}>}
+   */
+  async mintDeliveryHelperToken(target, accountId, makeApiKey) {
+    const permissions = await this.getCloudflarePermissions(
+      makeApiKey,
+      accountId,
+    );
+    const group = permissions[DELIVER_HELPER_PERMISSION_KEY];
+    if (
+      !group?.id ||
+      !this.catalogResolvedKeys?.has(DELIVER_HELPER_PERMISSION_KEY)
+    ) {
+      throw new Error(
+        `POLICY_BLOCKED_PERMISSION_UNVERIFIED: ${DELIVER_HELPER_PERMISSION_KEY} is not in this account's catalog`,
+      );
+    }
+    const helper = await this.createCloudflareToken(
+      {
+        name: `ChittyConnect ephemeral delivery helper: write ${deliveryKey(target)} (revoked after use)`,
+        policies: [
+          {
+            effect: "allow",
+            resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+            permission_groups: [{ id: group.id, name: group.name }],
+          },
+        ],
+        expires_on: new Date(Date.now() + DELIVER_HELPER_TTL_MS)
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "Z"), // CF rejects fractional seconds
+      },
+      accountId,
+      makeApiKey,
+    );
+    if (!helper?.id || !helper?.value) {
+      throw new Error("helper token response carried no id/value");
+    }
+    return { id: helper.id, value: helper.value };
+  }
+
+  /**
    * Write a freshly created token into a worker secret.
    *
    * - HTTP 2xx: delivered, whatever the body (an unparseable 2xx body does
@@ -1636,6 +1706,66 @@ export class EnhancedCredentialProvisioner {
    * @private
    */
   async deliverTokenToWorkerSecret(token, target, accountId, makeApiKey, rowId) {
+    let helper;
+    try {
+      helper = await this.mintDeliveryHelperToken(target, accountId, makeApiKey);
+    } catch (error) {
+      // The mint error is not surfaced: it may carry a Cloudflare body.
+      const revoked = await this.revokeCloudflareToken(
+        token.id,
+        accountId,
+        makeApiKey,
+      );
+      await this.markDelivery(rowId, "failed", revoked);
+      console.error(
+        `[EnhancedCredentialProvisioner] Delivery helper mint for ${target.script} failed; token ${token.id} revoked=${revoked}`,
+      );
+      throw provisionError(
+        revoked
+          ? `deliver_helper_failed: could not mint the delivery helper token for ${target.script}; token ${token.id} was revoked and not delivered`
+          : `deliver_helper_failed: could not mint the delivery helper token for ${target.script}; REVOKE FAILED for token ${token.id} — revoke it manually`,
+        "deliver_helper_failed",
+        502,
+      );
+    }
+
+    // helper.value is used only as the bearer below; never returned,
+    // logged or persisted. Only the id leaves this method.
+    const helperToken = { status: "revoke_failed", token_id: helper.id };
+    try {
+      return {
+        target: await this.writeWorkerSecret(
+          token,
+          target,
+          accountId,
+          makeApiKey,
+          rowId,
+          helper.value,
+          helperToken,
+        ),
+        helper: helperToken,
+      };
+    } finally {
+      if (await this.revokeCloudflareToken(helper.id, accountId, makeApiKey)) {
+        helperToken.status = "revoked";
+      } else {
+        console.error(
+          `[EnhancedCredentialProvisioner] Revoking delivery helper token ${helper.id} failed — revoke it manually (expires within ${DELIVER_HELPER_TTL_MS / 60000} minutes)`,
+        );
+      }
+    }
+  }
+
+  /** @private The secrets PUT itself; see deliverTokenToWorkerSecret. */
+  async writeWorkerSecret(
+    token,
+    target,
+    accountId,
+    makeApiKey,
+    rowId,
+    writerBearer,
+    helperToken,
+  ) {
     const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
     let response;
     try {
@@ -1644,7 +1774,7 @@ export class EnhancedCredentialProvisioner {
         {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${makeApiKey}`,
+            Authorization: `Bearer ${writerBearer}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -1666,7 +1796,7 @@ export class EnhancedCredentialProvisioner {
         `deliver_unknown: writing secret ${target.secret_name} to ${target.script} did not complete (request failed or timed out); token ${token.id} was NOT revoked — reconcile the worker secret against it`,
         "deliver_unknown",
         502,
-        { token_id: token.id },
+        { token_id: token.id, helper_token: helperToken },
       );
     }
 
@@ -1700,6 +1830,7 @@ export class EnhancedCredentialProvisioner {
         : `deliver_failed: writing secret ${target.secret_name} to ${target.script} failed (${failure}); REVOKE FAILED for token ${token.id} — revoke it manually`,
       "deliver_failed",
       502,
+      { helper_token: helperToken },
     );
   }
 
