@@ -9,16 +9,19 @@
 // migration, wrapped in the D1 prepare/bind/run/all surface.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { credentialsRoutes } from '../src/api/routes/credentials.js';
+
+// node:sqlite ships in Node >= 22.5. CI also runs Node 20, where this suite is
+// skipped; the Node 22 job runs it in full.
+const sqlite = await import('node:sqlite').catch(() => null);
 
 const ACCOUNT_ID = '0bc21e3a5a9de1a4cc843be9c3e98121';
 const CF = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}`;
 const CHRONICLE = 'https://chronicle.chitty.cc';
 
 function makeD1() {
-  const db = new DatabaseSync(':memory:');
+  const db = new sqlite.DatabaseSync(':memory:');
   for (const file of ['001_credential_provisions.sql', '020_credential_delivery_leases.sql']) {
     db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   }
@@ -91,7 +94,7 @@ const DELIVER_BODY = {
   },
 };
 
-describe('POST /provision with context.deliver_to (#380)', () => {
+describe.skipIf(!sqlite)('POST /provision with context.deliver_to (#380)', () => {
   let realFetch;
   let seen;
   let tokenValues;
