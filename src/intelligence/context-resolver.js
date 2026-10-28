@@ -1,3 +1,5 @@
+import { ChittyIDClient } from "../lib/chittyid-client.js";
+
 /**
  * Context Resolver - Intelligent Context Reconstitution & Binding
  *
@@ -28,6 +30,66 @@ export class ContextResolver {
   }
 
   /**
+   * Context continuity belongs to a canonical Synthetic Person (P).
+   * Legacy Thing (T) context identities are historical migration inputs only.
+   */
+  isSyntheticPersonChittyId(chittyId) {
+    if (
+      typeof chittyId !== "string" ||
+      !/^\d{2}-[A-Z0-9]-[A-Z]{3}-\d{4}-P-\d{3,4}-[0-5]-\d{1,2}$/.test(
+        chittyId,
+      )
+    ) {
+      return false;
+    }
+
+    const parsed = ChittyIDClient.parse(chittyId);
+    return !!parsed && parsed.entityType === "P";
+  }
+
+  legacyContextSummary(context) {
+    if (!context) return null;
+    return {
+      id: context.id,
+      chitty_id: context.chitty_id,
+      entity_type: ChittyIDClient.parse(context.chitty_id)?.entityType || null,
+      context_hash: context.context_hash,
+      project_path: context.project_path,
+      workspace: context.workspace,
+      support_type: context.support_type,
+      organization: context.organization,
+      status: context.status,
+      trust_level: context.trust_level,
+      total_sessions: context.total_sessions,
+      last_activity: context.last_activity,
+    };
+  }
+
+  migrationRequired(context, resolution, details = {}) {
+    return {
+      action: "migration_required",
+      context: null,
+      legacyContext: this.legacyContextSummary(context),
+      confidence: details.confidence ?? null,
+      reason:
+        details.reason ||
+        "Legacy context identity is not a Synthetic Person. Continuity migration is required before session binding.",
+      resolution,
+      requiresConfirmation: true,
+      migration: {
+        required: true,
+        kind: "legacy_context_identity",
+        sourceEntityType:
+          ChittyIDClient.parse(context?.chitty_id)?.entityType || "unknown",
+        targetEntityType: "P",
+        mutateLegacyIdentityInPlace: false,
+      },
+      anchors: details.anchors,
+      anchorHash: details.anchorHash,
+    };
+  }
+
+  /**
    * Resolve context from hints — reconstitute existing entity or propose new
    *
    * Resolution cascade:
@@ -54,11 +116,19 @@ export class ContextResolver {
       try {
         const context = await this.loadContextByChittyId(explicitChittyId);
         if (context) {
+          if (!this.isSyntheticPersonChittyId(context.chitty_id)) {
+            return this.migrationRequired(context, "explicit_legacy", {
+              confidence: 1.0,
+              reason:
+                "Explicit ChittyID resolves to a legacy non-P context. It cannot be used as a Synthetic Person viewport until continuity migration is completed.",
+            });
+          }
+
           return {
             action: "bind_existing",
             context,
             confidence: 1.0,
-            reason: "Explicit ChittyID reconstituted",
+            reason: "Explicit Synthetic Person ChittyID reconstituted",
             resolution: "explicit",
           };
         }
@@ -91,11 +161,22 @@ export class ContextResolver {
     try {
       const existingContext = await this.findContextByHash(anchorHash);
       if (existingContext) {
+        const confidence = this.calculateMatchConfidence(existingContext, hints);
+        if (!this.isSyntheticPersonChittyId(existingContext.chitty_id)) {
+          return this.migrationRequired(existingContext, "anchor_hash_legacy", {
+            confidence,
+            reason:
+              "Anchor hash matches a legacy non-P context. Refusing to mint or bind a duplicate identity until continuity migration is completed.",
+            anchors,
+            anchorHash,
+          });
+        }
+
         return {
           action: "bind_existing",
           context: existingContext,
-          confidence: this.calculateMatchConfidence(existingContext, hints),
-          reason: `Reconstituted by anchor hash: ${anchorHash.slice(0, 16)}...`,
+          confidence,
+          reason: `Reconstituted Synthetic Person by anchor hash: ${anchorHash.slice(0, 16)}...`,
           resolution: "anchor_hash",
           anchors,
           anchorHash,
@@ -119,6 +200,21 @@ export class ContextResolver {
     try {
       const candidate = await this.findBestCandidate(hints);
       if (candidate) {
+        if (candidate.migrationRequired) {
+          return this.migrationRequired(
+            candidate.context,
+            "multi_signal_legacy",
+            {
+              confidence: candidate.confidence,
+              reason:
+                candidate.reason +
+                ". Candidate is a legacy non-P context and cannot receive a new session binding.",
+              anchors,
+              anchorHash,
+            },
+          );
+        }
+
         return {
           action: "bind_existing",
           context: candidate.context,
@@ -194,9 +290,12 @@ export class ContextResolver {
 
     if (!candidates?.results?.length) return null;
 
-    let bestScore = 0;
-    let bestCandidate = null;
-    let bestReason = "";
+    let bestCanonicalScore = 0;
+    let bestCanonicalCandidate = null;
+    let bestCanonicalReason = "";
+    let bestLegacyScore = 0;
+    let bestLegacyCandidate = null;
+    let bestLegacyReason = "";
 
     for (const row of candidates.results) {
       let score = 0;
@@ -269,28 +368,36 @@ export class ContextResolver {
 
       score = Math.min(1, score);
 
-      if (score > bestScore && score >= 0.3) {
-        bestScore = score;
-        bestCandidate = row;
-        bestReason = `Multi-signal match (${signals.join(", ")}): score ${score.toFixed(3)}`;
+      if (score < 0.3) continue;
+
+      const reason = `Multi-signal match (${signals.join(", ")}): score ${score.toFixed(3)}`;
+      if (this.isSyntheticPersonChittyId(row.chitty_id)) {
+        if (score > bestCanonicalScore) {
+          bestCanonicalScore = score;
+          bestCanonicalCandidate = row;
+          bestCanonicalReason = reason;
+        }
+      } else if (score > bestLegacyScore) {
+        bestLegacyScore = score;
+        bestLegacyCandidate = row;
+        bestLegacyReason = reason;
       }
     }
 
-    if (!bestCandidate) return null;
+    const selected = bestCanonicalCandidate || bestLegacyCandidate;
+    if (!selected) return null;
 
+    const migrationRequired = !bestCanonicalCandidate;
     return {
       context: {
-        ...bestCandidate,
-        competencies: JSON.parse(bestCandidate.competencies || "[]"),
-        expertise_domains: JSON.parse(
-          bestCandidate.expertise_domains || "[]",
-        ),
-        current_sessions: JSON.parse(
-          bestCandidate.current_sessions || "[]",
-        ),
+        ...selected,
+        competencies: JSON.parse(selected.competencies || "[]"),
+        expertise_domains: JSON.parse(selected.expertise_domains || "[]"),
+        current_sessions: JSON.parse(selected.current_sessions || "[]"),
       },
-      confidence: bestScore,
-      reason: bestReason,
+      confidence: migrationRequired ? bestLegacyScore : bestCanonicalScore,
+      reason: migrationRequired ? bestLegacyReason : bestCanonicalReason,
+      migrationRequired,
     };
   }
 
@@ -447,6 +554,12 @@ export class ContextResolver {
       organization,
     });
 
+    if (!this.isSyntheticPersonChittyId(chittyId)) {
+      throw new Error(
+        `ChittyID mint returned non-canonical Synthetic Person identity: ${chittyId}`,
+      );
+    }
+
     // Create context entity
     await this.db
       .prepare(
@@ -598,6 +711,14 @@ export class ContextResolver {
   async bindSession(contextId, chittyId, sessionId, platform = "unknown") {
     const bindingId = crypto.randomUUID();
 
+    if (!this.isSyntheticPersonChittyId(chittyId)) {
+      const error = new Error(
+        "Session binding requires a canonical Synthetic Person (P) ChittyID; legacy context identity requires migration",
+      );
+      error.code = "CONTEXT_MIGRATION_REQUIRED";
+      throw error;
+    }
+
     // Bindings may cache the ChittyID for lookup, but the context entity is
     // authoritative. Refuse mismatched caller-supplied IDs before writing.
     const boundContext = await this.db
@@ -622,6 +743,13 @@ export class ContextResolver {
     }
     if (boundContext.chitty_id !== chittyId) {
       throw new Error("Context ChittyID does not match requested session binding");
+    }
+    if (!this.isSyntheticPersonChittyId(boundContext.chitty_id)) {
+      const error = new Error(
+        "Authoritative context identity is not a Synthetic Person; continuity migration required",
+      );
+      error.code = "CONTEXT_MIGRATION_REQUIRED";
+      throw error;
     }
 
     // Create session binding from the verified context identity.
