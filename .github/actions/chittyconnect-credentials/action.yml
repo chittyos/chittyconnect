@@ -86,9 +86,15 @@ runs:
         for CRED in "${CRED_ARRAY[@]}"; do
           VALUE=$(echo "$RESPONSE" | jq -r ".credentials.$CRED // empty")
           if [ -n "$VALUE" ]; then
-            # Mask sensitive values
+            # Mask sensitive values. GitHub command files require delimiter
+            # syntax for multiline values such as PEM private keys.
             echo "::add-mask::$VALUE"
-            echo "$CRED=$VALUE" >> $GITHUB_OUTPUT
+            DELIM="CHITTY_EOF_$(openssl rand -hex 12)"
+            {
+              echo "$CRED<<$DELIM"
+              printf '%s\n' "$VALUE"
+              echo "$DELIM"
+            } >> "$GITHUB_OUTPUT"
           fi
         done
 
