@@ -385,7 +385,7 @@ describe("canonical context supersession handoff", () => {
     expect(source.context_hash).toBe(`superseded:${auditId}:${originalHash}`);
     expect(source.current_sessions).toBe("[]");
 
-    expect(target.status).toBe("active");
+    expect(target.status).toBe("dormant");
     expect(target.context_hash).toBe(originalHash);
     expect(target.signature).toBe(`supersession:${auditId}`);
     expect(target.trust_level).toBe(4);
