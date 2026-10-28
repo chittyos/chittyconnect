@@ -40,6 +40,7 @@ Cloudflare Worker deployed at connect.chitty.cc with Neon PostgreSQL, KV, and Du
 - Context taxonomy (20 types, 10 categories)
 - Behavioral trait tracking (volatile, compliant, creative, methodical, resilient, trustAligned)
 - Alchemist archetypes (Sentinel, Artisan, Sage, Alchemist, Diplomat)
+- Canonical legacy T→P continuity handoff: ChittyID-authorized, active-session-drained, atomic D1 anchor/DNA transfer with predecessor provenance preserved
 
 ## Three Aspects (TY VY RY)
 
@@ -66,7 +67,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 ### Dependencies
 | Service | Purpose |
 |---------|---------|
-| ChittyID | Identity minting |
+| ChittyID | Identity minting + canonical supersession verification |
 | ChittyAuth | Token validation |
 | ChittyRegistry | Service discovery |
 | ChittyChronicle | Event logging |
@@ -84,6 +85,7 @@ Source: `chittycanon://gov/governance#three-aspects`
 | `/api/chittyid/validate` | POST | Yes | Validate ChittyID |
 | `/api/services/status` | GET | Yes | All services status |
 | `/api/thirdparty/notion/query` | POST | Yes | Query Notion |
+| `/api/v1/intelligence/context/experience/migrate` | POST | Yes | Verified T→P context continuity handoff |
 | `/mcp/tools/list` | GET | Yes | MCP tools |
 | `/mcp/tools/call` | POST | Yes | Execute MCP tool |
 

@@ -835,35 +835,35 @@ const MCP_TOOLS = [
   {
     name: "experience_migrate",
     description:
-      "Records-only migration of identity experience between two existing ChittyConnect contexts. Strictly downstream — does NOT mint identities, does NOT recalc trust, does NOT write events. Refuses without a ChittyID-issued supersession manifest. The composing saga (experience_reassign) lives at the Ch1tty gateway.",
+      "Controlled downstream T-to-P continuity handoff for ChittyConnect context records. The manifest is only a lookup/hint: ChittyConnect re-verifies the current canonical supersession relation through ChittyID before mutation. It retires/archives the legacy T without rewriting its ChittyID, transfers the canonical context anchor and current DNA to the successor P, preserves historical records, writes paired ledger receipts, and refuses while active sessions remain. It does NOT mint identities, recalculate trust, or write ChittyChronicle events.",
     inputSchema: {
       type: "object",
       properties: {
         manifest: {
           type: "object",
           description:
-            "Supersession manifest issued by ChittyID via /api/v2/chittyid/mint with supersedes metadata. Contains from_chitty_id, to_chitty_id, mint_audit_id, signature, issued_at, reason.",
+            "Reference to a ChittyID canonical supersession relation. Runtime requires at least auditId or supersedes; legacy mint_audit_id/from_chitty_id aliases are accepted for compatibility. successor/to_chitty_id are optional consistency hints. These fields locate the relation only and are never treated as authority.",
           properties: {
-            from_chitty_id: { type: "string" },
-            to_chitty_id: { type: "string" },
-            mint_audit_id: { type: "string" },
-            signature: { type: "string" },
-            issued_at: { type: "string" },
-            reason: { type: "string" },
+            auditId: { type: "string" },
+            supersedes: { type: "string" },
+            successor: { type: "string" },
+            authority: { type: "string" },
+            mintAuthority: { type: "string" },
+            issuedAt: { type: "string" },
+            recordedAt: { type: "string" },
+            mint_audit_id: {
+              type: "string",
+              description: "Deprecated alias for auditId",
+            },
+            from_chitty_id: {
+              type: "string",
+              description: "Deprecated alias for supersedes",
+            },
+            to_chitty_id: {
+              type: "string",
+              description: "Deprecated alias for successor",
+            },
           },
-          required: [
-            "from_chitty_id",
-            "to_chitty_id",
-            "mint_audit_id",
-            "signature",
-            "issued_at",
-            "reason",
-          ],
-        },
-        metrics_transferred: {
-          type: "object",
-          description:
-            "Optional metrics summary describing what's being transferred (sessions, interactions, decisions, expertise domains).",
         },
       },
       required: ["manifest"],

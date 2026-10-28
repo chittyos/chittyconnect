@@ -56,6 +56,7 @@ The intelligence layer provides decision-making capabilities based on accumulate
 | Module | Purpose |
 |--------|---------|
 | `context-resolver.js` | Resolves session hints to context entities |
+| `context-supersession.js` | Re-verifies canonical ChittyID T→P supersession and atomically hands off the current D1 context projection |
 | `context-intelligence.js` | Decision engine - coherence, autonomy, guardrails |
 | `context-behavior.js` | Behavioral tracking - traits, trends, red flags |
 | `context-taxonomy.js` | Context type classification (20 types, 10 categories) |
@@ -128,6 +129,7 @@ POST /api/v1/intelligence/derivative                  # Fork a context
 POST /api/v1/intelligence/suspension                  # Temporary blend
 POST /api/v1/intelligence/solution                    # Team of contexts
 POST /api/v1/intelligence/combination                 # Soft merge
+POST /api/v1/intelligence/context/experience/migrate # Verified legacy T→P context continuity handoff
 ```
 
 #### Database Tables

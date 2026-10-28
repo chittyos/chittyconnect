@@ -34,7 +34,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - Service health monitoring across ChittyOS ecosystem
 - **Brokered agent-runtime authorization insertion** — mints exact short-TTL ChittyAuth scopes in request-local memory and privately invokes the canonical `chittyagent-dispatch` runtime boundary; bearer values never leave the broker
 - API key management and rate limiting
-- ChittyID minting coordination
+- ChittyID minting coordination and verified identity-supersession projection handoff
 - Legal case management via ChittyCases
 - Evidence ingestion via ChittyEvidence
 - **User profile store** — canonical writer for `neon_auth.user`,
@@ -82,7 +82,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 
 | Type | Service | Purpose |
 |------|---------|---------|
-| Upstream | ChittyID | Identity minting |
+| Upstream | ChittyID | Identity minting + canonical supersession verification |
 | Upstream | ChittyAuth | Token validation |
 | Upstream | ChittyRegistry | Service discovery |
 | Peer | ChittyChronicle | Event logging |
@@ -111,6 +111,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | `/api/thirdparty/openai/chat` | POST | OpenAI proxy |
 | `/api/v1/agent-runtime/anthropic/agents` | GET | Brokered sanitized Anthropic projection inventory |
 | `/api/v1/agent-runtime/anthropic/project` | POST | Admin-only brokered canonical projection/adoption |
+| `/api/v1/intelligence/context/experience/migrate` | POST | Authenticated T→P context continuity handoff; re-verifies ChittyID authority before atomic D1 projection migration |
 
 ### MCP Endpoints
 | Endpoint | Method | Purpose |
