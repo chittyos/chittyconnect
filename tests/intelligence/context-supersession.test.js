@@ -206,22 +206,6 @@ class FakeStatement {
       return { meta: { changes } };
     }
 
-    if (this.sql.startsWith("INSERT INTO context_ledger") && this.sql.includes("'genesis'")) {
-      const [id, contextId, chittyId, sessionId, payload, hash] = this.args;
-      state.ledger.push({
-        id,
-        context_id: contextId,
-        context_chitty_id: chittyId,
-        session_id: sessionId,
-        event_type: "transaction",
-        payload,
-        hash,
-        previous_hash: "genesis",
-        timestamp: state.ledger.length + 1,
-      });
-      return { meta: { changes: 1 } };
-    }
-
     if (this.sql.startsWith("INSERT INTO context_ledger") && this.sql.includes("SELECT ?, ?, ?, ?")) {
       const [id, contextId, chittyId, sessionId, payload, hash, previousContextId] =
         this.args;
@@ -237,6 +221,22 @@ class FakeStatement {
         payload,
         hash,
         previous_hash: prior?.hash || "genesis",
+        timestamp: state.ledger.length + 1,
+      });
+      return { meta: { changes: 1 } };
+    }
+
+    if (this.sql.startsWith("INSERT INTO context_ledger") && this.sql.includes("'genesis'")) {
+      const [id, contextId, chittyId, sessionId, payload, hash] = this.args;
+      state.ledger.push({
+        id,
+        context_id: contextId,
+        context_chitty_id: chittyId,
+        session_id: sessionId,
+        event_type: "transaction",
+        payload,
+        hash,
+        previous_hash: "genesis",
         timestamp: state.ledger.length + 1,
       });
       return { meta: { changes: 1 } };
