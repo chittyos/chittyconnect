@@ -258,7 +258,18 @@ capabilityRoutes.post("/introspect", async (c) => {
     return error(c, 400, "INVALID_JSON", "Request body must be valid JSON");
   }
 
-  const token = body?.token;
+  const allowedKeys = new Set(["token", "operation", "repo_path", "remote", "ref"]);
+  const unexpected = Object.keys(body || {}).filter((key) => !allowedKeys.has(key));
+  if (unexpected.length) {
+    return error(
+      c,
+      400,
+      "UNEXPECTED_FIELDS",
+      `Unexpected fields: ${unexpected.join(", ")}`,
+    );
+  }
+
+  const { token, operation, repo_path, remote, ref } = body || {};
   if (typeof token !== "string" || !token.startsWith("cap_")) {
     return c.json({ active: false });
   }
@@ -291,6 +302,26 @@ capabilityRoutes.post("/introspect", async (c) => {
     record.operation,
   );
   if (!policy.allowed) return c.json({ active: false });
+
+  // Optional expected-scope fields let resource servers and the canonical CLI
+  // ask the broker to fail closed on the operation they are about to perform.
+  // The broker remains authoritative; clients must not reproduce this check
+  // locally and then assume the capability is valid.
+  if (operation !== undefined && operation !== record.operation) {
+    return c.json({ active: false, reason: "OPERATION_SCOPE_MISMATCH" });
+  }
+  if (repo_path !== undefined) {
+    const expectedPath = normalizeRepoPath(repo_path);
+    if (!expectedPath || expectedPath !== record.repo_path) {
+      return c.json({ active: false, reason: "REPO_SCOPE_MISMATCH" });
+    }
+  }
+  if (remote !== undefined && remote !== record.remote) {
+    return c.json({ active: false, reason: "REMOTE_SCOPE_MISMATCH" });
+  }
+  if (ref !== undefined && ref !== record.ref) {
+    return c.json({ active: false, reason: "REF_SCOPE_MISMATCH" });
+  }
 
   return c.json({
     active: true,
