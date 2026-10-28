@@ -71,7 +71,13 @@ describe("Synthetic Person context continuity", () => {
   });
 
   it("rejects a mint result that is not a Synthetic Person", async () => {
-    const resolver = new ContextResolver({ DB: {} });
+    const resolver = new ContextResolver({
+      DB: {
+        prepare: () => ({
+          bind: () => ({ first: async () => null }),
+        }),
+      },
+    });
     resolver.mintChittyId = vi.fn().mockResolvedValue(legacy.chitty_id);
 
     await expect(
@@ -80,10 +86,32 @@ describe("Synthetic Person context continuity", () => {
         workspace: "new",
         supportType: "development",
         organization: "CHITTYOS",
-        anchorHash: "new-hash",
         coordinationNeed: "new coordination role",
       }),
     ).rejects.toThrow("non-canonical Synthetic Person identity");
+  });
+
+  it("rechecks anchor ownership before minting and refuses to mint around a legacy row", async () => {
+    const resolver = new ContextResolver({
+      DB: {
+        prepare: () => ({
+          bind: () => ({ first: async () => legacy }),
+        }),
+      },
+    });
+    resolver.mintChittyId = vi.fn();
+
+    await expect(
+      resolver.createContext({
+        projectPath: legacy.project_path,
+        workspace: legacy.workspace,
+        supportType: legacy.support_type,
+        organization: legacy.organization,
+        coordinationNeed: "replacement requested",
+      }),
+    ).rejects.toMatchObject({ code: "CONTEXT_MIGRATION_REQUIRED" });
+
+    expect(resolver.mintChittyId).not.toHaveBeenCalled();
   });
 
   it("accepts P and rejects T identity classes", () => {
