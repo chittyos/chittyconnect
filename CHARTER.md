@@ -253,7 +253,13 @@ git operation. Fail-closed if unreachable.
     "type": "object",
     "required": ["token"],
     "additionalProperties": false,
-    "properties": { "token": { "type": "string" } }
+    "properties": {
+      "token":      { "type": "string" },
+      "operation":  { "type": "string", "enum": ["read", "commit", "tag", "push"], "description": "Optional expected operation; mismatch returns active=false." },
+      "repo_path":  { "type": "string", "description": "Optional expected normalized absolute repo path; mismatch returns active=false." },
+      "remote":     { "type": "string", "description": "Optional expected remote; mismatch returns active=false." },
+      "ref":        { "type": "string", "description": "Optional expected concrete ref; mismatch returns active=false." }
+    }
   },
   "output_schema": {
     "type": "object",

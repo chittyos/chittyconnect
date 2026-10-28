@@ -221,4 +221,57 @@ describe("custody diagnostic", () => {
       ready_for_gate_4_tx: false,
     });
   });
+
+  it("fails closed server-side when requested introspection scope mismatches", async () => {
+    const app = capabilityApp();
+    const env = envFor();
+
+    const mint = await app.request(
+      "/api/v1/capabilities/mint",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          caller_chittyid: canonicalCaller,
+          tenant_id: "chittyos-default",
+          operation: "read",
+          repo_path: "/home/ubuntu/projects/github.com/CHITTYOS/chittyconfig",
+        }),
+      },
+      env,
+    );
+    const { token } = await mint.json();
+
+    for (const body of [
+      {
+        token,
+        operation: "tag",
+        repo_path: "/home/ubuntu/projects/github.com/CHITTYOS/chittyconfig",
+      },
+      {
+        token,
+        operation: "read",
+        repo_path: "/home/ubuntu/projects/github.com/CHITTYOS/other-repo",
+      },
+      {
+        token,
+        operation: "read",
+        repo_path: "/home/ubuntu/projects/github.com/CHITTYOS/chittyconfig",
+        ref: "refs/heads/not-bound",
+      },
+    ]) {
+      const response = await app.request(
+        "/api/v1/capabilities/introspect",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+        env,
+      );
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ active: false });
+    }
+  });
+
 });
