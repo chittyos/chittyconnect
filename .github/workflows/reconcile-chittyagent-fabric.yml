@@ -18,12 +18,19 @@ jobs:
       - name: Checkout ChittyConnect
         uses: actions/checkout@v4
 
+      - name: Fetch ephemeral GitHub credential
+        id: chitty
+        uses: ./.github/actions/chitty-creds-action
+        with:
+          api_key: ${{ secrets.CHITTYCONNECT_API_KEY }}
+
       - name: Checkout canonical ChittyAgent source
         uses: actions/checkout@v4
         with:
           repository: chittyos/chittyentity
           ref: main
           path: chittyentity
+          token: ${{ steps.chitty.outputs.github_token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
