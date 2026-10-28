@@ -544,6 +544,40 @@ export class ContextResolver {
           "why an existing entity cannot serve this role.",
       );
     }
+
+    const anchors = this.buildAnchors({
+      projectPath,
+      workspace,
+      supportType,
+      organization,
+    });
+    const canonicalAnchorHash = await this.hashAnchors(anchors);
+
+    if (anchorHash && anchorHash !== canonicalAnchorHash) {
+      const error = new Error(
+        "Pending context anchor hash does not match canonical anchors; re-resolve before provisioning",
+      );
+      error.code = "CONTEXT_ANCHOR_MISMATCH";
+      throw error;
+    }
+
+    // Re-check continuity immediately before minting. This closes the race and
+    // prevents a client from bypassing migration_required with a forged/stale
+    // pendingContext, which could otherwise mint an orphaned Person before the
+    // unique context_hash insert fails.
+    const existingContext = await this.findContextByHash(canonicalAnchorHash);
+    if (existingContext) {
+      const error = new Error(
+        this.isSyntheticPersonChittyId(existingContext.chitty_id)
+          ? "A Synthetic Person already owns these context anchors; re-resolve and bind it"
+          : "Legacy context identity owns these anchors; continuity migration is required before provisioning",
+      );
+      error.code = this.isSyntheticPersonChittyId(existingContext.chitty_id)
+        ? "CONTEXT_ALREADY_EXISTS"
+        : "CONTEXT_MIGRATION_REQUIRED";
+      throw error;
+    }
+
     const contextId = crypto.randomUUID();
 
     // Mint ChittyID from ChittyID service
@@ -573,7 +607,7 @@ export class ContextResolver {
       .bind(
         contextId,
         chittyId,
-        anchorHash,
+        canonicalAnchorHash,
         projectPath,
         workspace || null,
         supportType,
@@ -605,7 +639,8 @@ export class ContextResolver {
     await this.logToLedger(contextId, chittyId, "system", "transaction", {
       type: "context_created",
       coordinationNeed,
-      anchors: { projectPath, workspace, supportType, organization },
+      anchors,
+      contextHash: canonicalAnchorHash,
     });
 
     return this.loadContextByChittyId(chittyId);
