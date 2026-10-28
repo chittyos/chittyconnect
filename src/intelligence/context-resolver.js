@@ -33,18 +33,22 @@ export class ContextResolver {
    * Context continuity belongs to a canonical Synthetic Person (P).
    * Legacy Thing (T) context identities are historical migration inputs only.
    */
-  isSyntheticPersonChittyId(chittyId) {
+  isWellFormedChittyId(chittyId) {
     if (
       typeof chittyId !== "string" ||
-      !/^\d{2}-[A-Z0-9]-[A-Z]{3}-\d{4}-P-\d{3,4}-[0-5]-\d{1,2}$/.test(
+      !/^\d{2}-[A-Z0-9]-[A-Z]{3}-\d{4}-[PLTEA]-\d{3,4}-[0-5]-\d{1,2}$/.test(
         chittyId,
       )
     ) {
       return false;
     }
 
-    const parsed = ChittyIDClient.parse(chittyId);
-    return !!parsed && parsed.entityType === "P";
+    return !!ChittyIDClient.parse(chittyId);
+  }
+
+  isSyntheticPersonChittyId(chittyId) {
+    if (!this.isWellFormedChittyId(chittyId)) return false;
+    return ChittyIDClient.parse(chittyId)?.entityType === "P";
   }
 
   legacyContextSummary(context) {
@@ -745,6 +749,14 @@ export class ContextResolver {
    */
   async bindSession(contextId, chittyId, sessionId, platform = "unknown") {
     const bindingId = crypto.randomUUID();
+
+    if (!this.isWellFormedChittyId(chittyId)) {
+      const error = new Error(
+        "Session binding requires a well-formed canonical ChittyID",
+      );
+      error.code = "CONTEXT_INVALID_CHITTY_ID";
+      throw error;
+    }
 
     if (!this.isSyntheticPersonChittyId(chittyId)) {
       const error = new Error(
