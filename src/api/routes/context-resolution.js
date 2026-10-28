@@ -109,13 +109,17 @@ contextResolution.post("/resolve", async (c) => {
       data: {
         action: resolution.action,
         context: resolution.context || null,
+        legacyContext: resolution.legacyContext || null,
         pendingContext: resolution.pendingContext || null,
-        confidence: resolution.confidence || null,
+        migration: resolution.migration || null,
+        confidence: resolution.confidence ?? null,
         reason: resolution.reason,
         anchors: resolution.anchors,
         anchorHash: resolution.anchorHash?.slice(0, 16) + "...",
         requiresConfirmation:
-          resolution.action === "create_new" || resolution.confidence < 0.9,
+          resolution.action === "create_new" ||
+          resolution.action === "migration_required" ||
+          (resolution.confidence != null && resolution.confidence < 0.9),
       },
     });
   } catch (error) {
@@ -233,10 +237,26 @@ contextResolution.post("/bind", async (c) => {
           success: false,
           error: {
             code: "INVALID_ACTION",
-            message: 'action "create_new" is no longer supported on /bind. Use /provision first.',
+            message:
+              'action "create_new" is no longer supported on /bind. Use /provision first.',
           },
         },
         400,
+      );
+    }
+
+    if (action === "migration_required") {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "CONTEXT_MIGRATION_REQUIRED",
+            message:
+              "Legacy context identities cannot receive new session bindings. Complete Synthetic Person continuity migration first.",
+          },
+        },
+        409,
       );
     }
 
@@ -253,6 +273,21 @@ contextResolution.post("/bind", async (c) => {
           },
         },
         400,
+      );
+    }
+
+    if (!resolver.isSyntheticPersonChittyId(chittyId)) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "CONTEXT_MIGRATION_REQUIRED",
+            message:
+              "Session binding requires a canonical Synthetic Person (P) ChittyID.",
+          },
+        },
+        409,
       );
     }
 
@@ -276,16 +311,19 @@ contextResolution.post("/bind", async (c) => {
     });
   } catch (error) {
     console.error("[ContextResolution] Bind error:", error);
+    const migrationRequired = error?.code === "CONTEXT_MIGRATION_REQUIRED";
     return apiResponse(
       c,
       {
         success: false,
         error: {
-          code: "BIND_FAILED",
+          code: migrationRequired
+            ? "CONTEXT_MIGRATION_REQUIRED"
+            : "BIND_FAILED",
           message: error.message,
         },
       },
-      500,
+      migrationRequired ? 409 : 500,
     );
   }
 });
