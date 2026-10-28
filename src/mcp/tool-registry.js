@@ -842,7 +842,7 @@ const MCP_TOOLS = [
         manifest: {
           type: "object",
           description:
-            "Reference to a ChittyID canonical supersession relation. Prefer auditId or supersedes. successor is an optional consistency hint. Legacy mint_audit_id/from_chitty_id/to_chitty_id aliases remain accepted for compatibility but are never treated as authority.",
+            "Reference to a ChittyID canonical supersession relation. Runtime requires at least auditId or supersedes; legacy mint_audit_id/from_chitty_id aliases are accepted for compatibility. successor/to_chitty_id are optional consistency hints. These fields locate the relation only and are never treated as authority.",
           properties: {
             auditId: { type: "string" },
             supersedes: { type: "string" },
@@ -864,12 +864,6 @@ const MCP_TOOLS = [
               description: "Deprecated alias for successor",
             },
           },
-          anyOf: [
-            { required: ["auditId"] },
-            { required: ["supersedes"] },
-            { required: ["mint_audit_id"] },
-            { required: ["from_chitty_id"] },
-          ],
         },
       },
       required: ["manifest"],
