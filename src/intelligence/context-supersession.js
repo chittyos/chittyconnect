@@ -292,7 +292,10 @@ export async function migrateCanonicalSupersession(
   const timestampMs = Date.now();
   const timestampSec = Math.floor(timestampMs / 1000);
   const targetCreatedAt = parseIssuedAtSeconds(relation.issuedAt);
-  const targetStatus = source.status === "dormant" ? "dormant" : "active";
+  // Active bindings were explicitly drained above, so the successor is
+  // reconstitutable but not currently active. The next authenticated bind
+  // promotes it back to active through the normal ContextResolver path.
+  const targetStatus = "dormant";
   const originalContextHash = source.context_hash;
   const releasedSourceHash = schema.contextHashUnique
     ? `superseded:${auditId}:${originalContextHash}`
