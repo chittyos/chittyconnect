@@ -42,6 +42,27 @@ describe("Synthetic Person context continuity", () => {
     expect(result.migration.mutateLegacyIdentityInPlace).toBe(false);
   });
 
+  it("marks a legacy multi-signal candidate as migration-required", async () => {
+    const resolver = new ContextResolver({
+      DB: {
+        prepare: () => ({
+          bind: () => ({ first: async () => null }),
+          all: async () => ({ results: [legacy] }),
+        }),
+      },
+    });
+
+    const result = await resolver.resolveContext({
+      projectPath: legacy.project_path,
+      workspace: legacy.workspace,
+      supportType: legacy.support_type,
+      organization: legacy.organization,
+    });
+
+    expect(result.action).toBe("migration_required");
+    expect(result.resolution).toBe("multi_signal_legacy");
+  });
+
   it("refuses a legacy identity at the bind boundary", async () => {
     const resolver = new ContextResolver({ DB: {} });
     await expect(
