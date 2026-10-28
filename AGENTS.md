@@ -59,5 +59,7 @@ This guide helps contributors work effectively in this repository. It summarizes
 ## Security & Configuration Tips
 
 - Secrets via Wrangler secrets and GitHub Actions secrets; never commit keys
+- Git broker capabilities are opaque `cap_*` references scoped to exactly one operation (`read | commit | tag | push`); never return or log installation tokens/signing keys.
+- GitHub Actions OIDC is accepted only on explicitly mounted control-plane routes and must be cryptographically verified before bypassing API-key auth.
 - For npm publish, CI loads tokens via GitHub/chittysecrets; local publishes require `--access public` for scoped packages
 
