@@ -78,18 +78,16 @@ async function activeSessionCount(db, contextId) {
   return Number(row?.count || 0);
 }
 
-async function previousLedgerHash(db, contextId) {
+async function contextDnaCount(db, contextId) {
   const row = await db
     .prepare(
-      `SELECT hash
-       FROM context_ledger
-       WHERE context_id = ?
-       ORDER BY timestamp DESC
-       LIMIT 1`,
+      `SELECT COUNT(*) AS count
+       FROM context_dna
+       WHERE context_id = ?`,
     )
     .bind(contextId)
     .first();
-  return row?.hash || "genesis";
+  return Number(row?.count || 0);
 }
 
 function isRetiredStatus(status) {
@@ -286,7 +284,10 @@ export async function migrateCanonicalSupersession(
     );
   }
 
-  const schema = await contextSchema(db);
+  const [schema, dnaRowsMoved] = await Promise.all([
+    contextSchema(db),
+    contextDnaCount(db, source.id),
+  ]);
   const targetId = crypto.randomUUID();
   const timestampMs = Date.now();
   const timestampSec = Math.floor(timestampMs / 1000);
@@ -308,7 +309,8 @@ export async function migrateCanonicalSupersession(
     sourceContextId: source.id,
     targetContextId: targetId,
     originalContextHash,
-    dnaMoved: true,
+    dnaMoved: dnaRowsMoved > 0,
+    dnaRowsMoved,
     reason: "legacy_context_identity_correction",
     migratedAt: timestampMs,
   };
@@ -322,7 +324,6 @@ export async function migrateCanonicalSupersession(
   };
   const targetEntryHash = await hashContent(targetEntryData);
 
-  const sourcePreviousHash = await previousLedgerHash(db, source.id);
   const sourceEntryId = crypto.randomUUID();
   const sourcePayload = {
     type: "identity_superseded",
@@ -419,7 +420,18 @@ export async function migrateCanonicalSupersession(
         `INSERT INTO context_ledger (
            id, context_id, context_chitty_id, session_id,
            event_type, payload, hash, previous_hash
-         ) VALUES (?, ?, ?, ?, 'transaction', ?, ?, ?)`,
+         )
+         SELECT ?, ?, ?, ?, 'transaction', ?, ?,
+                COALESCE(
+                  (
+                    SELECT hash
+                    FROM context_ledger
+                    WHERE context_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                  ),
+                  'genesis'
+                )`,
       )
       .bind(
         sourceEntryId,
@@ -428,7 +440,7 @@ export async function migrateCanonicalSupersession(
         "identity_supersession",
         JSON.stringify(sourcePayload),
         sourceEntryHash,
-        sourcePreviousHash,
+        source.id,
       ),
   ];
 
