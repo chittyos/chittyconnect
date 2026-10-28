@@ -69,7 +69,7 @@ function authorityFetcher(overrides = {}) {
   return async (_env, serviceName, path, options) => {
     expect(serviceName).toBe("id");
     expect(path).toBe("/api/supersession/verify");
-    const body = options.body;
+    expect(options.body).toBeTruthy();
     const rel = { ...relation(), ...overrides.relation };
     return Response.json(
       {
