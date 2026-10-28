@@ -281,6 +281,20 @@ contextResolution.post("/bind", async (c) => {
       );
     }
 
+    if (!resolver.isWellFormedChittyId(chittyId)) {
+      return apiResponse(
+        c,
+        {
+          success: false,
+          error: {
+            code: "CONTEXT_INVALID_CHITTY_ID",
+            message: "chittyId must be a well-formed canonical ChittyID.",
+          },
+        },
+        400,
+      );
+    }
+
     if (!resolver.isSyntheticPersonChittyId(chittyId)) {
       return apiResponse(
         c,
@@ -317,6 +331,7 @@ contextResolution.post("/bind", async (c) => {
   } catch (error) {
     console.error("[ContextResolution] Bind error:", error);
     const migrationRequired = error?.code === "CONTEXT_MIGRATION_REQUIRED";
+    const invalidChittyId = error?.code === "CONTEXT_INVALID_CHITTY_ID";
     return apiResponse(
       c,
       {
@@ -324,11 +339,13 @@ contextResolution.post("/bind", async (c) => {
         error: {
           code: migrationRequired
             ? "CONTEXT_MIGRATION_REQUIRED"
-            : "BIND_FAILED",
+            : invalidChittyId
+              ? "CONTEXT_INVALID_CHITTY_ID"
+              : "BIND_FAILED",
           message: error.message,
         },
       },
-      migrationRequired ? 409 : 500,
+      migrationRequired ? 409 : invalidChittyId ? 400 : 500,
     );
   }
 });
