@@ -181,16 +181,21 @@ contextResolution.post("/provision", async (c) => {
     });
   } catch (error) {
     console.error("[ContextResolution] Provision error:", error);
+    const statusByCode = {
+      CONTEXT_MIGRATION_REQUIRED: 409,
+      CONTEXT_ALREADY_EXISTS: 409,
+      CONTEXT_ANCHOR_MISMATCH: 400,
+    };
     return apiResponse(
       c,
       {
         success: false,
         error: {
-          code: "PROVISION_FAILED",
+          code: error?.code || "PROVISION_FAILED",
           message: error.message,
         },
       },
-      500,
+      statusByCode[error?.code] || 500,
     );
   }
 });
