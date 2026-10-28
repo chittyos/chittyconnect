@@ -1,0 +1,37 @@
+name: Reconcile ChittyAgent Fabric
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/reconcile-chittyagent-fabric.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[fabric-reconcile]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ChittyConnect
+        uses: actions/checkout@v4
+
+      - name: Checkout canonical ChittyAgent source
+        uses: actions/checkout@v4
+        with:
+          repository: chittyos/chittyentity
+          ref: main
+          path: chittyentity
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconcile existing Anthropic Managed Agent projections
+        env:
+          CHITTYCONNECT_API_KEY: ${{ secrets.CHITTYCONNECT_API_KEY }}
+          CHITTYENTITY_DIR: chittyentity
+        run: bash scripts/reconcile-anthropic-fabric.sh
