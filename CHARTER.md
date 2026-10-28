@@ -32,6 +32,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 - ContextConsciousness™ - Cross-session context maintenance
 - MemoryCloude™ - Persistent Experience Projection for Synthetic Persons: one authorized `memory-<P_ID>` AI Search instance per active Synthetic Person, with logical `/experiences/` organization and cross-session recall. Session IDs refine retrieval but never authorize it; unresolved or mismatched principal scope fails closed.
 - Service health monitoring across ChittyOS ecosystem
+- **Brokered agent-runtime authorization insertion** — mints exact short-TTL ChittyAuth scopes in request-local memory and privately invokes the canonical `chittyagent-dispatch` runtime boundary; bearer values never leave the broker
 - API key management and rate limiting
 - ChittyID minting coordination
 - Legal case management via ChittyCases
@@ -54,7 +55,7 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 
 ### IS NOT Responsible For
 - Direct identity generation (ChittyID)
-- Token provisioning (ChittyAuth)
+- Token lifecycle authority / credential issuance policy (ChittyAuth)
 - Service registration (ChittyRegister)
 - Certificate authority (ChittyTrust)
 - Evidence verification (ChittyVerify)
@@ -108,6 +109,8 @@ ChittyConnect is the **AI-intelligent spine** (itsChitty™) for the ChittyOS ec
 | `/api/services/status` | GET | All services status |
 | `/api/thirdparty/notion/query` | POST | Query Notion |
 | `/api/thirdparty/openai/chat` | POST | OpenAI proxy |
+| `/api/v1/agent-runtime/anthropic/agents` | GET | Brokered sanitized Anthropic projection inventory |
+| `/api/v1/agent-runtime/anthropic/project` | POST | Admin-only brokered canonical projection/adoption |
 
 ### MCP Endpoints
 | Endpoint | Method | Purpose |

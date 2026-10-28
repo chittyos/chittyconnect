@@ -330,7 +330,8 @@
         { "binding": "CHITTYAUTH_ISSUED_MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "CHITTYAUTH_ISSUED_MINT_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
         { "binding": "MINT_API_KEY", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "chittyauth_issued_mint_api_key" },
-        { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" }
+        { "binding": "COURTLISTENER_API_TOKEN", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "COURTLISTENER_API_TOKEN" },
+        { "binding": "CHITTYAUTH_MINT_SECRET", "store_id": "e914522471964c3c8cf1e601770edcc3", "secret_name": "CHITTYAUTH_MINT_SECRET" }
       ],
 
       "routes": [
@@ -440,6 +441,8 @@
         { "binding": "SVC_LEDGER", "service": "chittyledger", "environment": "production" },
         { "binding": "SVC_FINANCE", "service": "chittyfinance", "environment": "production" },
         { "binding": "SVC_SECRETS", "service": "chittysecrets", "entrypoint": "ChittyConnectInjectionBroker" },
+        { "binding": "CHITTYAUTH", "service": "chittyauth", "entrypoint": "ChittyAuthService" },
+        { "binding": "SVC_AGENT_DISPATCH", "service": "chittyagent-dispatch", "environment": "production" },
         { "binding": "SVC_CONCIERGE", "service": "chittyconcierge", "environment": "production" },
         { "binding": "SVC_CONTEXTUAL", "service": "chittycontextual", "environment": "production" },
         { "binding": "SVC_ID", "service": "chittyid", "environment": "production" },

@@ -47,6 +47,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import ledgerRoutes from "./routes/ledger.js";
 import { neonUserStoreRoutes } from "../auth/neon-user-store.js";
 import { identityRoutes } from "./routes/identity.js";
+import { agentRuntimeRoutes } from "./routes/agent-runtime.js";
 import { authenticate } from "./middleware/auth.js";
 import { autoRateLimit } from "./middleware/rate-limit.js";
 import openapiSpec from "../../public/openapi.json";
@@ -203,6 +204,7 @@ api.route("/api/v1/tenants", tenantRoutes);
 api.route("/api/v1/sessions", sessionRoutes);
 api.route("/api/v1/ledger", ledgerRoutes);
 api.route("/api/v1/identity", identityRoutes);
+api.route("/api/v1/agent-runtime", agentRuntimeRoutes);
 
 // Neon Auth user store — JWKS-validated read/write surface for
 // neon_auth.{user,account,session,verification,organization,member,invitation}.
