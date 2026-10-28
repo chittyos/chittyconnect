@@ -49,6 +49,7 @@ This guide helps contributors work effectively in this repository. It summarizes
 - Bind AI Search only to namespace `memory`; never `default` for MemoryCloude.
 - Resolve memory scope from the active `context_session_bindings` -> `context_entities` Synthetic Person binding.
 - Context resolution and binding MUST accept only canonical Synthetic Person (`P`) identities. Legacy non-`P` context rows are migration inputs: return `migration_required`; never silently relabel, bind, or duplicate-mint around them.
+- A legacy `T → P` continuity handoff MUST re-verify the current canonical relation through ChittyID immediately before mutation. Never trust caller-supplied predecessor/successor fields as authority. The handoff must atomically retire/archive `T`, transfer the canonical context anchor and current DNA to `P`, preserve historical records on `T`, write paired transaction receipts, and fail closed if any active session binding remains.
 - Require the authenticated principal P to match the bound P. A caller-provided session ID or `X-ChittyID` never grants access by itself.
 - Use one provider-safe `memory-<P_ID>` instance per Synthetic Person and lazy-provision only after scope authorization.
 - Store searchable retained material under the logical `/experiences/` Experience Projection.
