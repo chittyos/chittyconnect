@@ -1452,6 +1452,8 @@ app.post("/intelligence/relationships/discover", async (c) => {
 import { discoveryRoutes } from "./api/routes/discovery.js";
 import { githubActionsRoutes } from "./api/routes/github-actions.js";
 import { gitConfirmRoutes } from "./api/routes/git-confirm.js";
+import { capabilityRoutes } from "./api/routes/capabilities.js";
+import { custodyRoutes } from "./api/routes/custody.js";
 
 app.route("/.well-known", discoveryRoutes);
 
@@ -1468,6 +1470,14 @@ app.route("/api/github-actions", githubActionsRoutes);
  * write tool. API-key authenticated via mcpAuthMiddleware inside the route.
  */
 app.route("/api/git", gitConfirmRoutes);
+
+/**
+ * Git authorization control plane (chittyos/chittyconnect#209/#228).
+ * Routes own their API-key/GitHub-OIDC authentication and never return
+ * underlying GitHub or signing credentials.
+ */
+app.route("/api/v1/capabilities", capabilityRoutes);
+app.route("/api/v1/health", custodyRoutes);
 
 /**
  * SSE Health check endpoint

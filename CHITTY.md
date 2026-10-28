@@ -52,6 +52,10 @@ Source: `chittycanon://gov/governance#three-aspects`
 | **Connectivity** | VY | REST API + GitHub App; proxies Notion, OpenAI, Neon, Google Calendar; ContextConsciousness cross-session state. Acts as authorization server (capability minting/introspection, confirmation) + credential broker (signing-as-a-service from chittysecrets) + policy resolver + ledger emitter for the git tool surface — the MCP surface for git lives on `chittyagent-git` (resource server), not here. See CHARTER §"Git Broker Surface (REST, sensitive) — SPEC"; tracking chittyos/chittyconnect#209. |
 | **Authority** | RY | Tier 2 Platform — integration hub, not source of truth; delegates identity/auth/registration upstream |
 
+### Git broker implementation status
+
+`capabilities.mint` and `capabilities.introspect` are executable broker primitives. Commit/tag signing-as-a-service and git-domain ledger emission remain unresolved dependencies for #209/#228; `custody-verify` therefore fails closed until those runtime authorities are verifiably present. No raw GitHub credential is returned by the capability surface.
+
 ## ChittyOS Ecosystem
 
 ### Certification
@@ -86,6 +90,9 @@ Source: `chittycanon://gov/governance#three-aspects`
 | `/api/services/status` | GET | Yes | All services status |
 | `/api/thirdparty/notion/query` | POST | Yes | Query Notion |
 | `/api/v1/intelligence/context/experience/migrate` | POST | Yes | Verified T→P context continuity handoff |
+| `/api/v1/capabilities/mint` | POST | API key / GitHub OIDC | Mint opaque single-operation Git capability (#209) |
+| `/api/v1/capabilities/introspect` | POST | API key / GitHub OIDC | Fail-closed capability validation (#209) |
+| `/api/v1/health/custody-verify` | GET | API key / GitHub OIDC | #228 runtime custody status; reports unresolved signer/ledger gates honestly |
 | `/mcp/tools/list` | GET | Yes | MCP tools |
 | `/mcp/tools/call` | POST | Yes | Execute MCP tool |
 
