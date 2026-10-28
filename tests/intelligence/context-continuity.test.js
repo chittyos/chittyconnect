@@ -63,6 +63,15 @@ describe("Synthetic Person context continuity", () => {
     expect(result.resolution).toBe("multi_signal_legacy");
   });
 
+  it("rejects malformed ChittyIDs without starting a migration flow", async () => {
+    const resolver = new ContextResolver({ DB: {} });
+
+    expect(resolver.isWellFormedChittyId("not-a-chittyid")).toBe(false);
+    await expect(
+      resolver.bindSession("ctx-bad", "not-a-chittyid", "session-bad"),
+    ).rejects.toMatchObject({ code: "CONTEXT_INVALID_CHITTY_ID" });
+  });
+
   it("refuses a legacy identity at the bind boundary", async () => {
     const resolver = new ContextResolver({ DB: {} });
     await expect(
